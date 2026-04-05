@@ -16,14 +16,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication & RBAC
 
-- [ ] **AUTH-01**: User can log in with email/password using Auth.js v5 credentials provider
-- [ ] **AUTH-02**: User session persists across browser refresh (JWT strategy)
+- [x] **AUTH-01**: User can log in with email/password using Auth.js v5 credentials provider
+- [x] **AUTH-02**: User session persists across browser refresh (JWT strategy)
 - [ ] **AUTH-03**: User can log out from any page
 - [x] **AUTH-04**: Passwords hashed with bcryptjs before storage
 - [x] **AUTH-05**: Superadmin (sergey.fyodorov@gmail.com) seeded on first deploy
 - [ ] **AUTH-06**: RBAC enforced at middleware level (route redirect) AND in API routes/Server Actions
-- [ ] **AUTH-07**: JWT carries user role and allowed sections array
-- [ ] **AUTH-08**: next-auth.d.ts type augmentation for role/sections in session
+- [x] **AUTH-07**: JWT carries user role and allowed sections array
+- [x] **AUTH-08**: next-auth.d.ts type augmentation for role/sections in session
 
 ### User Management
 
@@ -130,14 +130,14 @@ Explicitly excluded. Documented to prevent scope creep.
 | FOUND-02 | Phase 1 | Complete |
 | FOUND-03 | Phase 1 | Complete |
 | FOUND-04 | Phase 1 | Complete |
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
+| AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Pending |
 | AUTH-04 | Phase 1 | Complete |
 | AUTH-05 | Phase 1 | Complete |
 | AUTH-06 | Phase 1 | Pending |
-| AUTH-07 | Phase 1 | Pending |
-| AUTH-08 | Phase 1 | Pending |
+| AUTH-07 | Phase 1 | Complete |
+| AUTH-08 | Phase 1 | Complete |
 | USER-01 | Phase 2 | Pending |
 | USER-02 | Phase 2 | Pending |
 | USER-03 | Phase 2 | Pending |
