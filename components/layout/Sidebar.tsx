@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { section: "SUPPORT", href: "/support", label: "Служба поддержки" },
   // USER_MANAGEMENT shown only to superadmin
   { section: "USER_MANAGEMENT", href: "/admin/users", label: "Пользователи" },
+  { section: "USER_MANAGEMENT", href: "/admin/settings", label: "Настройки" },
 ]
 
 export function Sidebar({ userRole, allowedSections }: SidebarProps) {
