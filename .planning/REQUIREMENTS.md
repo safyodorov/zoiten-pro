@@ -35,10 +35,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Reference Data
 
-- [ ] **REF-01**: Brand CRUD — create, read, update, delete brands. Zoiten seeded by default
-- [ ] **REF-02**: Category CRUD — per-brand categories. Zoiten seeded with: Дом, Кухня, Красота и здоровье
-- [ ] **REF-03**: Subcategory CRUD — nested under categories, per-brand
-- [ ] **REF-04**: Marketplace CRUD — WB, Ozon, ДМ, ЯМ seeded. Can add custom marketplaces
+- [x] **REF-01**: Brand CRUD — create, read, update, delete brands. Zoiten seeded by default
+- [x] **REF-02**: Category CRUD — per-brand categories. Zoiten seeded with: Дом, Кухня, Красота и здоровье
+- [x] **REF-03**: Subcategory CRUD — nested under categories, per-brand
+- [x] **REF-04**: Marketplace CRUD — WB, Ozon, ДМ, ЯМ seeded. Can add custom marketplaces
 - [ ] **REF-05**: Inline category/subcategory creation from product form (combobox with "Add new" option)
 
 ### Products
@@ -143,10 +143,10 @@ Explicitly excluded. Documented to prevent scope creep.
 | USER-03 | Phase 2 | Complete |
 | USER-04 | Phase 2 | Complete |
 | USER-05 | Phase 2 | Complete |
-| REF-01 | Phase 3 | Pending |
-| REF-02 | Phase 3 | Pending |
-| REF-03 | Phase 3 | Pending |
-| REF-04 | Phase 3 | Pending |
+| REF-01 | Phase 3 | Complete |
+| REF-02 | Phase 3 | Complete |
+| REF-03 | Phase 3 | Complete |
+| REF-04 | Phase 3 | Complete |
 | REF-05 | Phase 3 | Pending |
 | PROD-01 | Phase 4 | Pending |
 | PROD-02 | Phase 4 | Pending |
