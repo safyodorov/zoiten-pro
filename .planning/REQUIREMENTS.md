@@ -39,7 +39,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **REF-02**: Category CRUD — per-brand categories. Zoiten seeded with: Дом, Кухня, Красота и здоровье
 - [x] **REF-03**: Subcategory CRUD — nested under categories, per-brand
 - [x] **REF-04**: Marketplace CRUD — WB, Ozon, ДМ, ЯМ seeded. Can add custom marketplaces
-- [ ] **REF-05**: Inline category/subcategory creation from product form (combobox with "Add new" option)
+- [x] **REF-05**: Inline category/subcategory creation from product form (combobox with "Add new" option)
 
 ### Products
 
@@ -147,7 +147,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | REF-02 | Phase 3 | Complete |
 | REF-03 | Phase 3 | Complete |
 | REF-04 | Phase 3 | Complete |
-| REF-05 | Phase 3 | Pending |
+| REF-05 | Phase 3 | Complete |
 | PROD-01 | Phase 4 | Pending |
 | PROD-02 | Phase 4 | Pending |
 | PROD-03 | Phase 4 | Pending |

@@ -68,7 +68,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Server Actions for reference CRUD (brands, categories, subcategories, marketplaces) + seed extension
 - [ ] 03-02-PLAN.md — shadcn Tabs/Accordion wrappers + Settings page UI (/admin/settings) + Sidebar link
-- [ ] 03-03-PLAN.md — CreatableCombobox reusable component (REF-05, for Phase 4 product form)
+- [x] 03-03-PLAN.md — CreatableCombobox reusable component (REF-05, for Phase 4 product form)
 **UI hint**: yes
 
 ### Phase 4: Products Module
@@ -117,7 +117,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
 | 2. User Management | 1/2 | In Progress|  |
-| 3. Reference Data | 1/3 | In Progress|  |
+| 3. Reference Data | 2/3 | In Progress|  |
 | 4. Products Module | 0/? | Not started | - |
 | 5. UI & Module Stubs | 0/? | Not started | - |
 | 6. Deployment | 0/? | Not started | - |
