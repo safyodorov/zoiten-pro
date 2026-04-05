@@ -1,0 +1,151 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPERADMIN
+  MANAGER
+  VIEWER
+}
+
+enum ERP_SECTION {
+  PRODUCTS
+  PRICES
+  WEEKLY_CARDS
+  STOCK
+  COST
+  PROCUREMENT
+  SALES
+  SUPPORT
+  USER_MANAGEMENT
+}
+
+enum AbcStatus {
+  A
+  B
+  C
+}
+
+enum Availability {
+  IN_STOCK
+  OUT_OF_STOCK
+  DISCONTINUED
+  DELETED
+}
+
+// ──────────────────────────────────────────────────────────────────
+// User
+// ──────────────────────────────────────────────────────────────────
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  name            String
+  password        String        // bcrypt hash — never return to client
+  role            UserRole      @default(VIEWER)
+  allowedSections ERP_SECTION[] // Ignored when role = SUPERADMIN (per D-11)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Reference data
+// ──────────────────────────────────────────────────────────────────
+
+model Marketplace {
+  id       String               @id @default(cuid())
+  name     String               @unique // "WB", "Ozon", "ДМ", "ЯМ"
+  slug     String               @unique // "wb", "ozon", "dm", "ym"
+  articles MarketplaceArticle[]
+}
+
+model Brand {
+  id         String     @id @default(cuid())
+  name       String     @unique
+  categories Category[]
+  products   Product[]
+}
+
+model Category {
+  id            String        @id @default(cuid())
+  name          String
+  brandId       String
+  brand         Brand         @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  subcategories Subcategory[]
+  products      Product[]
+
+  @@unique([name, brandId])
+}
+
+model Subcategory {
+  id         String    @id @default(cuid())
+  name       String
+  categoryId String
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  products   Product[]
+
+  @@unique([name, categoryId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Product
+// ──────────────────────────────────────────────────────────────────
+
+model Product {
+  id            String               @id @default(cuid())
+  name          String               @db.VarChar(100)
+  photoUrl      String?
+  brandId       String
+  brand         Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  categoryId    String?
+  category      Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  subcategory   Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  abcStatus     AbcStatus?
+  availability  Availability         @default(IN_STOCK)
+  weightKg      Float?
+  heightCm      Float?
+  widthCm       Float?
+  depthCm       Float?
+  // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
+  articles      MarketplaceArticle[]
+  barcodes      Barcode[]
+  deletedAt     DateTime?            // Soft delete: null = active
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model MarketplaceArticle {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceId String
+  marketplace   Marketplace @relation(fields: [marketplaceId], references: [id])
+  article       String      // Marketplace article number
+  createdAt     DateTime    @default(now())
+
+  // Uniqueness: same article cannot appear twice for the same product+marketplace combo
+  // Up to 10 articles per marketplace per product enforced in service layer
+  @@unique([productId, marketplaceId, article])
+}
+
+model Barcode {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  value     String  @unique
+  // IMPORTANT: Phase 4 migration task — replace @unique with partial unique index
+  // WHERE deletedAt IS NULL on parent Product for soft-delete compatibility
+  // 1-20 barcodes per product enforced in service layer
+}
