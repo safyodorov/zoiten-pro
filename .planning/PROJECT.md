@@ -56,7 +56,7 @@
 
 ## Constraints
 
-- **Tech stack**: Next.js 14 (App Router, TypeScript), PostgreSQL + Prisma, shadcn/ui + Tailwind + Framer Motion, NextAuth.js
+- **Tech stack**: Next.js 15 (App Router, TypeScript, React 19), PostgreSQL + Prisma 6, shadcn/ui v4 + Tailwind v4 + motion, Auth.js v5
 - **Hosting**: Один VPS (85.198.97.89), нужно не мешать CantonFairBot
 - **Storage**: Фото на VPS filesystem, не в облаке
 - **Security**: bcrypt для паролей, HTTPS/SSL через Let's Encrypt, CSRF protection
