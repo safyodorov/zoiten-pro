@@ -67,7 +67,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 03-01-PLAN.md — Server Actions for reference CRUD (brands, categories, subcategories, marketplaces) + seed extension
-- [ ] 03-02-PLAN.md — shadcn Tabs/Accordion wrappers + Settings page UI (/admin/settings) + Sidebar link
+- [x] 03-02-PLAN.md — shadcn Tabs/Accordion wrappers + Settings page UI (/admin/settings) + Sidebar link
 - [x] 03-03-PLAN.md — CreatableCombobox reusable component (REF-05, for Phase 4 product form)
 **UI hint**: yes
 
