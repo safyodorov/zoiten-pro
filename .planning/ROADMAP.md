@@ -31,7 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can log out from any page and is redirected to `/login`
   4. Unauthenticated requests to protected routes redirect to `/login`; wrong-role requests redirect to `/unauthorized`
   5. Superadmin (sergey.fyodorov@gmail.com) exists in the database after `prisma db seed` runs
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Scaffold Next.js 15 project with dependencies, shadcn/ui v4, Tailwind v4
+- [ ] 01-02-PLAN.md — Prisma schema (all entities + enums), singleton, DB migration, superadmin seed
+- [ ] 01-03-PLAN.md — Auth.js v5 config split, JWT callbacks, TypeScript augmentation, RBAC utility
+- [ ] 01-04-PLAN.md — RBAC middleware, login UI, dashboard, logout, unauthorized page
 **UI hint**: yes
 
 ### Phase 2: User Management
@@ -103,7 +108,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Auth | 0/? | Not started | - |
+| 1. Foundation & Auth | 0/4 | Planned | - |
 | 2. User Management | 0/? | Not started | - |
 | 3. Reference Data | 0/? | Not started | - |
 | 4. Products Module | 0/? | Not started | - |
