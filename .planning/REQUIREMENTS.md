@@ -10,17 +10,17 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Foundation
 
 - [x] **FOUND-01**: Next.js 15 project initialized with TypeScript, Tailwind v4, shadcn/ui v4
-- [ ] **FOUND-02**: PostgreSQL database connected via Prisma 6 with migration system
-- [ ] **FOUND-03**: Prisma schema covers all core entities (User, Product, Brand, Category, Marketplace, MarketplaceArticle, Barcode)
-- [ ] **FOUND-04**: Prisma singleton pattern implemented (lib/prisma.ts)
+- [x] **FOUND-02**: PostgreSQL database connected via Prisma 6 with migration system
+- [x] **FOUND-03**: Prisma schema covers all core entities (User, Product, Brand, Category, Marketplace, MarketplaceArticle, Barcode)
+- [x] **FOUND-04**: Prisma singleton pattern implemented (lib/prisma.ts)
 
 ### Authentication & RBAC
 
 - [ ] **AUTH-01**: User can log in with email/password using Auth.js v5 credentials provider
 - [ ] **AUTH-02**: User session persists across browser refresh (JWT strategy)
 - [ ] **AUTH-03**: User can log out from any page
-- [ ] **AUTH-04**: Passwords hashed with bcryptjs before storage
-- [ ] **AUTH-05**: Superadmin (sergey.fyodorov@gmail.com) seeded on first deploy
+- [x] **AUTH-04**: Passwords hashed with bcryptjs before storage
+- [x] **AUTH-05**: Superadmin (sergey.fyodorov@gmail.com) seeded on first deploy
 - [ ] **AUTH-06**: RBAC enforced at middleware level (route redirect) AND in API routes/Server Actions
 - [ ] **AUTH-07**: JWT carries user role and allowed sections array
 - [ ] **AUTH-08**: next-auth.d.ts type augmentation for role/sections in session
@@ -127,14 +127,14 @@ Explicitly excluded. Documented to prevent scope creep.
 | REQ ID | Phase | Status |
 |--------|-------|--------|
 | FOUND-01 | Phase 1 | Complete |
-| FOUND-02 | Phase 1 | Pending |
-| FOUND-03 | Phase 1 | Pending |
-| FOUND-04 | Phase 1 | Pending |
+| FOUND-02 | Phase 1 | Complete |
+| FOUND-03 | Phase 1 | Complete |
+| FOUND-04 | Phase 1 | Complete |
 | AUTH-01 | Phase 1 | Pending |
 | AUTH-02 | Phase 1 | Pending |
 | AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
-| AUTH-05 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Complete |
+| AUTH-05 | Phase 1 | Complete |
 | AUTH-06 | Phase 1 | Pending |
 | AUTH-07 | Phase 1 | Pending |
 | AUTH-08 | Phase 1 | Pending |
