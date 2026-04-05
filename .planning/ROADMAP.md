@@ -64,7 +64,11 @@ Plans:
   2. Admin can create categories and subcategories scoped to a specific brand; Zoiten's three categories (Дом, Кухня, Красота и здоровье) exist after seed
   3. Admin can add a new marketplace beyond the seeded four (WB, Ozon, ДМ, ЯМ)
   4. Inside the product form, user can create a new category or subcategory inline without leaving the form
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Server Actions for reference CRUD (brands, categories, subcategories, marketplaces) + seed extension
+- [ ] 03-02-PLAN.md — shadcn Tabs/Accordion wrappers + Settings page UI (/admin/settings) + Sidebar link
+- [ ] 03-03-PLAN.md — CreatableCombobox reusable component (REF-05, for Phase 4 product form)
 **UI hint**: yes
 
 ### Phase 4: Products Module
@@ -113,7 +117,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
 | 2. User Management | 1/2 | In Progress|  |
-| 3. Reference Data | 0/? | Not started | - |
+| 3. Reference Data | 0/3 | Not started | - |
 | 4. Products Module | 0/? | Not started | - |
 | 5. UI & Module Stubs | 0/? | Not started | - |
 | 6. Deployment | 0/? | Not started | - |
