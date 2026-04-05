@@ -27,11 +27,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### User Management
 
-- [ ] **USER-01**: Superadmin can create new user accounts (email, password, name)
-- [ ] **USER-02**: Superadmin can assign role to user
-- [ ] **USER-03**: Superadmin can grant/revoke access to specific ERP sections per user
+- [x] **USER-01**: Superadmin can create new user accounts (email, password, name)
+- [x] **USER-02**: Superadmin can assign role to user
+- [x] **USER-03**: Superadmin can grant/revoke access to specific ERP sections per user
 - [ ] **USER-04**: Superadmin can view list of all users
-- [ ] **USER-05**: Superadmin can edit/deactivate existing users
+- [x] **USER-05**: Superadmin can edit/deactivate existing users
 
 ### Reference Data
 
@@ -138,11 +138,11 @@ Explicitly excluded. Documented to prevent scope creep.
 | AUTH-06 | Phase 1 | Complete |
 | AUTH-07 | Phase 1 | Complete |
 | AUTH-08 | Phase 1 | Complete |
-| USER-01 | Phase 2 | Pending |
-| USER-02 | Phase 2 | Pending |
-| USER-03 | Phase 2 | Pending |
+| USER-01 | Phase 2 | Complete |
+| USER-02 | Phase 2 | Complete |
+| USER-03 | Phase 2 | Complete |
 | USER-04 | Phase 2 | Pending |
-| USER-05 | Phase 2 | Pending |
+| USER-05 | Phase 2 | Complete |
 | REF-01 | Phase 3 | Pending |
 | REF-02 | Phase 3 | Pending |
 | REF-03 | Phase 3 | Pending |

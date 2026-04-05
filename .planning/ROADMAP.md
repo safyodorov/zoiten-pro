@@ -51,7 +51,7 @@ Plans:
   5. A deactivated user's login attempt is rejected
 **Plans**: 2 plans
 Plans:
-- [ ] 02-01-PLAN.md — Install shadcn components, section labels utility, and user Server Actions
+- [x] 02-01-PLAN.md — Install shadcn components, section labels utility, and user Server Actions
 - [ ] 02-02-PLAN.md — UserTable, UserDialog, UserForm components + /admin/users page + Toaster
 **UI hint**: yes
 
@@ -112,7 +112,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
-| 2. User Management | 0/? | Not started | - |
+| 2. User Management | 1/2 | In Progress|  |
 | 3. Reference Data | 0/? | Not started | - |
 | 4. Products Module | 0/? | Not started | - |
 | 5. UI & Module Stubs | 0/? | Not started | - |
