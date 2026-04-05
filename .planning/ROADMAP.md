@@ -52,7 +52,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 02-01-PLAN.md — Install shadcn components, section labels utility, and user Server Actions
-- [ ] 02-02-PLAN.md — UserTable, UserDialog, UserForm components + /admin/users page + Toaster
+- [x] 02-02-PLAN.md — UserTable, UserDialog, UserForm components + /admin/users page + Toaster
 **UI hint**: yes
 
 ### Phase 3: Reference Data
