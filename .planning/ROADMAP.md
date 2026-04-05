@@ -49,7 +49,10 @@ Plans:
   3. Superadmin can edit an existing user (name, password, role) and deactivate them
   4. Superadmin can grant or revoke access to specific ERP sections per user
   5. A deactivated user's login attempt is rejected
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — Install shadcn components, section labels utility, and user Server Actions
+- [ ] 02-02-PLAN.md — UserTable, UserDialog, UserForm components + /admin/users page + Toaster
 **UI hint**: yes
 
 ### Phase 3: Reference Data
