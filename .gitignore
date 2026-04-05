@@ -1,0 +1,13 @@
+# Environment
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+
+# Node
+node_modules/
+
+# Prisma
+prisma/generated/
