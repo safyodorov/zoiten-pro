@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Foundation
 
-- [ ] **FOUND-01**: Next.js 15 project initialized with TypeScript, Tailwind v4, shadcn/ui v4
+- [x] **FOUND-01**: Next.js 15 project initialized with TypeScript, Tailwind v4, shadcn/ui v4
 - [ ] **FOUND-02**: PostgreSQL database connected via Prisma 6 with migration system
 - [ ] **FOUND-03**: Prisma schema covers all core entities (User, Product, Brand, Category, Marketplace, MarketplaceArticle, Barcode)
 - [ ] **FOUND-04**: Prisma singleton pattern implemented (lib/prisma.ts)
@@ -126,7 +126,7 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | REQ ID | Phase | Status |
 |--------|-------|--------|
-| FOUND-01 | Phase 1 | Pending |
+| FOUND-01 | Phase 1 | Complete |
 | FOUND-02 | Phase 1 | Pending |
 | FOUND-03 | Phase 1 | Pending |
 | FOUND-04 | Phase 1 | Pending |

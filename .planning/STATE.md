@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-04-05T19:29:22.602Z"
-last_activity: 2026-04-05 -- Phase 01 execution started
+stopped_at: Completed 01-01-PLAN.md (Next.js scaffold + shadcn/ui)
+last_updated: "2026-04-05T19:38:45.877Z"
+last_activity: 2026-04-05
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 01 (foundation-auth) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 01
-Last activity: 2026-04-05 -- Phase 01 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-05
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01 P01 | 7 | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,9 @@ Recent decisions affecting current work:
 - Init: Photos stored at `/var/www/zoiten-uploads/` served by nginx (not inside project tree)
 - Init: Marketplace articles in normalized table (not JSONB) — enables future API sync
 - Init: Partial unique indexes on Barcode and MarketplaceArticle for soft-delete compatibility
+- [Phase 01]: shadcn v4 uses base-nova style with @base-ui/react (not radix-ui) — form.tsx created manually
+- [Phase 01]: zod@4.3.6 installed (not 3.x) and bcryptjs@3.0.3 (not 2.4.3) — newer compatible releases
+- [Phase 01]: typedRoutes removed from next.config.ts — moved out of experimental in Next.js 15.5.x
 
 ### Pending Todos
 
@@ -77,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T18:42:27.979Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-foundation-auth/01-CONTEXT.md
+Last session: 2026-04-05T19:38:45.875Z
+Stopped at: Completed 01-01-PLAN.md (Next.js scaffold + shadcn/ui)
+Resume file: None
