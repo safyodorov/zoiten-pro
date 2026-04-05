@@ -12,7 +12,7 @@ Six sequential phases that build the Zoiten ERP MVP from database foundation to 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & Auth** - Next.js project, PostgreSQL, Prisma schema, and working login with RBAC
+- [x] **Phase 1: Foundation & Auth** - Next.js project, PostgreSQL, Prisma schema, and working login with RBAC (completed 2026-04-05)
 - [ ] **Phase 2: User Management** - Superadmin creates and manages user accounts with section-level permissions
 - [ ] **Phase 3: Reference Data** - Brand, category/subcategory, and marketplace CRUD with seed data
 - [ ] **Phase 4: Products Module** - Full product CRUD, photo upload, soft delete, search, and 30-day cleanup
@@ -36,7 +36,7 @@ Plans:
 - [x] 01-01-PLAN.md — Scaffold Next.js 15 project with dependencies, shadcn/ui v4, Tailwind v4
 - [x] 01-02-PLAN.md — Prisma schema (all entities + enums), singleton, DB migration, superadmin seed
 - [x] 01-03-PLAN.md — Auth.js v5 config split, JWT callbacks, TypeScript augmentation, RBAC utility
-- [ ] 01-04-PLAN.md — RBAC middleware, login UI, dashboard, logout, unauthorized page
+- [x] 01-04-PLAN.md — RBAC middleware, login UI, dashboard, logout, unauthorized page
 **UI hint**: yes
 
 ### Phase 2: User Management
@@ -108,7 +108,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Auth | 3/4 | In Progress|  |
+| 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
 | 2. User Management | 0/? | Not started | - |
 | 3. Reference Data | 0/? | Not started | - |
 | 4. Products Module | 0/? | Not started | - |
