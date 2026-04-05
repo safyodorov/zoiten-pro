@@ -11,3 +11,4 @@ node_modules/
 
 # Prisma
 prisma/generated/
+tsconfig.tsbuildinfo
