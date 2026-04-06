@@ -79,6 +79,27 @@ export async function createProductFromCards(
       return { ok: false, error: "Маркетплейс WB не найден в настройках" }
     }
 
+    // Удаляем осиротевшие артикулы от soft-deleted товаров
+    const articleValues = cards.map((c) => String(c.nmId))
+    await prisma.marketplaceArticle.deleteMany({
+      where: {
+        marketplaceId: wbMarketplace.id,
+        article: { in: articleValues },
+        product: { deletedAt: { not: null } },
+      },
+    })
+
+    // Проверяем какие артикулы уже заняты активными товарами
+    const existingArticles = await prisma.marketplaceArticle.findMany({
+      where: {
+        marketplaceId: wbMarketplace.id,
+        article: { in: articleValues },
+      },
+      select: { article: true },
+    })
+    const existingSet = new Set(existingArticles.map((a) => a.article))
+    const newArticles = articleValues.filter((a) => !existingSet.has(a))
+
     // Создаём товар
     const product = await prisma.product.create({
       data: {
@@ -90,9 +111,9 @@ export async function createProductFromCards(
         widthCm: firstCard.widthCm,
         depthCm: firstCard.depthCm,
         articles: {
-          create: cards.map((card) => ({
+          create: newArticles.map((article) => ({
             marketplaceId: wbMarketplace.id,
-            article: String(card.nmId),
+            article,
           })),
         },
         barcodes: {
