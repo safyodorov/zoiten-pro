@@ -81,7 +81,12 @@ Plans:
   3. User can create a product with all fields (name, photo, brand, category, ABC status, availability, marketplace articles, barcodes, dimensions) and save it
   4. User can open an existing product, edit any field, and save changes
   5. User can duplicate a product (all fields except photo copied) and soft-delete a product; soft-deleted products vanish from the list and purge from the DB after 30 days
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 04-01-PLAN.md — Server Actions (CRUD + duplicate + soft delete), photo upload Route Handler, dev file serving, cron purge, partial index migration
+- [ ] 04-02-PLAN.md — Product list page (/products) with status tabs, debounced search, paginated table, per-row actions
+- [ ] 04-03-PLAN.md — Product create/edit pages (/products/new, /products/[id]/edit) with all 5 form sections
+- [ ] 04-04-PLAN.md — Sidebar active link highlighting + end-to-end human verification checkpoint
 **UI hint**: yes
 
 ### Phase 5: UI & Module Stubs
@@ -118,6 +123,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
 | 2. User Management | 1/2 | In Progress|  |
 | 3. Reference Data | 2/3 | In Progress|  |
-| 4. Products Module | 0/? | Not started | - |
+| 4. Products Module | 0/4 | Not started | - |
 | 5. UI & Module Stubs | 0/? | Not started | - |
 | 6. Deployment | 0/? | Not started | - |
