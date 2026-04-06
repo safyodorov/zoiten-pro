@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Video, ArrowUpDown } from "lucide-react"
+import { Video, ArrowUpDown, CheckCircle2 } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -58,6 +58,7 @@ interface WbCardsTableProps {
   sortDir: string
   selectedBrands: string[]
   selectedCategories: string[]
+  linkedNmIds: string[]
 }
 
 const PAGE_SIZES = [20, 50, 100]
@@ -124,9 +125,11 @@ export function WbCardsTable({
   sortDir,
   selectedBrands,
   selectedCategories,
+  linkedNmIds,
 }: WbCardsTableProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const linkedSet = new Set(linkedNmIds)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showExistingDialog, setShowExistingDialog] = useState(false)
   const [productSearch, setProductSearch] = useState("")
@@ -317,7 +320,14 @@ export function WbCardsTable({
                     <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
                   )}
                 </TableCell>
-                <TableCell className="font-medium max-w-[160px] truncate">{card.name}</TableCell>
+                <TableCell className="font-medium max-w-[160px]">
+                  <div className="flex items-center gap-1.5">
+                    {linkedSet.has(String(card.nmId)) && (
+                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                    )}
+                    <span className="truncate">{card.name}</span>
+                  </div>
+                </TableCell>
                 <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>

@@ -48,6 +48,9 @@ export default async function WbCardsPage({
   const orderBy: any = { [sortBy]: sortDir }
 
   // Загружаем данные + уникальные значения для фильтров
+  // Находим маркетплейс WB для проверки привязки
+  const wbMarketplace = await prisma.marketplace.findFirst({ where: { slug: "wb" } })
+
   const [cards, total, allBrands, allCategories] = await Promise.all([
     prisma.wbCard.findMany({ where, orderBy, skip, take: pageSize }),
     prisma.wbCard.count({ where }),
@@ -56,6 +59,20 @@ export default async function WbCardsPage({
   ])
 
   const totalPages = Math.ceil(total / pageSize)
+
+  // Проверяем какие nmId уже привязаны к активным товарам
+  const cardNmIds = cards.map((c) => String(c.nmId))
+  const linkedArticles = wbMarketplace
+    ? await prisma.marketplaceArticle.findMany({
+        where: {
+          marketplaceId: wbMarketplace.id,
+          article: { in: cardNmIds },
+          product: { deletedAt: null },
+        },
+        select: { article: true },
+      })
+    : []
+  const linkedNmIds = new Set(linkedArticles.map((a) => a.article))
 
   return (
     <div className="space-y-4">
@@ -77,6 +94,7 @@ export default async function WbCardsPage({
       />
       <WbCardsTable
         cards={cards}
+        linkedNmIds={Array.from(linkedNmIds)}
         currentPage={currentPage}
         totalPages={totalPages}
         totalCards={total}
