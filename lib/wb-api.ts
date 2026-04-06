@@ -103,13 +103,20 @@ export async function fetchAllCards(): Promise<WbCardRaw[]> {
   const token = getToken()
   const allCards: WbCardRaw[] = []
 
-  let cursor = { updatedAt: "", nmID: 0 }
+  let cursorUpdatedAt: string | undefined = undefined
+  let cursorNmID = 0
   const limit = 100
 
   while (true) {
+    // WB API не принимает пустую строку для updatedAt — передаём только если есть значение
+    const cursorObj: Record<string, unknown> = { limit, nmID: cursorNmID }
+    if (cursorUpdatedAt) {
+      cursorObj.updatedAt = cursorUpdatedAt
+    }
+
     const body = {
       settings: {
-        cursor: { limit, ...cursor },
+        cursor: cursorObj,
         filter: { withPhoto: -1 }, // -1 = все, 0 = без фото, 1 = с фото
       },
     }
@@ -136,10 +143,8 @@ export async function fetchAllCards(): Promise<WbCardRaw[]> {
 
     // Курсорная пагинация
     if (data.cursor.total < limit) break
-    cursor = {
-      updatedAt: data.cursor.updatedAt,
-      nmID: data.cursor.nmID,
-    }
+    cursorUpdatedAt = data.cursor.updatedAt
+    cursorNmID = data.cursor.nmID
   }
 
   return allCards
