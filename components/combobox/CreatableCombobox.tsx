@@ -1,8 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useState, useMemo } from "react"
-import { Combobox } from "@base-ui/react/combobox"
+import { useState, useMemo, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
@@ -32,38 +31,45 @@ export function CreatableCombobox({
   disabled = false,
   className,
 }: CreatableComboboxProps) {
-  const [inputValue, setInputValue] = useState<string>("")
+  const [open, setOpen] = useState(false)
+  const [inputValue, setInputValue] = useState("")
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Find label for the currently selected value
   const selectedOption = useMemo(
     () => options.find((o) => o.value === value) ?? null,
     [options, value]
   )
 
-  // Filter options based on inputValue (case-insensitive)
   const filteredOptions = useMemo(() => {
     const query = inputValue.trim().toLowerCase()
     if (!query) return options
     return options.filter((o) => o.label.toLowerCase().includes(query))
   }, [options, inputValue])
 
-  // Show create item when there is input and no exact label match
   const showCreate = useMemo(() => {
     const trimmed = inputValue.trim()
     if (!trimmed) return false
     return !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase())
   }, [options, inputValue])
 
-  function handleValueChange(newValue: string | null) {
-    if (newValue === null) {
-      onValueChange(null)
-      return
+  // Close on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
     }
-    const option = options.find((o) => o.value === newValue)
-    if (option) {
-      setInputValue(option.label)
-      onValueChange(newValue)
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
     }
+  }, [open])
+
+  function handleSelect(optionValue: string) {
+    onValueChange(optionValue)
+    setInputValue("")
+    setOpen(false)
   }
 
   function handleCreate() {
@@ -71,39 +77,38 @@ export function CreatableCombobox({
     if (!trimmed) return
     onCreate?.(trimmed)
     setInputValue("")
+    setOpen(false)
   }
 
   return (
-    <Combobox.Root
-      value={value}
-      onValueChange={handleValueChange}
-      inputValue={inputValue}
-      onInputValueChange={(val) => setInputValue(val)}
-      disabled={disabled}
-    >
-      <Combobox.Trigger
+    <div ref={containerRef} className={cn("relative", className)}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setOpen(!open)
+          setTimeout(() => inputRef.current?.focus(), 50)
+        }}
         className={cn(
-          "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           "disabled:opacity-50 disabled:cursor-not-allowed",
-          className
         )}
       >
-        <Combobox.Value placeholder={placeholder}>
+        <span className={cn(!selectedOption && "text-muted-foreground")}>
           {selectedOption?.label ?? placeholder}
-        </Combobox.Value>
+        </span>
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </Combobox.Trigger>
+      </button>
 
-      <Combobox.Positioner sideOffset={4}>
-        <Combobox.Popup
-          className={cn(
-            "z-50 w-[var(--anchor-width)] min-w-[200px] rounded-md border bg-popover text-popover-foreground shadow-md",
-            "overflow-hidden"
-          )}
-        >
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md">
           <div className="flex items-center border-b px-3">
-            <Combobox.Input
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               className="flex h-9 w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
               placeholder="Поиск..."
             />
@@ -111,36 +116,32 @@ export function CreatableCombobox({
 
           <div className="max-h-60 overflow-y-auto p-1">
             {filteredOptions.length === 0 && !showCreate && (
-              <Combobox.Empty className="py-2 px-3 text-sm text-muted-foreground">
+              <div className="py-2 px-3 text-sm text-muted-foreground">
                 Нет вариантов
-              </Combobox.Empty>
+              </div>
             )}
 
             {filteredOptions.map((option) => (
-              <Combobox.Item
+              <button
                 key={option.value}
-                value={option.value}
+                type="button"
+                onClick={() => handleSelect(option.value)}
                 className={cn(
-                  "relative flex cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-1.5 text-sm outline-none",
+                  "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-1.5 text-sm outline-none",
                   "hover:bg-accent hover:text-accent-foreground",
-                  "data-highlighted:bg-accent data-highlighted:text-accent-foreground",
-                  "data-disabled:pointer-events-none data-disabled:opacity-50"
+                  option.value === value && "bg-accent"
                 )}
               >
-                <Combobox.ItemIndicator className="flex h-4 w-4 items-center justify-center">
-                  <Check className="h-4 w-4" />
-                </Combobox.ItemIndicator>
+                <span className="flex h-4 w-4 items-center justify-center">
+                  {option.value === value && <Check className="h-4 w-4" />}
+                </span>
                 {option.label}
-              </Combobox.Item>
+              </button>
             ))}
 
             {showCreate && (
               <button
                 type="button"
-                onMouseDown={(e) => {
-                  // Prevent closing dropdown on mousedown
-                  e.preventDefault()
-                }}
                 onClick={handleCreate}
                 className={cn(
                   "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-3 py-1.5 text-sm outline-none",
@@ -153,8 +154,8 @@ export function CreatableCombobox({
               </button>
             )}
           </div>
-        </Combobox.Popup>
-      </Combobox.Positioner>
-    </Combobox.Root>
+        </div>
+      )}
+    </div>
   )
 }
