@@ -14,8 +14,10 @@ interface FilterOption {
 interface ProductFiltersProps {
   brands: FilterOption[]
   categories: FilterOption[]
+  subcategories: FilterOption[]
   selectedBrandIds: string[]
   selectedCategoryIds: string[]
+  selectedSubcategoryIds: string[]
 }
 
 // ── Dropdown с чекбоксами (тот же паттерн что в WbFilters) ──────
@@ -97,8 +99,10 @@ function MultiSelectDropdown({
 export function ProductFilters({
   brands,
   categories,
+  subcategories,
   selectedBrandIds,
   selectedCategoryIds,
+  selectedSubcategoryIds,
 }: ProductFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -122,12 +126,16 @@ export function ProductFilters({
     router.push(buildUrl({ categories: values.join(",") }))
   }
 
+  function setSubcategories(values: string[]) {
+    router.push(buildUrl({ subcategories: values.join(",") }))
+  }
+
   function clearAll() {
-    router.push(buildUrl({ brands: "", categories: "" }))
+    router.push(buildUrl({ brands: "", categories: "", subcategories: "" }))
   }
 
   const hasFilters =
-    selectedBrandIds.length > 0 || selectedCategoryIds.length > 0
+    selectedBrandIds.length > 0 || selectedCategoryIds.length > 0 || selectedSubcategoryIds.length > 0
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -142,6 +150,12 @@ export function ProductFilters({
         options={categories}
         selected={selectedCategoryIds}
         onChange={setCategories}
+      />
+      <MultiSelectDropdown
+        label="Подкатегория"
+        options={subcategories}
+        selected={selectedSubcategoryIds}
+        onChange={setSubcategories}
       />
       {hasFilters && (
         <Button

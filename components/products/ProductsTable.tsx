@@ -25,6 +25,7 @@ interface Product {
   photoUrl: string | null
   brand: { id: string; name: string }
   category: { id: string; name: string } | null
+  subcategory: { id: string; name: string } | null
   abcStatus: string | null
   availability: string
   deletedAt: Date | null
@@ -113,9 +114,10 @@ export function ProductsTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-16">Фото</TableHead>
-              <TableHead>Наименование</TableHead>
+              <TableHead className="max-w-[200px]">Наименование</TableHead>
               <TableHead>Бренд</TableHead>
               <TableHead>Категория</TableHead>
+              <TableHead>Подкатегория</TableHead>
               <TableHead className="w-16">ABC</TableHead>
               <TableHead>Наличие</TableHead>
               <TableHead className="text-right">Действия</TableHead>
@@ -124,7 +126,7 @@ export function ProductsTable({
           <TableBody>
             {products.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   Товары не найдены
                 </TableCell>
               </TableRow>
@@ -146,11 +148,11 @@ export function ProductsTable({
                   )}
                 </TableCell>
 
-                {/* Name — clickable → edit page */}
-                <TableCell className="font-medium">
+                {/* Name — clickable → edit page, truncated */}
+                <TableCell className="font-medium max-w-[200px]">
                   <Link
                     href={`/products/${product.id}/edit`}
-                    className="hover:underline"
+                    className="hover:underline line-clamp-2"
                   >
                     {product.name}
                   </Link>
@@ -162,6 +164,13 @@ export function ProductsTable({
                 {/* Category */}
                 <TableCell>
                   {product.category?.name ?? (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+
+                {/* Subcategory */}
+                <TableCell>
+                  {product.subcategory?.name ?? (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>

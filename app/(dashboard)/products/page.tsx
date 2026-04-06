@@ -21,16 +21,26 @@ export default async function ProductsPage({
     status?: string
     brands?: string
     categories?: string
+    subcategories?: string
   }>
 }) {
   await requireSection("PRODUCTS")
-  const { q, page: pageParam, status, brands: brandsParam, categories: categoriesParam } =
-    await searchParams
+  const {
+    q,
+    page: pageParam,
+    status,
+    brands: brandsParam,
+    categories: categoriesParam,
+    subcategories: subcategoriesParam,
+  } = await searchParams
 
-  // Parse brand/category filter arrays from comma-separated URL params
+  // Parse filter arrays from comma-separated URL params
   const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
   const selectedCategoryIds = categoriesParam
     ? categoriesParam.split(",").filter(Boolean)
+    : []
+  const selectedSubcategoryIds = subcategoriesParam
+    ? subcategoriesParam.split(",").filter(Boolean)
     : []
 
   // Build where clause
@@ -69,14 +79,19 @@ export default async function ProductsPage({
     where.categoryId = { in: selectedCategoryIds }
   }
 
+  // Subcategory filter
+  if (selectedSubcategoryIds.length > 0) {
+    where.subcategoryId = { in: selectedSubcategoryIds }
+  }
+
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
   const skip = (currentPage - 1) * PAGE_SIZE
 
-  // Fetch products + all brands/categories for filter dropdowns
-  const [products, total, allBrands, allCategories] = await Promise.all([
+  // Fetch products + all brands/categories/subcategories for filter dropdowns
+  const [products, total, allBrands, allCategories, allSubcategories] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { brand: true, category: true },
+      include: { brand: true, category: true, subcategory: true },
       orderBy: { createdAt: "desc" },
       skip,
       take: PAGE_SIZE,
@@ -84,6 +99,7 @@ export default async function ProductsPage({
     prisma.product.count({ where }),
     prisma.brand.findMany({ orderBy: { name: "asc" } }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
+    prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
   ])
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -106,8 +122,10 @@ export default async function ProductsPage({
         <ProductFilters
           brands={allBrands.map((b) => ({ id: b.id, name: b.name }))}
           categories={allCategories.map((c) => ({ id: c.id, name: c.name }))}
+          subcategories={allSubcategories.map((s) => ({ id: s.id, name: s.name }))}
           selectedBrandIds={selectedBrandIds}
           selectedCategoryIds={selectedCategoryIds}
+          selectedSubcategoryIds={selectedSubcategoryIds}
         />
       </div>
       <ProductsTable
