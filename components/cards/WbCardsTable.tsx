@@ -311,7 +311,12 @@ export function WbCardsTable({
             {cards.map((card) => (
               <TableRow key={card.id} className={selected.has(card.id) ? "bg-muted/50" : ""}>
                 <TableCell>
-                  <Checkbox checked={selected.has(card.id)} onCheckedChange={() => toggleSelect(card.id)} />
+                  <div className="flex flex-col items-center gap-1">
+                    <Checkbox checked={selected.has(card.id)} onCheckedChange={() => toggleSelect(card.id)} />
+                    {linkedSet.has(String(card.nmId)) && (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {card.photoUrl ? (
@@ -320,14 +325,7 @@ export function WbCardsTable({
                     <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
                   )}
                 </TableCell>
-                <TableCell className="font-medium max-w-[160px]">
-                  <div className="flex items-center gap-1.5">
-                    {linkedSet.has(String(card.nmId)) && (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
-                    )}
-                    <span className="truncate">{card.name}</span>
-                  </div>
-                </TableCell>
+                <TableCell className="font-medium max-w-[160px] truncate">{card.name}</TableCell>
                 <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>
