@@ -700,14 +700,14 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
             )}
           />
 
-          {/* Dimensions */}
+          {/* Dimensions — порядок как на WB: Длина × Ширина × Высота */}
           <div className="grid grid-cols-3 gap-3">
             <FormField
               control={form.control}
-              name="heightCm"
+              name="depthCm"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Высота, см</FormLabel>
+                  <FormLabel>Длина, см</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -750,10 +750,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
             />
             <FormField
               control={form.control}
-              name="depthCm"
+              name="heightCm"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Глубина, см</FormLabel>
+                  <FormLabel>Высота, см</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
