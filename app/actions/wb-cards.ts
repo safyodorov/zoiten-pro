@@ -100,26 +100,34 @@ export async function createProductFromCards(
     const existingArticleSet = new Set(existingArticles.map((a) => a.article))
     const newArticles = articleValues.filter((a) => !existingArticleSet.has(a))
 
-    // Создаём товар
-    const product = await prisma.product.create({
-      data: {
-        name: firstCard.name,
-        photoUrl: firstCard.photoUrl,
-        brandId,
-        weightKg: firstCard.weightKg,
-        heightCm: firstCard.heightCm,
-        widthCm: firstCard.widthCm,
-        depthCm: firstCard.depthCm,
-        articles: {
-          create: newArticles.map((article) => ({
-            marketplaceId: wbMarketplace.id,
-            article,
-          })),
+    // Создаём товар с уникальным SKU
+    const product = await prisma.$transaction(async (tx) => {
+      const [{ nextval }] = await tx.$queryRaw<[{ nextval: bigint }]>`
+        SELECT nextval('product_sku_seq')
+      `
+      const sku = `УКТ-${String(nextval).padStart(6, "0")}`
+
+      return tx.product.create({
+        data: {
+          sku,
+          name: firstCard.name,
+          photoUrl: firstCard.photoUrl,
+          brandId,
+          weightKg: firstCard.weightKg,
+          heightCm: firstCard.heightCm,
+          widthCm: firstCard.widthCm,
+          depthCm: firstCard.depthCm,
+          articles: {
+            create: newArticles.map((article) => ({
+              marketplaceId: wbMarketplace.id,
+              article,
+            })),
+          },
+          barcodes: {
+            create: newBarcodes.map((value) => ({ value })),
+          },
         },
-        barcodes: {
-          create: newBarcodes.map((value) => ({ value })),
-        },
-      },
+      })
     })
 
     revalidatePath("/products")
