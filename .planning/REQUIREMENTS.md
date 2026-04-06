@@ -45,9 +45,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **PROD-01**: User can view product list with pagination, filtered by availability status ("есть" by default)
 - [x] **PROD-02**: User can toggle button to show products with other statuses (out of stock, выведен из ассортимента, удалено)
-- [ ] **PROD-03**: User can create a new product with all fields: наименование (до 100 символов), фото (3:4, JPEG/PNG, до 2K), бренд, категория/подкатегория, ABC-статус (A/B/C), наличие
-- [ ] **PROD-04**: User can add marketplace article numbers to product (up to 10 per marketplace, integer values)
-- [ ] **PROD-05**: User can add barcodes to product (1-20 barcodes per product)
+- [x] **PROD-03**: User can create a new product with all fields: наименование (до 100 символов), фото (3:4, JPEG/PNG, до 2K), бренд, категория/подкатегория, ABC-статус (A/B/C), наличие
+- [x] **PROD-04**: User can add marketplace article numbers to product (up to 10 per marketplace, integer values)
+- [x] **PROD-05**: User can add barcodes to product (1-20 barcodes per product)
 - [x] **PROD-06**: User can set product dimensions (weight kg, height/width/depth cm) and see auto-calculated volume (liters)
 - [x] **PROD-07**: Clicking a product in the list opens edit form with all current values
 - [x] **PROD-08**: User can duplicate a product (deep copy of all fields except photo)
@@ -150,9 +150,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | REF-05 | Phase 3 | Complete |
 | PROD-01 | Phase 4 | Complete |
 | PROD-02 | Phase 4 | Complete |
-| PROD-03 | Phase 4 | Pending |
-| PROD-04 | Phase 4 | Pending |
-| PROD-05 | Phase 4 | Pending |
+| PROD-03 | Phase 4 | Complete |
+| PROD-04 | Phase 4 | Complete |
+| PROD-05 | Phase 4 | Complete |
 | PROD-06 | Phase 4 | Complete |
 | PROD-07 | Phase 4 | Complete |
 | PROD-08 | Phase 4 | Complete |
