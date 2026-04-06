@@ -21,6 +21,7 @@ import { duplicateProduct, softDeleteProduct, hardDeleteProduct } from "@/app/ac
 
 interface Product {
   id: string
+  sku: string
   name: string
   photoUrl: string | null
   brand: { id: string; name: string }
@@ -114,6 +115,7 @@ export function ProductsTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-16">Фото</TableHead>
+              <TableHead className="w-28">УКТ</TableHead>
               <TableHead className="max-w-[200px]">Наименование</TableHead>
               <TableHead>Бренд</TableHead>
               <TableHead>Категория</TableHead>
@@ -126,7 +128,7 @@ export function ProductsTable({
           <TableBody>
             {products.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   Товары не найдены
                 </TableCell>
               </TableRow>
@@ -146,6 +148,11 @@ export function ProductsTable({
                       —
                     </div>
                   )}
+                </TableCell>
+
+                {/* SKU */}
+                <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  {product.sku}
                 </TableCell>
 
                 {/* Name — clickable → edit page, truncated */}

@@ -87,6 +87,7 @@ interface BarcodeDB {
 
 interface ProductData {
   id?: string
+  sku?: string
   name?: string
   photoUrl?: string | null
   brandId?: string
@@ -390,6 +391,14 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
         {/* Section 1: Основное */}
         <section className="space-y-4">
           <h2 className="text-lg font-medium border-b pb-2">Основное</h2>
+
+          {/* SKU — read-only, only in edit mode */}
+          {product?.sku && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">УКТ</p>
+              <p className="text-sm text-muted-foreground font-mono bg-muted px-3 py-2 rounded-md">{product.sku}</p>
+            </div>
+          )}
 
           {/* Name */}
           <FormField

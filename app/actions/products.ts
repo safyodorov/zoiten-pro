@@ -81,8 +81,15 @@ export async function createProduct(
     const parsed = ProductSchema.parse(data)
 
     const product = await prisma.$transaction(async (tx) => {
+      // Generate next SKU from PostgreSQL sequence
+      const [{ nextval }] = await tx.$queryRaw<[{ nextval: bigint }]>`
+        SELECT nextval('product_sku_seq')
+      `
+      const sku = `УКТ-${String(nextval).padStart(6, "0")}`
+
       return tx.product.create({
         data: {
+          sku,
           name: parsed.name,
           photoUrl: parsed.photoUrl ?? null,
           brandId: parsed.brandId,
@@ -251,26 +258,35 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
       return { ok: false, error: "Товар не найден" }
     }
 
-    const newProduct = await prisma.product.create({
-      data: {
-        name: `Копия — ${original.name}`,
-        photoUrl: null, // Per D-26: photo is NOT copied
-        brandId: original.brandId,
-        categoryId: original.categoryId ?? null,
-        subcategoryId: original.subcategoryId ?? null,
-        abcStatus: original.abcStatus ?? null,
-        availability: original.availability,
-        weightKg: original.weightKg ?? null,
-        heightCm: original.heightCm ?? null,
-        widthCm: original.widthCm ?? null,
-        depthCm: original.depthCm ?? null,
-        articles: {
-          create: original.articles.map((a) => ({
-            marketplaceId: a.marketplaceId,
-            article: a.article,
-          })),
+    const newProduct = await prisma.$transaction(async (tx) => {
+      // Generate next SKU for the duplicate
+      const [{ nextval }] = await tx.$queryRaw<[{ nextval: bigint }]>`
+        SELECT nextval('product_sku_seq')
+      `
+      const sku = `УКТ-${String(nextval).padStart(6, "0")}`
+
+      return tx.product.create({
+        data: {
+          sku,
+          name: `Копия — ${original.name}`,
+          photoUrl: null, // Per D-26: photo is NOT copied
+          brandId: original.brandId,
+          categoryId: original.categoryId ?? null,
+          subcategoryId: original.subcategoryId ?? null,
+          abcStatus: original.abcStatus ?? null,
+          availability: original.availability,
+          weightKg: original.weightKg ?? null,
+          heightCm: original.heightCm ?? null,
+          widthCm: original.widthCm ?? null,
+          depthCm: original.depthCm ?? null,
+          articles: {
+            create: original.articles.map((a) => ({
+              marketplaceId: a.marketplaceId,
+              article: a.article,
+            })),
+          },
         },
-      },
+      })
     })
 
     revalidatePath("/products")

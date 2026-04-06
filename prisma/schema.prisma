@@ -144,6 +144,7 @@ model WbCard {
 
 model Product {
   id            String               @id @default(cuid())
+  sku           String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
   name          String               @db.VarChar(100)
   photoUrl      String?
   brandId       String
@@ -162,9 +163,22 @@ model Product {
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
   articles      MarketplaceArticle[]
   barcodes      Barcode[]
+  cost          ProductCost?         // One-to-one: product → cost record
   deletedAt     DateTime?            // Soft delete: null = active
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Product Cost (Себестоимость)
+// ──────────────────────────────────────────────────────────────────
+
+model ProductCost {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  costPrice Float    // Себестоимость в рублях (с точностью до копеек)
+  updatedAt DateTime @updatedAt
 }
 
 model MarketplaceArticle {
