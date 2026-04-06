@@ -103,6 +103,37 @@ model Subcategory {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// WB Cards (парсинг карточек Wildberries)
+// ──────────────────────────────────────────────────────────────────
+
+model WbCard {
+  id            String   @id @default(cuid())
+  nmId          Int      @unique              // WB nm_id
+  article       String                        // артикул WB
+  barcode       String?                       // основной штрихкод
+  barcodes      String[]                      // все штрихкоды
+  name          String
+  brand         String?
+  category      String?                       // категория WB (не наша)
+  photoUrl      String?                       // главное фото
+  photos        String[]                      // все фото из карточки
+  hasVideo      Boolean  @default(false)       // есть ли видео
+  rating        Float?                        // средний рейтинг
+  reviewsTotal  Int?                          // общее кол-во оценок
+  reviews1      Int?                          // оценок 1
+  reviews2      Int?                          // оценок 2
+  reviews3      Int?                          // оценок 3
+  reviews4      Int?                          // оценок 4
+  reviews5      Int?                          // оценок 5
+  price         Float?                        // цена
+  label         String?  @db.VarChar(100)      // ярлык (ручной)
+  availability  String   @default("IN_STOCK")
+  rawJson       Json?                         // полный ответ API
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Product
 // ──────────────────────────────────────────────────────────────────
 

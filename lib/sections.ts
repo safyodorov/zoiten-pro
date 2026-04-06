@@ -5,6 +5,7 @@
 
 export const SECTION_PATHS = {
   "/products": "PRODUCTS",
+  "/cards": "PRODUCTS",
   "/prices": "PRICES",
   "/weekly": "WEEKLY_CARDS",
   "/inventory": "STOCK",
