@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { duplicateProduct, softDeleteProduct } from "@/app/actions/products"
+import { duplicateProduct, softDeleteProduct, hardDeleteProduct } from "@/app/actions/products"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -93,11 +93,13 @@ export function ProductsTable({
     })
   }
 
-  function handleDelete(id: string) {
+  function handleDelete(id: string, isAlreadyDeleted: boolean) {
     startTransition(async () => {
-      const result = await softDeleteProduct(id)
+      const result = isAlreadyDeleted
+        ? await hardDeleteProduct(id)
+        : await softDeleteProduct(id)
       if (result.ok) {
-        toast("Товар удалён")
+        toast(isAlreadyDeleted ? "Товар удалён навсегда" : "Товар удалён")
         router.refresh()
       } else {
         toast.error(result.error)
@@ -203,8 +205,11 @@ export function ProductsTable({
                       size="sm"
                       disabled={isPending}
                       onClick={() => {
-                        if (confirm(`Удалить товар «${product.name}»?`)) {
-                          handleDelete(product.id)
+                        const msg = product.deletedAt
+                          ? `Удалить товар «${product.name}» навсегда? Это действие необратимо.`
+                          : `Удалить товар «${product.name}»?`
+                        if (confirm(msg)) {
+                          handleDelete(product.id, !!product.deletedAt)
                         }
                       }}
                       className="text-destructive hover:text-destructive"

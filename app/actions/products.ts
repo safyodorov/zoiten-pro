@@ -215,6 +215,26 @@ export async function softDeleteProduct(id: string): Promise<ActionResult> {
   }
 }
 
+// ── hardDeleteProduct (физическое удаление из корзины) ────────────
+
+export async function hardDeleteProduct(id: string): Promise<ActionResult> {
+  try {
+    await requireSection("PRODUCTS")
+    // Каскадно удалит articles и barcodes (onDelete: Cascade в schema)
+    await prisma.product.delete({ where: { id } })
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Товар не найден" }
+    }
+    console.error("hardDeleteProduct error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
 // ── duplicateProduct ──────────────────────────────────────────────
 
 export async function duplicateProduct(id: string): Promise<CreateResult> {
