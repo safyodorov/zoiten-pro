@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Reference Data** - Brand, category/subcategory, and marketplace CRUD with seed data
 - [x] **Phase 4: Products Module** - Full product CRUD, photo upload, soft delete, search, and 30-day cleanup (completed 2026-04-06)
 - [x] **Phase 5: UI & Module Stubs** - Animated landing page, stub tabs for future modules, support integration (completed 2026-04-06)
-- [ ] **Phase 6: Deployment** - VPS setup, nginx, systemd, SSL, and production go-live
+- [x] **Phase 6: Deployment** - VPS setup, nginx, systemd, SSL, and production go-live (completed 2026-04-06)
 
 ## Phase Details
 
@@ -117,7 +117,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 06-01-PLAN.md — Deploy script, systemd service + timer, nginx server block, updated .env.example
-- [ ] 06-02-PLAN.md — DEPLOY.md runbook — complete step-by-step VPS deployment guide
+- [x] 06-02-PLAN.md — DEPLOY.md runbook — complete step-by-step VPS deployment guide
 
 ## Progress
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Reference Data | 2/3 | In Progress|  |
 | 4. Products Module | 4/4 | Complete   | 2026-04-06 |
 | 5. UI & Module Stubs | 2/2 | Complete   | 2026-04-06 |
-| 6. Deployment | 1/2 | In Progress|  |
+| 6. Deployment | 2/2 | Complete   | 2026-04-06 |
