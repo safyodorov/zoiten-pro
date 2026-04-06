@@ -29,6 +29,7 @@ export interface WbCardRaw {
   subjectName: string
   subjectID: number
   video?: string // URL видео, если есть
+  tags?: Array<{ id: number; name: string }> // ярлыки продавца
   photos: WbPhotoRaw[]
   sizes: Array<{
     skus: string[]
@@ -124,6 +125,9 @@ export function parseCard(card: WbCardRaw) {
   // Видео — поле video в ответе API (URL m3u8 или null)
   const hasVideo = !!card.video
 
+  // Ярлыки (tags) — пользовательские метки продавца
+  const tags = (card.tags ?? []).map((t) => t.name)
+
   // Габариты (WB хранит в см, вес в кг)
   const dims = card.dimensions
   const weightKg = dims?.weightBrutto ?? null
@@ -146,5 +150,6 @@ export function parseCard(card: WbCardRaw) {
     heightCm,
     widthCm,
     depthCm,
+    tags,
   }
 }

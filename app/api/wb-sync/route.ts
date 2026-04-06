@@ -46,6 +46,7 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
             rawJson: JSON.parse(JSON.stringify(raw)),
             updatedAt: new Date(),
           },
@@ -64,6 +65,7 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            label: card.tags.length > 0 ? card.tags.join(", ") : null,
             rawJson: JSON.parse(JSON.stringify(raw)),
           },
         })
