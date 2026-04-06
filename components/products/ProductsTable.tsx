@@ -3,7 +3,7 @@
 "use client"
 
 import { useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
 import {
@@ -71,13 +71,12 @@ export function ProductsTable({
   searchQuery,
 }: ProductsTableProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
   function buildPageUrl(page: number) {
-    const params = new URLSearchParams()
-    params.set("status", currentStatus)
+    const params = new URLSearchParams(searchParams.toString())
     params.set("page", String(page))
-    if (searchQuery) params.set("q", searchQuery)
     return `/products?${params.toString()}`
   }
 
