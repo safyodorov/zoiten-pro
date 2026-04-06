@@ -1,7 +1,8 @@
 // lib/wb-api.ts
-// Работа с Wildberries Content API
+// Работа с Wildberries Content API и Prices API
 
 const CONTENT_API = "https://content-api.wildberries.ru"
+const PRICES_API = "https://discounts-prices-api.wildberries.ru"
 
 function getToken(): string {
   const token = process.env.WB_API_TOKEN
@@ -28,8 +29,8 @@ export interface WbCardRaw {
   description: string
   subjectName: string
   subjectID: number
-  video?: string // URL видео, если есть
-  tags?: Array<{ id: number; name: string }> // ярлыки продавца
+  video?: string
+  tags?: Array<{ id: number; name: string }>
   photos: WbPhotoRaw[]
   sizes: Array<{
     skus: string[]
@@ -73,7 +74,7 @@ export async function fetchAllCards(): Promise<WbCardRaw[]> {
     const body = {
       settings: {
         cursor: cursorObj,
-        filter: { withPhoto: -1 }, // -1 = все
+        filter: { withPhoto: -1 },
       },
     }
 
@@ -105,10 +106,115 @@ export async function fetchAllCards(): Promise<WbCardRaw[]> {
   return allCards
 }
 
+// ── Получение цен через Discounts & Prices API ──────────────────
+
+interface PriceItem {
+  nmID: number
+  discount: number
+  sizes: Array<{
+    price: number
+    discountedPrice: number
+  }>
+}
+
+interface PricesResponse {
+  data: {
+    listGoods: PriceItem[]
+  }
+  error: boolean
+}
+
+export async function fetchAllPrices(): Promise<Map<number, { price: number; discountedPrice: number }>> {
+  const token = getToken()
+  const priceMap = new Map<number, { price: number; discountedPrice: number }>()
+
+  let offset = 0
+  const limit = 1000
+
+  while (true) {
+    const res = await fetch(
+      `${PRICES_API}/api/v2/list/goods/filter?limit=${limit}&offset=${offset}`,
+      {
+        headers: { Authorization: token },
+      }
+    )
+
+    if (!res.ok) {
+      console.error(`Prices API ошибка ${res.status}`)
+      break
+    }
+
+    const data: PricesResponse = await res.json()
+    const items = data.data?.listGoods ?? []
+
+    if (items.length === 0) break
+
+    for (const item of items) {
+      const size = item.sizes?.[0]
+      if (size) {
+        // Цены приходят в копейках, переводим в рубли (целые)
+        priceMap.set(item.nmID, {
+          price: Math.round(size.price / 100),
+          discountedPrice: Math.round(size.discountedPrice / 100),
+        })
+      }
+    }
+
+    offset += items.length
+    if (items.length < limit) break
+  }
+
+  return priceMap
+}
+
+// ── Получение скидки WB (СПП) через публичный API ───────────────
+
+export async function fetchWbDiscounts(nmIds: number[]): Promise<Map<number, number>> {
+  const discountMap = new Map<number, number>()
+
+  // Батчами по 50 nmId
+  for (let i = 0; i < nmIds.length; i += 50) {
+    const batch = nmIds.slice(i, i + 50)
+    const nmStr = batch.join(";")
+
+    try {
+      const res = await fetch(
+        `https://card.wb.ru/cards/v2/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+        }
+      )
+
+      if (!res.ok) continue
+
+      const data = await res.json()
+      const products = data?.data?.products ?? []
+
+      for (const product of products) {
+        const spp = product.saleConditions ?? product.sale ?? null
+        if (spp != null) {
+          discountMap.set(product.id, Math.round(spp))
+        }
+      }
+    } catch {
+      // Публичный API может быть заблокирован с VPS — не критично
+    }
+
+    // Пауза между батчами
+    if (i + 50 < nmIds.length) {
+      await new Promise((r) => setTimeout(r, 300))
+    }
+  }
+
+  return discountMap
+}
+
 // ── Преобразование карточки API → данные для БД ─────────────────
 
 export function parseCard(card: WbCardRaw) {
-  // Штрихкоды из sizes
   const allBarcodes: string[] = []
   for (const size of card.sizes ?? []) {
     for (const sku of size.skus ?? []) {
@@ -118,17 +224,11 @@ export function parseCard(card: WbCardRaw) {
     }
   }
 
-  // Фото из массива photos
   const photos = (card.photos ?? []).map((p) => p.big)
   const photoUrl = photos[0] ?? null
-
-  // Видео — поле video в ответе API (URL m3u8 или null)
   const hasVideo = !!card.video
-
-  // Ярлыки (tags) — пользовательские метки продавца
   const tags = (card.tags ?? []).map((t) => t.name)
 
-  // Габариты (WB хранит в см, вес в кг)
   const dims = card.dimensions
   const weightKg = dims?.weightBrutto ?? null
   const heightCm = dims?.height ?? null

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Star, Video, ArrowUpDown } from "lucide-react"
+import { Video, ArrowUpDown } from "lucide-react"
 import {
   Table,
   TableBody,
@@ -41,6 +41,7 @@ interface WbCard {
   rating: number | null
   reviewsTotal: number | null
   price: number | null
+  discountWb: number | null
   label: string | null
   hasVideo: boolean
   availability: string
@@ -291,8 +292,8 @@ export function WbCardsTable({
                   <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
-              <TableHead>Рейтинг</TableHead>
-              <TableHead>Цена</TableHead>
+              <TableHead>Цена продавца</TableHead>
+              <TableHead>Скидка WB</TableHead>
               <TableHead className="w-12">Видео</TableHead>
             </TableRow>
           </TableHeader>
@@ -322,20 +323,14 @@ export function WbCardsTable({
                 <TableCell>{card.brand ?? "—"}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.category ?? "—"}</TableCell>
                 <TableCell>
-                  {card.rating != null ? (
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
-                      <span className="text-sm">{card.rating.toFixed(1)}</span>
-                      {card.reviewsTotal != null && (
-                        <span className="text-xs text-muted-foreground">({card.reviewsTotal})</span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  {card.price != null
+                    ? <span className="text-sm">{card.price.toLocaleString("ru-RU")} ₽</span>
+                    : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
-                  {card.price != null ? `${card.price.toLocaleString("ru-RU")} ₽` : <span className="text-muted-foreground">—</span>}
+                  {card.discountWb != null
+                    ? <span className="text-sm">{card.discountWb}%</span>
+                    : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
                   {card.hasVideo && <Video className="h-4 w-4 text-blue-500" />}

@@ -129,7 +129,8 @@ model WbCard {
   reviews3      Int?                          // оценок 3
   reviews4      Int?                          // оценок 4
   reviews5      Int?                          // оценок 5
-  price         Float?                        // цена
+  price         Float?                        // цена продавца со скидкой
+  discountWb    Int?                          // скидка WB (СПП), %
   label         String?  @db.VarChar(100)      // ярлык (ручной)
   availability  String   @default("IN_STOCK")
   rawJson       Json?                         // полный ответ API

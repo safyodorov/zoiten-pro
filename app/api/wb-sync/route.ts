@@ -6,7 +6,7 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-import { fetchAllCards, parseCard } from "@/lib/wb-api"
+import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts } from "@/lib/wb-api"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -15,20 +15,31 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    // 1. Получаем все карточки из Content API
+    // 1. Карточки из Content API
     const rawCards = await fetchAllCards()
 
     if (rawCards.length === 0) {
       return NextResponse.json({ synced: 0, message: "Карточки не найдены в WB API" })
     }
 
+    // 2. Цены из Discounts & Prices API (одним запросом для всех)
+    const priceMap = await fetchAllPrices()
+
+    // 3. Скидки WB (СПП) через публичный API (может не сработать с VPS)
+    const nmIds = rawCards.map((c) => c.nmID)
+    const discountMap = await fetchWbDiscounts(nmIds)
+
     let synced = 0
     const errors: string[] = []
 
-    // 2. Обрабатываем каждую карточку
+    // 4. Обрабатываем каждую карточку
     for (const raw of rawCards) {
       try {
         const card = parseCard(raw)
+        const priceData = priceMap.get(card.nmId)
+        const discountWb = discountMap.get(card.nmId) ?? null
+
+        const price = priceData?.discountedPrice ?? null
 
         await prisma.wbCard.upsert({
           where: { nmId: card.nmId },
@@ -46,6 +57,8 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            price,
+            discountWb,
             label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
             rawJson: JSON.parse(JSON.stringify(raw)),
             updatedAt: new Date(),
@@ -65,6 +78,8 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            price,
+            discountWb,
             label: card.tags.length > 0 ? card.tags.join(", ") : null,
             rawJson: JSON.parse(JSON.stringify(raw)),
           },
@@ -79,6 +94,8 @@ export async function POST(): Promise<NextResponse> {
     return NextResponse.json({
       synced,
       total: rawCards.length,
+      pricesLoaded: priceMap.size,
+      discountsLoaded: discountMap.size,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     })
   } catch (e) {
