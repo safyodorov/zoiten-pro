@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
 import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -205,8 +205,16 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   const watchedWidth = useWatch({ control: form.control, name: "widthCm" })
   const watchedDepth = useWatch({ control: form.control, name: "depthCm" })
 
+  // Skip the first render so initial values are not cleared
+  const brandMounted = useRef(false)
+  const categoryMounted = useRef(false)
+
   // Clear category+subcategory when brand changes (per D-10)
   useEffect(() => {
+    if (!brandMounted.current) {
+      brandMounted.current = true
+      return
+    }
     form.setValue("categoryId", null)
     form.setValue("subcategoryId", null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,6 +222,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
   // Clear subcategory when category changes (per D-10)
   useEffect(() => {
+    if (!categoryMounted.current) {
+      categoryMounted.current = true
+      return
+    }
     form.setValue("subcategoryId", null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedCategoryId])
