@@ -54,6 +54,8 @@ interface WbCardsTableProps {
   pageSize: number
   sortBy: string
   sortDir: string
+  selectedBrands: string[]
+  selectedCategories: string[]
 }
 
 const PAGE_SIZES = [20, 50, 100]
@@ -118,6 +120,8 @@ export function WbCardsTable({
   pageSize,
   sortBy,
   sortDir,
+  selectedBrands,
+  selectedCategories,
 }: WbCardsTableProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -146,6 +150,9 @@ export function WbCardsTable({
     if (values.sort && values.sort !== "createdAt") params.set("sort", String(values.sort))
     if (values.dir && values.dir !== "desc") params.set("dir", String(values.dir))
     if (values.q) params.set("q", String(values.q))
+    // Сохраняем активные фильтры
+    if (selectedBrands.length > 0) params.set("brands", selectedBrands.join(","))
+    if (selectedCategories.length > 0) params.set("categories", selectedCategories.join(","))
     const qs = params.toString()
     return `/cards/wb${qs ? `?${qs}` : ""}`
   }
