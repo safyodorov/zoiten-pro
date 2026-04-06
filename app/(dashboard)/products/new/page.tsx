@@ -1,0 +1,20 @@
+import { requireSection } from "@/lib/rbac"
+import { prisma } from "@/lib/prisma"
+import { ProductForm } from "@/components/products/ProductForm"
+
+export default async function NewProductPage() {
+  await requireSection("PRODUCTS")
+  const [brands, marketplaces] = await Promise.all([
+    prisma.brand.findMany({
+      include: { categories: { include: { subcategories: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.marketplace.findMany({ orderBy: { name: "asc" } }),
+  ])
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">Новый товар</h1>
+      <ProductForm brands={brands} marketplaces={marketplaces} />
+    </div>
+  )
+}
