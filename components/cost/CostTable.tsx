@@ -14,8 +14,8 @@ import { updateProductCost } from "@/app/actions/cost"
 
 interface CostProduct {
   id: string
-  sku: string
   name: string
+  photoUrl: string | null
   brand: { name: string }
   category: { name: string } | null
   subcategory: { name: string } | null
@@ -150,7 +150,7 @@ export function CostTable({ products, currentPage, totalPages }: CostTableProps)
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-28">УКТ</TableHead>
+              <TableHead className="w-16">Фото</TableHead>
               <TableHead>Бренд</TableHead>
               <TableHead className="max-w-[200px]">Наименование</TableHead>
               <TableHead>Категория</TableHead>
@@ -169,8 +169,12 @@ export function CostTable({ products, currentPage, totalPages }: CostTableProps)
             )}
             {products.map((product) => (
               <TableRow key={product.id}>
-                <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                  {product.sku}
+                <TableCell>
+                  {product.photoUrl ? (
+                    <img src={product.photoUrl} alt={product.name} className="w-12 h-16 object-cover rounded" />
+                  ) : (
+                    <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
+                  )}
                 </TableCell>
                 <TableCell>{product.brand.name}</TableCell>
                 <TableCell className="max-w-[200px]">
