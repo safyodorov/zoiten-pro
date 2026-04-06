@@ -4,17 +4,20 @@
 
 ## Домен & Хостинг
 
-- **Домен**: zoiten.pro (пока не привязан)
+- **Домен**: zoiten.pro ✅ привязан, SSL через Let's Encrypt
+- **URL**: https://zoiten.pro
 - **VPS**: root@85.198.97.89 (key-based SSH auth)
+- **Порт**: 3001 (bozon.pro занимает 3000)
 - **Слоган**: "Время для жизни, свобода от рутины"
 
 ## Stack
 
-- **Framework**: Next.js 14 (App Router, TypeScript)
-- **Database**: PostgreSQL + Prisma ORM
-- **UI**: shadcn/ui + Tailwind CSS + Framer Motion
-- **Auth**: NextAuth.js (credentials provider)
-- **Deploy**: systemd + nginx reverse proxy на VPS
+- **Framework**: Next.js 15.5.14 (App Router, TypeScript, React 19)
+- **Database**: PostgreSQL 16 + Prisma 6
+- **UI**: shadcn/ui v4 (base-nova) + Tailwind v4 + motion 12.x
+- **Auth**: Auth.js v5 (credentials provider, JWT)
+- **Deploy**: systemd + nginx reverse proxy → localhost:3001
+- **WB API**: Wildberries Content API + Prices API (lib/wb-api.ts)
 
 ## Аутентификация
 
@@ -24,10 +27,11 @@
 
 ## Разделы ERP
 
-1. **Товары** (MVP — первый модуль)
-2. Управление ценами
-3. Недельные карточки
-4. Управление остатками
+1. **Товары** ✅ полный CRUD, фото, артикулы, штрих-коды, размеры, мягкое удаление
+2. **Карточки Товаров** ✅ WB синхронизация через API, таблица с фильтрами, привязка к товарам + заглушка Ozon
+3. Управление ценами (заглушка)
+4. Недельные карточки (заглушка)
+5. Управление остатками (заглушка)
 5. Себестоимость партий
 6. План закупок
 7. План продаж
@@ -61,9 +65,32 @@
 
 ## VPS заметки
 
-- На VPS также работает CantonFairBot (/opt/CantonFairBot/)
-- PostgreSQL нужно установить на VPS
-- Nginx будет проксировать zoiten.pro → localhost:3000
+- Zoiten ERP: /opt/zoiten-pro/ → порт 3001, systemd zoiten-erp.service
+- bozon.pro: /opt/bozon-pro/ → порт 3000, systemd bozon-pro.service
+- CantonFairBot: /opt/CantonFairBot/, systemd cantonfairbot.service
+- PostgreSQL 16 установлен, БД zoiten_erp, пользователь zoiten
+- Nginx: zoiten.pro (SSL) → 3001, bozon.pro (SSL) → 3000
+- SSL: Let's Encrypt через certbot, автопродление
+- Фото товаров: /var/www/zoiten-uploads/ → nginx /uploads/
+- Cron purge: systemd zoiten-purge.timer (ежедневно 02:00)
+- Деплой: ssh + git pull + deploy.sh
+
+## Новые модули (добавлены после MVP)
+
+### Карточки WB
+- **Файлы**: lib/wb-api.ts, app/actions/wb-cards.ts, app/api/wb-sync/route.ts
+- **Компоненты**: components/cards/ (WbCardsTable, WbFilters, WbSyncButton, CardsTabs)
+- **Роут**: /cards/wb (+ /cards/ozon заглушка)
+- **API**: WB Content API + Discounts/Prices API
+- **Модель**: WbCard в Prisma (с привязкой к Product через артикул)
+- **Env**: WB_API_KEY в .env
+
+### Улучшения формы товаров
+- Кроп фото (PhotoCropDialog)
+- Поле "Ярлык" (label) на товаре
+- Drag-and-drop сортировка справочников (@dnd-kit)
+- Порядок габаритов как на WB (Длина × Ширина × Высота)
+- Физическое удаление из корзины
 
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
