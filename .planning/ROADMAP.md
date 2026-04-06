@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: User Management** - Superadmin creates and manages user accounts with section-level permissions
 - [ ] **Phase 3: Reference Data** - Brand, category/subcategory, and marketplace CRUD with seed data
 - [x] **Phase 4: Products Module** - Full product CRUD, photo upload, soft delete, search, and 30-day cleanup (completed 2026-04-06)
-- [ ] **Phase 5: UI & Module Stubs** - Animated landing page, stub tabs for future modules, support integration
+- [x] **Phase 5: UI & Module Stubs** - Animated landing page, stub tabs for future modules, support integration (completed 2026-04-06)
 - [ ] **Phase 6: Deployment** - VPS setup, nginx, systemd, SSL, and production go-live
 
 ## Phase Details
@@ -100,7 +100,7 @@ Plans:
   4. Служба поддержки section is accessible via navigation and respects RBAC permissions
 **Plans**: 2 plans
 Plans:
-- [ ] 05-01-PLAN.md — Install motion package + animated landing page (/, public, dark theme, hero + section cards)
+- [x] 05-01-PLAN.md — Install motion package + animated landing page (/, public, dark theme, hero + section cards)
 - [x] 05-02-PLAN.md — ComingSoon component + 6 module stub pages + /support placeholder
 **UI hint**: yes
 
@@ -127,5 +127,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. User Management | 1/2 | In Progress|  |
 | 3. Reference Data | 2/3 | In Progress|  |
 | 4. Products Module | 4/4 | Complete   | 2026-04-06 |
-| 5. UI & Module Stubs | 1/2 | In Progress|  |
+| 5. UI & Module Stubs | 2/2 | Complete   | 2026-04-06 |
 | 6. Deployment | 0/? | Not started | - |

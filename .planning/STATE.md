@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-04-06T04:53:04.293Z"
+status: verifying
+stopped_at: Completed 05-01-PLAN.md — landing page done
+last_updated: "2026-04-06T04:53:41.943Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 
 Phase: 05 (ui-module-stubs) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-06
 
 Progress: [░░░░░░░░░░] 0%
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-products-module P03 | 363 | 3 tasks | 4 files |
 | Phase 04-products-module P04 | 44s | 2 tasks | 2 files |
 | Phase 05-ui-module-stubs P02 | 2min | 2 tasks | 8 files |
+| Phase 05-ui-module-stubs P01 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Recent decisions affecting current work:
 - [Phase 04-products-module]: NavLinks extracted as client component — keeps Sidebar as RSC for server-side section filtering
 - [Phase 05-ui-module-stubs]: ComingSoon is a pure Server Component — no motion/client animation needed for placeholders
 - [Phase 05-ui-module-stubs]: Support page uses bespoke layout with GitHub link instead of ComingSoon to convey integration context
+- [Phase 05-ui-module-stubs]: motion@12.38.0 used as package name (not framer-motion); imported from 'motion/react'
+- [Phase 05-ui-module-stubs]: Landing page is a Server Component assembling three client components — motion stays in leaf components
 
 ### Pending Todos
 
@@ -112,6 +115,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T04:53:04.291Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-04-06T04:53:41.940Z
+Stopped at: Completed 05-01-PLAN.md — landing page done
 Resume file: None
