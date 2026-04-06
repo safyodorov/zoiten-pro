@@ -101,7 +101,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [ ] 05-01-PLAN.md — Install motion package + animated landing page (/, public, dark theme, hero + section cards)
-- [ ] 05-02-PLAN.md — ComingSoon component + 6 module stub pages + /support placeholder
+- [x] 05-02-PLAN.md — ComingSoon component + 6 module stub pages + /support placeholder
 **UI hint**: yes
 
 ### Phase 6: Deployment
@@ -127,5 +127,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. User Management | 1/2 | In Progress|  |
 | 3. Reference Data | 2/3 | In Progress|  |
 | 4. Products Module | 4/4 | Complete   | 2026-04-06 |
-| 5. UI & Module Stubs | 0/2 | Not started | - |
+| 5. UI & Module Stubs | 1/2 | In Progress|  |
 | 6. Deployment | 0/? | Not started | - |

@@ -67,17 +67,17 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Module Stubs
 
-- [ ] **STUB-01**: "Управление ценами" tab/page exists with placeholder content
-- [ ] **STUB-02**: "Недельные карточки" tab/page exists with placeholder content
-- [ ] **STUB-03**: "Управление остатками" tab/page exists with placeholder content
-- [ ] **STUB-04**: "Себестоимость партий" tab/page exists with placeholder content
-- [ ] **STUB-05**: "План закупок" tab/page exists with placeholder content
-- [ ] **STUB-06**: "План продаж" tab/page exists with placeholder content
+- [x] **STUB-01**: "Управление ценами" tab/page exists with placeholder content
+- [x] **STUB-02**: "Недельные карточки" tab/page exists with placeholder content
+- [x] **STUB-03**: "Управление остатками" tab/page exists with placeholder content
+- [x] **STUB-04**: "Себестоимость партий" tab/page exists with placeholder content
+- [x] **STUB-05**: "План закупок" tab/page exists with placeholder content
+- [x] **STUB-06**: "План продаж" tab/page exists with placeholder content
 
 ### Support Integration
 
-- [ ] **SUPP-01**: "Служба поддержки" section integrated from github.com/safyodorov/ai-cs-zoiten
-- [ ] **SUPP-02**: Support section accessible via navigation, respects RBAC permissions
+- [x] **SUPP-01**: "Служба поддержки" section integrated from github.com/safyodorov/ai-cs-zoiten
+- [x] **SUPP-02**: Support section accessible via navigation, respects RBAC permissions
 
 ### Deployment
 
@@ -166,14 +166,14 @@ Explicitly excluded. Documented to prevent scope creep.
 | LAND-02 | Phase 5 | Pending |
 | LAND-03 | Phase 5 | Pending |
 | LAND-04 | Phase 5 | Pending |
-| STUB-01 | Phase 5 | Pending |
-| STUB-02 | Phase 5 | Pending |
-| STUB-03 | Phase 5 | Pending |
-| STUB-04 | Phase 5 | Pending |
-| STUB-05 | Phase 5 | Pending |
-| STUB-06 | Phase 5 | Pending |
-| SUPP-01 | Phase 5 | Pending |
-| SUPP-02 | Phase 5 | Pending |
+| STUB-01 | Phase 5 | Complete |
+| STUB-02 | Phase 5 | Complete |
+| STUB-03 | Phase 5 | Complete |
+| STUB-04 | Phase 5 | Complete |
+| STUB-05 | Phase 5 | Complete |
+| STUB-06 | Phase 5 | Complete |
+| SUPP-01 | Phase 5 | Complete |
+| SUPP-02 | Phase 5 | Complete |
 | DEPLOY-01 | Phase 6 | Pending |
 | DEPLOY-02 | Phase 6 | Pending |
 | DEPLOY-03 | Phase 6 | Pending |
