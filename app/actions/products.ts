@@ -25,6 +25,7 @@ const ProductSchema = z.object({
   brandId: z.string().min(1),
   categoryId: z.string().optional(),
   subcategoryId: z.string().optional(),
+  label: z.string().max(100).nullable().optional(),
   abcStatus: z.enum(["A", "B", "C"]).optional(),
   availability: z
     .enum(["IN_STOCK", "OUT_OF_STOCK", "DISCONTINUED", "DELETED"])
@@ -87,6 +88,7 @@ export async function createProduct(
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
           subcategoryId: parsed.subcategoryId ?? null,
+          label: parsed.label ?? null,
           abcStatus: parsed.abcStatus ?? null,
           availability: parsed.availability,
           weightKg: parsed.weightKg ?? null,
@@ -138,6 +140,7 @@ export async function updateProduct(
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
           subcategoryId: parsed.subcategoryId ?? null,
+          label: parsed.label ?? null,
           abcStatus: parsed.abcStatus ?? null,
           availability: parsed.availability,
           weightKg: parsed.weightKg ?? null,

@@ -116,6 +116,7 @@ model Product {
   category      Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   subcategoryId String?
   subcategory   Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  label         String?              @db.VarChar(100)
   abcStatus     AbcStatus?
   availability  Availability         @default(IN_STOCK)
   weightKg      Float?

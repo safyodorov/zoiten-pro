@@ -92,6 +92,7 @@ interface ProductData {
   brandId?: string
   categoryId?: string | null
   subcategoryId?: string | null
+  label?: string | null
   abcStatus?: string | null
   availability?: string
   weightKg?: number | null
@@ -117,6 +118,7 @@ const formSchema = z.object({
   brandId: z.string().min(1, "Выберите бренд"),
   categoryId: z.string().nullable().optional(),
   subcategoryId: z.string().nullable().optional(),
+  label: z.string().max(100, "Максимум 100 символов").nullable().optional(),
   abcStatus: z.enum(["A", "B", "C"]).nullable().optional(),
   availability: z.enum(["IN_STOCK", "OUT_OF_STOCK", "DISCONTINUED", "DELETED"]),
   weightKg: z.number().positive().nullable().optional(),
@@ -170,6 +172,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       brandId: product?.brandId ?? "",
       categoryId: product?.categoryId ?? null,
       subcategoryId: product?.subcategoryId ?? null,
+      label: product?.label ?? null,
       abcStatus: (product?.abcStatus as "A" | "B" | "C" | null | undefined) ?? null,
       availability:
         (product?.availability as FormValues["availability"]) ?? "IN_STOCK",
@@ -464,6 +467,25 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                     placeholder="Выберите подкатегорию"
                     createLabel="Создать подкатегорию"
                     disabled={!watchedCategoryId}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Label */}
+          <FormField
+            control={form.control}
+            name="label"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Ярлык</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Введите ярлык"
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value || null)}
                   />
                 </FormControl>
                 <FormMessage />
