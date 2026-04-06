@@ -84,7 +84,7 @@ export async function POST(): Promise<NextResponse> {
             reviews4: ratingData.reviews4,
             reviews5: ratingData.reviews5,
             price,
-            rawJson: card as unknown as Record<string, unknown>,
+            rawJson: JSON.parse(JSON.stringify(card)),
             updatedAt: new Date(),
           },
           create: {
@@ -106,7 +106,7 @@ export async function POST(): Promise<NextResponse> {
             reviews4: ratingData.reviews4,
             reviews5: ratingData.reviews5,
             price,
-            rawJson: card as unknown as Record<string, unknown>,
+            rawJson: JSON.parse(JSON.stringify(card)),
           },
         })
 
