@@ -43,6 +43,17 @@ function formatMsk(date: string | Date): string {
   return mskFormatter.format(new Date(date))
 }
 
+// ── Currency formatter (с разрядами) ──────────────────────────────
+
+const currencyFormatter = new Intl.NumberFormat("ru-RU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function formatCost(value: number): string {
+  return currencyFormatter.format(value)
+}
+
 // ── Inline edit cell ──────────────────────────────────────────────
 
 function CostCell({
@@ -124,7 +135,7 @@ function CostCell({
       title="Нажмите для редактирования"
     >
       {currentValue !== null ? (
-        <span>{currentValue.toFixed(2)} ₽</span>
+        <span>{formatCost(currentValue)} ₽</span>
       ) : (
         <span className="text-muted-foreground">—</span>
       )}
