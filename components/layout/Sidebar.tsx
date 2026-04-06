@@ -1,7 +1,8 @@
 // components/layout/Sidebar.tsx
 // Navigation sidebar — filters nav items by user section access (per D-05: hide inaccessible)
 // SUPERADMIN sees all items
-import Link from "next/link"
+// NavLinks is extracted as a client component to support usePathname active state
+import { NavLinks } from "@/components/layout/NavLinks"
 
 interface SidebarProps {
   userRole: string
@@ -35,15 +36,7 @@ export function Sidebar({ userRole, allowedSections }: SidebarProps) {
         Zoiten ERP
       </div>
       <nav className="flex-1 py-2 overflow-y-auto">
-        {visibleItems.map((item) => (
-          <Link
-            key={item.section}
-            href={item.href}
-            className="flex items-center px-4 py-2 text-sm hover:bg-gray-50 transition-colors"
-          >
-            {item.label}
-          </Link>
-        ))}
+        <NavLinks items={visibleItems} />
       </nav>
     </aside>
   )
