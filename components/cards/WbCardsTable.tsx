@@ -316,7 +316,7 @@ export function WbCardsTable({
                     <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
                   )}
                 </TableCell>
-                <TableCell className="font-medium max-w-[250px] truncate">{card.name}</TableCell>
+                <TableCell className="font-medium max-w-[160px] truncate">{card.name}</TableCell>
                 <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>
