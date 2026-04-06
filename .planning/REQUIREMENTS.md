@@ -50,13 +50,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **PROD-05**: User can add barcodes to product (1-20 barcodes per product)
 - [ ] **PROD-06**: User can set product dimensions (weight kg, height/width/depth cm) and see auto-calculated volume (liters)
 - [ ] **PROD-07**: Clicking a product in the list opens edit form with all current values
-- [ ] **PROD-08**: User can duplicate a product (deep copy of all fields except photo)
-- [ ] **PROD-09**: User can mark product for soft deletion (status changes to "удалено")
-- [ ] **PROD-10**: Soft-deleted products auto-purge from database after 30 days (cron/scheduled task)
-- [ ] **PROD-11**: Product photo uploaded to VPS filesystem (/var/www/zoiten-uploads/), served by nginx directly
+- [x] **PROD-08**: User can duplicate a product (deep copy of all fields except photo)
+- [x] **PROD-09**: User can mark product for soft deletion (status changes to "удалено")
+- [x] **PROD-10**: Soft-deleted products auto-purge from database after 30 days (cron/scheduled task)
+- [x] **PROD-11**: Product photo uploaded to VPS filesystem (/var/www/zoiten-uploads/), served by nginx directly
 - [ ] **PROD-12**: Text search across product names in the product list
-- [ ] **PROD-13**: Marketplace articles stored in separate normalized table with DB-level uniqueness per marketplace
-- [ ] **PROD-14**: Barcode uniqueness constraint with partial index (WHERE deletedAt IS NULL)
+- [x] **PROD-13**: Marketplace articles stored in separate normalized table with DB-level uniqueness per marketplace
+- [x] **PROD-14**: Barcode uniqueness constraint with partial index (WHERE deletedAt IS NULL)
 
 ### Landing Page
 
@@ -155,13 +155,13 @@ Explicitly excluded. Documented to prevent scope creep.
 | PROD-05 | Phase 4 | Pending |
 | PROD-06 | Phase 4 | Pending |
 | PROD-07 | Phase 4 | Pending |
-| PROD-08 | Phase 4 | Pending |
-| PROD-09 | Phase 4 | Pending |
-| PROD-10 | Phase 4 | Pending |
-| PROD-11 | Phase 4 | Pending |
+| PROD-08 | Phase 4 | Complete |
+| PROD-09 | Phase 4 | Complete |
+| PROD-10 | Phase 4 | Complete |
+| PROD-11 | Phase 4 | Complete |
 | PROD-12 | Phase 4 | Pending |
-| PROD-13 | Phase 4 | Pending |
-| PROD-14 | Phase 4 | Pending |
+| PROD-13 | Phase 4 | Complete |
+| PROD-14 | Phase 4 | Complete |
 | LAND-01 | Phase 5 | Pending |
 | LAND-02 | Phase 5 | Pending |
 | LAND-03 | Phase 5 | Pending |

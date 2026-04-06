@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 4 context gathered
-last_updated: "2026-04-05T20:52:57.227Z"
-last_activity: 2026-04-05
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-06T04:29:58.156Z"
+last_activity: 2026-04-06
 progress:
   total_phases: 6
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 10
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 03 — reference-data
+**Current focus:** Phase 04 — products-module
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-05
+Phase: 04 (products-module) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-06
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-reference-data P01 | 8 | 2 tasks | 2 files |
 | Phase 03 P03 | 5 | 1 tasks | 1 files |
 | Phase 03-reference-data P02 | 7 | 2 tasks | 8 files |
+| Phase 04 P01 | 3 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 03-reference-data]: CreateResult type (ok: true; id: string) used for create actions to support CreatableCombobox — handleAuthError typed as { ok: false; error: string } | null for dual compatibility
 - [Phase 03]: Used plain <button> (not Combobox.Item) for create affordance — avoids value conflicts and allows direct onClick handler without base-ui selection logic
 - [Phase 03-reference-data]: base-ui data-selected:/data-open: variants used in Tabs/Accordion wrappers (not radix data-state=)
+- [Phase 04]: Barcodes NOT copied on product duplicate — globally unique across all products
+- [Phase 04]: UPLOAD_DIR env var controls photo storage path; /tmp/zoiten-uploads dev, /var/www/zoiten-uploads prod
+- [Phase 04]: Dev file serving route /api/uploads/[...path] returns 404 in production — nginx handles /uploads/* directly
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-05T20:52:57.223Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-products-module/04-CONTEXT.md
+Last session: 2026-04-06T04:29:58.154Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
