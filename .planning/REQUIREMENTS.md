@@ -60,10 +60,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Landing Page
 
-- [ ] **LAND-01**: Landing page displays Zoiten logo, slogan "Время для жизни, свобода от рутины", and navigation to all ERP sections
-- [ ] **LAND-02**: Framer Motion animations on landing page (entrance effects, smooth transitions)
-- [ ] **LAND-03**: Login button in top-right corner, redirects to login page
-- [ ] **LAND-04**: Responsive layout (desktop primary, mobile acceptable)
+- [x] **LAND-01**: Landing page displays Zoiten logo, slogan "Время для жизни, свобода от рутины", and navigation to all ERP sections
+- [x] **LAND-02**: Framer Motion animations on landing page (entrance effects, smooth transitions)
+- [x] **LAND-03**: Login button in top-right corner, redirects to login page
+- [x] **LAND-04**: Responsive layout (desktop primary, mobile acceptable)
 
 ### Module Stubs
 
@@ -162,10 +162,10 @@ Explicitly excluded. Documented to prevent scope creep.
 | PROD-12 | Phase 4 | Complete |
 | PROD-13 | Phase 4 | Complete |
 | PROD-14 | Phase 4 | Complete |
-| LAND-01 | Phase 5 | Pending |
-| LAND-02 | Phase 5 | Pending |
-| LAND-03 | Phase 5 | Pending |
-| LAND-04 | Phase 5 | Pending |
+| LAND-01 | Phase 5 | Complete |
+| LAND-02 | Phase 5 | Complete |
+| LAND-03 | Phase 5 | Complete |
+| LAND-04 | Phase 5 | Complete |
 | STUB-01 | Phase 5 | Complete |
 | STUB-02 | Phase 5 | Complete |
 | STUB-03 | Phase 5 | Complete |
