@@ -97,8 +97,8 @@ export async function createProductFromCards(
       },
       select: { article: true },
     })
-    const existingSet = new Set(existingArticles.map((a) => a.article))
-    const newArticles = articleValues.filter((a) => !existingSet.has(a))
+    const existingArticleSet = new Set(existingArticles.map((a) => a.article))
+    const newArticles = articleValues.filter((a) => !existingArticleSet.has(a))
 
     // Создаём товар
     const product = await prisma.product.create({
