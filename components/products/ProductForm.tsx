@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Plus, X, Trash2 } from "lucide-react"
 
+import { cn } from "@/lib/utils"
 import { createProduct, updateProduct } from "@/app/actions/products"
 import { createBrand, createCategory, createSubcategory } from "@/app/actions/reference"
 import { CreatableCombobox } from "@/components/combobox/CreatableCombobox"
@@ -22,13 +23,31 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+// Native select wrapper styled with Tailwind (base-ui Select crashes with empty values)
+function NativeSelect({
+  value,
+  onChange,
+  children,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+    >
+      {children}
+    </select>
+  )
+}
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -447,22 +466,17 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
             render={({ field }) => (
               <FormItem>
                 <FormLabel>ABC-статус</FormLabel>
-                <Select
-                  value={field.value ?? ""}
-                  onValueChange={(v) => field.onChange(v === "" ? null : v)}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Не указан" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="">Не указан</SelectItem>
-                    <SelectItem value="A">A</SelectItem>
-                    <SelectItem value="B">B</SelectItem>
-                    <SelectItem value="C">C</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <NativeSelect
+                    value={field.value ?? ""}
+                    onChange={(v) => field.onChange(v === "" ? null : v)}
+                  >
+                    <option value="">Не указан</option>
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                  </NativeSelect>
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -475,18 +489,13 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Наличие</FormLabel>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="IN_STOCK">Есть</SelectItem>
-                    <SelectItem value="OUT_OF_STOCK">Нет в наличии</SelectItem>
-                    <SelectItem value="DISCONTINUED">Выведен из ассортимента</SelectItem>
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <NativeSelect value={field.value} onChange={field.onChange}>
+                    <option value="IN_STOCK">Есть</option>
+                    <option value="OUT_OF_STOCK">Нет в наличии</option>
+                    <option value="DISCONTINUED">Выведен из ассортимента</option>
+                  </NativeSelect>
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -538,21 +547,18 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
           {showMarketplaceSelect ? (
             <div className="flex gap-2 items-center">
-              <Select
+              <NativeSelect
                 value={newMarketplaceId}
-                onValueChange={(v) => setNewMarketplaceId(v ?? "")}
+                onChange={(v) => setNewMarketplaceId(v)}
+                className="flex-1"
               >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Выберите маркетплейс" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableMarketplaces.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <option value="">Выберите маркетплейс</option>
+                {availableMarketplaces.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </NativeSelect>
               <Button
                 type="button"
                 size="sm"
