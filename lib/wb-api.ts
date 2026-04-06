@@ -152,10 +152,10 @@ export async function fetchAllPrices(): Promise<Map<number, { price: number; dis
     for (const item of items) {
       const size = item.sizes?.[0]
       if (size) {
-        // Цены приходят в копейках, переводим в рубли (целые)
+        // WB API: цены в рублях (целые или с копейками)
         priceMap.set(item.nmID, {
-          price: Math.round(size.price / 100),
-          discountedPrice: Math.round(size.discountedPrice / 100),
+          price: Math.round(size.price),
+          discountedPrice: Math.round(size.discountedPrice),
         })
       }
     }
