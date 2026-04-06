@@ -167,7 +167,11 @@ export async function fetchAllPrices(): Promise<Map<number, { price: number; dis
   return priceMap
 }
 
-// ── Получение скидки WB (СПП) через публичный API ───────────────
+// ── Получение скидки WB (СПП) через публичный API card.wb.ru ────
+//
+// СПП = общая скидка покупателю (sale) минус скидка продавца (basicSale)
+// Это скидка которую WB даёт из своей комиссии.
+// Публичный API — неофициальный, может быть заблокирован с VPS-IP.
 
 export async function fetchWbDiscounts(nmIds: number[]): Promise<Map<number, number>> {
   const discountMap = new Map<number, number>()
@@ -183,29 +187,61 @@ export async function fetchWbDiscounts(nmIds: number[]): Promise<Map<number, num
         {
           headers: {
             Accept: "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
           },
         }
       )
 
-      if (!res.ok) continue
+      if (!res.ok) {
+        console.warn(`[WB Public API] HTTP ${res.status} for batch starting at ${batch[0]}`)
+        continue
+      }
 
       const data = await res.json()
       const products = data?.data?.products ?? []
 
       for (const product of products) {
-        const spp = product.saleConditions ?? product.sale ?? null
-        if (spp != null) {
-          discountMap.set(product.id, Math.round(spp))
+        const nmId = product.id
+        if (!nmId) continue
+
+        // Способ 1: через цены (самый точный)
+        // salePriceU = финальная цена покупателя (в копейках)
+        // priceU = базовая цена до скидок (в копейках)
+        // basicSale = скидка продавца %
+        const salePriceU = product.salePriceU  // цена покупателя (копейки)
+        const priceU = product.priceU          // базовая цена (копейки)
+        const basicSale = product.basicSale ?? product.sale ?? 0  // скидка продавца %
+
+        if (salePriceU && priceU && basicSale > 0) {
+          // Цена после скидки продавца (до СПП)
+          const priceAfterSellerDiscount = priceU * (1 - basicSale / 100)
+          if (priceAfterSellerDiscount > 0) {
+            const spp = Math.round((1 - salePriceU / priceAfterSellerDiscount) * 100)
+            if (spp > 0 && spp < 100) {
+              discountMap.set(nmId, spp)
+              continue
+            }
+          }
+        }
+
+        // Способ 2: через разницу sale - basicSale (fallback)
+        const totalSale = product.sale ?? 0
+        const sellerSale = product.basicSale ?? 0
+        if (totalSale > sellerSale) {
+          const spp = Math.round(totalSale - sellerSale)
+          if (spp > 0) {
+            discountMap.set(nmId, spp)
+          }
         }
       }
-    } catch {
+    } catch (err) {
       // Публичный API может быть заблокирован с VPS — не критично
+      console.warn("[WB Public API] fetch error:", err instanceof Error ? err.message : err)
     }
 
-    // Пауза между батчами
+    // Пауза между батчами чтобы не забанили
     if (i + 50 < nmIds.length) {
-      await new Promise((r) => setTimeout(r, 300))
+      await new Promise((r) => setTimeout(r, 500))
     }
   }
 
