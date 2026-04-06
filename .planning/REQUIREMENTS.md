@@ -81,14 +81,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Deployment
 
-- [ ] **DEPLOY-01**: Application deployed on VPS (85.198.97.89) via systemd service
-- [ ] **DEPLOY-02**: Nginx reverse proxy configured: zoiten.pro → localhost:3000
-- [ ] **DEPLOY-03**: Nginx serves uploaded photos from /var/www/zoiten-uploads/ as static files
-- [ ] **DEPLOY-04**: PostgreSQL installed and configured on VPS
-- [ ] **DEPLOY-05**: SSL/HTTPS via Let's Encrypt (when domain is pointed)
-- [ ] **DEPLOY-06**: Nginx coexists with CantonFairBot without breaking it
-- [ ] **DEPLOY-07**: Deploy script runs `prisma migrate deploy` (not `prisma migrate dev`)
-- [ ] **DEPLOY-08**: Environment variables (.env) properly configured on VPS
+- [x] **DEPLOY-01**: Application deployed on VPS (85.198.97.89) via systemd service
+- [x] **DEPLOY-02**: Nginx reverse proxy configured: zoiten.pro → localhost:3000
+- [x] **DEPLOY-03**: Nginx serves uploaded photos from /var/www/zoiten-uploads/ as static files
+- [x] **DEPLOY-04**: PostgreSQL installed and configured on VPS
+- [x] **DEPLOY-05**: SSL/HTTPS via Let's Encrypt (when domain is pointed)
+- [x] **DEPLOY-06**: Nginx coexists with CantonFairBot without breaking it
+- [x] **DEPLOY-07**: Deploy script runs `prisma migrate deploy` (not `prisma migrate dev`)
+- [x] **DEPLOY-08**: Environment variables (.env) properly configured on VPS
 
 ## v2 Requirements
 
@@ -174,14 +174,14 @@ Explicitly excluded. Documented to prevent scope creep.
 | STUB-06 | Phase 5 | Complete |
 | SUPP-01 | Phase 5 | Complete |
 | SUPP-02 | Phase 5 | Complete |
-| DEPLOY-01 | Phase 6 | Pending |
-| DEPLOY-02 | Phase 6 | Pending |
-| DEPLOY-03 | Phase 6 | Pending |
-| DEPLOY-04 | Phase 6 | Pending |
-| DEPLOY-05 | Phase 6 | Pending |
-| DEPLOY-06 | Phase 6 | Pending |
-| DEPLOY-07 | Phase 6 | Pending |
-| DEPLOY-08 | Phase 6 | Pending |
+| DEPLOY-01 | Phase 6 | Complete |
+| DEPLOY-02 | Phase 6 | Complete |
+| DEPLOY-03 | Phase 6 | Complete |
+| DEPLOY-04 | Phase 6 | Complete |
+| DEPLOY-05 | Phase 6 | Complete |
+| DEPLOY-06 | Phase 6 | Complete |
+| DEPLOY-07 | Phase 6 | Complete |
+| DEPLOY-08 | Phase 6 | Complete |
 
 ---
 *Defined: 2026-04-05 | 56 requirements | 6 phases*

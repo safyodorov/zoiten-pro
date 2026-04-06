@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 6 context gathered
-last_updated: "2026-04-06T04:58:14.148Z"
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-04-06T05:05:50.796Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 05 — ui-module-stubs
+**Current focus:** Phase 06 — deployment
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 06 (deployment) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-04-06
 
 Progress: [░░░░░░░░░░] 0%
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-products-module P04 | 44s | 2 tasks | 2 files |
 | Phase 05-ui-module-stubs P02 | 2min | 2 tasks | 8 files |
 | Phase 05-ui-module-stubs P01 | 2min | 2 tasks | 5 files |
+| Phase 06 P01 | 87s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,10 @@ Recent decisions affecting current work:
 - [Phase 05-ui-module-stubs]: Support page uses bespoke layout with GitHub link instead of ComingSoon to convey integration context
 - [Phase 05-ui-module-stubs]: motion@12.38.0 used as package name (not framer-motion); imported from 'motion/react'
 - [Phase 05-ui-module-stubs]: Landing page is a Server Component assembling three client components — motion stays in leaf components
+- [Phase 06]: systemd EnvironmentFile=/etc/zoiten.pro.env keeps secrets off command line and out of git
+- [Phase 06]: nginx serves /uploads/ via alias (faster than proxy_pass for static files)
+- [Phase 06]: deploy.sh uses prisma migrate deploy (not dev) — dev resets production data
+- [Phase 06]: standalone build requires manual cp of public/ and .next/static/ after build
 
 ### Pending Todos
 
@@ -115,6 +120,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T04:58:14.143Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-deployment/06-CONTEXT.md
+Last session: 2026-04-06T05:05:50.793Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None
