@@ -45,7 +45,7 @@ export async function updateProductCost(
     const authErr = handleAuthError(e)
     if (authErr) return authErr
     if (e instanceof z.ZodError) {
-      return { ok: false, error: e.errors[0]?.message ?? "Ошибка валидации" }
+      return { ok: false, error: e.issues[0]?.message ?? "Ошибка валидации" }
     }
     console.error("updateProductCost error:", e)
     return { ok: false, error: "Ошибка сервера" }
