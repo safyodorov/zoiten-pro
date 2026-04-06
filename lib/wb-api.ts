@@ -39,6 +39,8 @@ export interface WbCardRaw {
     width: number
     height: number
     length: number
+    weightBrutto?: number
+    isValid?: boolean
   }
 }
 
@@ -122,6 +124,13 @@ export function parseCard(card: WbCardRaw) {
   // Видео — поле video в ответе API (URL m3u8 или null)
   const hasVideo = !!card.video
 
+  // Габариты (WB хранит в см, вес в кг)
+  const dims = card.dimensions
+  const weightKg = dims?.weightBrutto ?? null
+  const heightCm = dims?.height ?? null
+  const widthCm = dims?.width ?? null
+  const depthCm = dims?.length ?? null
+
   return {
     nmId: card.nmID,
     article: card.vendorCode,
@@ -133,5 +142,9 @@ export function parseCard(card: WbCardRaw) {
     hasVideo,
     barcode: allBarcodes[0] ?? null,
     barcodes: allBarcodes,
+    weightKg,
+    heightCm,
+    widthCm,
+    depthCm,
   }
 }

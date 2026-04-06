@@ -118,6 +118,10 @@ model WbCard {
   photoUrl      String?                       // главное фото
   photos        String[]                      // все фото из карточки
   hasVideo      Boolean  @default(false)       // есть ли видео
+  weightKg      Float?                        // вес брутто, кг
+  heightCm      Float?                        // высота, см
+  widthCm       Float?                        // ширина, см
+  depthCm       Float?                        // глубина (длина), см
   rating        Float?                        // средний рейтинг
   reviewsTotal  Int?                          // общее кол-во оценок
   reviews1      Int?                          // оценок 1

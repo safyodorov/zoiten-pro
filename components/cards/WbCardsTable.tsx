@@ -308,7 +308,7 @@ export function WbCardsTable({
                   )}
                 </TableCell>
                 <TableCell className="font-medium max-w-[250px] truncate">{card.name}</TableCell>
-                <TableCell className="font-mono text-xs">{card.article}</TableCell>
+                <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.category ?? "—"}</TableCell>
                 <TableCell>

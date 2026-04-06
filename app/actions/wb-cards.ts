@@ -85,10 +85,14 @@ export async function createProductFromCards(
         name: firstCard.name,
         photoUrl: firstCard.photoUrl,
         brandId,
+        weightKg: firstCard.weightKg,
+        heightCm: firstCard.heightCm,
+        widthCm: firstCard.widthCm,
+        depthCm: firstCard.depthCm,
         articles: {
           create: cards.map((card) => ({
             marketplaceId: wbMarketplace.id,
-            article: card.article,
+            article: String(card.nmId),
           })),
         },
         barcodes: {
@@ -140,11 +144,11 @@ export async function addCardsToProduct(
 
     // Новые артикулы (не дублируем)
     const newArticles = cards
-      .filter((card) => !existingArticles.has(card.article))
+      .filter((card) => !existingArticles.has(String(card.nmId)))
       .map((card) => ({
         productId,
         marketplaceId: wbMarketplace.id,
-        article: card.article,
+        article: String(card.nmId),
       }))
 
     // Собираем уникальные штрихкоды
