@@ -1,0 +1,10 @@
+[Unit]
+Description=Zoiten ERP — purge soft-deleted products (30-day cleanup)
+After=network.target zoiten-erp.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/zoiten.pro.env
+ExecStart=/usr/bin/curl -s -o /dev/null -w "%%{http_code}" \
+  -H "x-cron-secret: ${CRON_SECRET}" \
+  http://127.0.0.1:3000/api/cron/purge-deleted

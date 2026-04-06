@@ -1,0 +1,17 @@
+[Unit]
+Description=Zoiten ERP (Next.js)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/zoiten-pro
+EnvironmentFile=/etc/zoiten.pro.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/local/bin/node /opt/zoiten-pro/.next/standalone/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
