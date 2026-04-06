@@ -84,7 +84,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 04-01-PLAN.md — Server Actions (CRUD + duplicate + soft delete), photo upload Route Handler, dev file serving, cron purge, partial index migration
-- [ ] 04-02-PLAN.md — Product list page (/products) with status tabs, debounced search, paginated table, per-row actions
+- [x] 04-02-PLAN.md — Product list page (/products) with status tabs, debounced search, paginated table, per-row actions
 - [ ] 04-03-PLAN.md — Product create/edit pages (/products/new, /products/[id]/edit) with all 5 form sections
 - [ ] 04-04-PLAN.md — Sidebar active link highlighting + end-to-end human verification checkpoint
 **UI hint**: yes
@@ -123,6 +123,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Foundation & Auth | 4/4 | Complete   | 2026-04-05 |
 | 2. User Management | 1/2 | In Progress|  |
 | 3. Reference Data | 2/3 | In Progress|  |
-| 4. Products Module | 1/4 | In Progress|  |
+| 4. Products Module | 2/4 | In Progress|  |
 | 5. UI & Module Stubs | 0/? | Not started | - |
 | 6. Deployment | 0/? | Not started | - |
