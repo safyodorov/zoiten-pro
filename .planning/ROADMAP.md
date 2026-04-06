@@ -114,7 +114,10 @@ Plans:
   3. Product photos are served by nginx from `/var/www/zoiten-uploads/` without hitting Node.js
   4. CantonFairBot continues to function after nginx reconfiguration
   5. `prisma migrate deploy` runs without errors on the VPS database on deploy
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06-01-PLAN.md — Deploy script, systemd service + timer, nginx server block, updated .env.example
+- [ ] 06-02-PLAN.md — DEPLOY.md runbook — complete step-by-step VPS deployment guide
 
 ## Progress
 
@@ -128,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 3. Reference Data | 2/3 | In Progress|  |
 | 4. Products Module | 4/4 | Complete   | 2026-04-06 |
 | 5. UI & Module Stubs | 2/2 | Complete   | 2026-04-06 |
-| 6. Deployment | 0/? | Not started | - |
+| 6. Deployment | 0/2 | Not started | - |
