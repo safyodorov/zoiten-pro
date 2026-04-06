@@ -237,7 +237,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
   const volumeDisplay =
     watchedHeight && watchedWidth && watchedDepth
-      ? ((watchedHeight * watchedWidth * watchedDepth) / 1000).toFixed(3) + " л"
+      ? ((watchedHeight * watchedWidth * watchedDepth) / 1000).toFixed(1) + " л"
       : "—"
 
   // ── Reference data derived from current brand ──────────────────────
