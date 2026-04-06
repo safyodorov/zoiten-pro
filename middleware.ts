@@ -11,6 +11,9 @@ export default auth((req) => {
   const { nextUrl } = req
   const isLoggedIn = !!req.auth
 
+  // Landing page (/) is public — skip auth
+  if (nextUrl.pathname === "/") return
+
   // Redirect unauthenticated users to /login
   if (!isLoggedIn) {
     return Response.redirect(new URL("/login", nextUrl))
