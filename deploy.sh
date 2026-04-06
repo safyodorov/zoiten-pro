@@ -17,7 +17,7 @@ echo "==> Building application..."
 npm run build
 
 echo "==> Copying static assets to standalone..."
-cp -r public .next/standalone/public
+[ -d public ] && cp -r public .next/standalone/public || mkdir -p .next/standalone/public
 cp -r .next/static .next/standalone/.next/static
 
 echo "==> Restarting service..."
