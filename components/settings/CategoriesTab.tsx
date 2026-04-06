@@ -13,6 +13,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion"
 import { cn } from "@/lib/utils"
+import { SortableList, SortableItem } from "@/components/settings/SortableList"
 import {
   createCategory,
   updateCategory,
@@ -20,6 +21,8 @@ import {
   createSubcategory,
   updateSubcategory,
   deleteSubcategory,
+  reorderCategories,
+  reorderSubcategories,
 } from "@/app/actions/reference"
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -222,6 +225,12 @@ function CategoryAccordionItem({ category }: { category: Category }) {
     setEditingName(false)
   }
 
+  function handleReorderSubs(ids: string[]) {
+    reorderSubcategories(ids).then((r) => {
+      if (!r.ok) toast.error(r.error)
+    })
+  }
+
   return (
     <AccordionItem value={category.id}>
       <div className="flex items-center gap-1">
@@ -276,9 +285,13 @@ function CategoryAccordionItem({ category }: { category: Category }) {
       </div>
       <AccordionContent>
         <div className="border-l ml-2 pl-2">
-          {category.subcategories.map((sub) => (
-            <SubcategoryRow key={sub.id} sub={sub} />
-          ))}
+          <SortableList items={category.subcategories} onReorder={handleReorderSubs}>
+            {category.subcategories.map((sub) => (
+              <SortableItem key={sub.id} id={sub.id}>
+                <SubcategoryRow sub={sub} />
+              </SortableItem>
+            ))}
+          </SortableList>
           {category.subcategories.length === 0 && (
             <p className="py-1.5 pl-2 text-xs text-muted-foreground">Нет подкатегорий</p>
           )}
@@ -342,6 +355,12 @@ export function CategoriesTab({ brands }: CategoriesTabProps) {
 
   const selectedBrand = brands.find((b) => b.id === selectedBrandId)
 
+  function handleReorderCats(ids: string[]) {
+    reorderCategories(ids).then((r) => {
+      if (!r.ok) toast.error(r.error)
+    })
+  }
+
   return (
     <div className="max-w-md space-y-4">
       {/* Brand picker */}
@@ -368,11 +387,15 @@ export function CategoriesTab({ brands }: CategoriesTabProps) {
         <>
           <div className="border rounded-lg px-4 py-1">
             {selectedBrand.categories.length > 0 ? (
-              <Accordion>
-                {selectedBrand.categories.map((cat) => (
-                  <CategoryAccordionItem key={cat.id} category={cat} />
-                ))}
-              </Accordion>
+              <SortableList items={selectedBrand.categories} onReorder={handleReorderCats}>
+                <Accordion>
+                  {selectedBrand.categories.map((cat) => (
+                    <SortableItem key={cat.id} id={cat.id}>
+                      <CategoryAccordionItem category={cat} />
+                    </SortableItem>
+                  ))}
+                </Accordion>
+              </SortableList>
             ) : (
               <p className="py-4 text-sm text-muted-foreground">Категории не найдены</p>
             )}

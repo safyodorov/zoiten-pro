@@ -8,15 +8,15 @@ export default async function SettingsPage() {
 
   const [brands, marketplaces] = await Promise.all([
     prisma.brand.findMany({
-      orderBy: { name: "asc" },
+      orderBy: { sortOrder: "asc" },
       include: {
         categories: {
-          orderBy: { name: "asc" },
-          include: { subcategories: { orderBy: { name: "asc" } } },
+          orderBy: { sortOrder: "asc" },
+          include: { subcategories: { orderBy: { sortOrder: "asc" } } },
         },
       },
     }),
-    prisma.marketplace.findMany({ orderBy: { name: "asc" } }),
+    prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
   ])
 
   return (

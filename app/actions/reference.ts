@@ -78,8 +78,9 @@ export async function createBrand(
   try {
     await requireSuperadmin()
     const parsed = BrandSchema.parse(data)
+    const maxOrder = await prisma.brand.aggregate({ _max: { sortOrder: true } })
     const brand = await prisma.brand.create({
-      data: { name: parsed.name },
+      data: { name: parsed.name, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
     })
     revalidatePath("/admin/settings")
     return { ok: true, id: brand.id }
@@ -153,8 +154,12 @@ export async function createCategory(
   try {
     await requireSuperadmin()
     const parsed = CategorySchema.parse(data)
+    const maxOrder = await prisma.category.aggregate({
+      where: { brandId: parsed.brandId },
+      _max: { sortOrder: true },
+    })
     const category = await prisma.category.create({
-      data: { name: parsed.name, brandId: parsed.brandId },
+      data: { name: parsed.name, brandId: parsed.brandId, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
     })
     revalidatePath("/admin/settings")
     return { ok: true, id: category.id }
@@ -230,8 +235,12 @@ export async function createSubcategory(
   try {
     await requireSuperadmin()
     const parsed = SubcategorySchema.parse(data)
+    const maxOrder = await prisma.subcategory.aggregate({
+      where: { categoryId: parsed.categoryId },
+      _max: { sortOrder: true },
+    })
     const subcategory = await prisma.subcategory.create({
-      data: { name: parsed.name, categoryId: parsed.categoryId },
+      data: { name: parsed.name, categoryId: parsed.categoryId, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
     })
     revalidatePath("/admin/settings")
     return { ok: true, id: subcategory.id }
@@ -300,8 +309,9 @@ export async function createMarketplace(
   try {
     await requireSuperadmin()
     const parsed = MarketplaceSchema.parse(data)
+    const maxOrder = await prisma.marketplace.aggregate({ _max: { sortOrder: true } })
     const marketplace = await prisma.marketplace.create({
-      data: { name: parsed.name, slug: parsed.slug },
+      data: { name: parsed.name, slug: parsed.slug, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
     })
     revalidatePath("/admin/settings")
     return { ok: true, id: marketplace.id }
@@ -364,6 +374,72 @@ export async function deleteMarketplace(id: string): Promise<ActionResult> {
       return { ok: false, error: "Маркетплейс не найден" }
     }
     console.error("deleteMarketplace error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// ── Reorder Actions ──────────────────────────────────────────────
+
+export async function reorderBrands(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) => prisma.brand.update({ where: { id }, data: { sortOrder: i } }))
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderBrands error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function reorderCategories(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) => prisma.category.update({ where: { id }, data: { sortOrder: i } }))
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderCategories error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function reorderSubcategories(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) => prisma.subcategory.update({ where: { id }, data: { sortOrder: i } }))
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderSubcategories error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function reorderMarketplaces(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) => prisma.marketplace.update({ where: { id }, data: { sortOrder: i } }))
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderMarketplaces error:", e)
     return { ok: false, error: "Ошибка сервера" }
   }
 }

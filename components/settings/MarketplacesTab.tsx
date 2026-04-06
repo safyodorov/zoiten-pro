@@ -7,10 +7,12 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { SortableList, SortableItem } from "@/components/settings/SortableList"
 import {
   createMarketplace,
   updateMarketplace,
   deleteMarketplace,
+  reorderMarketplaces,
 } from "@/app/actions/reference"
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -222,12 +224,22 @@ function AddMarketplaceRow() {
 // ── MarketplacesTab ───────────────────────────────────────────────
 
 export function MarketplacesTab({ marketplaces }: MarketplacesTabProps) {
+  function handleReorder(ids: string[]) {
+    reorderMarketplaces(ids).then((r) => {
+      if (!r.ok) toast.error(r.error)
+    })
+  }
+
   return (
     <div className="max-w-md">
       <div className="border rounded-lg px-4 py-2">
-        {marketplaces.map((mp) => (
-          <MarketplaceRowItem key={mp.id} mp={mp} />
-        ))}
+        <SortableList items={marketplaces} onReorder={handleReorder}>
+          {marketplaces.map((mp) => (
+            <SortableItem key={mp.id} id={mp.id}>
+              <MarketplaceRowItem mp={mp} />
+            </SortableItem>
+          ))}
+        </SortableList>
         {marketplaces.length === 0 && (
           <p className="py-4 text-sm text-muted-foreground">Маркетплейсы не найдены</p>
         )}

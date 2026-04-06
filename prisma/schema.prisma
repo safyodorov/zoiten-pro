@@ -64,15 +64,17 @@ model User {
 // ──────────────────────────────────────────────────────────────────
 
 model Marketplace {
-  id       String               @id @default(cuid())
-  name     String               @unique // "WB", "Ozon", "ДМ", "ЯМ"
-  slug     String               @unique // "wb", "ozon", "dm", "ym"
-  articles MarketplaceArticle[]
+  id        String               @id @default(cuid())
+  name      String               @unique // "WB", "Ozon", "ДМ", "ЯМ"
+  slug      String               @unique // "wb", "ozon", "dm", "ym"
+  sortOrder Int                  @default(0)
+  articles  MarketplaceArticle[]
 }
 
 model Brand {
   id         String     @id @default(cuid())
   name       String     @unique
+  sortOrder  Int        @default(0)
   categories Category[]
   products   Product[]
 }
@@ -82,6 +84,7 @@ model Category {
   name          String
   brandId       String
   brand         Brand         @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  sortOrder     Int           @default(0)
   subcategories Subcategory[]
   products      Product[]
 
@@ -93,6 +96,7 @@ model Subcategory {
   name       String
   categoryId String
   category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder  Int       @default(0)
   products   Product[]
 
   @@unique([name, categoryId])

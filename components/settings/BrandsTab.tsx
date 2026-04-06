@@ -7,10 +7,12 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { SortableList, SortableItem } from "@/components/settings/SortableList"
 import {
   createBrand,
   updateBrand,
   deleteBrand,
+  reorderBrands,
 } from "@/app/actions/reference"
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -193,12 +195,22 @@ function AddBrandRow() {
 // ── BrandsTab ─────────────────────────────────────────────────────
 
 export function BrandsTab({ brands }: BrandsTabProps) {
+  function handleReorder(ids: string[]) {
+    reorderBrands(ids).then((r) => {
+      if (!r.ok) toast.error(r.error)
+    })
+  }
+
   return (
     <div className="max-w-md">
       <div className="border rounded-lg px-4 py-2">
-        {brands.map((brand) => (
-          <BrandRow key={brand.id} brand={brand} />
-        ))}
+        <SortableList items={brands} onReorder={handleReorder}>
+          {brands.map((brand) => (
+            <SortableItem key={brand.id} id={brand.id}>
+              <BrandRow brand={brand} />
+            </SortableItem>
+          ))}
+        </SortableList>
         {brands.length === 0 && (
           <p className="py-4 text-sm text-muted-foreground">Бренды не найдены</p>
         )}

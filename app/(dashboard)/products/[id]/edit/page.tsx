@@ -19,10 +19,15 @@ export default async function EditProductPage({
       },
     }),
     prisma.brand.findMany({
-      include: { categories: { include: { subcategories: true } } },
-      orderBy: { name: "asc" },
+      include: {
+        categories: {
+          orderBy: { sortOrder: "asc" },
+          include: { subcategories: { orderBy: { sortOrder: "asc" } } },
+        },
+      },
+      orderBy: { sortOrder: "asc" },
     }),
-    prisma.marketplace.findMany({ orderBy: { name: "asc" } }),
+    prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
   ])
   if (!product) notFound()
   return (
