@@ -135,17 +135,15 @@ model MarketplaceArticle {
   article       String      // Marketplace article number
   createdAt     DateTime    @default(now())
 
-  // Uniqueness: same article cannot appear twice for the same product+marketplace combo
+  // Uniqueness enforced by partial index migration — see migrations/20260405_partial_indexes
   // Up to 10 articles per marketplace per product enforced in service layer
-  @@unique([productId, marketplaceId, article])
 }
 
 model Barcode {
   id        String  @id @default(cuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  value     String  @unique
-  // IMPORTANT: Phase 4 migration task — replace @unique with partial unique index
-  // WHERE deletedAt IS NULL on parent Product for soft-delete compatibility
+  value     String
+  // Uniqueness enforced by partial index migration — see migrations/20260405_partial_indexes
   // 1-20 barcodes per product enforced in service layer
 }
