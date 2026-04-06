@@ -41,6 +41,7 @@ interface WbCard {
   rating: number | null
   reviewsTotal: number | null
   price: number | null
+  label: string | null
   hasVideo: boolean
   availability: string
 }
@@ -277,6 +278,7 @@ export function WbCardsTable({
               <TableHead className="w-16">Фото</TableHead>
               <TableHead>Наименование</TableHead>
               <TableHead>Артикул</TableHead>
+              <TableHead>Ярлык</TableHead>
               <TableHead>
                 <button onClick={() => handleSort("brand")} className="flex items-center gap-1 hover:text-foreground transition-colors">
                   Бренд{sortIndicator("brand")}
@@ -297,7 +299,7 @@ export function WbCardsTable({
           <TableBody>
             {cards.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
                   Карточки не найдены. Нажмите «Синхронизировать с WB» для загрузки.
                 </TableCell>
               </TableRow>
@@ -316,6 +318,7 @@ export function WbCardsTable({
                 </TableCell>
                 <TableCell className="font-medium max-w-[250px] truncate">{card.name}</TableCell>
                 <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
+                <TableCell className="text-xs max-w-[150px] truncate">{card.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.category ?? "—"}</TableCell>
                 <TableCell>
