@@ -21,6 +21,7 @@ const ArticleSchema = z.object({
 
 const ProductSchema = z.object({
   name: z.string().min(1).max(100),
+  photoUrl: z.string().nullable().optional(),
   brandId: z.string().min(1),
   categoryId: z.string().optional(),
   subcategoryId: z.string().optional(),
@@ -82,6 +83,7 @@ export async function createProduct(
       return tx.product.create({
         data: {
           name: parsed.name,
+          photoUrl: parsed.photoUrl ?? null,
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
           subcategoryId: parsed.subcategoryId ?? null,
@@ -132,6 +134,7 @@ export async function updateProduct(
         where: { id: parsed.id },
         data: {
           name: parsed.name,
+          photoUrl: parsed.photoUrl ?? null,
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
           subcategoryId: parsed.subcategoryId ?? null,
