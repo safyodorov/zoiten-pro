@@ -3,14 +3,14 @@ import { WbCardsTable } from "@/components/cards/WbCardsTable"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { Input } from "@/components/ui/input"
 
-const PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 50
 
 export default async function WbCardsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>
+  searchParams: Promise<{ q?: string; page?: string; size?: string; sort?: string; dir?: string }>
 }) {
-  const { q, page: pageParam } = await searchParams
+  const { q, page: pageParam, size: sizeParam, sort, dir } = await searchParams
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {}
@@ -21,20 +21,28 @@ export default async function WbCardsPage({
     ]
   }
 
+  const pageSize = [20, 50, 100].includes(Number(sizeParam)) ? Number(sizeParam) : DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
-  const skip = (currentPage - 1) * PAGE_SIZE
+  const skip = (currentPage - 1) * pageSize
+
+  // Сортировка
+  const sortBy = sort && ["brand", "category", "name", "createdAt"].includes(sort) ? sort : "createdAt"
+  const sortDir = dir === "asc" ? "asc" : "desc"
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const orderBy: any = { [sortBy]: sortDir }
 
   const [cards, total] = await Promise.all([
     prisma.wbCard.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip,
-      take: PAGE_SIZE,
+      take: pageSize,
     }),
     prisma.wbCard.count({ where }),
   ])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
 
   return (
     <div className="space-y-4">
@@ -48,14 +56,15 @@ export default async function WbCardsPage({
         </form>
         <WbSyncButton />
       </div>
-      <p className="text-sm text-muted-foreground">
-        Всего карточек: {total}
-      </p>
       <WbCardsTable
         cards={cards}
         currentPage={currentPage}
         totalPages={totalPages}
+        totalCards={total}
         searchQuery={q ?? ""}
+        pageSize={pageSize}
+        sortBy={sortBy}
+        sortDir={sortDir}
       />
     </div>
   )
