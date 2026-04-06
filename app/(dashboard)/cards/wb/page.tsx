@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { WbCardsTable } from "@/components/cards/WbCardsTable"
+import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { Input } from "@/components/ui/input"
 
 const PAGE_SIZE = 20
@@ -37,13 +38,19 @@ export default async function WbCardsPage({
 
   return (
     <div className="space-y-4">
-      <form className="max-w-sm">
-        <Input
-          name="q"
-          placeholder="Поиск по названию или артикулу…"
-          defaultValue={q ?? ""}
-        />
-      </form>
+      <div className="flex items-center justify-between gap-4">
+        <form className="max-w-sm flex-1">
+          <Input
+            name="q"
+            placeholder="Поиск по названию или артикулу…"
+            defaultValue={q ?? ""}
+          />
+        </form>
+        <WbSyncButton />
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Всего карточек: {total}
+      </p>
       <WbCardsTable
         cards={cards}
         currentPage={currentPage}
