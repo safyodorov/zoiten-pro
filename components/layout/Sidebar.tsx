@@ -11,7 +11,7 @@ interface SidebarProps {
 
 const NAV_ITEMS = [
   { section: "PRODUCTS", href: "/products", label: "Товары" },
-  { section: "PRODUCTS", href: "/cards", label: "Карточки Товаров" },
+  { section: "PRODUCTS", href: "/cards", label: "Карточки товаров" },
   { section: "PRICES", href: "/prices", label: "Управление ценами" },
   { section: "WEEKLY_CARDS", href: "/weekly", label: "Недельные карточки" },
   { section: "STOCK", href: "/inventory", label: "Управление остатками" },

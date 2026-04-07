@@ -28,28 +28,110 @@
 ## Разделы ERP
 
 1. **Товары** ✅ полный CRUD, фото, артикулы, штрих-коды, размеры, мягкое удаление
-2. **Карточки Товаров** ✅ WB синхронизация через API, таблица с фильтрами, привязка к товарам + заглушка Ozon
+2. **Карточки товаров** ✅ WB синхронизация через API, таблица с фильтрами, привязка к товарам + заглушка Ozon
 3. Управление ценами (заглушка)
 4. Недельные карточки (заглушка)
 5. Управление остатками (заглушка)
-5. Себестоимость партий
-6. План закупок
-7. План продаж
+5. **Себестоимость партий** ✅ отдельная БД, inline-редактирование, фильтры
+6. План закупок (заглушка)
+7. План продаж (заглушка)
 8. Служба поддержки (из https://github.com/safyodorov/ai-cs-zoiten)
 
 ## Модель данных — Товары
 
+- **УКТ (sku)** — уникальный код товара, формат УКТ-000001. Автоинкремент через PostgreSQL SEQUENCE (не сбивается при удалении). Присваивается автоматически при создании. Read-only.
 - Наименование (строка до 100 символов)
 - Фото (одно, вертикальное 3:4, JPEG/PNG, до 2К)
 - Артикулы маркетплейсов (WB, Ozon, ДМ, ЯМ + кастомные, до 10 на маркетплейс)
 - Штрих-коды (1-20 на товар)
-- Характеристики: вес кг, габариты (В×Ш×Г см), объём (авто из габаритов)
+- Характеристики: вес кг, габариты (Д×Ш×В см), объём (авто из габаритов)
 - Бренд (по умолчанию Zoiten)
 - Категория/подкатегория (настраиваются per бренд, CRUD)
   - Zoiten: Дом, Кухня, Красота и здоровье
 - ABC-статус (A, B, C)
 - Наличие (есть / out of stock / выведен из ассортимента)
 - Мягкое удаление (статус "удалено", физ. удаление через 30 дней)
+
+## Связи между таблицами БД
+
+```
+User (пользователи)
+  ├── role: SUPERADMIN | MANAGER | VIEWER
+  └── allowedSections: ERP_SECTION[]
+
+Brand (бренды)
+  └── categories: Category[] (1:N)
+
+Category (категории, per brand)
+  ├── brand: Brand (N:1)
+  └── subcategories: Subcategory[] (1:N)
+
+Subcategory (подкатегории, per category)
+  └── category: Category (N:1)
+
+Marketplace (маркетплейсы: WB, Ozon, ДМ, ЯМ)
+  └── articles: MarketplaceArticle[] (1:N)
+
+Product (товары) — ЦЕНТРАЛЬНАЯ ТАБЛИЦА
+  ├── sku: String @unique         ← УКТ-000001 (PostgreSQL SEQUENCE)
+  ├── brand: Brand (N:1)
+  ├── category: Category? (N:1)
+  ├── subcategory: Subcategory? (N:1)
+  ├── articles: MarketplaceArticle[] (1:N, onDelete: Cascade)
+  ├── barcodes: Barcode[] (1:N, onDelete: Cascade)
+  ├── cost: ProductCost? (1:1, onDelete: Cascade)
+  └── deletedAt: DateTime? (soft delete)
+
+MarketplaceArticle (артикулы по маркетплейсам)
+  ├── product: Product (N:1, Cascade)
+  └── marketplace: Marketplace (N:1)
+  — Partial unique index на (marketplaceId, article) WHERE product not deleted
+
+Barcode (штрих-коды)
+  └── product: Product (N:1, Cascade)
+  — Partial unique index на value WHERE product not deleted
+
+ProductCost (себестоимость) — ОТДЕЛЬНАЯ ТАБЛИЦА
+  ├── product: Product (1:1, Cascade)
+  ├── costPrice: Float (руб, с точностью до копеек)
+  └── updatedAt: DateTime @updatedAt
+
+WbCard (карточки WB — парсинг из Wildberries API)
+  — Связь с Product через артикул nmId (не FK, а через MarketplaceArticle.article)
+  ├── nmId: Int @unique
+  ├── price: Float? (цена продавца со скидкой)
+  ├── discountWb: Int? (скидка WB / СПП, %)
+  └── rawJson: Json? (полный ответ API)
+```
+
+### Cascade-удаление
+При **hard delete** товара (Product) каскадно удаляются:
+- Все MarketplaceArticle (артикулы)
+- Все Barcode (штрих-коды)
+- ProductCost (себестоимость)
+
+## Скидка WB (СПП) — как считается
+
+СПП (Скидка Постоянного Покупателя) — скидка которую WB даёт из своей комиссии. Нет официального API для получения текущей СПП.
+
+**Наш подход** (из проекта [ai-zoiten](https://github.com/safyodorov/ai-zoiten)):
+
+1. **Цена продавца** — из официального Prices API (`discounts-prices-api.wildberries.ru`)
+   - Endpoint: `GET /api/v2/list/goods/filter`
+   - Поле: `sizes[].discountedPrice` — цена после скидки продавца, в рублях
+
+2. **Цена покупателя** — из публичного card.wb.ru **v4** API
+   - Endpoint: `GET /cards/v4/detail?nm={nmId}`
+   - Поле: `sizes[].price.product` — финальная цена покупателя, в **сотых копейки** (делить на 100 → рубли)
+   - ⚠️ v2 API заблокирован (x-pow proof-of-work), v4 работает
+
+3. **Формула СПП:**
+   ```
+   СПП % = (1 - цена_покупателя / цена_продавца) × 100
+   ```
+   Пример: продавец = 700₽, покупатель = 476₽ → СПП = 32%
+
+**Файлы:** `lib/wb-api.ts` → `fetchWbDiscounts()`, `app/api/wb-sync/route.ts`
 
 ## Маркетплейсы
 
@@ -81,9 +163,24 @@
 - **Файлы**: lib/wb-api.ts, app/actions/wb-cards.ts, app/api/wb-sync/route.ts
 - **Компоненты**: components/cards/ (WbCardsTable, WbFilters, WbSyncButton, CardsTabs)
 - **Роут**: /cards/wb (+ /cards/ozon заглушка)
-- **API**: WB Content API + Discounts/Prices API
+- **API**: WB Content API + Discounts/Prices API + card.wb.ru v4 (публичный, для СПП)
 - **Модель**: WbCard в Prisma (с привязкой к Product через артикул)
 - **Env**: WB_API_KEY в .env
+
+### Себестоимость партий
+- **Файлы**: app/actions/cost.ts, app/(dashboard)/batches/page.tsx
+- **Компоненты**: components/cost/ (CostTable, CostFilters, CostSearchInput)
+- **Роут**: /batches
+- **Модель**: ProductCost в Prisma (1:1 с Product, onDelete: Cascade)
+- **Фишка**: inline-редактирование себестоимости (клик → input → Enter → сохранить)
+- **Время**: все даты в московском времени (Europe/Moscow)
+
+### УКТ — Уникальный Код Товара
+- **Формат**: УКТ-000001 (6 цифр с ведущими нулями)
+- **Генерация**: PostgreSQL SEQUENCE `product_sku_seq` (не сбивается при удалении)
+- **Поле**: `Product.sku` (String, @unique)
+- **Отображение**: только в форме редактирования товара (read-only), НЕ в таблицах
+- **Файлы**: prisma/migrations/20260406_add_sku_and_cost/, app/actions/products.ts
 
 ### Улучшения формы товаров
 - Кроп фото (PhotoCropDialog)
@@ -92,119 +189,59 @@
 - Порядок габаритов как на WB (Длина × Ширина × Высота)
 - Физическое удаление из корзины
 
-<!-- GSD:project-start source:PROJECT.md -->
-## Project
-
-**Zoiten ERP**
-
-Корпоративная мини-ERP система для компании Zoiten — торговля на маркетплейсах (Wildberries, Ozon, Детский Мир, Яндекс Маркет). Веб-приложение на zoiten.pro для управления товарами, ценами, остатками, закупками и службой поддержки. Целевая аудитория — команда из 10+ сотрудников компании.
-
-**Core Value:** Единая база товаров компании, от которой зависят все остальные процессы ERP — цены, закупки, остатки, поддержка.
-
-### Constraints
-
-- **Tech stack**: Next.js 15 (App Router, TypeScript, React 19), PostgreSQL + Prisma 6, shadcn/ui v4 + Tailwind v4 + motion, Auth.js v5
-- **Hosting**: Один VPS (85.198.97.89), нужно не мешать CantonFairBot
-- **Storage**: Фото на VPS filesystem, не в облаке
-- **Security**: bcrypt для паролей, HTTPS/SSL через Let's Encrypt, CSRF protection
-- **Deploy**: systemd + nginx reverse proxy → localhost:3000
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:research/STACK.md -->
-## Technology Stack
-
-## Summary Verdict
-## Recommended Stack
-### Core Framework
-| Technology | Version to Use | Purpose | Why |
-|------------|----------------|---------|-----|
-| Next.js | **15.2.4** (not 14) | Fullstack framework | Current stable. App Router is mature. Turbopack stable. React 19 required. Starting on 14 today is a deliberate downgrade. |
-| React | **19.x** (required by Next.js 15) | UI runtime | Next.js 15 requires React 19 minimum. Not optional. |
-| TypeScript | **5.x** | Type safety | Ships with Next.js. Use strict mode. |
-- `cookies()`, `headers()` are now async — must be awaited in server components/actions.
-- GET Route Handlers no longer cached by default — explicitly set `cache: 'force-cache'` where needed.
-- React 19 minimum — `useFormState` renamed to `useActionState`.
-### Database
-| Technology | Version to Use | Purpose | Why |
-|------------|----------------|---------|-----|
-| PostgreSQL | **16.x** | Primary database | Battle-tested, JSONB for flexible article data, supports partial indexes. Install on VPS. |
-| Prisma ORM | **6.x** (NOT 7.x) | Database access, migrations | v6 is stable and has wide Next.js compatibility. v7 introduces breaking driver adapter requirement — unnecessary complexity for this project size. |
-### Authentication
-| Technology | Version to Use | Purpose | Why |
-|------------|----------------|---------|-----|
-| Auth.js (NextAuth.js) | **5.x (beta, stable enough)** | Session + RBAC | The v4 → v5 rename to Auth.js is complete. v5 has deep Next.js 15 App Router integration, middleware-based route protection, and JWT/database sessions. Credentials provider works for username/password. |
-| bcryptjs | **^2.4.3** | Password hashing | Pure JS implementation, no native bindings. Safer than `bcrypt` (native) for VPS deploy where Node.js version may vary. |
-### UI Framework
-| Technology | Version to Use | Purpose | Why |
-|------------|----------------|---------|-----|
-| shadcn/ui | **CLI v4 (March 2026)** | Component library | Not a package — components are copied into the project. CLI v4 supports Tailwind v4, React 19, and Next.js 15. Copy-ownership model means no upstream breaking changes. |
-| Tailwind CSS | **v4.x** | Styling | shadcn/ui now requires Tailwind v4. CSS-first configuration (no `tailwind.config.js`). All config in the main CSS file. |
-| tw-animate-css | **^1.x** | Animation utilities | Replaces `tailwindcss-animate`. New shadcn/ui projects install this by default as of March 2025. |
-### Animations
-| Technology | Version to Use | Purpose | Why |
-|------------|----------------|---------|-----|
-| motion (formerly framer-motion) | **12.x** | Page transitions, UI animations | Package renamed from `framer-motion` to `motion`. Both package names work but `motion` is the canonical current name. |
-### Form Handling & Validation
-| Library | Version | Purpose | Why |
-|---------|---------|---------|-----|
-| react-hook-form | **^7.x** | Form state management | De facto standard. Minimal re-renders. Works with shadcn/ui Form components out of the box. |
-| zod | **^3.x** | Schema validation | TypeScript-first. One schema used for both client validation and server action input validation. Integrates with react-hook-form via `@hookform/resolvers`. |
-| @hookform/resolvers | **^3.x** | Bridge between RHF and Zod | Required to use Zod schemas as react-hook-form validators. |
-### File Upload (Product Photos)
-### Deployment
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Node.js | **22.x LTS** | Runtime | Current LTS. Next.js 15 supports Node.js 18.18+. |
-| systemd | system | Process manager | Already chosen. Simpler than PM2 for single-app VPS, no extra daemon. |
-| nginx | **1.24+** | Reverse proxy + static files | Handles SSL termination, static file serving, upload directory. |
-| Let's Encrypt / certbot | latest | TLS certificates | Standard for VPS HTTPS. |
-## Alternatives Considered
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Framework | Next.js 15 | Remix, Nuxt | Stack is pre-decided. Remix lacks ecosystem breadth. Nuxt is Vue. |
-| ORM | Prisma 6 | Drizzle ORM, Prisma 7, TypeORM | Drizzle is faster but requires raw SQL mental model; overkill for this scale. Prisma 7 has documented Next.js 15 issues. TypeORM is dated. |
-| Auth | Auth.js v5 | Lucia Auth, custom JWT | Lucia is lower-level — more setup. Custom JWT is a security liability. Auth.js v5 handles edge cases correctly. |
-| Animation | motion (Framer Motion) | CSS animations, React Spring | CSS animations lack the Spring physics model for premium feel. React Spring is viable but smaller community. motion is the most widely documented. |
-| Password hashing | bcryptjs | bcrypt (native), argon2 | `bcrypt` (native) requires build tools matching VPS Node.js version. `argon2` is stronger but overkill for internal ERP. `bcryptjs` is pure JS, zero native dependency risk. |
-| Process manager | systemd | PM2 | PM2 adds a daemon that needs management. systemd is already on every Linux server and handles restarts, logging, and boot starts natively. |
-| Photo storage | VPS filesystem | S3, Cloudinary | 50-200 products = ~200 photos. S3 adds cost and complexity. VPS is sufficient and already paid for. |
-## Full Installation
-# Create project
-# Database
-# Auth
-# UI (shadcn init handles Tailwind v4 configuration)
-# Forms & validation
-# shadcn components you'll need
-## Environment Variables
-# .env.local
-## Sources
-- [Next.js 15 Release Blog](https://nextjs.org/blog/next-15)
-- [Next.js Current Version March 2026](https://www.abhs.in/blog/nextjs-current-version-march-2026-stable-release-whats-new)
-- [Next.js Version 15 Upgrade Guide](https://nextjs.org/docs/app/guides/upgrading/version-15)
-- [Prisma ORM 7 Release Announcement](https://www.prisma.io/blog/announcing-prisma-orm-7-0-0)
-- [Prisma Releases on GitHub](https://github.com/prisma/prisma/releases)
-- [Auth.js RBAC Guide](https://authjs.dev/guides/role-based-access-control)
-- [Auth.js Credentials Provider](https://authjs.dev/getting-started/providers/credentials)
-- [shadcn/ui Tailwind v4 Docs](https://ui.shadcn.com/docs/tailwind-v4)
-- [shadcn/ui CLI v4 Changelog](https://ui.shadcn.com/docs/changelog/2026-03-cli-v4)
-- [Framer Motion + Next.js Server Components](https://www.hemantasundaray.com/blog/use-framer-motion-with-nextjs-server-components)
-- [Next.js Self-Hosting Guide](https://nextjs.org/docs/app/guides/self-hosting)
-- [Next.js File Upload Server Actions](https://akoskm.com/file-upload-with-nextjs-14-and-server-actions/)
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 ## Conventions
 
-Conventions not yet established. Will populate as patterns emerge during development.
-<!-- GSD:conventions-end -->
+- **Язык интерфейса**: русский
+- **Server Actions**: "use server" + requireSection()/requireSuperadmin() + try/catch + revalidatePath
+- **Формы**: react-hook-form + zod + shadcn Form компоненты
+- **Select**: используем native HTML select (НЕ base-ui Select — он ломается с пустыми value)
+- **Combobox**: кастомный CreatableCombobox (НЕ base-ui Combobox — x-pow errors)
+- **auth.config.ts**: ОБЯЗАТЕЛЬНО содержит jwt/session callbacks (не только auth.ts)
+- **middleware.ts**: "/" (landing) исключён из auth проверки
+- **Фильтры**: MultiSelectDropdown с чекбоксами (паттерн из WbFilters/ProductFilters)
+- **Время**: Moscow timezone через `Intl.DateTimeFormat({ timeZone: "Europe/Moscow" })`
+- **SKU генерация**: `$queryRaw SELECT nextval('product_sku_seq')` внутри транзакции
 
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
-<!-- GSD:architecture-end -->
+```
+app/
+├── (auth)/login/         ← страница логина (публичная)
+├── (dashboard)/          ← защищённые страницы (RBAC)
+│   ├── dashboard/        ← главная после логина
+│   ├── products/         ← товары CRUD
+│   ├── cards/wb/         ← карточки WB
+│   ├── batches/          ← себестоимость
+│   ├── admin/users/      ← управление пользователями
+│   ├── admin/settings/   ← бренды, категории, маркетплейсы
+│   └── [stubs]/          ← заглушки будущих модулей
+├── api/
+│   ├── auth/[...nextauth]/ ← Auth.js route handler
+│   ├── upload/           ← загрузка фото (multipart)
+│   ├── uploads/[...path]/ ← dev-only отдача фото
+│   ├── wb-sync/          ← синхронизация карточек WB
+│   └── cron/purge-deleted/ ← авто-удаление через 30 дней
+├── actions/
+│   ├── products.ts       ← CRUD товаров (с генерацией SKU)
+│   ├── cost.ts           ← upsert себестоимости
+│   ├── reference.ts      ← CRUD брендов/категорий/маркетплейсов
+│   ├── users.ts          ← CRUD пользователей
+│   └── wb-cards.ts       ← привязка WB карточек к товарам
+└── page.tsx              ← landing page (публичная, motion анимации)
 
-<!-- GSD:workflow-start source:GSD defaults -->
+lib/
+├── auth.ts               ← Auth.js полная конфигурация (Node.js)
+├── auth.config.ts        ← Auth.js Edge-safe конфиг (для middleware)
+├── prisma.ts             ← PrismaClient singleton
+├── rbac.ts               ← requireSection(), requireSuperadmin()
+├── sections.ts           ← URL → ERP_SECTION mapping (Edge-safe)
+├── section-labels.ts     ← русские названия секций
+├── wb-api.ts             ← WB Content + Prices + v4 public API
+└── utils.ts              ← cn() для Tailwind
+
+middleware.ts             ← RBAC route guard (Edge runtime)
+```
+
 ## GSD Workflow Enforcement
 
 Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
@@ -215,11 +252,8 @@ Use these entry points:
 - `/gsd:execute-phase` for planned phase work
 
 Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
 
-<!-- GSD:profile-start -->
 ## Developer Profile
 
 > Profile not yet configured. Run `/gsd:profile-user` to generate your developer profile.
 > This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
