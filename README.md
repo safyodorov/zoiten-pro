@@ -4,6 +4,14 @@
 
 **Продакшн:** https://zoiten.pro
 
+## Дизайн
+
+- **Landing**: Glassmorphism — стеклянные карточки, анимированные градиентные блобы, адаптивный
+- **Тема**: светлая по умолчанию + переключатель dark/light (next-themes)
+- **Палитра**: тёплый оранжево-красный accent
+- **Dashboard**: Lucide иконки, карточки с hover-эффектами
+- **Sidebar**: иконки навигации, RBAC-фильтрация
+
 ## Возможности
 
 ### Товары
@@ -30,6 +38,9 @@
 - Бренды, категории, подкатегории — CRUD с drag-and-drop сортировкой
 - Маркетплейсы — WB, Ozon, ДМ, ЯМ + кастомные
 
+### Сотрудники
+- Раздел в разработке (заглушка)
+
 ### Пользователи
 - RBAC — суперадмин, менеджер, наблюдатель
 - Доступ к разделам по ролям
@@ -38,7 +49,8 @@
 
 - **Next.js 15** (App Router, TypeScript, React 19)
 - **PostgreSQL 16** + **Prisma 6**
-- **shadcn/ui v4** + Tailwind v4
+- **shadcn/ui v4** + Tailwind v4 + motion 12.x
+- **next-themes** (light/dark toggle)
 - **Auth.js v5** (credentials, JWT)
 - **Wildberries API** (Content, Prices, Statistics, Analytics, Tariffs)
 

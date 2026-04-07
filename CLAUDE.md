@@ -13,7 +13,8 @@
 
 - **Framework**: Next.js 15.5.14 (App Router, TypeScript, React 19)
 - **Database**: PostgreSQL 16 + Prisma 6
-- **UI**: shadcn/ui v4 (base-nova) + Tailwind v4 + motion 12.x
+- **UI**: shadcn/ui v4 (base-nova) + Tailwind v4 + motion 12.x + Three.js (3D)
+- **Theme**: next-themes (light/dark), оранжево-красный accent (oklch hue 28-30)
 - **Auth**: Auth.js v5 (credentials provider, JWT)
 - **Deploy**: systemd + nginx reverse proxy → localhost:3001
 - **WB API**: Wildberries Content + Prices + Statistics + Analytics + Tariffs API
@@ -34,6 +35,17 @@
 7. План закупок (заглушка)
 8. План продаж (заглушка)
 9. Служба поддержки (из https://github.com/safyodorov/ai-cs-zoiten)
+10. Сотрудники (заглушка)
+
+## Дизайн
+
+- **Landing**: Glassmorphism стиль — стеклянные карточки, анимированные градиентные блобы (6 орбов, CSS keyframes), адаптивный (mobile/desktop)
+- **Тема**: светлая по умолчанию, переключатель light/dark в header (next-themes)
+- **Палитра**: оранжево-красный accent (oklch hue 28-30), вдохновлён Claude Code
+- **Favicon**: логотип Zoiten (SVG interlocking circles), ICO/PNG/SVG
+- **Dashboard**: Lucide иконки, карточки с hover-эффектами
+- **Sidebar**: иконки + текст, фиолетовый → оранжевый primary, CSS variables
+- **Auth-aware header**: залогинен → имя + ссылка в dashboard; нет → кнопка «Войти»
 
 ## Модель данных — Товары
 
@@ -169,6 +181,7 @@ app/
 │   ├── batches/             ← себестоимость партий
 │   ├── admin/users/         ← управление пользователями
 │   ├── admin/settings/      ← бренды, категории, маркетплейсы (DnD)
+│   ├── employees/           ← сотрудники (заглушка)
 │   └── [stubs]/             ← заглушки будущих модулей
 ├── api/
 │   ├── auth/[...nextauth]/  ← Auth.js route handler
@@ -200,7 +213,10 @@ components/
 ├── products/                ← ProductsTable, ProductForm, PhotoUploadField, PhotoCropDialog, ProductFilters
 ├── cost/                    ← CostTable, CostFilters, CostSearchInput
 ├── settings/                ← BrandsTab, CategoriesTab, MarketplacesTab, SortableList, SettingsTabs
-├── layout/                  ← Sidebar, NavLinks
+├── landing/variants/        ← GlassmorphismLanding (главная страница)
+├── layout/                  ← Sidebar, NavLinks, Header
+├── theme-provider.tsx       ← next-themes ThemeProvider
+├── theme-toggle.tsx         ← Sun/Moon переключатель темы
 └── ui/                      ← shadcn компоненты
 
 middleware.ts                ← RBAC route guard (Edge runtime)
