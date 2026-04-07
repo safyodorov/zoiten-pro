@@ -328,7 +328,7 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
 
 export async function fetchWbDiscounts(
   nmIds: number[],
-  sellerPriceMap?: Map<number, { price: number; discountedPrice: number }>
+  sellerPriceMap?: Map<number, PriceData>
 ): Promise<Map<number, number>> {
   const discountMap = new Map<number, number>()
 
