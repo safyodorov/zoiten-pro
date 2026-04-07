@@ -335,6 +335,9 @@ export async function fetchWbDiscounts(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   }
 
+  // Пауза перед v4 — даём остыть rate limit после предыдущих API запросов
+  await new Promise((r) => setTimeout(r, 10000))
+
   // Батчами по 30 с паузой 6 сек (50 блокируется PoW)
   let v4Failed = false
   for (let i = 0; i < nmIds.length; i += 30) {
