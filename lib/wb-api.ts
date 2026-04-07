@@ -111,9 +111,11 @@ export async function fetchAllCards(): Promise<WbCardRaw[]> {
 interface PriceItem {
   nmID: number
   discount: number
+  clubDiscount: number
   sizes: Array<{
     price: number
     discountedPrice: number
+    clubDiscountedPrice: number
   }>
 }
 
@@ -124,9 +126,16 @@ interface PricesResponse {
   error: boolean
 }
 
-export async function fetchAllPrices(): Promise<Map<number, { price: number; discountedPrice: number }>> {
+export interface PriceData {
+  priceBeforeDiscount: number  // цена до скидки продавца, руб
+  discountedPrice: number      // цена со скидкой продавца, руб
+  sellerDiscount: number       // скидка продавца, %
+  clubDiscount: number         // скидка WB клуба, %
+}
+
+export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
   const token = getToken()
-  const priceMap = new Map<number, { price: number; discountedPrice: number }>()
+  const priceMap = new Map<number, PriceData>()
 
   let offset = 0
   const limit = 1000
@@ -152,10 +161,11 @@ export async function fetchAllPrices(): Promise<Map<number, { price: number; dis
     for (const item of items) {
       const size = item.sizes?.[0]
       if (size) {
-        // WB API: цены в рублях (целые или с копейками)
         priceMap.set(item.nmID, {
-          price: Math.round(size.price),
+          priceBeforeDiscount: Math.round(size.price),
           discountedPrice: Math.round(size.discountedPrice),
+          sellerDiscount: item.discount ?? 0,
+          clubDiscount: item.clubDiscount ?? 0,
         })
       }
     }
@@ -165,6 +175,145 @@ export async function fetchAllPrices(): Promise<Map<number, { price: number; dis
   }
 
   return priceMap
+}
+
+// ── Получение остатков через Statistics API ──────────────────────
+
+export async function fetchStocks(): Promise<Map<number, number>> {
+  const token = getToken()
+  const stockMap = new Map<number, number>()
+
+  try {
+    const res = await fetch(
+      "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
+      { headers: { Authorization: token } }
+    )
+
+    if (!res.ok) {
+      console.error(`Statistics API stocks ошибка ${res.status}`)
+      return stockMap
+    }
+
+    const items: Array<{ nmId: number; quantity: number }> = await res.json()
+
+    for (const item of items) {
+      const current = stockMap.get(item.nmId) ?? 0
+      stockMap.set(item.nmId, current + item.quantity)
+    }
+  } catch (e) {
+    console.error("fetchStocks error:", e)
+  }
+
+  return stockMap
+}
+
+// ── Получение процента выкупа через Analytics API ───────────────
+
+export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, number>> {
+  const token = getToken()
+  const buyoutMap = new Map<number, number>()
+
+  try {
+    // Период: последний месяц
+    const endDate = new Date().toISOString().split("T")[0]
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+
+    const id = crypto.randomUUID()
+
+    // 1. Создаём задание на отчёт
+    const createRes = await fetch(
+      "https://seller-analytics-api.wildberries.ru/api/v2/nm-report/downloads",
+      {
+        method: "POST",
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          reportType: "DETAIL_HISTORY_REPORT",
+          params: { nmIDs: nmIds, startDate, endDate },
+        }),
+      }
+    )
+
+    if (!createRes.ok) {
+      console.error(`Analytics create report ошибка ${createRes.status}`)
+      return buyoutMap
+    }
+
+    // 2. Ждём готовности (до 30 сек)
+    let ready = false
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise((r) => setTimeout(r, 3000))
+      const statusRes = await fetch(
+        `https://seller-analytics-api.wildberries.ru/api/v2/nm-report/downloads?downloadId=${id}`,
+        { headers: { Authorization: token } }
+      )
+      if (!statusRes.ok) continue
+      const statusData = await statusRes.json()
+      const report = (statusData.data ?? []).find((r: { id: string }) => r.id === id)
+      if (report?.status === "SUCCESS") {
+        ready = true
+        break
+      }
+    }
+
+    if (!ready) {
+      console.error("Analytics report не готов за 30 сек")
+      return buyoutMap
+    }
+
+    // 3. Скачиваем ZIP → CSV
+    const fileRes = await fetch(
+      `https://seller-analytics-api.wildberries.ru/api/v2/nm-report/downloads/file/${id}`,
+      { headers: { Authorization: token } }
+    )
+
+    if (!fileRes.ok) {
+      console.error(`Analytics download ошибка ${fileRes.status}`)
+      return buyoutMap
+    }
+
+    // Распаковываем ZIP (в Node.js) — простой подход через текст
+    // ZIP с одним CSV файлом — читаем как arrayBuffer
+    const zipBuffer = await fileRes.arrayBuffer()
+    const { unzipSync } = await import("node:zlib")
+    // Пробуем прочитать как deflate stream из ZIP
+    // Простой парсер: находим CSV данные внутри ZIP
+    const bytes = new Uint8Array(zipBuffer)
+    // Ищем начало CSV после заголовка ZIP (после первого \n после "buyoutPercent")
+    const text = new TextDecoder().decode(bytes)
+    const csvStart = text.indexOf("nmID,dt,")
+    if (csvStart === -1) return buyoutMap
+
+    const csvText = text.slice(csvStart).split("\x00")[0] // отрезаем мусор после CSV
+
+    const lines = csvText.trim().split("\n")
+    if (lines.length < 2) return buyoutMap
+
+    // Суммируем выкупы и заказы по nmId за весь период
+    const totals = new Map<number, { buyouts: number; orders: number }>()
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(",")
+      const nmId = parseInt(cols[0])
+      const orders = parseInt(cols[4]) || 0
+      const buyouts = parseInt(cols[6]) || 0
+      if (!nmId) continue
+      const cur = totals.get(nmId) ?? { buyouts: 0, orders: 0 }
+      totals.set(nmId, { buyouts: cur.buyouts + buyouts, orders: cur.orders + orders })
+    }
+
+    for (const [nmId, { buyouts, orders }] of totals) {
+      if (orders > 0) {
+        buyoutMap.set(nmId, Math.round((buyouts / orders) * 100))
+      }
+    }
+  } catch (e) {
+    console.error("fetchBuyoutPercent error:", e)
+  }
+
+  return buyoutMap
 }
 
 // ── Получение скидки WB (СПП) через card.wb.ru v4 API ───────────

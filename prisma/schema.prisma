@@ -129,8 +129,13 @@ model WbCard {
   reviews3      Int?                          // оценок 3
   reviews4      Int?                          // оценок 4
   reviews5      Int?                          // оценок 5
-  price         Float?                        // цена продавца со скидкой
+  priceBeforeDiscount Float?                   // цена продавца до скидки, руб
+  sellerDiscount Int?                         // скидка продавца, %
+  price         Float?                        // цена продавца со скидкой, руб
   discountWb    Int?                          // скидка WB (СПП), %
+  clubDiscount  Int?                          // скидка WB клуба, %
+  stockQty      Int?                          // остаток товара, шт
+  buyoutPercent Float?                        // процент выкупа за месяц, %
   commFbwStd    Float?                        // комиссия стандартная FBW, %
   commFbsStd    Float?                        // комиссия стандартная FBS, %
   commFbwIu     Float?                        // комиссия ИУ FBW, %

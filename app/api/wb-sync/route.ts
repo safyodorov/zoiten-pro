@@ -6,7 +6,7 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts, fetchStandardCommissions } from "@/lib/wb-api"
+import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts, fetchStandardCommissions, fetchStocks, fetchBuyoutPercent } from "@/lib/wb-api"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -32,7 +32,14 @@ export async function POST(): Promise<NextResponse> {
     const iuList = await prisma.wbCommissionIu.findMany()
     const iuMap = new Map(iuList.map((iu) => [iu.subjectName, { fbw: iu.fbw, fbs: iu.fbs }]))
 
-    // 5. Скидки WB (СПП) через card.wb.ru v4 + цены продавца
+    // 5. Остатки из Statistics API
+    const stockMap = await fetchStocks()
+
+    // 6. Процент выкупа из Analytics API (за месяц)
+    const nmIds = rawCards.map((c) => c.nmID)
+    const buyoutMap = await fetchBuyoutPercent(nmIds)
+
+    // 7. Скидки WB (СПП) через card.wb.ru v4 + цены продавца
     //    СПП = (1 - цена_покупателя / цена_продавца) × 100
     const nmIds = rawCards.map((c) => c.nmID)
     const discountMap = await fetchWbDiscounts(nmIds, priceMap)
@@ -47,6 +54,11 @@ export async function POST(): Promise<NextResponse> {
         const priceData = priceMap.get(card.nmId)
         const discountWb = discountMap.get(card.nmId) ?? null
         const price = priceData?.discountedPrice ?? null
+        const priceBeforeDiscount = priceData?.priceBeforeDiscount ?? null
+        const sellerDiscount = priceData?.sellerDiscount ?? null
+        const clubDiscount = priceData?.clubDiscount ?? null
+        const stockQty = stockMap.get(card.nmId) ?? null
+        const buyoutPct = buyoutMap.get(card.nmId) ?? null
 
         // Комиссии: стандартные по subjectID, ИУ по subjectName (category)
         const stdComm = commMap.get(raw.subjectID)
@@ -68,8 +80,13 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            priceBeforeDiscount,
+            sellerDiscount,
             price,
             discountWb,
+            clubDiscount,
+            stockQty,
+            buyoutPercent: buyoutPct,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,
@@ -93,8 +110,13 @@ export async function POST(): Promise<NextResponse> {
             heightCm: card.heightCm,
             widthCm: card.widthCm,
             depthCm: card.depthCm,
+            priceBeforeDiscount,
+            sellerDiscount,
             price,
             discountWb,
+            clubDiscount,
+            stockQty,
+            buyoutPercent: buyoutPct,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,

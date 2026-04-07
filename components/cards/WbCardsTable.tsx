@@ -42,6 +42,9 @@ interface WbCard {
   reviewsTotal: number | null
   price: number | null
   discountWb: number | null
+  clubDiscount: number | null
+  stockQty: number | null
+  buyoutPercent: number | null
   commFbwStd: number | null
   commFbsStd: number | null
   commFbwIu: number | null
@@ -301,6 +304,8 @@ export function WbCardsTable({
               </TableHead>
               <TableHead>Цена продавца</TableHead>
               <TableHead>Скидка WB</TableHead>
+              <TableHead>Клуб</TableHead>
+              <TableHead>Остаток</TableHead>
               <TableHead className="text-center border-l text-xs">Стд FBW</TableHead>
               <TableHead className="text-center text-xs">Стд FBS</TableHead>
               <TableHead className="text-center border-l text-xs">ИУ FBW</TableHead>
@@ -310,7 +315,7 @@ export function WbCardsTable({
           <TableBody>
             {cards.length === 0 && (
               <TableRow>
-                <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={15} className="text-center py-12 text-muted-foreground">
                   Карточки не найдены. Нажмите «Синхронизировать с WB» для загрузки.
                 </TableCell>
               </TableRow>
@@ -345,6 +350,16 @@ export function WbCardsTable({
                 <TableCell>
                   {card.discountWb != null
                     ? <span className="text-sm">{card.discountWb}%</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>
+                  {card.clubDiscount != null && card.clubDiscount > 0
+                    ? <span className="text-sm">{card.clubDiscount}%</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>
+                  {card.stockQty != null
+                    ? <span className="text-sm">{card.stockQty}</span>
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center border-l text-xs">
