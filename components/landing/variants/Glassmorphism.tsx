@@ -147,7 +147,7 @@ export function GlassmorphismLanding() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4 }}
       >
-        <div className="flex flex-wrap justify-center gap-3 max-w-5xl mx-auto">
+        <div className="flex flex-wrap justify-center gap-4 max-w-6xl mx-auto">
           {cards.map((s, i) => {
             const Icon = SECTION_ICONS[s.value]
             return (
@@ -157,10 +157,10 @@ export function GlassmorphismLanding() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.05 }}
-                className="flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-white/50 dark:border-white/10 hover:bg-white/70 dark:hover:bg-white/10 hover:shadow-lg hover:shadow-orange-500/10 transition-all group cursor-pointer"
+                className="flex items-center gap-3 px-7 py-4 rounded-2xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-white/50 dark:border-white/10 hover:bg-white/70 dark:hover:bg-white/10 hover:shadow-lg hover:shadow-orange-500/10 transition-all group cursor-pointer"
               >
-                {Icon && <Icon className="w-5 h-5 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform" />}
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {Icon && <Icon className="w-6 h-6 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform" />}
+                <span className="text-base font-medium text-gray-700 dark:text-gray-300">
                   {s.label}
                 </span>
               </motion.a>
