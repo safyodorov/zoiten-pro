@@ -25,9 +25,10 @@ export async function POST(): Promise<NextResponse> {
     // 2. Цены из Discounts & Prices API (одним запросом для всех)
     const priceMap = await fetchAllPrices()
 
-    // 3. Скидки WB (СПП) через публичный API (может не сработать с VPS)
+    // 3. Скидки WB (СПП) через card.wb.ru v4 + цены продавца
+    //    СПП = (1 - цена_покупателя / цена_продавца) × 100
     const nmIds = rawCards.map((c) => c.nmID)
-    const discountMap = await fetchWbDiscounts(nmIds)
+    const discountMap = await fetchWbDiscounts(nmIds, priceMap)
 
     let synced = 0
     const errors: string[] = []
