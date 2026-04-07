@@ -17,7 +17,11 @@ const SECTION_PATHS: Record<string, string> = {
   COST: "/batches", PROCUREMENT: "/purchase-plan", SALES: "/sales-plan", SUPPORT: "/support",
 }
 
-export function GlassmorphismLanding() {
+interface Props {
+  user?: { name: string } | null
+}
+
+export function GlassmorphismLanding({ user }: Props) {
   const cards = SECTION_OPTIONS.filter((s) => s.value !== "USER_MANAGEMENT")
 
   return (
@@ -101,12 +105,21 @@ export function GlassmorphismLanding() {
         </span>
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <Link
-            href="/login"
-            className="px-5 py-2 text-sm font-medium bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/30"
-          >
-            Войти
-          </Link>
+          {user ? (
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/30"
+            >
+              <span>{user.name}</span>
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="px-5 py-2 text-sm font-medium bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl hover:from-orange-600 hover:to-red-600 transition-all shadow-lg shadow-orange-500/30"
+            >
+              Войти
+            </Link>
+          )}
         </div>
       </header>
 
