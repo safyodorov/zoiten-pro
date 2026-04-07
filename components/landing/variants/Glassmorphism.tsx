@@ -118,8 +118,18 @@ export function GlassmorphismLanding() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
-          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shadow-lg shadow-orange-500/30">
-            <span className="text-white font-black text-2xl">Z</span>
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center shadow-lg shadow-orange-500/30 p-3">
+            <svg viewBox="0 0 512 512" className="w-[50px] h-[50px]">
+              <g transform="translate(256,256)" fill="none" stroke="#ffffff" strokeWidth="24" strokeLinecap="round">
+                <circle cx="0" cy="0" r="195"/>
+                <circle cx="0" cy="0" r="120"/>
+                <line x1="0" y1="-195" x2="0" y2="195"/>
+                <path d="M 0,-120 C -66,-120 -120,-66 -120,0" strokeWidth="26"/>
+                <path d="M -120,0 C -120,66 -66,120 0,120" strokeWidth="26"/>
+                <path d="M 0,-120 C 66,-120 120,-66 120,0" strokeWidth="26"/>
+                <path d="M 120,0 C 120,66 66,120 0,120" strokeWidth="26"/>
+              </g>
+            </svg>
           </div>
           <h1 className="text-6xl md:text-8xl font-black tracking-tight bg-gradient-to-r from-orange-600 via-red-500 to-orange-600 dark:from-orange-400 dark:via-red-400 dark:to-orange-400 bg-clip-text text-transparent mb-4">
             ZOITEN
@@ -137,7 +147,7 @@ export function GlassmorphismLanding() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.4 }}
       >
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2 max-w-4xl mx-auto">
+        <div className="flex flex-wrap justify-center gap-3 max-w-5xl mx-auto">
           {cards.map((s, i) => {
             const Icon = SECTION_ICONS[s.value]
             return (
@@ -147,10 +157,10 @@ export function GlassmorphismLanding() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 + i * 0.05 }}
-                className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-white/50 dark:border-white/10 hover:bg-white/70 dark:hover:bg-white/10 hover:shadow-lg hover:shadow-orange-500/10 transition-all group cursor-pointer"
+                className="flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-white/50 dark:border-white/10 hover:bg-white/70 dark:hover:bg-white/10 hover:shadow-lg hover:shadow-orange-500/10 transition-all group cursor-pointer"
               >
                 {Icon && <Icon className="w-5 h-5 text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform" />}
-                <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400 text-center leading-tight">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {s.label}
                 </span>
               </motion.a>
