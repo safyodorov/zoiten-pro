@@ -1,1 +1,93 @@
 # Zoiten ERP
+
+Корпоративная мини-ERP система для управления товарами и карточками маркетплейсов.
+
+**Продакшн:** https://zoiten.pro
+
+## Возможности
+
+### Товары
+- Полный CRUD с фото (кроп 3:4), артикулами маркетплейсов, штрих-кодами
+- УКТ — автоматический уникальный код товара (УКТ-000001)
+- Габариты (Д×Ш×В), вес, объём (авто), ABC-статус, ярлык
+- Мягкое удаление с физическим удалением из корзины
+- Фильтры по бренду, категории, подкатегории
+
+### Карточки товаров WB
+- Синхронизация всех карточек из Wildberries через API
+- Данные: фото, видео, штрихкоды, габариты, ярлыки
+- Цена продавца (до/после скидки), скидка WB (СПП), скидка клуба
+- Остатки по складам, процент выкупа за месяц
+- Комиссии стандартные (FBW/FBS) и индивидуальные (из Excel)
+- Создание товаров из выбранных карточек (чекбоксы + кнопки)
+- Фильтры по бренду/категории, пагинация, сортировка
+
+### Себестоимость партий
+- Inline-редактирование себестоимости товаров
+- Фильтры, поиск
+
+### Настройки
+- Бренды, категории, подкатегории — CRUD с drag-and-drop сортировкой
+- Маркетплейсы — WB, Ozon, ДМ, ЯМ + кастомные
+
+### Пользователи
+- RBAC — суперадмин, менеджер, наблюдатель
+- Доступ к разделам по ролям
+
+## Технологии
+
+- **Next.js 15** (App Router, TypeScript, React 19)
+- **PostgreSQL 16** + **Prisma 6**
+- **shadcn/ui v4** + Tailwind v4
+- **Auth.js v5** (credentials, JWT)
+- **Wildberries API** (Content, Prices, Statistics, Analytics, Tariffs)
+
+## Синхронизация с Wildberries
+
+### Три кнопки
+
+| Кнопка | Endpoint | Что делает | Время |
+|--------|----------|------------|-------|
+| Синхронизировать с WB | `POST /api/wb-sync` | Полная синхронизация всех данных | ~2 мин |
+| Скидка WB | `POST /api/wb-sync-spp` | Только актуальная СПП | ~45 сек |
+| Загрузить ИУ | `POST /api/wb-commission-iu` | Excel с индивидуальными комиссиями | мгновенно |
+
+### API WB — используемые endpoint'ы
+
+| API | Endpoint | Данные |
+|-----|----------|--------|
+| Content | `POST /content/v2/get/cards/list` | Карточки, фото, видео, штрихкоды, габариты |
+| Prices | `GET /api/v2/list/goods/filter` | Цены, скидки продавца, скидка клуба |
+| Tariffs | `GET /api/v1/tariffs/commission` | Комиссии FBW (`paidStorageKgvp`) и FBS (`kgvpSupplier`) |
+| Statistics | `GET /api/v1/supplier/stocks` | Остатки по складам |
+| Statistics | `GET /api/v1/supplier/sales` | СПП из продаж (fallback) |
+| Analytics | `POST /api/v2/nm-report/downloads` | Процент выкупа (CSV в ZIP) |
+| Публичный | `GET card.wb.ru/cards/v4/detail` | Цена покупателя для расчёта СПП |
+
+### Скидка WB (СПП) — как работает
+
+WB не даёт СПП через seller API. Решение:
+
+1. **Основной:** `curl` → `card.wb.ru/v4` → цена покупателя → `СПП = (1 - цена_покупателя / цена_продавца) × 100`
+2. **Fallback:** Statistics Sales API → поле `spp` из последних продаж
+
+**Важно:** Node.js `fetch()` блокируется WB по TLS fingerprint (403). Используем `execSync('curl ...')`. Батчи по 20 артикулов, пауза 3 сек.
+
+## Деплой
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && bash deploy.sh"
+```
+
+`deploy.sh` выполняет: git pull → npm ci → prisma migrate deploy → next build → systemctl restart
+
+## Env переменные
+
+```
+DATABASE_URL=postgresql://zoiten:***@localhost:5432/zoiten_erp
+AUTH_SECRET=<openssl rand -hex 32>
+AUTH_URL=https://zoiten.pro
+CRON_SECRET=<openssl rand -hex 32>
+UPLOAD_DIR=/var/www/zoiten-uploads
+WB_API_TOKEN=<токен из кабинета WB>
+```
