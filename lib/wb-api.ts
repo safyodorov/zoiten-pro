@@ -335,15 +335,12 @@ export async function fetchWbDiscounts(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   }
 
-  // Пауза перед v4 — даём остыть rate limit после предыдущих API запросов
-  await new Promise((r) => setTimeout(r, 10000))
-
-  // Батчами по 30 с паузой 6 сек (50 блокируется PoW)
+  // Батчами по 20 с паузой 3 сек (30+ иногда блокируется PoW)
   let v4Failed = false
-  for (let i = 0; i < nmIds.length; i += 30) {
+  for (let i = 0; i < nmIds.length; i += 20) {
     if (v4Failed) break
 
-    const batch = nmIds.slice(i, i + 30)
+    const batch = nmIds.slice(i, i + 20)
     const nmStr = batch.join(";")
 
     try {
@@ -385,9 +382,9 @@ export async function fetchWbDiscounts(
       break
     }
 
-    // Пауза 6 сек между батчами
-    if (i + 30 < nmIds.length) {
-      await new Promise((r) => setTimeout(r, 6000))
+    // Пауза 3 сек между батчами
+    if (i + 20 < nmIds.length) {
+      await new Promise((r) => setTimeout(r, 3000))
     }
   }
 
