@@ -1,18 +1,13 @@
 // app/api/wb-sync-spp/route.ts
 // POST /api/wb-sync-spp — синхронизация только скидки WB (СПП)
-// Отдельный endpoint без seller API, чтобы v4 не блокировался
+// Использует curl вместо Node.js fetch (WB блокирует Node.js по TLS fingerprint)
 export const runtime = "nodejs"
 export const maxDuration = 300
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-
-const HEADERS = {
-  Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-}
+import { execSync } from "node:child_process"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -21,25 +16,23 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    // 1. Берём nmId и цены продавца из БД (без seller API запросов!)
+    // 1. Берём nmId и цены продавца из БД
     const cards = await prisma.wbCard.findMany({
       select: { nmId: true, price: true },
     })
 
     if (cards.length === 0) {
-      return NextResponse.json({ updated: 0, message: "Карточки не найдены. Сначала синхронизируйте." })
+      return NextResponse.json({ updated: 0, message: "Карточки не найдены" })
     }
 
-    // Цены продавца из БД (уже синхронизированные)
     const sellerPrices = new Map(cards.map((c) => [c.nmId, c.price ?? 0]))
-
-    // 2. Запрашиваем v4 API батчами по 20, пауза 3 сек
-    //    НИКАКИХ seller API запросов перед этим!
     const nmIds = cards.map((c) => c.nmId)
+
     let updated = 0
     let v4Success = 0
     let v4Failed = false
 
+    // 2. v4 API через curl (обходит TLS fingerprint блокировку)
     for (let i = 0; i < nmIds.length; i += 20) {
       if (v4Failed) break
 
@@ -47,28 +40,27 @@ export async function POST(): Promise<NextResponse> {
       const nmStr = batch.join(";")
 
       try {
-        const res = await fetch(
-          `https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`,
-          { headers: HEADERS }
-        )
+        const result = execSync(
+          `curl -s -H "Accept: application/json" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" "https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}"`,
+          { timeout: 15000 }
+        ).toString()
 
-        if (res.status === 403 || res.status === 429) {
-          console.warn(`[СПП] v4 ${res.status} на батче ${i / 20 + 1}`)
+        if (result.includes("403 Forbidden") || result.includes("<html>")) {
+          console.warn(`[СПП] v4 403 на батче ${i / 20 + 1}`)
           v4Failed = true
           break
         }
 
-        if (!res.ok) continue
-
-        const data = await res.json()
-        const products = data?.products ?? data?.data?.products ?? []
+        const data = JSON.parse(result)
+        const products = data?.products ?? []
 
         for (const product of products) {
           const nmId: number = product.id
           if (!nmId) continue
 
           const sizes = product.sizes ?? []
-          const sizeWithPrice = sizes.find((s: { price?: { product?: number } }) => s.price?.product)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const sizeWithPrice = sizes.find((s: any) => s.price?.product)
           if (!sizeWithPrice?.price?.product) continue
 
           const buyerPriceRub = sizeWithPrice.price.product / 100
@@ -86,28 +78,29 @@ export async function POST(): Promise<NextResponse> {
           }
         }
       } catch {
+        console.warn(`[СПП] curl ошибка на батче ${i / 20 + 1}`)
         v4Failed = true
         break
       }
 
+      // Пауза 3 сек
       if (i + 20 < nmIds.length) {
         await new Promise((r) => setTimeout(r, 3000))
       }
     }
 
-    // 4. Fallback через Sales API для пропущенных
+    // 3. Fallback через Sales API
     if (v4Failed) {
       try {
-        const token = process.env.WB_API_TOKEN
+        const token = process.env.WB_API_TOKEN!
         const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
         const res = await fetch(
           `https://statistics-api.wildberries.ru/api/v1/supplier/sales?dateFrom=${dateFrom}&flag=0`,
-          { headers: { Authorization: token! } }
+          { headers: { Authorization: token } }
         )
         if (res.ok) {
           const sales = await res.json()
           if (Array.isArray(sales)) {
-            // Собираем последний SPP для каждого nmId
             const sppMap = new Map<number, number>()
             for (const item of sales) {
               if (item.nmId && item.spp != null && item.spp > 0) {
@@ -128,7 +121,7 @@ export async function POST(): Promise<NextResponse> {
       }
     }
 
-    console.log(`[СПП sync] v4: ${v4Success} | fallback: ${v4Failed ? "да" : "нет"} | updated: ${updated}`)
+    console.log(`[СПП sync] v4(curl): ${v4Success} | fallback: ${v4Failed ? "да" : "нет"} | updated: ${updated}`)
 
     return NextResponse.json({
       updated,
