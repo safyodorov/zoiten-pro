@@ -316,80 +316,47 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
   return buyoutMap
 }
 
-// ── Получение скидки WB (СПП) через card.wb.ru v4 API ───────────
+// ── Получение скидки WB (СПП) через Statistics Sales API ────────
 //
-// Подход из проекта ai-zoiten (github.com/safyodorov/ai-zoiten):
-// 1. card.wb.ru/cards/v4/detail — возвращает цену покупателя (sizes[].price.product)
-//    в сотых копейки (делим на 100 → рубли)
-// 2. Цену продавца берём из sellerPriceMap (из официального Prices API)
-// 3. СПП = (1 - цена_покупателя / цена_продавца) × 100
-//
-// v4 API работает без x-pow (в отличие от v2 который заблокирован с февраля 2026).
+// Публичный card.wb.ru заблокирован с VPS (PoW challenge / 403).
+// Вместо этого берём СПП из Statistics API → supplier/sales.
+// Поле spp в каждой продаже — актуальная скидка WB на момент продажи.
+// Берём последнюю продажу для каждого nmId.
 
 export async function fetchWbDiscounts(
-  nmIds: number[],
-  sellerPriceMap?: Map<number, PriceData>
+  _nmIds: number[],
+  _sellerPriceMap?: Map<number, PriceData>
 ): Promise<Map<number, number>> {
+  const token = getToken()
   const discountMap = new Map<number, number>()
 
-  const HEADERS = {
-    Accept: "application/json",
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  }
+  try {
+    // Берём продажи за последний месяц
+    const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
 
-  // Батчами по 50 nmId (v4 API поддерживает множественные nm через ;)
-  for (let i = 0; i < nmIds.length; i += 50) {
-    const batch = nmIds.slice(i, i + 50)
-    const nmStr = batch.join(";")
+    const res = await fetch(
+      `https://statistics-api.wildberries.ru/api/v1/supplier/sales?dateFrom=${dateFrom}&flag=0`,
+      { headers: { Authorization: token } }
+    )
 
-    try {
-      const res = await fetch(
-        `https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`,
-        { headers: HEADERS }
-      )
-
-      if (!res.ok) {
-        console.warn(`[WB v4 API] HTTP ${res.status} for batch starting at ${batch[0]}`)
-        continue
-      }
-
-      const data = await res.json()
-      // v4 формат: {"products": [...]} — без обёртки "data"
-      const products = data?.products ?? data?.data?.products ?? []
-
-      for (const product of products) {
-        const nmId: number = product.id
-        if (!nmId) continue
-
-        // Цена покупателя из v4 API (в сотых копейки → делим на 100 → рубли)
-        // Берём первый size с ценой (не все sizes имеют price)
-        const sizes = product.sizes ?? []
-        const sizeWithPrice = sizes.find((s: { price?: { product?: number } }) => s.price?.product)
-        if (!sizeWithPrice?.price?.product) continue
-
-        const buyerPriceRub = sizeWithPrice.price.product / 100 // цена покупателя, руб
-
-        // Цена продавца (после его скидки, до СПП) — из официального Prices API
-        const sellerData = sellerPriceMap?.get(nmId)
-        if (sellerData && sellerData.discountedPrice > 0 && buyerPriceRub > 0) {
-          // СПП = (1 - цена_покупателя / цена_продавца) × 100
-          const spp = Math.round(
-            (1 - buyerPriceRub / sellerData.discountedPrice) * 100
-          )
-          if (spp > 0 && spp < 100) {
-            discountMap.set(nmId, spp)
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("[WB v4 API] fetch error:", err instanceof Error ? err.message : err)
+    if (!res.ok) {
+      console.error(`Statistics Sales API ошибка ${res.status}`)
+      return discountMap
     }
 
-    // Пауза между батчами — не перегружать API
-    if (i + 50 < nmIds.length) {
-      await new Promise((r) => setTimeout(r, 500))
+    const data = await res.json()
+    if (!Array.isArray(data)) return discountMap
+
+    // Последняя продажа для каждого nmId перезапишет — получим актуальный SPP
+    for (const item of data) {
+      const nmId = item.nmId
+      const spp = item.spp
+      if (nmId && spp != null && spp > 0) {
+        discountMap.set(nmId, Math.round(spp))
+      }
     }
+  } catch (e) {
+    console.error("fetchWbDiscounts error:", e)
   }
 
   return discountMap
