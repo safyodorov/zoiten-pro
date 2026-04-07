@@ -1,17 +1,19 @@
 "use client"
 
 import Link from "next/link"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export function LandingHeader() {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-gray-950/80 backdrop-blur-sm border-b border-white/10">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <span className="text-violet-400 font-bold text-xl tracking-wide">
-          Zoiten
-        </span>
+    <header className="h-16 border-b border-border/50 bg-background/80 backdrop-blur-sm px-6 flex items-center justify-between shrink-0 z-50">
+      <span className="text-primary font-bold text-xl tracking-wide">
+        Zoiten
+      </span>
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
         <Link
           href="/login"
-          className="px-4 py-2 text-sm font-medium text-white border border-white/20 rounded-lg hover:bg-white/10 hover:border-white/40 transition-colors"
+          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
         >
           Войти
         </Link>

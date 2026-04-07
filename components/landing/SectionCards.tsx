@@ -15,12 +15,12 @@ import { SECTION_OPTIONS } from "@/lib/section-labels"
 
 const containerVariants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.07 } },
+  visible: { transition: { staggerChildren: 0.05 } },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4 } },
 }
 
 const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -49,12 +49,12 @@ export function SectionCards() {
   const cards = SECTION_OPTIONS.filter((s) => s.value !== "USER_MANAGEMENT")
 
   return (
-    <div>
-      <p className="text-white/60 text-sm uppercase tracking-widest mb-6">
+    <div className="px-6 pb-6 pt-4">
+      <p className="text-muted-foreground text-xs uppercase tracking-widest mb-3 text-center">
         Модули системы
       </p>
       <motion.div
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+        className="flex flex-wrap justify-center gap-3 max-w-5xl mx-auto"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -67,10 +67,14 @@ export function SectionCards() {
               key={section.value}
               href={path}
               variants={itemVariants}
-              className="rounded-xl border border-white/10 bg-white/5 p-6 hover:bg-white/10 transition-colors flex flex-col items-center gap-3 cursor-pointer"
+              className="rounded-xl border border-border bg-card/80 backdrop-blur-sm px-5 py-3 hover:bg-accent hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 transition-all duration-200 flex items-center gap-2.5 cursor-pointer group"
             >
-              {Icon && <Icon className="w-8 h-8 text-violet-400" />}
-              <span className="text-sm text-gray-300 text-center">{section.label}</span>
+              {Icon && (
+                <Icon className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
+              )}
+              <span className="text-sm font-medium text-foreground">
+                {section.label}
+              </span>
             </motion.a>
           )
         })}

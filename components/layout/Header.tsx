@@ -1,11 +1,11 @@
 // components/layout/Header.tsx
-// Top header — shows user name/role and logout button
-// Logout uses Server Action inline (per AUTH-03)
+// Top header — shows user name/role, theme toggle, and logout button
 import { signOut } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { LogOut } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface HeaderProps {
   user: {
@@ -30,13 +30,14 @@ export function Header({ user }: HeaderProps) {
     .slice(0, 2) ?? "??"
 
   return (
-    <header className="h-14 border-b bg-white px-6 flex items-center justify-between shrink-0">
+    <header className="h-14 border-b border-border bg-card px-6 flex items-center justify-between shrink-0">
       <div />
       <div className="flex items-center gap-3">
+        <ThemeToggle />
         <Badge variant="secondary">{ROLE_LABELS[user.role] ?? user.role}</Badge>
         <div className="flex items-center gap-2">
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            <AvatarFallback className="text-xs bg-primary/10 text-primary">{initials}</AvatarFallback>
           </Avatar>
           <span className="text-sm font-medium hidden sm:block">
             {user.name ?? user.email}
