@@ -7,7 +7,6 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-import { fetchAllPrices } from "@/lib/wb-api"
 
 const HEADERS = {
   Accept: "application/json",
@@ -22,7 +21,7 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    // 1. Берём nmId и текущие цены продавца из БД
+    // 1. Берём nmId и цены продавца из БД (без seller API запросов!)
     const cards = await prisma.wbCard.findMany({
       select: { nmId: true, price: true },
     })
@@ -31,10 +30,11 @@ export async function POST(): Promise<NextResponse> {
       return NextResponse.json({ updated: 0, message: "Карточки не найдены. Сначала синхронизируйте." })
     }
 
-    // 2. Загружаем цены продавца (один запрос к seller API)
-    const priceMap = await fetchAllPrices()
+    // Цены продавца из БД (уже синхронизированные)
+    const sellerPrices = new Map(cards.map((c) => [c.nmId, c.price ?? 0]))
 
-    // 3. Запрашиваем v4 API батчами по 20, пауза 3 сек
+    // 2. Запрашиваем v4 API батчами по 20, пауза 3 сек
+    //    НИКАКИХ seller API запросов перед этим!
     const nmIds = cards.map((c) => c.nmId)
     let updated = 0
     let v4Success = 0
@@ -72,9 +72,9 @@ export async function POST(): Promise<NextResponse> {
           if (!sizeWithPrice?.price?.product) continue
 
           const buyerPriceRub = sizeWithPrice.price.product / 100
-          const sellerData = priceMap.get(nmId)
-          if (sellerData && sellerData.discountedPrice > 0 && buyerPriceRub > 0) {
-            const spp = Math.round((1 - buyerPriceRub / sellerData.discountedPrice) * 100)
+          const sellerPrice = sellerPrices.get(nmId) ?? 0
+          if (sellerPrice > 0 && buyerPriceRub > 0) {
+            const spp = Math.round((1 - buyerPriceRub / sellerPrice) * 100)
             if (spp > 0 && spp < 100) {
               await prisma.wbCard.update({
                 where: { nmId },
