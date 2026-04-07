@@ -316,10 +316,13 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
   return buyoutMap
 }
 
-// ── Получение скидки WB (СПП) — гибридный подход ────────────────
+// ── Получение скидки WB (СПП) — curl + Sales API fallback ───────
 //
-// 1. Сначала пробуем card.wb.ru v4 (актуальные данные в реальном времени)
-// 2. Для тех nmId где v4 вернул 403/PoW — берём из Statistics Sales API (ретроспектива)
+// WB блокирует Node.js fetch по TLS fingerprint (403), но curl проходит.
+// 1. v4 API через execSync(curl) — актуальные данные реального времени
+// 2. Sales API fallback — ретроспектива для пропущенных
+
+import { execSync } from "node:child_process"
 
 export async function fetchWbDiscounts(
   nmIds: number[],
@@ -328,15 +331,10 @@ export async function fetchWbDiscounts(
   const token = getToken()
   const discountMap = new Map<number, number>()
 
-  // ── Шаг 1: публичный v4 API (реальное время) ──────────────────
-  const HEADERS = {
-    Accept: "application/json",
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  }
-
-  // Батчами по 20 с паузой 3 сек (30+ иногда блокируется PoW)
+  // ── Шаг 1: v4 API через curl (реальное время) ─────────────────
   let v4Failed = false
+  let v4Count = 0
+
   for (let i = 0; i < nmIds.length; i += 20) {
     if (v4Failed) break
 
@@ -344,36 +342,36 @@ export async function fetchWbDiscounts(
     const nmStr = batch.join(";")
 
     try {
-      const res = await fetch(
-        `https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}`,
-        { headers: HEADERS }
-      )
+      const result = execSync(
+        `curl -s -H "Accept: application/json" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" "https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}"`,
+        { timeout: 15000 }
+      ).toString()
 
-      if (res.status === 403 || res.status === 429) {
-        console.warn(`[WB v4] ${res.status} — переключаюсь на Sales API`)
+      if (result.includes("403 Forbidden") || result.includes("<html>")) {
+        console.warn(`[СПП] v4 curl 403 на батче ${i / 20 + 1} — fallback`)
         v4Failed = true
         break
       }
 
-      if (!res.ok) continue
-
-      const data = await res.json()
-      const products = data?.products ?? data?.data?.products ?? []
+      const data = JSON.parse(result)
+      const products = data?.products ?? []
 
       for (const product of products) {
         const nmId: number = product.id
         if (!nmId) continue
 
         const sizes = product.sizes ?? []
-        const sizeWithPrice = sizes.find((s: { price?: { product?: number } }) => s.price?.product)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sizeWithPrice = sizes.find((s: any) => s.price?.product)
         if (!sizeWithPrice?.price?.product) continue
 
         const buyerPriceRub = sizeWithPrice.price.product / 100
-        const sellerData = sellerPriceMap?.get(nmId)
-        if (sellerData && sellerData.discountedPrice > 0 && buyerPriceRub > 0) {
-          const spp = Math.round((1 - buyerPriceRub / sellerData.discountedPrice) * 100)
+        const sellerPrice = sellerPriceMap?.get(nmId)?.discountedPrice ?? 0
+        if (sellerPrice > 0 && buyerPriceRub > 0) {
+          const spp = Math.round((1 - buyerPriceRub / sellerPrice) * 100)
           if (spp > 0 && spp < 100) {
             discountMap.set(nmId, spp)
+            v4Count++
           }
         }
       }
@@ -382,14 +380,12 @@ export async function fetchWbDiscounts(
       break
     }
 
-    // Пауза 3 сек между батчами
     if (i + 20 < nmIds.length) {
       await new Promise((r) => setTimeout(r, 3000))
     }
   }
 
   // ── Шаг 2: fallback через Sales API (ретроспектива) ────────────
-  // Для nmId которые не получили СПП через v4
   const missingNmIds = nmIds.filter((nm) => !discountMap.has(nm))
 
   if (missingNmIds.length > 0) {
@@ -416,7 +412,7 @@ export async function fetchWbDiscounts(
     }
   }
 
-  console.log(`[СПП] v4: ${discountMap.size - (v4Failed ? 0 : 0)} | fallback: ${v4Failed ? "да" : "нет"} | итого: ${discountMap.size}/${nmIds.length}`)
+  console.log(`[СПП] v4(curl): ${v4Count} | fallback: ${v4Failed ? "да" : "нет"} | итого: ${discountMap.size}/${nmIds.length}`)
 
   return discountMap
 }
