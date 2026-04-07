@@ -13,6 +13,7 @@ export const SECTION_PATHS = {
   "/purchase-plan": "PROCUREMENT",
   "/sales-plan": "SALES",
   "/support": "SUPPORT",
+  "/employees": "EMPLOYEES",
 } as const satisfies Record<string, string>
 
 export type SectionPath = keyof typeof SECTION_PATHS

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import {
-  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones,
+  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones, UserCheck,
 } from "lucide-react"
 
 const ALL_SECTIONS = [
@@ -15,6 +15,7 @@ const ALL_SECTIONS = [
   { section: "PROCUREMENT", href: "/purchase-plan", title: "План закупок", description: "Планирование закупок", icon: ShoppingCart },
   { section: "SALES", href: "/sales-plan", title: "План продаж", description: "Планирование продаж", icon: TrendingUp },
   { section: "SUPPORT", href: "/support", title: "Служба поддержки", description: "Тикеты и обращения клиентов", icon: Headphones },
+  { section: "EMPLOYEES", href: "/employees", title: "Сотрудники", description: "Управление персоналом", icon: UserCheck },
 ]
 
 export default async function DashboardPage() {

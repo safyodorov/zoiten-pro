@@ -3,18 +3,18 @@
 import { motion } from "motion/react"
 import Link from "next/link"
 import {
-  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones,
+  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones, UserCheck,
 } from "lucide-react"
 import { SECTION_OPTIONS } from "@/lib/section-labels"
 import { ThemeToggle } from "@/components/theme-toggle"
 
 const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   PRODUCTS: Package, PRICES: Tag, WEEKLY_CARDS: LayoutGrid, STOCK: Boxes,
-  COST: Calculator, PROCUREMENT: ShoppingCart, SALES: TrendingUp, SUPPORT: Headphones,
+  COST: Calculator, PROCUREMENT: ShoppingCart, SALES: TrendingUp, SUPPORT: Headphones, EMPLOYEES: UserCheck,
 }
 const SECTION_PATHS: Record<string, string> = {
   PRODUCTS: "/products", PRICES: "/prices", WEEKLY_CARDS: "/weekly", STOCK: "/inventory",
-  COST: "/batches", PROCUREMENT: "/purchase-plan", SALES: "/sales-plan", SUPPORT: "/support",
+  COST: "/batches", PROCUREMENT: "/purchase-plan", SALES: "/sales-plan", SUPPORT: "/support", EMPLOYEES: "/employees",
 }
 
 interface Props {

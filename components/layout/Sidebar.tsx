@@ -11,6 +11,7 @@ import {
   ShoppingCart,
   TrendingUp,
   Headphones,
+  UserCheck,
   Users,
   Settings,
 } from "lucide-react"
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { section: "PROCUREMENT", href: "/purchase-plan", label: "План закупок", icon: "ShoppingCart" },
   { section: "SALES", href: "/sales-plan", label: "План продаж", icon: "TrendingUp" },
   { section: "SUPPORT", href: "/support", label: "Служба поддержки", icon: "Headphones" },
+  { section: "EMPLOYEES", href: "/employees", label: "Сотрудники", icon: "UserCheck" },
   { section: "USER_MANAGEMENT", href: "/admin/users", label: "Пользователи", icon: "Users" },
   { section: "USER_MANAGEMENT", href: "/admin/settings", label: "Настройки", icon: "Settings" },
 ]
@@ -44,6 +46,7 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   ShoppingCart,
   TrendingUp,
   Headphones,
+  UserCheck,
   Users,
   Settings,
 }
