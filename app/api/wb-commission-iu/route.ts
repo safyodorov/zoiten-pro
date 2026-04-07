@@ -59,12 +59,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       records.push({
         parentName,
         subjectName,
-        fbw: parseFloat(String(row[2])) || 0,
-        fbs: parseFloat(String(row[3])) || 0,
-        dbs: parseFloat(String(row[4])) || 0,
-        express: parseFloat(String(row[5])) || 0,
-        pickup: parseFloat(String(row[6])) || 0,
-        booking: parseFloat(String(row[7])) || 0,
+        fbw: parseFloat(String(row[2])) || 0,       // Склад WB
+        fbs: parseFloat(String(row[4])) || 0,       // Склад продавца — везу до клиента (DBS, ближайшее к FBS)
+        dbs: parseFloat(String(row[4])) || 0,       // Склад продавца — везу самостоятельно до клиента
+        express: parseFloat(String(row[5])) || 0,   // Экспресс
+        pickup: parseFloat(String(row[6])) || 0,    // Самовывоз
+        booking: parseFloat(String(row[7])) || 0,   // Бронирование
       })
     }
 

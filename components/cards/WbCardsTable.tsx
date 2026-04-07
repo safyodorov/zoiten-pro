@@ -355,10 +355,10 @@ export function WbCardsTable({
                   {card.commFbsStd != null ? `${card.commFbsStd}%` : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center border-l text-xs">
-                  {card.commFbwIu != null ? `${card.commFbwIu}%` : <span className="text-muted-foreground">—</span>}
+                  {card.commFbwIu != null ? `${card.commFbwIu.toFixed(1)}%` : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-xs">
-                  {card.commFbsIu != null ? `${card.commFbsIu}%` : <span className="text-muted-foreground">—</span>}
+                  {card.commFbsIu != null ? `${card.commFbsIu.toFixed(1)}%` : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
                   {card.hasVideo && <Video className="h-4 w-4 text-blue-500" />}
