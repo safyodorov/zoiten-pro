@@ -57,10 +57,10 @@ export function Sidebar({ userRole, allowedSections }: SidebarProps) {
 
   return (
     <aside className="w-56 bg-card border-r border-border flex flex-col shrink-0">
-      <div className="h-14 flex items-center px-4 border-b border-border">
+      <a href="/dashboard" className="h-14 flex items-center px-4 border-b border-border hover:bg-accent/50 transition-colors">
         <span className="font-bold text-lg text-primary">Zoiten</span>
         <span className="font-light text-lg text-foreground ml-1">ERP</span>
-      </div>
+      </a>
       <nav className="flex-1 py-2 overflow-y-auto">
         <NavLinks items={visibleItems} />
       </nav>
