@@ -363,11 +363,12 @@ export async function fetchWbDiscounts(
         if (!nmId) continue
 
         // Цена покупателя из v4 API (в сотых копейки → делим на 100 → рубли)
+        // Берём первый size с ценой (не все sizes имеют price)
         const sizes = product.sizes ?? []
-        const firstSize = sizes[0]
-        if (!firstSize?.price) continue
+        const sizeWithPrice = sizes.find((s: { price?: { product?: number } }) => s.price?.product)
+        if (!sizeWithPrice?.price?.product) continue
 
-        const buyerPriceRub = firstSize.price.product / 100 // цена покупателя, руб
+        const buyerPriceRub = sizeWithPrice.price.product / 100 // цена покупателя, руб
 
         // Цена продавца (после его скидки, до СПП) — из официального Prices API
         const sellerData = sellerPriceMap?.get(nmId)
