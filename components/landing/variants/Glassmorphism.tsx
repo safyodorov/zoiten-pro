@@ -22,12 +22,77 @@ export function GlassmorphismLanding() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden relative bg-gradient-to-br from-orange-50 via-white to-amber-50 dark:from-gray-950 dark:via-orange-950/20 dark:to-gray-950">
-      {/* Background orbs — warm orange/amber palette */}
+      {/* Background orbs — smooth flowing animation across entire screen */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-20 w-72 h-72 bg-orange-400 rounded-full opacity-25 dark:opacity-15 blur-[80px] animate-pulse" />
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-red-400 rounded-full opacity-20 dark:opacity-12 blur-[100px]" style={{ animationDelay: "2s", animationDuration: "4s" }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-amber-300 rounded-full opacity-15 dark:opacity-10 blur-[90px]" style={{ animationDelay: "1s", animationDuration: "3s" }} />
+        <div className="absolute w-[500px] h-[500px] bg-orange-400 rounded-full opacity-20 dark:opacity-12 blur-[120px] orb-1" />
+        <div className="absolute w-[400px] h-[400px] bg-red-400 rounded-full opacity-18 dark:opacity-10 blur-[100px] orb-2" />
+        <div className="absolute w-[450px] h-[450px] bg-amber-300 rounded-full opacity-15 dark:opacity-10 blur-[110px] orb-3" />
+        <div className="absolute w-[350px] h-[350px] bg-rose-400 rounded-full opacity-15 dark:opacity-8 blur-[90px] orb-4" />
+        <div className="absolute w-[300px] h-[300px] bg-yellow-300 rounded-full opacity-12 dark:opacity-8 blur-[80px] orb-5" />
+        <div className="absolute w-[380px] h-[380px] bg-orange-300 rounded-full opacity-14 dark:opacity-9 blur-[100px] orb-6" />
       </div>
+      <style jsx>{`
+        .orb-1 {
+          animation: drift1 20s ease-in-out infinite;
+        }
+        .orb-2 {
+          animation: drift2 25s ease-in-out infinite;
+        }
+        .orb-3 {
+          animation: drift3 22s ease-in-out infinite;
+        }
+        .orb-4 {
+          animation: drift4 28s ease-in-out infinite;
+        }
+        .orb-5 {
+          animation: drift5 18s ease-in-out infinite;
+        }
+        .orb-6 {
+          animation: drift6 24s ease-in-out infinite;
+        }
+        @keyframes drift1 {
+          0% { top: -10%; left: -10%; transform: scale(1); }
+          25% { top: 20%; left: 60%; transform: scale(1.1); }
+          50% { top: 60%; left: 80%; transform: scale(0.9); }
+          75% { top: 70%; left: 20%; transform: scale(1.05); }
+          100% { top: -10%; left: -10%; transform: scale(1); }
+        }
+        @keyframes drift2 {
+          0% { top: 80%; right: -5%; left: auto; transform: scale(1); }
+          20% { top: 40%; right: 30%; left: auto; transform: scale(1.15); }
+          40% { top: 10%; right: 60%; left: auto; transform: scale(0.85); }
+          60% { top: -5%; right: 20%; left: auto; transform: scale(1.1); }
+          80% { top: 50%; right: -10%; left: auto; transform: scale(0.95); }
+          100% { top: 80%; right: -5%; left: auto; transform: scale(1); }
+        }
+        @keyframes drift3 {
+          0% { top: 30%; left: 50%; transform: scale(1) rotate(0deg); }
+          33% { top: -5%; left: 10%; transform: scale(1.2) rotate(120deg); }
+          66% { top: 60%; left: 70%; transform: scale(0.8) rotate(240deg); }
+          100% { top: 30%; left: 50%; transform: scale(1) rotate(360deg); }
+        }
+        @keyframes drift4 {
+          0% { bottom: -10%; left: 30%; top: auto; transform: scale(1); }
+          25% { bottom: 40%; left: 70%; top: auto; transform: scale(1.1); }
+          50% { bottom: 70%; left: 10%; top: auto; transform: scale(0.9); }
+          75% { bottom: 20%; left: 50%; top: auto; transform: scale(1.15); }
+          100% { bottom: -10%; left: 30%; top: auto; transform: scale(1); }
+        }
+        @keyframes drift5 {
+          0% { top: 60%; left: -5%; transform: scale(1); }
+          20% { top: 10%; left: 30%; transform: scale(1.2); }
+          40% { top: -10%; left: 70%; transform: scale(0.9); }
+          60% { top: 40%; left: 90%; transform: scale(1.1); }
+          80% { top: 80%; left: 50%; transform: scale(0.85); }
+          100% { top: 60%; left: -5%; transform: scale(1); }
+        }
+        @keyframes drift6 {
+          0% { top: 10%; right: 10%; left: auto; transform: scale(1); }
+          30% { top: 50%; right: 50%; left: auto; transform: scale(1.15); }
+          60% { top: 80%; right: 5%; left: auto; transform: scale(0.9); }
+          100% { top: 10%; right: 10%; left: auto; transform: scale(1); }
+        }
+      `}</style>
 
       {/* Header - glass */}
       <header className="relative z-20 h-16 mx-4 mt-4 px-6 flex items-center justify-between shrink-0 rounded-2xl bg-white/40 dark:bg-white/5 backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-lg shadow-black/5">
