@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { WbCardsTable } from "@/components/cards/WbCardsTable"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
+import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
@@ -87,6 +88,7 @@ export default async function WbCardsPage({
         </form>
         <div className="flex gap-2">
           <WbUploadIuButton />
+          <WbSyncSppButton />
           <WbSyncButton />
         </div>
       </div>

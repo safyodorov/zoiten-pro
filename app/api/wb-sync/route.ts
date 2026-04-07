@@ -15,47 +15,32 @@ export async function POST(): Promise<NextResponse> {
   }
 
   try {
-    // 1. СПП через публичный v4 API — САМЫМ ПЕРВЫМ, до любых seller API
-    //    Берём nmId из БД (уже синхронизированные ранее)
-    const existingCards = await prisma.wbCard.findMany({ select: { nmId: true } })
-    const existingNmIds = existingCards.map((c) => c.nmId)
-
-    // Цены нужны для расчёта СПП, но fetchAllPrices — seller API.
-    // Сначала v4 (публичный), потом seller API для цен.
-    // Для первой синхронизации (БД пустая) v4 пропускается.
-    let discountMap = new Map<number, number>()
-    if (existingNmIds.length > 0) {
-      // Загружаем цены (seller API) — нужны для расчёта СПП
-      const priceMapForSpp = await fetchAllPrices()
-      // v4 публичный API — должен идти сразу после Prices API, до остальных
-      discountMap = await fetchWbDiscounts(existingNmIds, priceMapForSpp)
-    }
-
-    // 2. Карточки из Content API (seller API)
+    // 1. Карточки из Content API
     const rawCards = await fetchAllCards()
 
     if (rawCards.length === 0) {
       return NextResponse.json({ synced: 0, message: "Карточки не найдены в WB API" })
     }
 
-    // 3. Цены (если не загружали выше)
-    const priceMap = existingNmIds.length > 0
-      ? await fetchAllPrices()
-      : await fetchAllPrices()
+    // 2. Цены из Prices API
+    const priceMap = await fetchAllPrices()
 
-    // 4. Стандартные комиссии из Tariffs API
+    // 3. Стандартные комиссии из Tariffs API
     const commMap = await fetchStandardCommissions()
 
-    // 5. ИУ комиссии из БД
+    // 4. ИУ комиссии из БД
     const iuList = await prisma.wbCommissionIu.findMany()
     const iuMap = new Map(iuList.map((iu) => [iu.subjectName, { fbw: iu.fbw, fbs: iu.fbs }]))
 
-    // 6. Остатки из Statistics API
+    // 5. Остатки из Statistics API
     const stockMap = await fetchStocks()
 
-    // 7. Процент выкупа из Analytics API
+    // 6. Процент выкупа из Analytics API
     const nmIds = rawCards.map((c) => c.nmID)
     const buyoutMap = await fetchBuyoutPercent(nmIds)
+
+    // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
+    const discountMap = await fetchWbDiscounts(nmIds)
 
     let synced = 0
     const errors: string[] = []
