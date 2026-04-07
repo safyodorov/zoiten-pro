@@ -131,11 +131,31 @@ model WbCard {
   reviews5      Int?                          // оценок 5
   price         Float?                        // цена продавца со скидкой
   discountWb    Int?                          // скидка WB (СПП), %
+  commFbwStd    Float?                        // комиссия стандартная FBW, %
+  commFbsStd    Float?                        // комиссия стандартная FBS, %
+  commFbwIu     Float?                        // комиссия ИУ FBW, %
+  commFbsIu     Float?                        // комиссия ИУ FBS, %
   label         String?  @db.VarChar(100)      // ярлык (ручной)
   availability  String   @default("IN_STOCK")
   rawJson       Json?                         // полный ответ API
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Индивидуальные условия комиссий WB (загружаются из Excel)
+// ──────────────────────────────────────────────────────────────────
+
+model WbCommissionIu {
+  id            String  @id @default(cuid())
+  parentName    String                        // родительская категория WB
+  subjectName   String  @unique               // предмет (ключ связки с WbCard.category)
+  fbw           Float                         // Склад WB, %
+  fbs           Float                         // Склад продавца → WB, %
+  dbs           Float                         // Доставка продавцом, %
+  express       Float                         // Экспресс, %
+  pickup        Float                         // Самовывоз, %
+  booking       Float                         // Бронирование, %
 }
 
 // ──────────────────────────────────────────────────────────────────

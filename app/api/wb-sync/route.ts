@@ -6,7 +6,7 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts } from "@/lib/wb-api"
+import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts, fetchStandardCommissions } from "@/lib/wb-api"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -25,7 +25,14 @@ export async function POST(): Promise<NextResponse> {
     // 2. Цены из Discounts & Prices API (одним запросом для всех)
     const priceMap = await fetchAllPrices()
 
-    // 3. Скидки WB (СПП) через card.wb.ru v4 + цены продавца
+    // 3. Стандартные комиссии из Tariffs API
+    const commMap = await fetchStandardCommissions()
+
+    // 4. ИУ комиссии из БД (загруженные из Excel)
+    const iuList = await prisma.wbCommissionIu.findMany()
+    const iuMap = new Map(iuList.map((iu) => [iu.subjectName, { fbw: iu.fbw, fbs: iu.fbs }]))
+
+    // 5. Скидки WB (СПП) через card.wb.ru v4 + цены продавца
     //    СПП = (1 - цена_покупателя / цена_продавца) × 100
     const nmIds = rawCards.map((c) => c.nmID)
     const discountMap = await fetchWbDiscounts(nmIds, priceMap)
@@ -33,14 +40,17 @@ export async function POST(): Promise<NextResponse> {
     let synced = 0
     const errors: string[] = []
 
-    // 4. Обрабатываем каждую карточку
+    // 6. Обрабатываем каждую карточку
     for (const raw of rawCards) {
       try {
         const card = parseCard(raw)
         const priceData = priceMap.get(card.nmId)
         const discountWb = discountMap.get(card.nmId) ?? null
-
         const price = priceData?.discountedPrice ?? null
+
+        // Комиссии: стандартные по subjectID, ИУ по subjectName (category)
+        const stdComm = commMap.get(raw.subjectID)
+        const iuComm = card.category ? iuMap.get(card.category) : undefined
 
         await prisma.wbCard.upsert({
           where: { nmId: card.nmId },
@@ -60,6 +70,10 @@ export async function POST(): Promise<NextResponse> {
             depthCm: card.depthCm,
             price,
             discountWb,
+            commFbwStd: stdComm?.fbw ?? null,
+            commFbsStd: stdComm?.fbs ?? null,
+            commFbwIu: iuComm?.fbw ?? null,
+            commFbsIu: iuComm?.fbs ?? null,
             label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
             rawJson: JSON.parse(JSON.stringify(raw)),
             updatedAt: new Date(),
@@ -81,6 +95,10 @@ export async function POST(): Promise<NextResponse> {
             depthCm: card.depthCm,
             price,
             discountWb,
+            commFbwStd: stdComm?.fbw ?? null,
+            commFbsStd: stdComm?.fbs ?? null,
+            commFbwIu: iuComm?.fbw ?? null,
+            commFbsIu: iuComm?.fbs ?? null,
             label: card.tags.length > 0 ? card.tags.join(", ") : null,
             rawJson: JSON.parse(JSON.stringify(raw)),
           },

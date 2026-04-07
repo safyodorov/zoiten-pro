@@ -42,6 +42,10 @@ interface WbCard {
   reviewsTotal: number | null
   price: number | null
   discountWb: number | null
+  commFbwStd: number | null
+  commFbsStd: number | null
+  commFbwIu: number | null
+  commFbsIu: number | null
   label: string | null
   hasVideo: boolean
   availability: string
@@ -297,13 +301,17 @@ export function WbCardsTable({
               </TableHead>
               <TableHead>Цена продавца</TableHead>
               <TableHead>Скидка WB</TableHead>
+              <TableHead className="text-center border-l text-xs">Стд FBW</TableHead>
+              <TableHead className="text-center text-xs">Стд FBS</TableHead>
+              <TableHead className="text-center border-l text-xs">ИУ FBW</TableHead>
+              <TableHead className="text-center text-xs">ИУ FBS</TableHead>
               <TableHead className="w-12">Видео</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cards.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={14} className="text-center py-12 text-muted-foreground">
                   Карточки не найдены. Нажмите «Синхронизировать с WB» для загрузки.
                 </TableCell>
               </TableRow>
@@ -339,6 +347,18 @@ export function WbCardsTable({
                   {card.discountWb != null
                     ? <span className="text-sm">{card.discountWb}%</span>
                     : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center border-l text-xs">
+                  {card.commFbwStd != null ? `${card.commFbwStd}%` : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center text-xs">
+                  {card.commFbsStd != null ? `${card.commFbsStd}%` : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center border-l text-xs">
+                  {card.commFbwIu != null ? `${card.commFbwIu}%` : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center text-xs">
+                  {card.commFbsIu != null ? `${card.commFbsIu}%` : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
                   {card.hasVideo && <Video className="h-4 w-4 text-blue-500" />}

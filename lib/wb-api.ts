@@ -245,6 +245,40 @@ export async function fetchWbDiscounts(
   return discountMap
 }
 
+// ── Получение стандартных комиссий через Tariffs API ─────────────
+
+export async function fetchStandardCommissions(): Promise<Map<number, { fbw: number; fbs: number }>> {
+  const token = getToken()
+  const commMap = new Map<number, { fbw: number; fbs: number }>()
+
+  try {
+    const res = await fetch(
+      "https://common-api.wildberries.ru/api/v1/tariffs/commission?locale=ru",
+      { headers: { Authorization: token } }
+    )
+
+    if (!res.ok) {
+      console.error(`Tariffs API ошибка ${res.status}`)
+      return commMap
+    }
+
+    const data = await res.json()
+    const report = data?.report ?? []
+
+    for (const item of report) {
+      // paidStorageKgvp = FBW, kgvpSupplier = FBS
+      commMap.set(item.subjectID, {
+        fbw: item.paidStorageKgvp ?? 0,
+        fbs: item.kgvpSupplier ?? 0,
+      })
+    }
+  } catch (e) {
+    console.error("fetchStandardCommissions error:", e)
+  }
+
+  return commMap
+}
+
 // ── Преобразование карточки API → данные для БД ─────────────────
 
 export function parseCard(card: WbCardRaw) {
