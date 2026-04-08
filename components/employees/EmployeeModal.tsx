@@ -41,6 +41,8 @@ interface EmployeeCompanyEntry {
   companyId: string
   company: Company
   position: string | null
+  hireDate: Date | string | null
+  fireDate: Date | string | null
   rate: number | string
   salary: number | null
   trudovoyDogovor: boolean
@@ -154,6 +156,8 @@ export function EmployeeModal({
     {
       companyId: string
       position: string
+      hireDate: string
+      fireDate: string
       rate: string
       salary: string
       trudovoyDogovor: boolean
@@ -187,6 +191,8 @@ export function EmployeeModal({
         employee.companies.map((c) => ({
           companyId: c.companyId,
           position: c.position ?? "",
+          hireDate: toDateInputValue(c.hireDate),
+          fireDate: toDateInputValue(c.fireDate),
           rate: String(c.rate),
           salary: c.salary !== null ? String(c.salary) : "",
           trudovoyDogovor: c.trudovoyDogovor,
@@ -224,6 +230,8 @@ export function EmployeeModal({
       {
         companyId: companies[0]?.id ?? "",
         position: "",
+        hireDate: "",
+        fireDate: "",
         rate: "1",
         salary: "",
         trudovoyDogovor: false,
@@ -266,6 +274,8 @@ export function EmployeeModal({
       companies: empCompanies.map((c) => ({
         companyId: c.companyId,
         position: c.position.trim() || null,
+        hireDate: c.hireDate || null,
+        fireDate: c.fireDate || null,
         rate: parseFloat(c.rate) || 1,
         salary: c.salary ? parseInt(c.salary) : null,
         trudovoyDogovor: c.trudovoyDogovor,
@@ -383,18 +393,6 @@ export function EmployeeModal({
                 onChange={setBirthDate}
                 type="date"
               />
-              <InputField
-                label="Дата приёма"
-                value={hireDate}
-                onChange={setHireDate}
-                type="date"
-              />
-              <InputField
-                label="Дата увольнения"
-                value={fireDate}
-                onChange={setFireDate}
-                type="date"
-              />
             </div>
 
             {/* ── Компании ── */}
@@ -424,6 +422,26 @@ export function EmployeeModal({
                         value={ec.position}
                         onChange={(e) => updateCompany(idx, "position", e.target.value)}
                         placeholder="Менеджер"
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Дата приёма</label>
+                      <input
+                        type="date"
+                        value={ec.hireDate}
+                        onChange={(e) => updateCompany(idx, "hireDate", e.target.value)}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Дата увольнения</label>
+                      <input
+                        type="date"
+                        value={ec.fireDate}
+                        onChange={(e) => updateCompany(idx, "fireDate", e.target.value)}
                         className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>

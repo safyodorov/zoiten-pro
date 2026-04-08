@@ -17,6 +17,8 @@ type CreateResult = { ok: true; id: string } | { ok: false; error: string }
 const EmployeeCompanySchema = z.object({
   companyId: z.string().min(1),
   position: z.string().optional().nullable(),
+  hireDate: z.string().optional().nullable(),
+  fireDate: z.string().optional().nullable(),
   rate: z.number().min(0).max(1).default(1),
   salary: z.number().int().nullable().optional(),
   trudovoyDogovor: z.boolean().default(false),
@@ -138,6 +140,13 @@ export async function createEmployee(
     const parsed = EmployeeSchema.parse(data)
 
     const emp = await prisma.$transaction(async (tx) => {
+      // Compute Employee-level dates from company entries
+      const companyHireDates = parsed.companies.map((c) => parseDate(c.hireDate)).filter((d): d is Date => d !== null)
+      const companyFireDates = parsed.companies.map((c) => parseDate(c.fireDate)).filter((d): d is Date => d !== null)
+      const computedHireDate = companyHireDates.length > 0 ? new Date(Math.min(...companyHireDates.map((d) => d.getTime()))) : parseDate(parsed.hireDate)
+      const allFired = parsed.companies.length > 0 && companyFireDates.length === parsed.companies.length
+      const computedFireDate = allFired ? new Date(Math.max(...companyFireDates.map((d) => d.getTime()))) : parseDate(parsed.fireDate)
+
       const employee = await tx.employee.create({
         data: {
           lastName: parsed.lastName,
@@ -145,8 +154,8 @@ export async function createEmployee(
           middleName: parsed.middleName ?? null,
           department: parsed.department ?? null,
           birthDate: parseDate(parsed.birthDate),
-          hireDate: parseDate(parsed.hireDate),
-          fireDate: parseDate(parsed.fireDate),
+          hireDate: computedHireDate,
+          fireDate: computedFireDate,
         },
       })
 
@@ -156,6 +165,8 @@ export async function createEmployee(
             employeeId: employee.id,
             companyId: c.companyId,
             position: c.position ?? null,
+            hireDate: parseDate(c.hireDate),
+            fireDate: parseDate(c.fireDate),
             rate: c.rate,
             salary: c.salary ?? null,
             trudovoyDogovor: c.trudovoyDogovor,
@@ -221,6 +232,13 @@ export async function updateEmployee(
     const parsed = UpdateEmployeeSchema.parse(data)
 
     await prisma.$transaction(async (tx) => {
+      // Compute Employee-level dates from company entries
+      const companyHireDates = parsed.companies.map((c) => parseDate(c.hireDate)).filter((d): d is Date => d !== null)
+      const companyFireDates = parsed.companies.map((c) => parseDate(c.fireDate)).filter((d): d is Date => d !== null)
+      const computedHireDate = companyHireDates.length > 0 ? new Date(Math.min(...companyHireDates.map((d) => d.getTime()))) : parseDate(parsed.hireDate)
+      const allFired = parsed.companies.length > 0 && companyFireDates.length === parsed.companies.length
+      const computedFireDate = allFired ? new Date(Math.max(...companyFireDates.map((d) => d.getTime()))) : parseDate(parsed.fireDate)
+
       await tx.employee.update({
         where: { id: parsed.id },
         data: {
@@ -229,8 +247,8 @@ export async function updateEmployee(
           middleName: parsed.middleName ?? null,
           department: parsed.department ?? null,
           birthDate: parseDate(parsed.birthDate),
-          hireDate: parseDate(parsed.hireDate),
-          fireDate: parseDate(parsed.fireDate),
+          hireDate: computedHireDate,
+          fireDate: computedFireDate,
         },
       })
 
@@ -242,6 +260,8 @@ export async function updateEmployee(
             employeeId: parsed.id,
             companyId: c.companyId,
             position: c.position ?? null,
+            hireDate: parseDate(c.hireDate),
+            fireDate: parseDate(c.fireDate),
             rate: c.rate,
             salary: c.salary ?? null,
             trudovoyDogovor: c.trudovoyDogovor,

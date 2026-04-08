@@ -32,6 +32,8 @@ interface EmployeeCompanyEntry {
   companyId: string
   company: Company
   position: string | null
+  hireDate: Date | string | null
+  fireDate: Date | string | null
   rate: number | string
   salary: number | null
   trudovoyDogovor: boolean

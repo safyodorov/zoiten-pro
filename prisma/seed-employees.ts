@@ -309,6 +309,8 @@ async function main() {
           employeeId: emp.id,
           companyId,
           position: row.position || null,
+          hireDate: row.hireDate,
+          fireDate: row.isFired ? (row.fireDate ?? fireDate) : null,
           rate: row.rate || 1,
           salary: row.salary,
           trudovoyDogovor: row.trudovoyDogovor,

@@ -279,6 +279,8 @@ model EmployeeCompany {
   companyId            String
   company              Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
   position             String?
+  hireDate             DateTime?
+  fireDate             DateTime?
   rate                 Decimal  @default(1) @db.Decimal(3, 2)
   salary               Int?
   trudovoyDogovor      Boolean  @default(false)
