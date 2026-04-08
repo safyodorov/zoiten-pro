@@ -72,6 +72,15 @@ interface EmployeeRow {
   companyName: string
 }
 
+// Known company names from Excel
+const KNOWN_COMPANIES = new Set([
+  "ГЕЙМ БЛОКС", "ДРИМ ЛАЙН", "ЗОЙТЕН", "ПЕЛИКАН ХЭППИ ТОЙС", "СИКРЕТ ВЭЙ", "ХОУМ ЭНД БЬЮТИ",
+])
+
+function isCompanyHeader(val: string): boolean {
+  return KNOWN_COMPANIES.has(val.toUpperCase()) || KNOWN_COMPANIES.has(val)
+}
+
 function parseEmployeesSheet(rows: unknown[][]): EmployeeRow[] {
   const result: EmployeeRow[] = []
   let currentCompany = ""
@@ -82,10 +91,10 @@ function parseEmployeesSheet(rows: unknown[][]): EmployeeRow[] {
     const first = normalizeName(row[0])
     if (!first) continue
 
-    // Company header: next row is "Актуальное" or "Уволенные"
-    const nextFirst = i + 1 < rows.length ? normalizeName(rows[i + 1][0]) : ""
-    if (nextFirst === "Актуальное" || nextFirst === "Уволенные") {
+    // Company header: known company name
+    if (isCompanyHeader(first)) {
       currentCompany = first
+      isFired = false
       continue
     }
 
@@ -99,12 +108,12 @@ function parseEmployeesSheet(rows: unknown[][]): EmployeeRow[] {
       continue
     }
 
-    // Skip header row (row 0)
-    if (first === "" || !currentCompany) continue
+    // Skip if no company context yet
+    if (!currentCompany) continue
 
-    // Skip if looks like a sub-header (second column is also text like "Должность")
+    // Skip if looks like a sub-header
     const secondCol = normalizeName(row[1])
-    if (secondCol === "Должность") continue
+    if (secondCol === "Должность" || secondCol === "NaN") continue
 
     // Parse employee row
     // col 0: ФИО, 1: Должность, 2: Ставка, 3: Оклад, 4: Часы, 5: эффективный оклад
@@ -194,7 +203,8 @@ function nameKey(fullName: string): string {
 // ── Main ──────────────────────────────────────────────────────────
 
 async function main() {
-  const wb = XLSX.readFile("/Users/macmini/Desktop/Сотрудники.xlsx")
+  const xlPath = process.env.EXCEL_PATH ?? "/Users/macmini/Desktop/Сотрудники.xlsx"
+  const wb = XLSX.readFile(xlPath)
 
   const employeesWs = wb.Sheets["Сотрудники "]
   const nomeraWs = wb.Sheets["Номера"]
