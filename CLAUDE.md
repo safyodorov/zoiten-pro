@@ -35,7 +35,7 @@
 7. План закупок (заглушка)
 8. План продаж (заглушка)
 9. Служба поддержки (из https://github.com/safyodorov/ai-cs-zoiten)
-10. Сотрудники (заглушка)
+10. **Сотрудники** ✅ полный CRUD, таблица с фильтрами/сортировкой, модалка, экспорт XLSX
 
 ## Дизайн
 
@@ -88,6 +88,25 @@ WbCard (карточки WB — парсинг из Wildberries API)
 WbCommissionIu (индивидуальные условия комиссий — из Excel)
   ├── subjectName: String @unique  (ключ связки с WbCard.category)
   └── fbw, fbs, dbs, express, pickup, booking: Float (%)
+
+Company (справочник компаний)
+  └── name: String @unique  (ГЕЙМ БЛОКС, ДРИМ ЛАЙН, ЗОЙТЕН, ПЕЛИКАН ХЭППИ ТОЙС, СИКРЕТ ВЭЙ, ХОУМ ЭНД БЬЮТИ)
+
+Employee (сотрудники)
+  ├── lastName, firstName, middleName
+  ├── department: Department? (OFFICE/WAREHOUSE)
+  ├── gender: Gender? (MALE/FEMALE)
+  ├── passNumbers: Int[]      (номера пропусков, 1-10000)
+  ├── birthDate, hireDate, fireDate (вычисляются из компаний)
+  ├── companies: EmployeeCompany[] (M:N с Company)
+  ├── phones: EmployeePhone[] (PERSONAL/WORK, макс 5)
+  ├── emails: EmployeeEmail[] (PERSONAL/WORK, макс 5)
+  └── passes: EmployeePass[]  (паспорта)
+
+EmployeeCompany (связь сотрудник↔компания)
+  ├── position, hireDate, fireDate (должность и даты по каждой компании)
+  ├── rate: Decimal, salary: Int
+  └── документы: trudovoyDogovor, prikazPriema, soglasiePersDannyh, nda, lichnayaKartochka, zayavlenieUvolneniya, prikazUvolneniya
 ```
 
 ## Синхронизация с Wildberries — ВАЖНАЯ СЕКЦИЯ
@@ -181,7 +200,7 @@ app/
 │   ├── batches/             ← себестоимость партий
 │   ├── admin/users/         ← управление пользователями
 │   ├── admin/settings/      ← бренды, категории, маркетплейсы (DnD)
-│   ├── employees/           ← сотрудники (заглушка)
+│   ├── employees/           ← сотрудники CRUD + фильтры + экспорт XLSX
 │   └── [stubs]/             ← заглушки будущих модулей
 ├── api/
 │   ├── auth/[...nextauth]/  ← Auth.js route handler
@@ -190,13 +209,15 @@ app/
 │   ├── wb-sync/             ← полная синхронизация карточек WB
 │   ├── wb-sync-spp/         ← быстрая синхронизация только СПП
 │   ├── wb-commission-iu/    ← загрузка Excel с ИУ комиссиями
+│   ├── employees-export/    ← экспорт сотрудников в XLSX
 │   └── cron/purge-deleted/  ← авто-удаление через 30 дней
 ├── actions/
 │   ├── products.ts          ← CRUD товаров (с генерацией SKU)
 │   ├── cost.ts              ← upsert себестоимости
 │   ├── reference.ts         ← CRUD + reorder брендов/категорий/маркетплейсов
 │   ├── users.ts             ← CRUD пользователей
-│   └── wb-cards.ts          ← создание товаров из WB карточек
+│   ├── wb-cards.ts          ← создание товаров из WB карточек
+│   └── employees.ts         ← CRUD сотрудников (с nested relations)
 └── page.tsx                 ← landing page
 
 lib/
@@ -212,6 +233,7 @@ components/
 ├── cards/                   ← WbCardsTable, WbFilters, WbSyncButton, WbSyncSppButton, WbUploadIuButton, CardsTabs
 ├── products/                ← ProductsTable, ProductForm, PhotoUploadField, PhotoCropDialog, ProductFilters
 ├── cost/                    ← CostTable, CostFilters, CostSearchInput
+├── employees/               ← EmployeesTable, EmployeeFilters, EmployeeModal
 ├── settings/                ← BrandsTab, CategoriesTab, MarketplacesTab, SortableList, SettingsTabs
 ├── landing/variants/        ← GlassmorphismLanding (главная страница)
 ├── layout/                  ← Sidebar, NavLinks, Header
