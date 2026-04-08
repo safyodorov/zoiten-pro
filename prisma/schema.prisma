@@ -228,3 +228,83 @@ model Barcode {
   // Uniqueness enforced by partial index migration — see migrations/20260405_partial_indexes
   // 1-20 barcodes per product enforced in service layer
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Employees
+// ──────────────────────────────────────────────────────────────────
+
+enum PhoneType {
+  PERSONAL
+  WORK
+}
+
+enum EmailType {
+  PERSONAL
+  WORK
+}
+
+model Company {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  employees EmployeeCompany[]
+  createdAt DateTime          @default(now())
+}
+
+model Employee {
+  id         String            @id @default(cuid())
+  lastName   String
+  firstName  String
+  middleName String?
+  position   String?
+  birthDate  DateTime?
+  hireDate   DateTime?
+  fireDate   DateTime?
+  companies  EmployeeCompany[]
+  phones     EmployeePhone[]
+  emails     EmployeeEmail[]
+  passes     EmployeePass[]
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+model EmployeeCompany {
+  id                   String   @id @default(cuid())
+  employeeId           String
+  employee             Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  companyId            String
+  company              Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  rate                 Decimal  @default(1) @db.Decimal(3, 2)
+  salary               Int?
+  trudovoyDogovor      Boolean  @default(false)
+  prikazPriema         Boolean  @default(false)
+  soglasiePersDannyh   Boolean  @default(false)
+  nda                  Boolean  @default(false)
+  lichnayaKartochka    Boolean  @default(false)
+  zayavlenieUvolneniya Boolean  @default(false)
+  prikazUvolneniya     Boolean  @default(false)
+
+  @@unique([employeeId, companyId])
+}
+
+model EmployeePhone {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  number     String
+  type       PhoneType @default(WORK)
+}
+
+model EmployeeEmail {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  email      String
+  type       EmailType @default(WORK)
+}
+
+model EmployeePass {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  number     String
+}
