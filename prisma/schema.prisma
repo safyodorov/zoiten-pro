@@ -238,6 +238,11 @@ enum Department {
   WAREHOUSE
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
 enum PhoneType {
   PERSONAL
   WORK
@@ -260,9 +265,10 @@ model Employee {
   lastName   String
   firstName  String
   middleName String?
-  department Department?
-  passNumber Int?
-  birthDate  DateTime?
+  department  Department?
+  gender      Gender?
+  passNumbers Int[]
+  birthDate   DateTime?
   hireDate   DateTime?
   fireDate   DateTime?
   companies  EmployeeCompany[]

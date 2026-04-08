@@ -51,7 +51,8 @@ interface Employee {
   firstName: string
   middleName: string | null
   department: string | null
-  passNumber: number | null
+  gender: string | null
+  passNumbers: number[]
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -223,7 +224,7 @@ function TableHeader() {
           Дата рождения
         </th>
         <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Раб.телефон</th>
-        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Раб.email</th>
+        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground min-w-[240px]">Раб.email</th>
         <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Статус</th>
       </tr>
     </thead>
@@ -249,11 +250,14 @@ export function EmployeesTable({ employees, allCompanies, grouped = false }: Emp
     )
   }
 
-  // Sort: by first company name asc, then lastName asc
+  // Sort: office first, then warehouse, then unset; within each — by lastName
+  const deptOrder = (d: string | null) => d === "OFFICE" ? 0 : d === "WAREHOUSE" ? 1 : 2
   const sorted = [...employees].sort((a, b) => {
-    const aCompany = a.companies[0]?.company.name ?? ""
-    const bCompany = b.companies[0]?.company.name ?? ""
-    if (aCompany !== bCompany) return aCompany.localeCompare(bCompany, "ru")
+    if (!grouped) {
+      const da = deptOrder(a.department)
+      const db = deptOrder(b.department)
+      if (da !== db) return da - db
+    }
     return a.lastName.localeCompare(b.lastName, "ru")
   })
 

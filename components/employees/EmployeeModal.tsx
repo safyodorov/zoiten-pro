@@ -60,7 +60,8 @@ interface Employee {
   firstName: string
   middleName: string | null
   department: string | null
-  passNumber: number | null
+  gender: string | null
+  passNumbers: number[]
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -148,7 +149,8 @@ export function EmployeeModal({
   const [firstName, setFirstName] = useState("")
   const [middleName, setMiddleName] = useState("")
   const [department, setDepartment] = useState("")
-  const [passNumber, setPassNumber] = useState("")
+  const [gender, setGender] = useState("")
+  const [passNumbers, setPassNumbers] = useState<string[]>([])
   const [birthDate, setBirthDate] = useState("")
   const [hireDate, setHireDate] = useState("")
   const [fireDate, setFireDate] = useState("")
@@ -186,7 +188,8 @@ export function EmployeeModal({
       setFirstName(employee.firstName)
       setMiddleName(employee.middleName ?? "")
       setDepartment(employee.department ?? "")
-      setPassNumber(employee.passNumber ? String(employee.passNumber) : "")
+      setGender(employee.gender ?? "")
+      setPassNumbers(employee.passNumbers?.map(String) ?? [])
       setBirthDate(toDateInputValue(employee.birthDate))
       setHireDate(toDateInputValue(employee.hireDate))
       setFireDate(toDateInputValue(employee.fireDate))
@@ -215,7 +218,8 @@ export function EmployeeModal({
       setFirstName("")
       setMiddleName("")
       setDepartment("")
-      setPassNumber("")
+      setGender("")
+      setPassNumbers([])
       setBirthDate("")
       setHireDate("")
       setFireDate("")
@@ -232,7 +236,7 @@ export function EmployeeModal({
     setEmpCompanies((prev) => [
       ...prev,
       {
-        companyId: companies[0]?.id ?? "",
+        companyId: "",
         position: "",
         hireDate: "",
         fireDate: "",
@@ -272,11 +276,12 @@ export function EmployeeModal({
       firstName: firstName.trim(),
       middleName: middleName.trim() || null,
       department: (department === "OFFICE" || department === "WAREHOUSE" ? department : null) as "OFFICE" | "WAREHOUSE" | null,
-      passNumber: passNumber ? parseInt(passNumber) : null,
+      gender: (gender === "MALE" || gender === "FEMALE" ? gender : null) as "MALE" | "FEMALE" | null,
+      passNumbers: passNumbers.map((p) => parseInt(p)).filter((n) => !isNaN(n) && n >= 1 && n <= 10000),
       birthDate: birthDate || null,
       hireDate: hireDate || null,
       fireDate: fireDate || null,
-      companies: empCompanies.map((c) => ({
+      companies: empCompanies.filter((c) => c.companyId).map((c) => ({
         companyId: c.companyId,
         position: c.position.trim() || null,
         hireDate: c.hireDate || null,
@@ -392,18 +397,23 @@ export function EmployeeModal({
                   <option value="WAREHOUSE">Склад</option>
                 </select>
               </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Пол</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Не указан</option>
+                  <option value="MALE">Мужской</option>
+                  <option value="FEMALE">Женский</option>
+                </select>
+              </div>
               <InputField
                 label="Дата рождения"
                 value={birthDate}
                 onChange={setBirthDate}
                 type="date"
-              />
-              <InputField
-                label="Номер пропуска"
-                value={passNumber}
-                onChange={setPassNumber}
-                type="number"
-                placeholder="1–10000"
               />
             </div>
 
@@ -420,6 +430,7 @@ export function EmployeeModal({
                         onChange={(e) => updateCompany(idx, "companyId", e.target.value)}
                         className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                       >
+                        <option value="">Не трудоустроен</option>
                         {companies.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -611,6 +622,43 @@ export function EmployeeModal({
                 onClick={() => setEmails((prev) => [...prev, { email: "", type: "WORK" }])}
               >
                 + Добавить email
+              </Button>
+            </div>
+
+            {/* ── Пропуска ── */}
+            <SectionDivider label="Пропуска" />
+            <div className="space-y-2">
+              {passNumbers.map((pn, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    value={pn}
+                    onChange={(e) =>
+                      setPassNumbers((prev) =>
+                        prev.map((p, i) => (i === idx ? e.target.value : p))
+                      )
+                    }
+                    placeholder="1–10000"
+                    className="w-32 h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPassNumbers((prev) => prev.filter((_, i) => i !== idx))}
+                    className="text-muted-foreground hover:text-destructive text-lg leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setPassNumbers((prev) => [...prev, ""])}
+              >
+                + Добавить пропуск
               </Button>
             </div>
 

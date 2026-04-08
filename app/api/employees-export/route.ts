@@ -36,7 +36,8 @@ export async function GET() {
       Компания: activeCompanies.map((c) => c.company.name).join(", "),
       Должность: activeCompanies.map((c) => c.position).filter(Boolean).join(", "),
       Подразделение: emp.department === "OFFICE" ? "Офис" : emp.department === "WAREHOUSE" ? "Склад" : "",
-      "Номер пропуска": emp.passNumber ?? "",
+      Пол: emp.gender === "MALE" ? "М" : emp.gender === "FEMALE" ? "Ж" : "",
+      "Номера пропусков": emp.passNumbers?.join(", ") ?? "",
       "Дата рождения": emp.birthDate
         ? emp.birthDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
         : "",
