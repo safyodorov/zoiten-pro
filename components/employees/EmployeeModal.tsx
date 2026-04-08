@@ -533,15 +533,25 @@ export function EmployeeModal({
               {phones.map((ph, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <input
-                    type="text"
+                    type="tel"
                     value={ph.number}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      // Mask: +7 (XXX) XXX-XX-XX
+                      let digits = e.target.value.replace(/\D/g, "")
+                      if (digits.startsWith("8")) digits = "7" + digits.slice(1)
+                      if (!digits.startsWith("7") && digits.length > 0) digits = "7" + digits
+                      let formatted = ""
+                      if (digits.length > 0) formatted = "+" + digits.slice(0, 1)
+                      if (digits.length > 1) formatted += " (" + digits.slice(1, 4)
+                      if (digits.length > 4) formatted += ") " + digits.slice(4, 7)
+                      if (digits.length > 7) formatted += "-" + digits.slice(7, 9)
+                      if (digits.length > 9) formatted += "-" + digits.slice(9, 11)
                       setPhones((prev) =>
-                        prev.map((p, i) => (i === idx ? { ...p, number: e.target.value } : p))
+                        prev.map((p, i) => (i === idx ? { ...p, number: formatted } : p))
                       )
-                    }
-                    placeholder="+7 900 000 00 00"
-                    className="flex-1 h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    }}
+                    placeholder="+7 (___) ___-__-__"
+                    className="w-48 h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   <select
                     value={ph.type}

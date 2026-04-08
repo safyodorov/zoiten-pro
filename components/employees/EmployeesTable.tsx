@@ -120,9 +120,21 @@ function daysUntilBirthday(birthDate: Date | string | null | undefined): number 
   return Math.round(diffMs / 86400000)
 }
 
+function formatPhone(raw: string): string {
+  // Strip non-digits
+  let digits = raw.replace(/\D/g, "")
+  // 8... → 7...
+  if (digits.startsWith("8") && digits.length === 11) digits = "7" + digits.slice(1)
+  // Format as +7 (XXX) XXX-XX-XX
+  if (digits.length === 11 && digits.startsWith("7")) {
+    return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`
+  }
+  return raw
+}
+
 function getWorkPhone(phones: EmployeePhone[]): string {
   const work = phones.find((p) => p.type === "WORK")
-  return work?.number ?? "—"
+  return work ? formatPhone(work.number) : "—"
 }
 
 function getWorkEmail(emails: EmployeeEmail[]): string {
@@ -223,7 +235,7 @@ function TableHeader() {
         <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">
           Дата рождения
         </th>
-        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Раб.телефон</th>
+        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground min-w-[180px]">Раб.телефон</th>
         <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground min-w-[240px]">Раб.email</th>
         <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Статус</th>
       </tr>
