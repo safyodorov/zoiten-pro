@@ -81,6 +81,16 @@ interface EmployeeModalProps {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+function formatPhoneNumber(raw: string): string {
+  let digits = raw.replace(/\D/g, "")
+  if (digits.startsWith("8") && digits.length === 11) digits = "7" + digits.slice(1)
+  if (!digits.startsWith("7") && digits.length > 0 && digits.length >= 10) digits = "7" + digits
+  if (digits.length === 11 && digits.startsWith("7")) {
+    return `+7 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7, 9)}-${digits.slice(9, 11)}`
+  }
+  return raw
+}
+
 function toDateInputValue(val: Date | string | null | undefined): string {
   if (!val) return ""
   const d = typeof val === "string" ? new Date(val) : val
@@ -210,7 +220,7 @@ export function EmployeeModal({
           prikazUvolneniya: c.prikazUvolneniya,
         }))
       )
-      setPhones(employee.phones.map((p) => ({ number: p.number, type: p.type })))
+      setPhones(employee.phones.map((p) => ({ number: formatPhoneNumber(p.number), type: p.type })))
       setEmails(employee.emails.map((e) => ({ email: e.email, type: e.type })))
       setPasses(employee.passes.map((p) => ({ number: p.number })))
     } else {
@@ -296,7 +306,7 @@ export function EmployeeModal({
         zayavlenieUvolneniya: c.zayavlenieUvolneniya,
         prikazUvolneniya: c.prikazUvolneniya,
       })),
-      phones: phones.filter((p) => p.number.trim()),
+      phones: phones.filter((p) => p.number.trim()).map((p) => ({ ...p, number: formatPhoneNumber(p.number) })),
       emails: emails.filter((em) => em.email.trim()),
       passes: passes.filter((p) => p.number.trim()),
     }
