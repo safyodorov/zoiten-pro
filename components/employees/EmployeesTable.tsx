@@ -70,6 +70,15 @@ interface EmployeesTableProps {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+function ageWord(n: number): string {
+  const mod100 = n % 100
+  const mod10 = n % 10
+  if (mod100 >= 11 && mod100 <= 19) return "лет"
+  if (mod10 === 1) return "год"
+  if (mod10 >= 2 && mod10 <= 4) return "года"
+  return "лет"
+}
+
 function formatDate(val: Date | string | null | undefined): string {
   if (!val) return "—"
   const d = typeof val === "string" ? new Date(val) : val
@@ -179,7 +188,7 @@ function EmployeeRow({
 
   const age = calcAge(employee.birthDate)
   const bdStr = employee.birthDate
-    ? `${formatDate(employee.birthDate)}${age !== null ? ` (${age} лет)` : ""}`
+    ? `${formatDate(employee.birthDate)}${age !== null ? ` (${age} ${ageWord(age)})` : ""}`
     : "—"
 
   return (
