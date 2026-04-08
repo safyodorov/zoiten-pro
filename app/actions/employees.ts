@@ -16,6 +16,7 @@ type CreateResult = { ok: true; id: string } | { ok: false; error: string }
 
 const EmployeeCompanySchema = z.object({
   companyId: z.string().min(1),
+  position: z.string().optional().nullable(),
   rate: z.number().min(0).max(1).default(1),
   salary: z.number().int().nullable().optional(),
   trudovoyDogovor: z.boolean().default(false),
@@ -45,8 +46,8 @@ const EmployeeSchema = z.object({
   lastName: z.string().min(1),
   firstName: z.string().min(1),
   middleName: z.string().optional().nullable(),
-  position: z.string().optional().nullable(),
-  birthDate: z.string().optional().nullable(), // ISO date string or null
+  department: z.enum(["OFFICE", "WAREHOUSE"]).optional().nullable(),
+  birthDate: z.string().optional().nullable(),
   hireDate: z.string().optional().nullable(),
   fireDate: z.string().optional().nullable(),
   companies: z.array(EmployeeCompanySchema).default([]),
@@ -142,7 +143,7 @@ export async function createEmployee(
           lastName: parsed.lastName,
           firstName: parsed.firstName,
           middleName: parsed.middleName ?? null,
-          position: parsed.position ?? null,
+          department: parsed.department ?? null,
           birthDate: parseDate(parsed.birthDate),
           hireDate: parseDate(parsed.hireDate),
           fireDate: parseDate(parsed.fireDate),
@@ -154,6 +155,7 @@ export async function createEmployee(
           data: parsed.companies.map((c) => ({
             employeeId: employee.id,
             companyId: c.companyId,
+            position: c.position ?? null,
             rate: c.rate,
             salary: c.salary ?? null,
             trudovoyDogovor: c.trudovoyDogovor,
@@ -225,7 +227,7 @@ export async function updateEmployee(
           lastName: parsed.lastName,
           firstName: parsed.firstName,
           middleName: parsed.middleName ?? null,
-          position: parsed.position ?? null,
+          department: parsed.department ?? null,
           birthDate: parseDate(parsed.birthDate),
           hireDate: parseDate(parsed.hireDate),
           fireDate: parseDate(parsed.fireDate),
@@ -239,6 +241,7 @@ export async function updateEmployee(
           data: parsed.companies.map((c) => ({
             employeeId: parsed.id,
             companyId: c.companyId,
+            position: c.position ?? null,
             rate: c.rate,
             salary: c.salary ?? null,
             trudovoyDogovor: c.trudovoyDogovor,

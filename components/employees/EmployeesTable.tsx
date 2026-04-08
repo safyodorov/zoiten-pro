@@ -31,6 +31,7 @@ interface EmployeeCompanyEntry {
   id: string
   companyId: string
   company: Company
+  position: string | null
   rate: number | string
   salary: number | null
   trudovoyDogovor: boolean
@@ -47,7 +48,7 @@ interface Employee {
   lastName: string
   firstName: string
   middleName: string | null
-  position: string | null
+  department: string | null
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -169,7 +170,9 @@ function EmployeeRow({
         {employee.middleName ?? ""}
       </td>
       <td className="px-3 py-2 text-sm">{getCompanyNames(employee.companies)}</td>
-      <td className="px-3 py-2 text-sm text-muted-foreground">{employee.position ?? "—"}</td>
+      <td className="px-3 py-2 text-sm text-muted-foreground">
+        {employee.companies.map((c) => c.position).filter(Boolean).join(", ") || "—"}
+      </td>
       <td className="px-3 py-2 text-sm whitespace-nowrap">{bdStr}</td>
       <td className="px-3 py-2 text-sm whitespace-nowrap">{getWorkPhone(employee.phones)}</td>
       <td className="px-3 py-2 text-sm">{getWorkEmail(employee.emails)}</td>

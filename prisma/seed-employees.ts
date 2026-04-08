@@ -274,10 +274,9 @@ async function main() {
       fireDate = fireDates.length > 0 ? fireDates[fireDates.length - 1] : null
     }
 
-    // Use first row's hireDate and position (primary company entry)
+    // Use first row's hireDate (primary company entry)
     const primaryRow = person.rows[0]
     const hireDate = primaryRow.hireDate
-    const position = primaryRow.position || null
 
     // Delete existing employee data (for idempotency)
     const existing = await prisma.employee.findFirst({
@@ -287,13 +286,12 @@ async function main() {
       await prisma.employee.delete({ where: { id: existing.id } })
     }
 
-    // Create employee
+    // Create employee (position is now per-company, not per-employee)
     const emp = await prisma.employee.create({
       data: {
         lastName,
         firstName,
         middleName,
-        position,
         birthDate,
         hireDate,
         fireDate,
@@ -310,6 +308,7 @@ async function main() {
         data: {
           employeeId: emp.id,
           companyId,
+          position: row.position || null,
           rate: row.rate || 1,
           salary: row.salary,
           trudovoyDogovor: row.trudovoyDogovor,

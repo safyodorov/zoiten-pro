@@ -40,6 +40,7 @@ interface EmployeeCompanyEntry {
   id: string
   companyId: string
   company: Company
+  position: string | null
   rate: number | string
   salary: number | null
   trudovoyDogovor: boolean
@@ -56,7 +57,7 @@ interface Employee {
   lastName: string
   firstName: string
   middleName: string | null
-  position: string | null
+  department: string | null
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -143,7 +144,7 @@ export function EmployeeModal({
   const [lastName, setLastName] = useState("")
   const [firstName, setFirstName] = useState("")
   const [middleName, setMiddleName] = useState("")
-  const [position, setPosition] = useState("")
+  const [department, setDepartment] = useState("")
   const [birthDate, setBirthDate] = useState("")
   const [hireDate, setHireDate] = useState("")
   const [fireDate, setFireDate] = useState("")
@@ -152,6 +153,7 @@ export function EmployeeModal({
   const [empCompanies, setEmpCompanies] = useState<
     {
       companyId: string
+      position: string
       rate: string
       salary: string
       trudovoyDogovor: boolean
@@ -177,13 +179,14 @@ export function EmployeeModal({
       setLastName(employee.lastName)
       setFirstName(employee.firstName)
       setMiddleName(employee.middleName ?? "")
-      setPosition(employee.position ?? "")
+      setDepartment(employee.department ?? "")
       setBirthDate(toDateInputValue(employee.birthDate))
       setHireDate(toDateInputValue(employee.hireDate))
       setFireDate(toDateInputValue(employee.fireDate))
       setEmpCompanies(
         employee.companies.map((c) => ({
           companyId: c.companyId,
+          position: c.position ?? "",
           rate: String(c.rate),
           salary: c.salary !== null ? String(c.salary) : "",
           trudovoyDogovor: c.trudovoyDogovor,
@@ -202,7 +205,7 @@ export function EmployeeModal({
       setLastName("")
       setFirstName("")
       setMiddleName("")
-      setPosition("")
+      setDepartment("")
       setBirthDate("")
       setHireDate("")
       setFireDate("")
@@ -220,6 +223,7 @@ export function EmployeeModal({
       ...prev,
       {
         companyId: companies[0]?.id ?? "",
+        position: "",
         rate: "1",
         salary: "",
         trudovoyDogovor: false,
@@ -255,12 +259,13 @@ export function EmployeeModal({
       lastName: lastName.trim(),
       firstName: firstName.trim(),
       middleName: middleName.trim() || null,
-      position: position.trim() || null,
+      department: (department === "OFFICE" || department === "WAREHOUSE" ? department : null) as "OFFICE" | "WAREHOUSE" | null,
       birthDate: birthDate || null,
       hireDate: hireDate || null,
       fireDate: fireDate || null,
       companies: empCompanies.map((c) => ({
         companyId: c.companyId,
+        position: c.position.trim() || null,
         rate: parseFloat(c.rate) || 1,
         salary: c.salary ? parseInt(c.salary) : null,
         trudovoyDogovor: c.trudovoyDogovor,
@@ -357,15 +362,21 @@ export function EmployeeModal({
               />
             </div>
 
-            {/* ── Должность и даты ── */}
+            {/* ── Подразделение и даты ── */}
             <SectionDivider label="Общие данные" />
             <div className="grid grid-cols-2 gap-3">
-              <InputField
-                label="Должность"
-                value={position}
-                onChange={setPosition}
-                placeholder="Менеджер"
-              />
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-muted-foreground">Подразделение</label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Не указано</option>
+                  <option value="OFFICE">Офис</option>
+                  <option value="WAREHOUSE">Склад</option>
+                </select>
+              </div>
               <InputField
                 label="Дата рождения"
                 value={birthDate}
@@ -405,6 +416,16 @@ export function EmployeeModal({
                           </option>
                         ))}
                       </select>
+                    </div>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Должность</label>
+                      <input
+                        type="text"
+                        value={ec.position}
+                        onChange={(e) => updateCompany(idx, "position", e.target.value)}
+                        placeholder="Менеджер"
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
                     </div>
                     <div className="w-20 flex flex-col gap-1">
                       <label className="text-xs font-medium text-muted-foreground">Ставка</label>

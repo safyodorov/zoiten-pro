@@ -233,6 +233,11 @@ model Barcode {
 // Employees
 // ──────────────────────────────────────────────────────────────────
 
+enum Department {
+  OFFICE
+  WAREHOUSE
+}
+
 enum PhoneType {
   PERSONAL
   WORK
@@ -255,7 +260,7 @@ model Employee {
   lastName   String
   firstName  String
   middleName String?
-  position   String?
+  department Department?
   birthDate  DateTime?
   hireDate   DateTime?
   fireDate   DateTime?
@@ -273,6 +278,7 @@ model EmployeeCompany {
   employee             Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   companyId            String
   company              Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  position             String?
   rate                 Decimal  @default(1) @db.Decimal(3, 2)
   salary               Int?
   trudovoyDogovor      Boolean  @default(false)

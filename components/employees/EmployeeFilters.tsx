@@ -19,6 +19,7 @@ interface EmployeeFiltersProps {
   selectedCompanyIds: string[]
   currentStatus: string
   currentGroup: boolean
+  currentDept: string | null
   currentSearch: string
   allCompanies: FilterOption[]
 }
@@ -109,6 +110,7 @@ export function EmployeeFilters({
   selectedCompanyIds,
   currentStatus,
   currentGroup,
+  currentDept,
   currentSearch,
   allCompanies,
 }: EmployeeFiltersProps) {
@@ -137,6 +139,10 @@ export function EmployeeFilters({
 
   function toggleGroup() {
     router.push(buildUrl({ group: currentGroup ? undefined : "1" }))
+  }
+
+  function setDept(dept: string | null) {
+    router.push(buildUrl({ dept: dept ?? undefined }))
   }
 
   // Debounced search
@@ -212,6 +218,28 @@ export function EmployeeFilters({
           <LayoutList className="h-3.5 w-3.5" />
           Разбить по компаниям
         </Button>
+
+        {/* Department filter */}
+        <div className="flex items-center gap-0.5 border rounded-md">
+          <button
+            onClick={() => setDept(null)}
+            className={`px-3 py-1 text-xs font-medium rounded-l-md transition-colors ${!currentDept ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Все
+          </button>
+          <button
+            onClick={() => setDept("OFFICE")}
+            className={`px-3 py-1 text-xs font-medium transition-colors ${currentDept === "OFFICE" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Офис
+          </button>
+          <button
+            onClick={() => setDept("WAREHOUSE")}
+            className={`px-3 py-1 text-xs font-medium rounded-r-md transition-colors ${currentDept === "WAREHOUSE" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+          >
+            Склад
+          </button>
+        </div>
 
         {/* Clear filters */}
         {hasFilters && (

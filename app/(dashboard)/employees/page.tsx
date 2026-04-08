@@ -14,11 +14,12 @@ export default async function EmployeesPage({
     companies?: string
     q?: string
     group?: string
+    dept?: string
   }>
 }) {
   await requireSection("EMPLOYEES")
 
-  const { status, companies: companiesParam, q, group } = await searchParams
+  const { status, companies: companiesParam, q, group, dept } = await searchParams
 
   const currentStatus = (status === "fired" || status === "all" ? status : "active") as
     | "active"
@@ -26,6 +27,7 @@ export default async function EmployeesPage({
     | "all"
   const selectedCompanyIds = companiesParam ? companiesParam.split(",").filter(Boolean) : []
   const currentGroup = group === "1"
+  const currentDept = dept === "OFFICE" || dept === "WAREHOUSE" ? dept : null
   const currentSearch = q?.trim() ?? ""
 
   // Build where clause
@@ -45,6 +47,10 @@ export default async function EmployeesPage({
         companyId: { in: selectedCompanyIds },
       },
     }
+  }
+
+  if (currentDept) {
+    where.department = currentDept
   }
 
   if (currentSearch) {
@@ -95,6 +101,7 @@ export default async function EmployeesPage({
         selectedCompanyIds={selectedCompanyIds}
         currentStatus={currentStatus}
         currentGroup={currentGroup}
+        currentDept={currentDept}
         currentSearch={currentSearch}
         allCompanies={companiesForFilters}
       />
