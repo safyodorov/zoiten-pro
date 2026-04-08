@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 Phase: 06
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-04-06
+Last activity: 2026-04-08 - Completed quick task 260408-syb: Создать модуль Сотрудники
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -114,6 +114,12 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 None yet.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260408-syb | Создать модуль Сотрудники — БД, CRUD, таблица, фильтры, модалка | 2026-04-08 | efb9ca8 | [260408-syb-crud](./quick/260408-syb-crud/) |
 
 ### Blockers/Concerns
 
