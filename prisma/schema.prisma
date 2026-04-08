@@ -261,6 +261,7 @@ model Employee {
   firstName  String
   middleName String?
   department Department?
+  passNumber Int?
   birthDate  DateTime?
   hireDate   DateTime?
   fireDate   DateTime?

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ChevronDown, X, Search, LayoutList } from "lucide-react"
+import { ChevronDown, X, Search, LayoutList, Download } from "lucide-react"
 import { EmployeeModal } from "@/components/employees/EmployeeModal"
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -249,8 +249,17 @@ export function EmployeeFilters({
           </Button>
         )}
 
-        {/* Add button */}
-        <div className="ml-auto">
+        {/* Spacer + action buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => window.open("/api/employees-export", "_blank")}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Выгрузить базу
+          </Button>
           <Button size="sm" onClick={() => setAddModalOpen(true)}>
             + Добавить сотрудника
           </Button>

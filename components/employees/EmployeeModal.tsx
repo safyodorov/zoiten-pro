@@ -60,6 +60,7 @@ interface Employee {
   firstName: string
   middleName: string | null
   department: string | null
+  passNumber: number | null
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -147,6 +148,7 @@ export function EmployeeModal({
   const [firstName, setFirstName] = useState("")
   const [middleName, setMiddleName] = useState("")
   const [department, setDepartment] = useState("")
+  const [passNumber, setPassNumber] = useState("")
   const [birthDate, setBirthDate] = useState("")
   const [hireDate, setHireDate] = useState("")
   const [fireDate, setFireDate] = useState("")
@@ -184,6 +186,7 @@ export function EmployeeModal({
       setFirstName(employee.firstName)
       setMiddleName(employee.middleName ?? "")
       setDepartment(employee.department ?? "")
+      setPassNumber(employee.passNumber ? String(employee.passNumber) : "")
       setBirthDate(toDateInputValue(employee.birthDate))
       setHireDate(toDateInputValue(employee.hireDate))
       setFireDate(toDateInputValue(employee.fireDate))
@@ -212,6 +215,7 @@ export function EmployeeModal({
       setFirstName("")
       setMiddleName("")
       setDepartment("")
+      setPassNumber("")
       setBirthDate("")
       setHireDate("")
       setFireDate("")
@@ -268,6 +272,7 @@ export function EmployeeModal({
       firstName: firstName.trim(),
       middleName: middleName.trim() || null,
       department: (department === "OFFICE" || department === "WAREHOUSE" ? department : null) as "OFFICE" | "WAREHOUSE" | null,
+      passNumber: passNumber ? parseInt(passNumber) : null,
       birthDate: birthDate || null,
       hireDate: hireDate || null,
       fireDate: fireDate || null,
@@ -392,6 +397,13 @@ export function EmployeeModal({
                 value={birthDate}
                 onChange={setBirthDate}
                 type="date"
+              />
+              <InputField
+                label="Номер пропуска"
+                value={passNumber}
+                onChange={setPassNumber}
+                type="number"
+                placeholder="1–10000"
               />
             </div>
 

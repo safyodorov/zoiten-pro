@@ -51,6 +51,7 @@ interface Employee {
   firstName: string
   middleName: string | null
   department: string | null
+  passNumber: number | null
   birthDate: Date | string | null
   hireDate: Date | string | null
   fireDate: Date | string | null
@@ -128,9 +129,25 @@ function getWorkEmail(emails: EmployeeEmail[]): string {
   return work?.email ?? "—"
 }
 
+function getActiveCompanies(companies: EmployeeCompanyEntry[]): EmployeeCompanyEntry[] {
+  return companies.filter((c) => !c.fireDate)
+}
+
 function getCompanyNames(companies: EmployeeCompanyEntry[]): string {
-  if (companies.length === 0) return "—"
-  return companies.map((c) => c.company.name).join(", ")
+  const active = getActiveCompanies(companies)
+  if (active.length === 0) {
+    // All fired — show all with strikethrough handled in caller
+    return companies.map((c) => c.company.name).join(", ") || "—"
+  }
+  return active.map((c) => c.company.name).join(", ")
+}
+
+function getActivePositions(companies: EmployeeCompanyEntry[]): string {
+  const active = getActiveCompanies(companies)
+  if (active.length === 0) {
+    return companies.map((c) => c.position).filter(Boolean).join(", ") || "—"
+  }
+  return active.map((c) => c.position).filter(Boolean).join(", ") || "—"
 }
 
 // ── Row component ──────────────────────────────────────────────────
@@ -172,9 +189,7 @@ function EmployeeRow({
         {employee.middleName ?? ""}
       </td>
       <td className="px-3 py-2 text-sm">{getCompanyNames(employee.companies)}</td>
-      <td className="px-3 py-2 text-sm text-muted-foreground">
-        {employee.companies.map((c) => c.position).filter(Boolean).join(", ") || "—"}
-      </td>
+      <td className="px-3 py-2 text-sm text-muted-foreground">{getActivePositions(employee.companies)}</td>
       <td className="px-3 py-2 text-sm whitespace-nowrap">{bdStr}</td>
       <td className="px-3 py-2 text-sm whitespace-nowrap">{getWorkPhone(employee.phones)}</td>
       <td className="px-3 py-2 text-sm">{getWorkEmail(employee.emails)}</td>
