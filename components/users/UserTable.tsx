@@ -15,12 +15,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Pencil, Trash2, Plus, Eye, EyeOff, Copy } from "lucide-react"
 import { UserDialog } from "./UserDialog"
-import { type UserRow } from "./UserForm"
+import { type UserRow, type EmployeeOption } from "./UserForm"
 import { deleteUser } from "@/app/actions/users"
 import { SECTION_OPTIONS } from "@/lib/section-labels"
 
 interface UserTableProps {
   users: UserRow[]
+  availableEmployees: EmployeeOption[]
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -85,7 +86,7 @@ function PasswordCell({ plainPassword }: { plainPassword: string | null }) {
 
 // ── Основная таблица ──────────────────────────────────────────────
 
-export function UserTable({ users }: UserTableProps) {
+export function UserTable({ users, availableEmployees }: UserTableProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState<UserRow | undefined>(undefined)
 
@@ -123,6 +124,7 @@ export function UserTable({ users }: UserTableProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Имя</TableHead>
+              <TableHead>Фамилия</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Пароль</TableHead>
               <TableHead>Роль</TableHead>
@@ -134,7 +136,7 @@ export function UserTable({ users }: UserTableProps) {
           <TableBody>
             {users.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   Пользователи не найдены
                 </TableCell>
               </TableRow>
@@ -144,7 +146,8 @@ export function UserTable({ users }: UserTableProps) {
                 key={user.id}
                 className={!user.isActive ? "opacity-50" : undefined}
               >
-                <TableCell className="font-medium">{user.name}</TableCell>
+                <TableCell className="font-medium">{user.firstName ?? user.name}</TableCell>
+                <TableCell>{user.lastName ?? "—"}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>
                   <PasswordCell plainPassword={user.plainPassword} />
@@ -212,6 +215,7 @@ export function UserTable({ users }: UserTableProps) {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         user={editUser}
+        availableEmployees={availableEmployees}
       />
     </div>
   )

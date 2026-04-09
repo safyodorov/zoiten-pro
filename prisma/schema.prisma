@@ -51,7 +51,11 @@ enum Availability {
 model User {
   id              String            @id @default(cuid())
   email           String            @unique
-  name            String
+  name            String            // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
+  firstName       String?
+  lastName        String?
+  employeeId      String?           @unique
+  employee        Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   password        String            // bcrypt hash — never return to client
   plainPassword   String?           // plain text для просмотра суперадмином (только внутренняя ERP)
   role            UserRole          @default(VIEWER)
@@ -292,6 +296,7 @@ model Employee {
   phones     EmployeePhone[]
   emails     EmployeeEmail[]
   passes     EmployeePass[]
+  user       User?
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
 }

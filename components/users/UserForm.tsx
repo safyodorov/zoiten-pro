@@ -1,7 +1,7 @@
 // components/users/UserForm.tsx
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -23,7 +23,7 @@ import { SECTION_OPTIONS } from "@/lib/section-labels"
 import { generatePassword } from "@/lib/password"
 import { createUser, updateUser } from "@/app/actions/users"
 
-// ── NativeSelect (по конвенции проекта — shadcn Select ломается с defaultValue) ──
+// ── NativeSelect ──────────────────────────────────────────────────
 
 function NativeSelect({
   value,
@@ -55,6 +55,9 @@ function NativeSelect({
 export interface UserRow {
   id: string
   name: string
+  firstName: string | null
+  lastName: string | null
+  employeeId: string | null
   email: string
   role: "SUPERADMIN" | "MANAGER" | "VIEWER"
   allowedSections: string[]
@@ -64,10 +67,20 @@ export interface UserRow {
   createdAt: Date
 }
 
+export interface EmployeeOption {
+  id: string
+  firstName: string
+  lastName: string
+  middleName: string | null
+  emails: Array<{ id: string; email: string; type: string }>
+}
+
 // ── Schema ─────────────────────────────────────────────────────────
 
 const formSchema = z.object({
-  name: z.string().min(2, "Минимум 2 символа"),
+  employeeId: z.string().optional(),
+  firstName: z.string().min(1, "Обязательно"),
+  lastName: z.string().min(1, "Обязательно"),
   email: z.string().email("Некорректный email"),
   password: z
     .string()
@@ -84,6 +97,7 @@ type FormData = z.infer<typeof formSchema>
 
 interface UserFormProps {
   user?: UserRow
+  availableEmployees: EmployeeOption[]
   onSuccess: () => void
 }
 
@@ -97,15 +111,18 @@ type SectionAccess = "NONE" | "VIEW" | "MANAGE"
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function UserForm({ user, onSuccess }: UserFormProps) {
+export function UserForm({ user, availableEmployees, onSuccess }: UserFormProps) {
   const isEdit = !!user
+  const isLegacyUser = isEdit && !user?.employeeId // старые пользователи без привязки
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: user?.name ?? "",
+      employeeId: user?.employeeId ?? "",
+      firstName: user?.firstName ?? "",
+      lastName: user?.lastName ?? "",
       email: user?.email ?? "",
       password: "",
       role: user?.role ?? "VIEWER",
@@ -116,14 +133,43 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
 
   const watchedRole = form.watch("role")
   const watchedSectionRoles = form.watch("sectionRoles")
+  const watchedEmployeeId = form.watch("employeeId")
 
-  // Получить текущий access для раздела (NONE / VIEW / MANAGE)
+  // Выбранный сотрудник для email dropdown
+  const selectedEmployee = useMemo(
+    () => availableEmployees.find((e) => e.id === watchedEmployeeId),
+    [watchedEmployeeId, availableEmployees]
+  )
+
+  // ── Handlers ─────────────────────────────────────────────────────
+
+  function handleEmployeeChange(employeeId: string) {
+    form.setValue("employeeId", employeeId, { shouldDirty: true })
+    if (!employeeId) {
+      form.setValue("firstName", "")
+      form.setValue("lastName", "")
+      form.setValue("email", "")
+      return
+    }
+    const emp = availableEmployees.find((e) => e.id === employeeId)
+    if (emp) {
+      form.setValue("firstName", emp.firstName, { shouldDirty: true })
+      form.setValue("lastName", emp.lastName, { shouldDirty: true })
+      // Автоподстановка email: если один — сразу, если несколько — оставить пустым
+      if (emp.emails.length === 1) {
+        form.setValue("email", emp.emails[0].email, { shouldDirty: true })
+      } else if (emp.emails.length === 0) {
+        form.setValue("email", "")
+      }
+      // Если emails.length > 1 — пользователь выберет в dropdown ниже
+    }
+  }
+
   function getAccess(section: string): SectionAccess {
     const role = watchedSectionRoles[section]
     return role ?? "NONE"
   }
 
-  // Установить access для раздела
   function setAccess(section: string, access: SectionAccess) {
     const current = { ...form.getValues("sectionRoles") }
     if (access === "NONE") {
@@ -134,12 +180,10 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
     form.setValue("sectionRoles", current, { shouldDirty: true })
   }
 
-  // При смене общей роли — проставить access ко всем разделам
   function handleRoleChange(newRole: string) {
     form.setValue("role", newRole as "SUPERADMIN" | "MANAGER" | "VIEWER")
 
     if (newRole === "SUPERADMIN") {
-      // Суперадмин — sectionRoles не нужен (bypasses всё)
       form.setValue("sectionRoles", {})
       return
     }
@@ -159,6 +203,12 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
   }
 
   async function onSubmit(data: FormData) {
+    // Для новых пользователей — employeeId обязателен
+    if (!isEdit && !data.employeeId) {
+      form.setError("employeeId", { message: "Выберите сотрудника" })
+      return
+    }
+
     if (!isEdit && (!data.password || data.password.length < 8)) {
       form.setError("password", { message: "Минимум 8 символов" })
       return
@@ -170,7 +220,8 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       if (isEdit && user) {
         result = await updateUser({
           id: user.id,
-          name: data.name,
+          firstName: data.firstName || null,
+          lastName: data.lastName || null,
           email: data.email,
           password: data.password || "",
           role: data.role,
@@ -179,7 +230,9 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
         })
       } else {
         result = await createUser({
-          name: data.name,
+          employeeId: data.employeeId!,
+          firstName: data.firstName,
+          lastName: data.lastName,
           email: data.email,
           password: data.password!,
           role: data.role,
@@ -203,33 +256,107 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
 
-        {/* Name */}
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Имя</FormLabel>
-              <FormControl><Input placeholder="Иван Иванов" {...field} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Сотрудник — только для создания новых пользователей */}
+        {!isEdit && (
+          <FormField
+            control={form.control}
+            name="employeeId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Сотрудник *</FormLabel>
+                <FormControl>
+                  <NativeSelect
+                    value={field.value ?? ""}
+                    onChange={handleEmployeeChange}
+                  >
+                    <option value="">— Выберите сотрудника —</option>
+                    {availableEmployees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.lastName} {emp.firstName}
+                        {emp.middleName ? ` ${emp.middleName}` : ""}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </FormControl>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Показаны только сотрудники без учётной записи
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
-        {/* Email */}
+        {/* Для старых пользователей — показать что они без привязки */}
+        {isEdit && isLegacyUser && (
+          <div className="rounded-md bg-muted p-3 text-xs text-muted-foreground">
+            Этот пользователь создан до интеграции со справочником Сотрудники и не привязан к сотруднику.
+          </div>
+        )}
+
+        {/* Имя + Фамилия — два поля в ряд */}
+        <div className="grid grid-cols-2 gap-3">
+          <FormField
+            control={form.control}
+            name="firstName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Имя</FormLabel>
+                <FormControl>
+                  <Input placeholder="Иван" {...field} readOnly={!isEdit && !!watchedEmployeeId} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="lastName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Фамилия</FormLabel>
+                <FormControl>
+                  <Input placeholder="Иванов" {...field} readOnly={!isEdit && !!watchedEmployeeId} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Email — dropdown если у сотрудника несколько, иначе input */}
         <FormField
           control={form.control}
           name="email"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Email</FormLabel>
-              <FormControl><Input type="email" placeholder="user@zoiten.ru" {...field} /></FormControl>
+              <FormControl>
+                {!isEdit && selectedEmployee && selectedEmployee.emails.length > 1 ? (
+                  <NativeSelect value={field.value} onChange={field.onChange}>
+                    <option value="">— Выберите email —</option>
+                    {selectedEmployee.emails.map((e) => (
+                      <option key={e.id} value={e.email}>
+                        {e.email} ({e.type === "WORK" ? "рабочий" : "личный"})
+                      </option>
+                    ))}
+                  </NativeSelect>
+                ) : !isEdit && selectedEmployee && selectedEmployee.emails.length === 0 ? (
+                  <Input
+                    type="email"
+                    placeholder="user@zoiten.ru (у сотрудника нет email)"
+                    {...field}
+                  />
+                ) : (
+                  <Input type="email" placeholder="user@zoiten.ru" {...field} />
+                )}
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Password + генератор + показать/скрыть */}
+        {/* Password + генератор */}
         <FormField
           control={form.control}
           name="password"
@@ -271,7 +398,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           )}
         />
 
-        {/* Общая роль — NativeSelect */}
+        {/* Общая роль */}
         <FormField
           control={form.control}
           name="role"

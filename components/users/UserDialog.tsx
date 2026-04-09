@@ -7,28 +7,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { UserForm, type UserRow } from "./UserForm"
+import { UserForm, type UserRow, type EmployeeOption } from "./UserForm"
 
 interface UserDialogProps {
-  // Controlled from parent (UserTable passes setEditUser + open state via these callbacks)
   open: boolean
   onOpenChange: (open: boolean) => void
   user?: UserRow // undefined = create mode
+  availableEmployees: EmployeeOption[]
 }
 
-export function UserDialog({ open, onOpenChange, user }: UserDialogProps) {
+export function UserDialog({ open, onOpenChange, user, availableEmployees }: UserDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {user ? "Редактировать пользователя" : "Новый пользователь"}
           </DialogTitle>
         </DialogHeader>
-        {/* key forces re-mount on user change → form.reset() not needed (Pitfall 1) */}
         <UserForm
           key={user?.id ?? "create"}
           user={user}
+          availableEmployees={availableEmployees}
           onSuccess={() => onOpenChange(false)}
         />
       </DialogContent>

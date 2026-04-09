@@ -15,7 +15,9 @@ import type { UserRole, ERP_SECTION, SectionRole } from "@prisma/client"
 const SectionRoleEnum = z.enum(["VIEW", "MANAGE"])
 
 const CreateUserSchema = z.object({
-  name: z.string().min(2, "Минимум 2 символа"),
+  employeeId: z.string().min(1, "Выберите сотрудника"),
+  firstName: z.string().min(1, "Имя обязательно"),
+  lastName: z.string().min(1, "Фамилия обязательна"),
   email: z.string().email("Некорректный email"),
   password: z.string().min(8, "Минимум 8 символов"),
   role: z.enum(["SUPERADMIN", "MANAGER", "VIEWER"]),
@@ -24,7 +26,8 @@ const CreateUserSchema = z.object({
 
 const UpdateUserSchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(2, "Минимум 2 символа"),
+  firstName: z.string().min(1, "Имя обязательно").nullable(),
+  lastName: z.string().min(1, "Фамилия обязательна").nullable(),
   email: z.string().email("Некорректный email"),
   password: z.string().min(8, "Минимум 8 символов").optional().or(z.literal("")),
   role: z.enum(["SUPERADMIN", "MANAGER", "VIEWER"]),
@@ -47,6 +50,34 @@ function sectionRolesToData(
   }))
 }
 
+function fullName(firstName: string, lastName: string): string {
+  return `${firstName} ${lastName}`.trim()
+}
+
+// ── Список доступных сотрудников для создания пользователя ───────
+
+export async function getAvailableEmployees() {
+  await requireSuperadmin()
+
+  const employees = await prisma.employee.findMany({
+    where: {
+      user: null, // только те у кого нет пользователя
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      middleName: true,
+      emails: {
+        select: { id: true, email: true, type: true },
+      },
+    },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  })
+
+  return employees
+}
+
 // ── Actions ────────────────────────────────────────────────────────
 
 export async function createUser(
@@ -55,17 +86,28 @@ export async function createUser(
   try {
     await requireSuperadmin() // D-13
     const parsed = CreateUserSchema.parse(data)
+
+    // Проверка: сотрудник не привязан к другому пользователю
+    const existingUser = await prisma.user.findUnique({
+      where: { employeeId: parsed.employeeId },
+    })
+    if (existingUser) {
+      return { ok: false, error: "У этого сотрудника уже есть пользователь" }
+    }
+
     const hashedPassword = await bcrypt.hash(parsed.password, 10)
 
     await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          name: parsed.name,
+          employeeId: parsed.employeeId,
+          firstName: parsed.firstName,
+          lastName: parsed.lastName,
+          name: fullName(parsed.firstName, parsed.lastName), // legacy поле
           email: parsed.email,
           password: hashedPassword,
-          plainPassword: parsed.password, // plain для просмотра суперадмином
+          plainPassword: parsed.password,
           role: parsed.role as UserRole,
-          // allowedSections оставляем для legacy fallback — заполним из sectionRoles
           allowedSections: Object.keys(parsed.sectionRoles) as ERP_SECTION[],
         },
       })
@@ -85,7 +127,7 @@ export async function createUser(
       if (e.message === "FORBIDDEN") return { ok: false, error: "Нет доступа" }
     }
     if ((e as { code?: string })?.code === "P2002") {
-      return { ok: false, error: "Email уже используется" }
+      return { ok: false, error: "Email или сотрудник уже используются" }
     }
     console.error("createUser error:", e)
     return { ok: false, error: "Ошибка сервера" }
@@ -98,7 +140,7 @@ export async function updateUser(
   try {
     await requireSuperadmin() // D-13
 
-    // Guard: prevent superadmin self-deactivation (Pitfall 5 / D-12)
+    // Guard: prevent superadmin self-deactivation
     const session = await auth()
     if (session?.user?.id === data.id && data.isActive === false) {
       return { ok: false, error: "Нельзя деактивировать собственный аккаунт" }
@@ -106,8 +148,16 @@ export async function updateUser(
 
     const parsed = UpdateUserSchema.parse(data)
 
+    // Имя для legacy поля name: если firstName/lastName есть — склеиваем, иначе не трогаем
+    const computedName =
+      parsed.firstName && parsed.lastName
+        ? fullName(parsed.firstName, parsed.lastName)
+        : undefined
+
     const updateData: {
-      name: string
+      firstName: string | null
+      lastName: string | null
+      name?: string
       email: string
       role: UserRole
       allowedSections: ERP_SECTION[]
@@ -115,12 +165,16 @@ export async function updateUser(
       password?: string
       plainPassword?: string
     } = {
-      name: parsed.name,
+      firstName: parsed.firstName,
+      lastName: parsed.lastName,
       email: parsed.email,
       role: parsed.role as UserRole,
-      // allowedSections синхронизируем из ключей sectionRoles (legacy fallback)
       allowedSections: Object.keys(parsed.sectionRoles) as ERP_SECTION[],
       isActive: parsed.isActive,
+    }
+
+    if (computedName) {
+      updateData.name = computedName
     }
 
     // D-06: only update password if provided (blank = keep current hash)
@@ -160,7 +214,6 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   try {
     await requireSuperadmin() // D-13
 
-    // Guard: prevent deleting own account
     const session = await auth()
     if (session?.user?.id === id) {
       return { ok: false, error: "Нельзя удалить собственный аккаунт" }
