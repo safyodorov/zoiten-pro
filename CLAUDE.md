@@ -36,6 +36,7 @@
 8. План продаж (заглушка)
 9. Служба поддержки (из https://github.com/safyodorov/ai-cs-zoiten)
 10. **Сотрудники** ✅ полный CRUD, таблица с фильтрами/сортировкой, модалка, экспорт XLSX
+11. **Пользователи** ✅ привязка к справочнику Сотрудники, роли per раздел (VIEW/MANAGE), генератор паролей
 
 ## Дизайн
 
@@ -61,6 +62,22 @@
 ## Связи между таблицами БД
 
 ```
+User (пользователи ERP)
+  ├── firstName / lastName (отдельные поля)
+  ├── name (legacy, заполняется автоматически из firstName + lastName)
+  ├── employeeId: String? @unique → Employee (1:1, onDelete: SetNull)
+  ├── email, password (bcrypt), plainPassword (видимый суперадмином)
+  ├── role: SUPERADMIN | MANAGER | VIEWER (общая роль)
+  ├── allowedSections: ERP_SECTION[] (DEPRECATED, legacy fallback)
+  ├── sectionRoles: UserSectionRole[] (актуальные права per раздел)
+  └── isActive: Boolean
+
+UserSectionRole (гранулярные права per раздел)
+  ├── userId → User (N:1, onDelete: Cascade)
+  ├── section: ERP_SECTION
+  ├── role: SectionRole (VIEW | MANAGE)
+  └── @@unique([userId, section])
+
 Product (товары) — ЦЕНТРАЛЬНАЯ ТАБЛИЦА
   ├── sku: String @unique         ← УКТ-000001 (PostgreSQL SEQUENCE)
   ├── brand: Brand (N:1)
@@ -101,13 +118,47 @@ Employee (сотрудники)
   ├── companies: EmployeeCompany[] (M:N с Company)
   ├── phones: EmployeePhone[] (PERSONAL/WORK, макс 5)
   ├── emails: EmployeeEmail[] (PERSONAL/WORK, макс 5)
-  └── passes: EmployeePass[]  (паспорта)
+  ├── passes: EmployeePass[]  (паспорта)
+  └── user: User?             (опциональная учётная запись, 1:1)
 
 EmployeeCompany (связь сотрудник↔компания)
   ├── position, hireDate, fireDate (должность и даты по каждой компании)
   ├── rate: Decimal, salary: Int
   └── документы: trudovoyDogovor, prikazPriema, soglasiePersDannyh, nda, lichnayaKartochka, zayavlenieUvolneniya, prikazUvolneniya
 ```
+
+## Пользователи и RBAC
+
+### Модель прав
+Две роли действуют одновременно:
+- **User.role** (`SUPERADMIN | MANAGER | VIEWER`) — общая роль, используется как **пресет** при назначении прав
+- **UserSectionRole** — гранулярные права per раздел (`VIEW | MANAGE`), источник истины для проверок
+
+**SUPERADMIN** bypasses всё: `requireSection()` возвращает сразу без проверки `UserSectionRole`.
+
+**Для MANAGER/VIEWER:**
+- При смене общей роли в форме автоматически проставляются права ко всем разделам (MANAGER → MANAGE везде, VIEWER → VIEW везде).
+- После этого можно точечно переопределить per раздел в таблице: **Нет / Просмотр / Управление**.
+
+### `requireSection(section, minRole)`
+```typescript
+await requireSection("PRODUCTS")           // достаточно VIEW
+await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-операций)
+```
+Иерархия: `MANAGE > VIEW`. Все существующие вызовы без второго аргумента требуют `VIEW` — обратная совместимость сохраняется. Legacy `allowedSections[]` используется как fallback.
+
+### Привязка к сотрудникам
+- `User.employeeId` — UNIQUE FK на `Employee` (1:1)
+- При создании нового пользователя показывается селектор сотрудников **без учётки** (`where: { user: null }`)
+- Имя/Фамилия/email автоподставляются из `Employee` (email dropdown если несколько)
+- При удалении сотрудника → `onDelete: SET NULL` (учётка остаётся, но связь обнуляется)
+- Два исторических пользователя (до рефакторинга) имеют `employeeId = null` — редактируются вручную
+
+### Пароли
+- `User.password` — bcrypt hash (используется для авторизации)
+- `User.plainPassword` — plain text, доступен **только суперадмину** через UI (для внутренней ERP)
+- Генератор: `lib/password.ts` → `generatePassword(12)` через `crypto.getRandomValues`
+- В форме кнопка `Shuffle` → генерация, `Eye` → показать/скрыть
 
 ## Синхронизация с Wildberries — ВАЖНАЯ СЕКЦИЯ
 
