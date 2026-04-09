@@ -15,17 +15,34 @@ export default async function UsersPage() {
       email: true,
       role: true,
       allowedSections: true,
+      plainPassword: true,
       isActive: true,
       createdAt: true,
+      sectionRoles: {
+        select: { section: true, role: true },
+      },
     },
   })
 
-  // Cast to UserRow[] — allowedSections comes back as ERP_SECTION[], compatible as string[]
-  const userRows: UserRow[] = users.map((u) => ({
-    ...u,
-    role: u.role as UserRow["role"],
-    allowedSections: u.allowedSections as string[],
-  }))
+  // Преобразуем sectionRoles из массива в Record для UI
+  const userRows: UserRow[] = users.map((u) => {
+    const sectionRolesMap: Record<string, "VIEW" | "MANAGE"> = {}
+    for (const sr of u.sectionRoles) {
+      sectionRolesMap[sr.section] = sr.role as "VIEW" | "MANAGE"
+    }
+
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role as UserRow["role"],
+      allowedSections: u.allowedSections as string[],
+      sectionRoles: sectionRolesMap,
+      plainPassword: u.plainPassword,
+      isActive: u.isActive,
+      createdAt: u.createdAt,
+    }
+  })
 
   return (
     <div className="space-y-4">

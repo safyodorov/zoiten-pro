@@ -8,16 +8,18 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
-import type { ERP_SECTION, UserRole } from "@prisma/client"
+import type { UserRole, ERP_SECTION, SectionRole } from "@prisma/client"
 
 // ── Schemas ────────────────────────────────────────────────────────
+
+const SectionRoleEnum = z.enum(["VIEW", "MANAGE"])
 
 const CreateUserSchema = z.object({
   name: z.string().min(2, "Минимум 2 символа"),
   email: z.string().email("Некорректный email"),
   password: z.string().min(8, "Минимум 8 символов"),
   role: z.enum(["SUPERADMIN", "MANAGER", "VIEWER"]),
-  allowedSections: z.array(z.string()),
+  sectionRoles: z.record(z.string(), SectionRoleEnum),
 })
 
 const UpdateUserSchema = z.object({
@@ -26,11 +28,24 @@ const UpdateUserSchema = z.object({
   email: z.string().email("Некорректный email"),
   password: z.string().min(8, "Минимум 8 символов").optional().or(z.literal("")),
   role: z.enum(["SUPERADMIN", "MANAGER", "VIEWER"]),
-  allowedSections: z.array(z.string()),
+  sectionRoles: z.record(z.string(), SectionRoleEnum),
   isActive: z.boolean(),
 })
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+function sectionRolesToData(
+  userId: string,
+  sectionRoles: Record<string, "VIEW" | "MANAGE">
+) {
+  return Object.entries(sectionRoles).map(([section, role]) => ({
+    userId,
+    section: section as ERP_SECTION,
+    role: role as SectionRole,
+  }))
+}
 
 // ── Actions ────────────────────────────────────────────────────────
 
@@ -41,15 +56,27 @@ export async function createUser(
     await requireSuperadmin() // D-13
     const parsed = CreateUserSchema.parse(data)
     const hashedPassword = await bcrypt.hash(parsed.password, 10)
-    await prisma.user.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        password: hashedPassword,
-        role: parsed.role as UserRole,
-        allowedSections: parsed.allowedSections as ERP_SECTION[],
-      },
+
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: parsed.name,
+          email: parsed.email,
+          password: hashedPassword,
+          plainPassword: parsed.password, // plain для просмотра суперадмином
+          role: parsed.role as UserRole,
+          // allowedSections оставляем для legacy fallback — заполним из sectionRoles
+          allowedSections: Object.keys(parsed.sectionRoles) as ERP_SECTION[],
+        },
+      })
+
+      if (Object.keys(parsed.sectionRoles).length > 0) {
+        await tx.userSectionRole.createMany({
+          data: sectionRolesToData(user.id, parsed.sectionRoles),
+        })
+      }
     })
+
     revalidatePath("/admin/users")
     return { ok: true }
   } catch (e) {
@@ -86,20 +113,34 @@ export async function updateUser(
       allowedSections: ERP_SECTION[]
       isActive: boolean
       password?: string
+      plainPassword?: string
     } = {
       name: parsed.name,
       email: parsed.email,
       role: parsed.role as UserRole,
-      allowedSections: parsed.allowedSections as ERP_SECTION[],
+      // allowedSections синхронизируем из ключей sectionRoles (legacy fallback)
+      allowedSections: Object.keys(parsed.sectionRoles) as ERP_SECTION[],
       isActive: parsed.isActive,
     }
 
     // D-06: only update password if provided (blank = keep current hash)
     if (parsed.password && parsed.password.trim() !== "") {
       updateData.password = await bcrypt.hash(parsed.password, 10)
+      updateData.plainPassword = parsed.password
     }
 
-    await prisma.user.update({ where: { id: parsed.id }, data: updateData })
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: parsed.id }, data: updateData }),
+      prisma.userSectionRole.deleteMany({ where: { userId: parsed.id } }),
+      ...(Object.keys(parsed.sectionRoles).length > 0
+        ? [
+            prisma.userSectionRole.createMany({
+              data: sectionRolesToData(parsed.id, parsed.sectionRoles),
+            }),
+          ]
+        : []),
+    ])
+
     revalidatePath("/admin/users")
     return { ok: true }
   } catch (e) {

@@ -6,17 +6,10 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { Shuffle, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Switch } from "@/components/ui/switch"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Form,
   FormControl,
@@ -25,21 +18,54 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"
+import { cn } from "@/lib/utils"
 import { SECTION_OPTIONS } from "@/lib/section-labels"
+import { generatePassword } from "@/lib/password"
 import { createUser, updateUser } from "@/app/actions/users"
 
-// UserRow is the shape from prisma.user.findMany select — passed from page → UserTable → UserDialog → UserForm
+// ── NativeSelect (по конвенции проекта — shadcn Select ломается с defaultValue) ──
+
+function NativeSelect({
+  value,
+  onChange,
+  children,
+  className,
+}: {
+  value: string
+  onChange: (value: string) => void
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+    >
+      {children}
+    </select>
+  )
+}
+
+// ── Types ──────────────────────────────────────────────────────────
+
 export interface UserRow {
   id: string
   name: string
   email: string
   role: "SUPERADMIN" | "MANAGER" | "VIEWER"
   allowedSections: string[]
+  sectionRoles: Record<string, "VIEW" | "MANAGE">
+  plainPassword: string | null
   isActive: boolean
   createdAt: Date
 }
 
-// Single unified schema — password optional, required-on-create enforced in onSubmit
+// ── Schema ─────────────────────────────────────────────────────────
+
 const formSchema = z.object({
   name: z.string().min(2, "Минимум 2 символа"),
   email: z.string().email("Некорректный email"),
@@ -50,14 +76,14 @@ const formSchema = z.object({
       message: "Минимум 8 символов",
     }),
   role: z.enum(["SUPERADMIN", "MANAGER", "VIEWER"]),
-  allowedSections: z.array(z.string()),
+  sectionRoles: z.record(z.string(), z.enum(["VIEW", "MANAGE"])),
   isActive: z.boolean(),
 })
 
 type FormData = z.infer<typeof formSchema>
 
 interface UserFormProps {
-  user?: UserRow // undefined = create mode, defined = edit mode
+  user?: UserRow
   onSuccess: () => void
 }
 
@@ -67,9 +93,14 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: "Просмотр",
 }
 
+type SectionAccess = "NONE" | "VIEW" | "MANAGE"
+
+// ── Component ──────────────────────────────────────────────────────
+
 export function UserForm({ user, onSuccess }: UserFormProps) {
   const isEdit = !!user
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -78,15 +109,56 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
       email: user?.email ?? "",
       password: "",
       role: user?.role ?? "VIEWER",
-      allowedSections: user?.allowedSections ?? [],
+      sectionRoles: user?.sectionRoles ?? {},
       isActive: user?.isActive ?? true,
     },
   })
 
   const watchedRole = form.watch("role")
+  const watchedSectionRoles = form.watch("sectionRoles")
+
+  // Получить текущий access для раздела (NONE / VIEW / MANAGE)
+  function getAccess(section: string): SectionAccess {
+    const role = watchedSectionRoles[section]
+    return role ?? "NONE"
+  }
+
+  // Установить access для раздела
+  function setAccess(section: string, access: SectionAccess) {
+    const current = { ...form.getValues("sectionRoles") }
+    if (access === "NONE") {
+      delete current[section]
+    } else {
+      current[section] = access
+    }
+    form.setValue("sectionRoles", current, { shouldDirty: true })
+  }
+
+  // При смене общей роли — проставить access ко всем разделам
+  function handleRoleChange(newRole: string) {
+    form.setValue("role", newRole as "SUPERADMIN" | "MANAGER" | "VIEWER")
+
+    if (newRole === "SUPERADMIN") {
+      // Суперадмин — sectionRoles не нужен (bypasses всё)
+      form.setValue("sectionRoles", {})
+      return
+    }
+
+    const defaultAccess: SectionAccess = newRole === "MANAGER" ? "MANAGE" : "VIEW"
+    const next: Record<string, "VIEW" | "MANAGE"> = {}
+    for (const opt of SECTION_OPTIONS) {
+      next[opt.value] = defaultAccess
+    }
+    form.setValue("sectionRoles", next, { shouldDirty: true })
+  }
+
+  function handleGeneratePassword() {
+    const generated = generatePassword(12)
+    form.setValue("password", generated, { shouldDirty: true })
+    setShowPassword(true)
+  }
 
   async function onSubmit(data: FormData) {
-    // Create mode: password is required
     if (!isEdit && (!data.password || data.password.length < 8)) {
       form.setError("password", { message: "Минимум 8 символов" })
       return
@@ -102,7 +174,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           email: data.email,
           password: data.password || "",
           role: data.role,
-          allowedSections: data.allowedSections,
+          sectionRoles: data.sectionRoles,
           isActive: data.isActive,
         })
       } else {
@@ -111,7 +183,7 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           email: data.email,
           password: data.password!,
           role: data.role,
-          allowedSections: data.allowedSections,
+          sectionRoles: data.sectionRoles,
         })
       }
       if (result.ok) {
@@ -157,90 +229,112 @@ export function UserForm({ user, onSuccess }: UserFormProps) {
           )}
         />
 
-        {/* Password */}
+        {/* Password + генератор + показать/скрыть */}
         <FormField
           control={form.control}
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{isEdit ? "Новый пароль (оставьте пустым, чтобы не менять)" : "Пароль"}</FormLabel>
-              <FormControl><Input type="password" autoComplete="new-password" {...field} /></FormControl>
+              <FormLabel>
+                {isEdit ? "Новый пароль (оставьте пустым, чтобы не менять)" : "Пароль"}
+              </FormLabel>
+              <FormControl>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="new-password"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? "Скрыть" : "Показать"}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={handleGeneratePassword}
+                    title="Сгенерировать случайный пароль"
+                  >
+                    <Shuffle className="h-4 w-4" />
+                  </Button>
+                </div>
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Role */}
+        {/* Общая роль — NativeSelect */}
         <FormField
           control={form.control}
           name="role"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Роль</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Выберите роль" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
+              <FormLabel>Общая роль</FormLabel>
+              <FormControl>
+                <NativeSelect value={field.value} onChange={handleRoleChange}>
                   {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </NativeSelect>
+              </FormControl>
+              <p className="text-xs text-muted-foreground mt-1">
+                {watchedRole === "SUPERADMIN"
+                  ? "Полный доступ ко всем разделам (настройка не требуется)"
+                  : "Меняет права ко всем разделам — ниже можно уточнить по каждому"}
+              </p>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* Section access — hidden for SUPERADMIN (bypasses section checks per lib/rbac.ts) */}
+        {/* Точечная настройка прав per раздел */}
         {watchedRole !== "SUPERADMIN" && (
-          <FormField
-            control={form.control}
-            name="allowedSections"
-            render={() => (
-              <FormItem>
-                <FormLabel>Доступ к разделам</FormLabel>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {SECTION_OPTIONS.map((option) => (
-                    <FormField
-                      key={option.value}
-                      control={form.control}
-                      name="allowedSections"
-                      render={({ field }) => (
-                        <FormItem className="flex items-center space-x-2 space-y-0">
-                          <FormControl>
-                            <Checkbox
-                              checked={(field.value as string[])?.includes(option.value)}
-                              onCheckedChange={(checked) => {
-                                const current = (field.value as string[]) ?? []
-                                field.onChange(
-                                  checked
-                                    ? [...current, option.value]
-                                    : current.filter((v) => v !== option.value)
-                                )
-                              }}
-                            />
-                          </FormControl>
-                          <FormLabel className="font-normal text-sm">{option.label}</FormLabel>
-                        </FormItem>
-                      )}
-                    />
-                  ))}
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-        {watchedRole === "SUPERADMIN" && (
-          <p className="text-sm text-muted-foreground">
-            Суперадмин имеет доступ ко всем разделам
-          </p>
+          <div className="space-y-2">
+            <FormLabel>Доступ к разделам</FormLabel>
+            <div className="rounded-lg border divide-y">
+              {SECTION_OPTIONS.map((option) => {
+                const access = getAccess(option.value)
+                return (
+                  <div
+                    key={option.value}
+                    className="flex items-center justify-between p-2.5"
+                  >
+                    <span className="text-sm font-medium">{option.label}</span>
+                    <div className="flex gap-1">
+                      {(["NONE", "VIEW", "MANAGE"] as SectionAccess[]).map((a) => (
+                        <button
+                          key={a}
+                          type="button"
+                          onClick={() => setAccess(option.value, a)}
+                          className={cn(
+                            "px-2.5 py-1 text-xs rounded-md border transition-colors",
+                            access === a
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background hover:bg-muted border-input"
+                          )}
+                        >
+                          {a === "NONE" ? "Нет" : a === "VIEW" ? "Просмотр" : "Управление"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
 
-        {/* isActive toggle — edit mode only (D-09) */}
+        {/* isActive toggle — edit mode only */}
         {isEdit && (
           <FormField
             control={form.control}

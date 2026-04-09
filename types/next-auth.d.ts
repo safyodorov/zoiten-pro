@@ -10,13 +10,15 @@ declare module "next-auth" {
     user: {
       id: string
       role: string // "SUPERADMIN" | "MANAGER" | "VIEWER"
-      allowedSections: string[] // ERP_SECTION enum values as strings
+      allowedSections: string[] // DEPRECATED, legacy fallback
+      sectionRoles: Record<string, string> // { "PRODUCTS": "MANAGE" | "VIEW", ... }
     } & DefaultSession["user"]
   }
 
   interface User {
     role?: string
     allowedSections?: string[]
+    sectionRoles?: Record<string, string>
   }
 }
 
@@ -25,5 +27,6 @@ declare module "next-auth/jwt" {
     id?: string
     role?: string
     allowedSections?: string[]
+    sectionRoles?: Record<string, string>
   }
 }

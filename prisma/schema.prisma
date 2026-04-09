@@ -49,15 +49,32 @@ enum Availability {
 // ──────────────────────────────────────────────────────────────────
 
 model User {
-  id              String        @id @default(cuid())
-  email           String        @unique
+  id              String            @id @default(cuid())
+  email           String            @unique
   name            String
-  password        String        // bcrypt hash — never return to client
-  role            UserRole      @default(VIEWER)
-  allowedSections ERP_SECTION[] // Ignored when role = SUPERADMIN (per D-11)
-  isActive        Boolean       @default(true)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  password        String            // bcrypt hash — never return to client
+  plainPassword   String?           // plain text для просмотра суперадмином (только внутренняя ERP)
+  role            UserRole          @default(VIEWER)
+  allowedSections ERP_SECTION[]     // DEPRECATED — оставлено для отката миграции, см. sectionRoles
+  sectionRoles    UserSectionRole[] // актуальный источник прав per раздел
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+enum SectionRole {
+  VIEW   // только просмотр
+  MANAGE // полный доступ
+}
+
+model UserSectionRole {
+  id      String      @id @default(cuid())
+  userId  String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section ERP_SECTION
+  role    SectionRole
+
+  @@unique([userId, section])
 }
 
 // ──────────────────────────────────────────────────────────────────

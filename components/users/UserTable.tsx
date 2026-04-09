@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Pencil, Trash2, Plus } from "lucide-react"
+import { Pencil, Trash2, Plus, Eye, EyeOff, Copy } from "lucide-react"
 import { UserDialog } from "./UserDialog"
 import { type UserRow } from "./UserForm"
 import { deleteUser } from "@/app/actions/users"
@@ -29,10 +29,61 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: "Просмотр",
 }
 
-// Returns the Russian label for a section value
+const ACCESS_LABELS: Record<string, string> = {
+  MANAGE: "Управление",
+  VIEW: "Просмотр",
+}
+
 function sectionLabel(value: string): string {
   return SECTION_OPTIONS.find((o) => o.value === value)?.label ?? value
 }
+
+// ── Компонент ячейки с паролем ────────────────────────────────────
+
+function PasswordCell({ plainPassword }: { plainPassword: string | null }) {
+  const [visible, setVisible] = useState(false)
+
+  if (!plainPassword) {
+    return <span className="text-sm text-muted-foreground">—</span>
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(plainPassword!)
+      toast.success("Пароль скопирован")
+    } catch {
+      toast.error("Не удалось скопировать")
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-sm font-mono">
+        {visible ? plainPassword : "••••••••"}
+      </span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6"
+        onClick={() => setVisible((v) => !v)}
+        aria-label={visible ? "Скрыть" : "Показать"}
+      >
+        {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6"
+        onClick={handleCopy}
+        aria-label="Копировать"
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  )
+}
+
+// ── Основная таблица ──────────────────────────────────────────────
 
 export function UserTable({ users }: UserTableProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -73,6 +124,7 @@ export function UserTable({ users }: UserTableProps) {
             <TableRow>
               <TableHead>Имя</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Пароль</TableHead>
               <TableHead>Роль</TableHead>
               <TableHead>Статус</TableHead>
               <TableHead>Разделы</TableHead>
@@ -82,7 +134,7 @@ export function UserTable({ users }: UserTableProps) {
           <TableBody>
             {users.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   Пользователи не найдены
                 </TableCell>
               </TableRow>
@@ -94,6 +146,9 @@ export function UserTable({ users }: UserTableProps) {
               >
                 <TableCell className="font-medium">{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <PasswordCell plainPassword={user.plainPassword} />
+                </TableCell>
                 <TableCell>
                   <Badge variant={user.role === "SUPERADMIN" ? "default" : "secondary"}>
                     {ROLE_LABELS[user.role] ?? user.role}
@@ -107,13 +162,21 @@ export function UserTable({ users }: UserTableProps) {
                 <TableCell>
                   {user.role === "SUPERADMIN" ? (
                     <span className="text-sm text-muted-foreground">Все разделы</span>
-                  ) : user.allowedSections.length === 0 ? (
+                  ) : Object.keys(user.sectionRoles).length === 0 ? (
                     <span className="text-sm text-muted-foreground">Нет доступа</span>
                   ) : (
                     <div className="flex flex-wrap gap-1">
-                      {user.allowedSections.map((s) => (
-                        <Badge key={s} variant="outline" className="text-xs">
-                          {sectionLabel(s)}
+                      {Object.entries(user.sectionRoles).map(([section, role]) => (
+                        <Badge
+                          key={section}
+                          variant={role === "MANAGE" ? "default" : "outline"}
+                          className="text-xs"
+                          title={ACCESS_LABELS[role]}
+                        >
+                          {sectionLabel(section)}
+                          <span className="ml-1 opacity-70">
+                            {role === "MANAGE" ? "✎" : "👁"}
+                          </span>
                         </Badge>
                       ))}
                     </div>
