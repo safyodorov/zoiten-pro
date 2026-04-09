@@ -47,7 +47,7 @@ created: 2026-04-09
 
 | Token | Tailwind class | Px | Применение в Phase 7 |
 |-------|----------------|----|----------------------|
-| 2xs | `gap-1` / `p-1` | 4 | Зазоры между иконкой и текстом в кнопках/бейджах, вертикальный padding ячеек 30-колоночного расчёта (`py-1`) |
+| 2xs | `gap-1` / `p-1` | 4 | Зазоры между иконкой и текстом в кнопках/бейджах, вертикальный padding ячеек 30-колоночного расчёта (`py-1`), gap между подстроками в ячейке Сводка |
 | xs | `gap-2` / `p-2` | 8 | Горизонтальный padding ячеек таблицы (`px-2`), зазоры между кнопками шапки, внутри tooltip |
 | sm | `gap-3` / `p-3` | 12 | Вертикальный rhythm внутри секций сводки Product, зазоры между input-группами модалки |
 | md | `gap-4` / `p-4` | 16 | Паддинг карточек ставок, внутренний gap колонок модалки, зазоры между группами в header |
@@ -226,7 +226,7 @@ Accent НЕ применяется к:
 
 ```tsx
 <TableCell rowSpan={totalRowsOfProduct} className="sticky left-20 z-10 bg-background border-r w-60 align-top p-3">
-  <div className="flex flex-col gap-1.5">
+  <div className="flex flex-col gap-1">
     <div className="text-sm font-medium leading-snug line-clamp-3">{product.name}</div>
     <div className="text-xs text-muted-foreground">
       Остаток: <span className="text-foreground tabular-nums">{totalStock}</span> шт
@@ -458,7 +458,7 @@ Accent НЕ применяется к:
 | Dialog open animation | `data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95` (уже в `components/ui/dialog.tsx`) |
 | Toast position | `position="top-right"` (проверить текущий `<Toaster />`, изменить если нужно; default shadcn sonner) |
 | Table horizontal scroll | Нативный `overflow-x-auto` + sticky columns — пользователь видит scrollbar внизу контейнера |
-| Empty state (no linked cards) | Центрированный блок `text-center py-16`: иконка `Package` (lucide) 48px в `text-muted-foreground`, `<h3>` bold sm, body xs muted, CTA `<Button variant="outline">Перейти к карточкам</Button>` |
+| Empty state (no linked cards) | Центрированный блок `text-center py-16`: иконка `Package` (lucide) 48px в `text-muted-foreground`, `<h3 className="text-sm font-medium">`, body `text-xs text-muted-foreground`, CTA `<Button variant="outline">Перейти к карточкам</Button>` |
 | Empty state (no promotions) | `<Alert>` (shadcn `alert` уже установлен) над таблицей с иконкой `Info` и текстом из copywriting contract |
 
 ---
