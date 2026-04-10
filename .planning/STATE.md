@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: "Completed 07-prices-wb-07-PLAN.md (3 клиентских компонента: GlobalRatesBar, PromoTooltip, PriceCalculatorTable)"
-last_updated: "2026-04-10T09:28:29.510Z"
+stopped_at: Completed 07-09-PLAN.md (PricingCalculatorDialog + Wrapper + PriceRow extension)
+last_updated: "2026-04-10T10:59:28.905Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 27
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 5 of 12
+Plan: 10 of 12
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Plan: 5 of 12
 | Phase 07-prices-wb P04 | 9min | 2 tasks | 4 files |
 | Phase 07-prices-wb P06 | 3min | 2 tasks | 6 files |
 | Phase 07-prices-wb P07 | 15min | 2 tasks | 3 files |
+| Phase 07-prices-wb P09 | 18min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,10 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: base-ui TooltipTrigger использует render-prop для замены button на span (НЕ asChild как radix) — паттерн из components/ui/dialog.tsx
 - [Phase 07-prices-wb]: GlobalRatesBar: debounced save через useRef<Partial<Record<key, timer>>> — отдельный таймер на поле, чтобы изменение одного не сбрасывало pending save другого
 - [Phase 07-prices-wb]: Indicator strip (border-l-4 blue/purple/amber) рендерится на первой не-sticky ячейке (Статус цены), не на <tr> — чтобы не конфликтовать с sticky колонками
+- [Phase 07-prices-wb]: PricingCalculatorDialog: z.number() + valueAsNumber вместо z.coerce.number() — zod 4.x + RHF 7.72 + zodResolver не совместимы с coerce (input unknown → output number)
+- [Phase 07-prices-wb]: PriceRow расширен полями inputs (PricingInputs) и context (productId/subcategoryId/categoryId) — модалка работает без дополнительных DB-запросов, данные собираются RSC на сервере и передаются через props
+- [Phase 07-prices-wb]: Realtime пересчёт через useWatch({name: [5 полей]}) + useMemo → calculatePricing — rerender только правой колонки outputs, левая колонка inputs не перерисовывается
+- [Phase 07-prices-wb]: Scope checkboxes ДРР/Брак: checked=per-product (updateProductOverride), unchecked=subcategory/category default (updateSubcategoryDefault/updateCategoryDefault); Доставка всегда per-product по D-14
 
 ### Roadmap Evolution
 
@@ -159,6 +164,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T09:28:14.327Z
-Stopped at: Completed 07-prices-wb-07-PLAN.md (3 клиентских компонента: GlobalRatesBar, PromoTooltip, PriceCalculatorTable)
+Last session: 2026-04-10T10:51:08.944Z
+Stopped at: Completed 07-09-PLAN.md (PricingCalculatorDialog + Wrapper + PriceRow extension)
 Resume file: None
