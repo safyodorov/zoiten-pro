@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: "Completed 07-11-PLAN.md + Phase 7 closeout (docs, deploy, миграция 20260409_prices_wb применена на VPS, https://zoiten.pro/prices/wb live)"
+stopped_at: "Phase 7 задеплоен + UI fix (photo w-32 + sticky positions) в коммите 7fb170a. Ожидает user verification на https://zoiten.pro/prices/wb перед закрытием фазы. 10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md"
 last_updated: "2026-04-10T11:46:13.097Z"
 progress:
   total_phases: 7
