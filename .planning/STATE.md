@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-prices-wb-04-PLAN.md (WB promotions sync + Excel auto-promo upload routes)
-last_updated: "2026-04-10T08:34:49.548Z"
+stopped_at: "Completed 07-prices-wb-06-PLAN.md (UI инфраструктура: tooltip, layout, redirect, табы)"
+last_updated: "2026-04-10T08:56:22.369Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Plan: 3 of 12
 | Phase 07-prices-wb P03 | 6min | 2 tasks | 3 files |
 | Phase 07-prices-wb P05 | 7min | 1 tasks | 3 files |
 | Phase 07-prices-wb P04 | 9min | 2 tasks | 4 files |
+| Phase 07-prices-wb P06 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,8 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Prisma Json поле snapshot передаётся как 'as never' — устоявшийся паттерн проекта (wb-promotions-sync/route.ts:75)
 - [Phase 07-prices-wb]: parseAutoPromoExcel вынесен в lib/parse-auto-promo-excel.ts (pure TS) — route.ts тянет next/server, vitest падает на next-auth транзитивном импорте
 - [Phase 07-prices-wb]: Excel auto-акций: реальные индексы колонок S=18 (planDiscount), T=19 (status) — 20 колонок 0..19; план 07-04 ошибочно указывал T=19/U=20 (off-by-one), исправлено в парсере и Wave 0 тесте
+- [Phase 07-prices-wb]: shadcn tooltip создан вручную как @base-ui/react wrapper (не через CLI) — паттерн dialog.tsx, TooltipProvider встроен в Tooltip root для упрощения использования
+- [Phase 07-prices-wb]: PricesTabs визуально идентичен CardsTabs (pathname.startsWith + border-primary) — единый паттерн табов для разделов с подсекциями маркетплейсов
 
 ### Roadmap Evolution
 
@@ -150,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T08:34:49.282Z
-Stopped at: Completed 07-prices-wb-04-PLAN.md (WB promotions sync + Excel auto-promo upload routes)
+Last session: 2026-04-10T08:56:22.365Z
+Stopped at: Completed 07-prices-wb-06-PLAN.md (UI инфраструктура: tooltip, layout, redirect, табы)
 Resume file: None
