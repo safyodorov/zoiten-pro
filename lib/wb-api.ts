@@ -627,9 +627,10 @@ export async function fetchPromotionDetails(
 
   for (let i = 0; i < ids.length; i += 10) {
     const batch = ids.slice(i, i + 10)
-    const url =
-      `${PROMO_API}/api/v1/calendar/promotions/details` +
-      `?promotionIDs=${batch.join(",")}`
+    // WB API требует повторяющиеся параметры: ?promotionIDs=1&promotionIDs=2
+    // (comma-separated формат возвращает 400 "Invalid query params")
+    const qs = batch.map((id) => `promotionIDs=${id}`).join("&")
+    const url = `${PROMO_API}/api/v1/calendar/promotions/details?${qs}`
 
     let attempt = 0
     while (true) {
@@ -676,9 +677,10 @@ export async function fetchPromotionNomenclatures(
   promotionId: number,
 ): Promise<WbPromotionNomenclatureRaw[]> {
   const token = getToken()
+  // WB API требует inAction=true (false возвращает 400 Invalid query params)
   const url =
     `${PROMO_API}/api/v1/calendar/promotions/nomenclatures` +
-    `?promotionID=${promotionId}&inAction=false&limit=1000`
+    `?promotionID=${promotionId}&inAction=true&limit=1000`
 
   let attempt = 0
   while (true) {
