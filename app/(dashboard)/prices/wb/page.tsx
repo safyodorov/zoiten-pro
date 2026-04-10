@@ -26,8 +26,10 @@ import {
 import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculatorTableWrapper"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
-
-// TODO (план 07-10): добавить импорты WbPromotionsSyncButton, WbAutoPromoUploadButton + Alert пустого состояния акций
+import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
+import { WbAutoPromoUploadButton } from "@/components/prices/WbAutoPromoUploadButton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Info } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
@@ -399,15 +401,29 @@ export default async function PricesWbPage() {
     <div className="space-y-4">
       <GlobalRatesBar initialRates={rates} />
 
-      {/* Кнопки шапки. WbPromotionsSyncButton + WbAutoPromoUploadButton добавятся в 07-10 */}
+      {/* Кнопки шапки */}
       <div className="flex flex-wrap gap-2">
         <WbSyncButton />
         <WbSyncSppButton />
-        {/* TODO (план 07-10): <WbPromotionsSyncButton /> */}
-        {/* TODO (план 07-10): <WbAutoPromoUploadButton /> */}
+        <WbPromotionsSyncButton />
+        <WbAutoPromoUploadButton
+          autoPromotions={promotions
+            .filter((p) => p.type === "auto")
+            .map((p) => ({ id: p.id, name: p.name }))}
+        />
       </div>
 
-      {/* TODO (план 07-10): если promotions.length === 0 — показать Alert о синхронизации акций */}
+      {/* Empty state для promotions — призыв синхронизировать акции */}
+      {promotions.length === 0 && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>Акции не синхронизированы</AlertTitle>
+          <AlertDescription>
+            Нажмите «Синхронизировать акции», чтобы загрузить текущие и будущие
+            акции WB на 60 дней вперёд.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <PriceCalculatorTableWrapper groups={groups} />
     </div>
