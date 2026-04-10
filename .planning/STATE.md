@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: "Phase 7 задеплоен + UI fix (photo w-32 + sticky positions) в коммите 7fb170a. Ожидает user verification на https://zoiten.pro/prices/wb перед закрытием фазы. 10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md"
-last_updated: "2026-04-10T11:46:13.097Z"
+stopped_at: "UI/UX round 2: свёртываемый sidebar + название раздела в header (коммит 02c911d), PricesFilters бренд/категория/подкатегория + 2 toggle остатков + центр заголовков (139e4ab), глобальная «Брак» ставка в GlobalRatesBar (a0253b0), fix WB promotions API query params promotionIDs+inAction (8f5bc3d), nginx proxy_read_timeout 600s. 10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md"
+last_updated: "2026-04-10T20:10:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -171,6 +171,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T11:46:13.092Z
-Stopped at: Completed 07-11-PLAN.md + Phase 7 closeout (docs, deploy, миграция 20260409_prices_wb применена на VPS, https://zoiten.pro/prices/wb live)
+Last session: 2026-04-10T20:10:00.000Z
+Stopped at: UI/UX round 2 задеплоено — свёртываемый sidebar, название раздела в header, PricesFilters, глобальная Брак ставка, fix WB promotions API (promotionIDs repeated + inAction=true), nginx timeout 600s. 10 HUMAN-UAT по Phase 7 pending.
 Resume file: None

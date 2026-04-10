@@ -45,8 +45,13 @@
 - **Палитра**: оранжево-красный accent (oklch hue 28-30), вдохновлён Claude Code
 - **Favicon**: логотип Zoiten (SVG interlocking circles), ICO/PNG/SVG
 - **Dashboard**: Lucide иконки, карточки с hover-эффектами
-- **Sidebar**: иконки + текст, фиолетовый → оранжевый primary, CSS variables
+- **Sidebar**: свёртываемый (w-56 ↔ w-16), persist в `localStorage` (`zoiten.sidebar.collapsed`), в свёрнутом виде только иконки + tooltip через `title` attr. Кнопка toggle (`PanelLeftClose/Open`) в левой части header
+- **Header**: название текущего раздела по `pathname` (через `getSectionTitle` из `section-titles.ts`) — h1 убраны из отдельных страниц
 - **Auth-aware header**: залогинен → имя + ссылка в dashboard; нет → кнопка «Войти»
+
+### Architecture-важное про layout
+
+`app/(dashboard)/layout.tsx` — RSC, передаёт `<LogoutForm />` (server component с inline server action) в `<DashboardShell>` (client) через ReactNode prop — это рабочий паттерн пропуска server actions через RSC → client boundary. `DashboardShell` содержит `SidebarContext` (collapsed/toggle), Sidebar (client) + Header (client) + main. NAV_ITEMS вынесены в `components/layout/nav-items.ts` (shared между RSC layout и client Sidebar, без циклов импортов).
 
 ## Модель данных — Товары
 
@@ -234,7 +239,7 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 
 ### Модель данных (новые таблицы в Phase 7)
 
-- **AppSetting** (KeyValue) — 6 глобальных ставок: wbWalletPct (2.0), wbAcquiringPct (2.7), wbJemPct (1.0), wbCreditPct (7.0), wbOverheadPct (6.0), wbTaxPct (8.0)
+- **AppSetting** (KeyValue) — 7 глобальных ставок: wbWalletPct (2.0), wbAcquiringPct (2.7), wbJemPct (1.0), wbCreditPct (7.0), wbOverheadPct (6.0), wbDefectRatePct (2.0), wbTaxPct (8.0)
 - **CalculatedPrice** — расчётные цены пользователя, uniqueness per (wbCardId, slot 1/2/3)
 - **WbPromotion** — акции WB с id = promotionID из WB API
 - **WbPromotionNomenclature** — связи nmId с акциями (regular через API, auto через Excel)
@@ -248,9 +253,11 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 
 ### Fallback chain для per-product параметров
 
-`Product.override → Subcategory/Category.default → hardcoded`
+- **ДРР:** `Product.drrOverridePct → Subcategory.defaultDrrPct → 10% hardcoded`
+- **Брак:** `Product.defectRateOverridePct → Category.defaultDefectRatePct → AppSetting.wbDefectRatePct → 2% hardcoded`
+- **Доставка:** `Product.deliveryCostRub → 30₽ hardcoded`
 
-Реализовано в `lib/pricing-math.ts`: функции `resolveDrrPct`, `resolveDefectRatePct`, `resolveDeliveryCostRub`.
+Реализовано в `lib/pricing-math.ts`: функции `resolveDrrPct`, `resolveDefectRatePct` (принимает `globalDefault` из `rates.wbDefectRatePct`), `resolveDeliveryCostRub`.
 
 ### WB Promotions Calendar API
 
@@ -258,6 +265,10 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 - Rate limit: 10 req / 6 sec → 600ms паузы между запросами, sleep(6000) + retry на 429
 - Endpoints: `/api/v1/calendar/promotions`, `/api/v1/calendar/promotions/details`, `/api/v1/calendar/promotions/nomenclatures`
 - **Auto-акции:** API возвращает 422 на `/nomenclatures` — данные загружаются через Excel из кабинета WB (D-06)
+- **КРИТИЧЕСКИ ВАЖНО — формат query params** (обнаружено при первом запуске на проде):
+  - `/details` требует repeated `promotionIDs=1&promotionIDs=2&...` (comma-separated `promotionIDs=1,2` → 400 Invalid query params)
+  - `/nomenclatures` требует `inAction=true` (значение `false` → 400 Invalid query params)
+- **nginx proxy timeout:** увеличен до `proxy_read_timeout 600s` в `/etc/nginx/sites-enabled/zoiten-pro` — синхронизация акций может занимать 1-3 минуты из-за rate limit WB
 
 ### Pure function calculatePricing
 
@@ -281,10 +292,11 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 
 ### Компоненты
 
-- `GlobalRatesBar` — редактор 6 ставок с debounced save (500ms)
-- `PriceCalculatorTable` — главная таблица с rowSpan + sticky колонки + indicator strips
+- `GlobalRatesBar` — редактор 7 ставок (включая «Брак») с debounced save (500ms) + `router.refresh()` для мгновенного пересчёта таблицы
+- `PricesFilters` — MultiSelect бренд/категория/подкатегория + 2 toggle (Товар с остатком/Весь + Карточки с остатком/без)
+- `PriceCalculatorTable` — главная таблица с rowSpan + sticky колонки + indicator strips; заголовки выровнены `text-center` + `align-middle`
 - `PricingCalculatorDialog` — модалка юнит-экономики с realtime пересчётом
-- `WbPromotionsSyncButton`, `WbAutoPromoUploadButton` — кнопки шапки
+- `WbPromotionsSyncButton`, `WbAutoPromoUploadButton` — кнопки шапки (сдвинуты `ml-auto` вправо)
 - `PromoTooltip` — wrapper shadcn Tooltip с description + advantages
 
 ### Testing

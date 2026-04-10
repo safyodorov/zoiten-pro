@@ -10,7 +10,8 @@
 - **Тема**: светлая по умолчанию + переключатель dark/light (next-themes)
 - **Палитра**: тёплый оранжево-красный accent
 - **Dashboard**: Lucide иконки, карточки с hover-эффектами
-- **Sidebar**: иконки навигации, RBAC-фильтрация
+- **Sidebar**: свёртываемый (полный/только иконки), persist в localStorage, tooltip по hover, RBAC-фильтрация
+- **Header**: название раздела по pathname (динамический заголовок вместо h1 на страницах)
 
 ## Возможности
 
@@ -32,12 +33,14 @@
 
 ### Управление ценами — WB
 - Калькулятор юнит-экономики WB карточек — таблица 30 колонок расчёта с rowSpan + sticky колонками
-- 6 глобальных ставок (Кошелёк WB, Эквайринг, ВБ Джем, Кредит, Накладные, Налог) с debounced save
+- 7 глобальных ставок (Кошелёк WB, Эквайринг, ВБ Джем, Кредит, Накладные, **Брак**, Налог) с debounced save + мгновенный `router.refresh()` после сохранения
 - Синхронизация regular-акций через WB Promotions Calendar API (rate limit 10 req/6 sec)
 - Загрузка Excel отчётов auto-акций из кабинета WB
 - Realtime модалка пересчёта юнит-экономики — изменение ДРР/брака/скидок мгновенно пересчитывает прибыль, ROI, re-продажи
 - Расчётные цены: 1-3 слота на карточку, сохранение snapshot входных параметров
-- Fallback chain для per-product параметров: Product.override → Subcategory/Category.default → hardcoded
+- Fallback chain: **Брак** Product.override → Category.default → AppSetting.wbDefectRatePct → 2% hardcoded; **ДРР** Product.override → Subcategory.default → 10% hardcoded
+- Фильтры: MultiSelect (бренд/категория/подкатегория) + toggle «Товар с остатком/Весь товар» + toggle «Карточки с остатком/без»; состояние в URL
+- Заголовки столбцов таблицы выравнены `text-center` + `align-middle` (по горизонтали и вертикали)
 - RBAC: read через `requireSection("PRICES")`, write через `requireSection("PRICES", "MANAGE")`
 - Покрытие vitest: pricing-math (golden test), pricing-fallback, pricing-settings, wb-promotions-api, excel-auto-promo
 - **UX таблицы:** регулируемые ширины столбцов (drag handle на правой границе, double-click → reset), перенос заголовков по словам, персистентное сохранение ширин per-user в таблицу `UserPreference` (debounced save, кросс-девайс), денежные значения отображаются без копеек (в БД хранятся полные)
