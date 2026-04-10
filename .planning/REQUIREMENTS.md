@@ -96,13 +96,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **PRICES-02**: Таблица группирует ценовые строки по Product через rowSpan — колонки Фото + Сводка объединены на все строки всех карточек товара, колонки Ярлык + Артикул объединены на все ценовые строки одной WbCard. Жирный разделитель между Product, тонкий между WbCard внутри Product.
 - [ ] **PRICES-03**: 4 sticky колонки слева при горизонтальном скролле (Фото 80px + Сводка 240px + Ярлык 80px + Артикул 120px) остаются видимыми, используя `position: sticky; left: {accumulated}` с z-index слоями.
 - [ ] **PRICES-04**: Ценовые строки внутри каждой WbCard отображаются в строгом порядке: «Текущая цена» (первая, с Badge «Текущая») → Regular акции DESC by planPrice → Auto акции DESC by planPrice (только с данными из Excel) → Расчётные цены 1/2/3 по слотам. Индикаторные полосы: regular=blue, auto=purple, calculated=amber.
-- [ ] **PRICES-05**: 30 колонок расчёта юнит-экономики считаются серверно через pure function `calculatePricing(inputs): outputs` в `lib/pricing-math.ts`. Golden test case: nmId 800750522 → profit ≈ 567.68 ₽, returnOnSales ≈ 7%, roi ≈ 26%.
+- [x] **PRICES-05**: 30 колонок расчёта юнит-экономики считаются серверно через pure function `calculatePricing(inputs): outputs` в `lib/pricing-math.ts`. Golden test case: nmId 800750522 → profit ≈ 567.68 ₽, returnOnSales ≈ 7%, roi ≈ 26%.
 - [x] **PRICES-06**: 6 глобальных ставок (wbWalletPct, wbAcquiringPct, wbJemPct, wbCreditPct, wbOverheadPct, wbTaxPct) редактируются inline в `GlobalRatesBar` в шапке раздела. Сохраняются в таблицу `AppSetting` через debounced (500ms) server action с Zod валидацией (0-100, десятые). Seed дефолтов: 2.0/2.7/1.0/7.0/6.0/8.0.
 - [ ] **PRICES-07**: Клик по любой ценовой строке открывает `PricingCalculatorDialog` с 2-колоночным layout (inputs слева, realtime outputs справа). Realtime пересчёт через `useWatch` + `useMemo`, latency < 100ms.
 - [x] **PRICES-08**: Сохранение расчёта в таблицу `CalculatedPrice` через upsert по `@@unique([wbCardId, slot])`. Пользователь выбирает слот 1/2/3 и опциональное имя. `snapshot: Json` фиксирует полный набор параметров на момент сохранения.
 - [x] **PRICES-09**: Чекбокс «только этот товар» в модалке у полей ДРР/Брак управляет scope сохранения: true → Product override, false → Subcategory/Category default (с предупреждающим toast). Fallback chain: `Product.override → Subcategory/Category.default → hardcoded (10%/2%/30₽)`.
-- [ ] **PRICES-10**: Синхронизация акций через кнопку «Синхронизировать акции» → `POST /api/wb-promotions-sync` → WB Promotions Calendar API с окном [today, today+60 days]. Rate limit compliant: 600ms между запросами, 429 retry через sleep(6000). Cleanup акций с `endDateTime < today - 7 days`.
-- [ ] **PRICES-11**: Загрузка Excel отчёта из кабинета WB для auto-акций через `POST /api/wb-promotions-upload-excel` (multipart file + promotionId). Парсинг 6 колонок по индексам A=0/F=5/L=11/M=12/T=19/U=20, upsert в `WbPromotionNomenclature` по `@@unique([promotionId, nmId])`.
+- [x] **PRICES-10**: Синхронизация акций через кнопку «Синхронизировать акции» → `POST /api/wb-promotions-sync` → WB Promotions Calendar API с окном [today, today+60 days]. Rate limit compliant: 600ms между запросами, 429 retry через sleep(6000). Cleanup акций с `endDateTime < today - 7 days`.
+- [x] **PRICES-11**: Загрузка Excel отчёта из кабинета WB для auto-акций через `POST /api/wb-promotions-upload-excel` (multipart file + promotionId). Парсинг 6 колонок по индексам A=0/F=5/L=11/M=12/T=19/U=20, upsert в `WbPromotionNomenclature` по `@@unique([promotionId, nmId])`.
 - [x] **PRICES-12**: Новое поле `WbCard.avgSalesSpeed7d: Float?` заполняется при `/api/wb-sync` из WB Statistics Sales API (sales за 7 дней / 7). Отображается в колонке Сводка как «Скорость 7д: {N} шт/день», суммируется по всем WbCard одного Product.
 - [ ] **PRICES-13**: Подраздел `/prices/ozon` — заглушка `<ComingSoon sectionName="Управление ценами Ozon" />` по аналогии с `/cards/ozon`.
 - [ ] **PRICES-14**: RBAC: все страницы раздела требуют `requireSection("PRICES")`, все write actions (updateAppSetting, saveCalculatedPrice, updateProductOverride, синхронизация акций, загрузка Excel) требуют `requireSection("PRICES", "MANAGE")`.
@@ -213,13 +213,13 @@ Explicitly excluded. Documented to prevent scope creep.
 | PRICES-02 | Phase 7 | Pending |
 | PRICES-03 | Phase 7 | Pending |
 | PRICES-04 | Phase 7 | Pending |
-| PRICES-05 | Phase 7 | Pending |
+| PRICES-05 | Phase 7 | Complete |
 | PRICES-06 | Phase 7 | Complete |
 | PRICES-07 | Phase 7 | Pending |
 | PRICES-08 | Phase 7 | Complete |
 | PRICES-09 | Phase 7 | Complete |
-| PRICES-10 | Phase 7 | Pending |
-| PRICES-11 | Phase 7 | Pending |
+| PRICES-10 | Phase 7 | Complete |
+| PRICES-11 | Phase 7 | Complete |
 | PRICES-12 | Phase 7 | Complete |
 | PRICES-13 | Phase 7 | Pending |
 | PRICES-14 | Phase 7 | Pending |

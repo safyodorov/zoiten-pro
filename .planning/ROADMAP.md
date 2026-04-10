@@ -134,7 +134,7 @@ Plans:
   6. Golden test nmId 800750522 → profit ≈ 567.68 ₽, ROI ≈ 26%, Re продаж ≈ 7% (tests/pricing-math.test.ts GREEN)
 **Plans**: 12 plans
 Plans:
-- [ ] 07-00-PLAN.md — Wave 0 Infrastructure: vitest install, Excel canonical read, WB API smoke test, 5 RED test stubs, fixture copy
+- [x] 07-00-PLAN.md — Wave 0 Infrastructure: vitest install, Excel canonical read, WB API smoke test, 5 RED test stubs, fixture copy
 - [x] 07-01-PLAN.md — Wave 1 Prisma migration + schema changes (4 новые модели + 6 новых полей) + seed AppSetting
 - [ ] 07-02-PLAN.md — Wave 1 lib/pricing-math.ts pure function + fallback resolvers + golden test GREEN (TDD)
 - [ ] 07-03-PLAN.md — Wave 2 lib/wb-api.ts расширения (4 новые функции: promotions + avgSalesSpeed7d) + integration в /api/wb-sync

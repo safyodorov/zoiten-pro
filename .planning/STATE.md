@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Executing Phase 07
-stopped_at: Completed 07-01-PLAN.md (DB migration)
-last_updated: "2026-04-10T07:10:09.171Z"
+status: Ready to execute
+stopped_at: Completed 07-prices-wb-00-PLAN.md (Wave 0 infra)
+last_updated: "2026-04-10T07:49:05.509Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 1 of 12
+Plan: 2 of 12
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Plan: 1 of 12
 | Phase 06 P01 | 87s | 2 tasks | 6 files |
 | Phase 06-deployment P02 | 139s | 1 tasks | 1 files |
 | Phase 07-prices-wb P01 | 3min | 2 tasks | 2 files |
+| Phase 07-prices-wb P00 | 21min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,10 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Phase 7 DB: pricing overrides как поля в Category/Subcategory/Product (не отдельная таблица) — COALESCE быстрее JOIN'а на 1000-10k товарах
 - [Phase 07-prices-wb]: Phase 7 DB: AppSetting KeyValue (key PK TEXT, value TEXT) — генерическое хранилище глобальных ставок, seed 6 ключей через INSERT ON CONFLICT DO NOTHING
 - [Phase 07-prices-wb]: Phase 7 DB: WbPromotion.id = Int (= promotionID из WB API), не cuid — прямое сопоставление без lookup
+- [Phase 07-prices-wb]: [Phase 07-prices-wb]: vitest@4.1.4 с alias @ → корень проекта (flat root layout, нет src/)
+- [Phase 07-prices-wb]: [Phase 07-prices-wb]: WB Promotions Calendar base URL = https://dp-calendar-api.wildberries.ru (origin s2sauth-calendar), НЕ discounts-prices-api
+- [Phase 07-prices-wb]: [Phase 07-prices-wb]: Excel auto-акции парсится по индексам колонок (A=0, F=5, L=11, M=12, T=19, U=20), не по названиям — устойчиво к изменениям заголовков в кабинете WB
+- [Phase 07-prices-wb]: [Phase 07-prices-wb]: Golden test nmId 800750522 → profit 567.68, ROI ~26%, Re продаж ~7% (из canonical Excel, зафиксированы в 07-WAVE0-NOTES.md §2)
 
 ### Roadmap Evolution
 
@@ -131,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T07:09:38.474Z
-Stopped at: Completed 07-01-PLAN.md (DB migration)
+Last session: 2026-04-10T07:49:05.506Z
+Stopped at: Completed 07-prices-wb-00-PLAN.md (Wave 0 infra)
 Resume file: None
