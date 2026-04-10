@@ -51,15 +51,15 @@ enum Availability {
 model User {
   id              String            @id @default(cuid())
   email           String            @unique
-  name            String            // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
+  name            String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
   firstName       String?
   lastName        String?
   employeeId      String?           @unique
   employee        Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  password        String            // bcrypt hash — never return to client
-  plainPassword   String?           // plain text для просмотра суперадмином (только внутренняя ERP)
+  password        String // bcrypt hash — never return to client
+  plainPassword   String? // plain text для просмотра суперадмином (только внутренняя ERP)
   role            UserRole          @default(VIEWER)
-  allowedSections ERP_SECTION[]     // DEPRECATED — оставлено для отката миграции, см. sectionRoles
+  allowedSections ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
   sectionRoles    UserSectionRole[] // актуальный источник прав per раздел
   isActive        Boolean           @default(true)
   createdAt       DateTime          @default(now())
@@ -67,7 +67,7 @@ model User {
 }
 
 enum SectionRole {
-  VIEW   // только просмотр
+  VIEW // только просмотр
   MANAGE // полный доступ
 }
 
@@ -110,6 +110,9 @@ model Category {
   subcategories Subcategory[]
   products      Product[]
 
+  // Phase 7: default процент брака (D-01)
+  defaultDefectRatePct Float?
+
   @@unique([name, brandId])
 }
 
@@ -121,6 +124,9 @@ model Subcategory {
   sortOrder  Int       @default(0)
   products   Product[]
 
+  // Phase 7: default ДРР (D-01)
+  defaultDrrPct Float?
+
   @@unique([name, categoryId])
 }
 
@@ -129,44 +135,48 @@ model Subcategory {
 // ──────────────────────────────────────────────────────────────────
 
 model WbCard {
-  id            String   @id @default(cuid())
-  nmId          Int      @unique              // WB nm_id
-  article       String                        // артикул WB
-  barcode       String?                       // основной штрихкод
-  barcodes      String[]                      // все штрихкоды
-  name          String
-  brand         String?
-  category      String?                       // категория WB (не наша)
-  photoUrl      String?                       // главное фото
-  photos        String[]                      // все фото из карточки
-  hasVideo      Boolean  @default(false)       // есть ли видео
-  weightKg      Float?                        // вес брутто, кг
-  heightCm      Float?                        // высота, см
-  widthCm       Float?                        // ширина, см
-  depthCm       Float?                        // глубина (длина), см
-  rating        Float?                        // средний рейтинг
-  reviewsTotal  Int?                          // общее кол-во оценок
-  reviews1      Int?                          // оценок 1
-  reviews2      Int?                          // оценок 2
-  reviews3      Int?                          // оценок 3
-  reviews4      Int?                          // оценок 4
-  reviews5      Int?                          // оценок 5
-  priceBeforeDiscount Float?                   // цена продавца до скидки, руб
-  sellerDiscount Int?                         // скидка продавца, %
-  price         Float?                        // цена продавца со скидкой, руб
-  discountWb    Int?                          // скидка WB (СПП), %
-  clubDiscount  Int?                          // скидка WB клуба, %
-  stockQty      Int?                          // остаток товара, шт
-  buyoutPercent Float?                        // процент выкупа за месяц, %
-  commFbwStd    Float?                        // комиссия стандартная FBW, %
-  commFbsStd    Float?                        // комиссия стандартная FBS, %
-  commFbwIu     Float?                        // комиссия ИУ FBW, %
-  commFbsIu     Float?                        // комиссия ИУ FBS, %
-  label         String?  @db.VarChar(100)      // ярлык (ручной)
-  availability  String   @default("IN_STOCK")
-  rawJson       Json?                         // полный ответ API
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                  String            @id @default(cuid())
+  nmId                Int               @unique // WB nm_id
+  article             String // артикул WB
+  barcode             String? // основной штрихкод
+  barcodes            String[] // все штрихкоды
+  name                String
+  brand               String?
+  category            String? // категория WB (не наша)
+  photoUrl            String? // главное фото
+  photos              String[] // все фото из карточки
+  hasVideo            Boolean           @default(false) // есть ли видео
+  weightKg            Float? // вес брутто, кг
+  heightCm            Float? // высота, см
+  widthCm             Float? // ширина, см
+  depthCm             Float? // глубина (длина), см
+  rating              Float? // средний рейтинг
+  reviewsTotal        Int? // общее кол-во оценок
+  reviews1            Int? // оценок 1
+  reviews2            Int? // оценок 2
+  reviews3            Int? // оценок 3
+  reviews4            Int? // оценок 4
+  reviews5            Int? // оценок 5
+  priceBeforeDiscount Float? // цена продавца до скидки, руб
+  sellerDiscount      Int? // скидка продавца, %
+  price               Float? // цена продавца со скидкой, руб
+  discountWb          Int? // скидка WB (СПП), %
+  clubDiscount        Int? // скидка WB клуба, %
+  stockQty            Int? // остаток товара, шт
+  buyoutPercent       Float? // процент выкупа за месяц, %
+  commFbwStd          Float? // комиссия стандартная FBW, %
+  commFbsStd          Float? // комиссия стандартная FBS, %
+  commFbwIu           Float? // комиссия ИУ FBW, %
+  commFbsIu           Float? // комиссия ИУ FBS, %
+  label               String?           @db.VarChar(100) // ярлык (ручной)
+  availability        String            @default("IN_STOCK")
+  rawJson             Json? // полный ответ API
+  // Phase 7: Средняя скорость продаж за 7 дней (D-09)
+  avgSalesSpeed7d     Float?
+  // Phase 7: Relation to calculated prices (D-03)
+  calculatedPrices    CalculatedPrice[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -174,15 +184,15 @@ model WbCard {
 // ──────────────────────────────────────────────────────────────────
 
 model WbCommissionIu {
-  id            String  @id @default(cuid())
-  parentName    String                        // родительская категория WB
-  subjectName   String  @unique               // предмет (ключ связки с WbCard.category)
-  fbw           Float                         // Склад WB, %
-  fbs           Float                         // Склад продавца → WB, %
-  dbs           Float                         // Доставка продавцом, %
-  express       Float                         // Экспресс, %
-  pickup        Float                         // Самовывоз, %
-  booking       Float                         // Бронирование, %
+  id          String @id @default(cuid())
+  parentName  String // родительская категория WB
+  subjectName String @unique // предмет (ключ связки с WbCard.category)
+  fbw         Float // Склад WB, %
+  fbs         Float // Склад продавца → WB, %
+  dbs         Float // Доставка продавцом, %
+  express     Float // Экспресс, %
+  pickup      Float // Самовывоз, %
+  booking     Float // Бронирование, %
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -190,30 +200,34 @@ model WbCommissionIu {
 // ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id            String               @id @default(cuid())
-  sku           String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
-  name          String               @db.VarChar(100)
-  photoUrl      String?
-  brandId       String
-  brand         Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  categoryId    String?
-  category      Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  subcategoryId String?
-  subcategory   Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
-  label         String?              @db.VarChar(100)
-  abcStatus     AbcStatus?
-  availability  Availability         @default(IN_STOCK)
-  weightKg      Float?
-  heightCm      Float?
-  widthCm       Float?
-  depthCm       Float?
+  id                    String               @id @default(cuid())
+  sku                   String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
+  name                  String               @db.VarChar(100)
+  photoUrl              String?
+  brandId               String
+  brand                 Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  categoryId            String?
+  category              Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId         String?
+  subcategory           Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  label                 String?              @db.VarChar(100)
+  abcStatus             AbcStatus?
+  availability          Availability         @default(IN_STOCK)
+  weightKg              Float?
+  heightCm              Float?
+  widthCm               Float?
+  depthCm               Float?
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
-  articles      MarketplaceArticle[]
-  barcodes      Barcode[]
-  cost          ProductCost?         // One-to-one: product → cost record
-  deletedAt     DateTime?            // Soft delete: null = active
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
+  articles              MarketplaceArticle[]
+  barcodes              Barcode[]
+  cost                  ProductCost? // One-to-one: product → cost record
+  // Phase 7: Pricing overrides (D-01)
+  drrOverridePct        Float?
+  defectRateOverridePct Float?
+  deliveryCostRub       Float?
+  deletedAt             DateTime? // Soft delete: null = active
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -224,7 +238,7 @@ model ProductCost {
   id        String   @id @default(cuid())
   productId String   @unique
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  costPrice Float    // Себестоимость в рублях (с точностью до копеек)
+  costPrice Float // Себестоимость в рублях (с точностью до копеек)
   updatedAt DateTime @updatedAt
 }
 
@@ -234,7 +248,7 @@ model MarketplaceArticle {
   product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   marketplaceId String
   marketplace   Marketplace @relation(fields: [marketplaceId], references: [id])
-  article       String      // Marketplace article number
+  article       String // Marketplace article number
   createdAt     DateTime    @default(now())
 
   // Uniqueness enforced by partial index migration — see migrations/20260405_partial_indexes
@@ -282,43 +296,43 @@ model Company {
 }
 
 model Employee {
-  id         String            @id @default(cuid())
-  lastName   String
-  firstName  String
-  middleName String?
+  id          String            @id @default(cuid())
+  lastName    String
+  firstName   String
+  middleName  String?
   department  Department?
   gender      Gender?
   passNumbers Int[]
   birthDate   DateTime?
-  hireDate   DateTime?
-  fireDate   DateTime?
-  companies  EmployeeCompany[]
-  phones     EmployeePhone[]
-  emails     EmployeeEmail[]
-  passes     EmployeePass[]
-  user       User?
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  hireDate    DateTime?
+  fireDate    DateTime?
+  companies   EmployeeCompany[]
+  phones      EmployeePhone[]
+  emails      EmployeeEmail[]
+  passes      EmployeePass[]
+  user        User?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }
 
 model EmployeeCompany {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   employeeId           String
-  employee             Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee             Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   companyId            String
-  company              Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  company              Company   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   position             String?
   hireDate             DateTime?
   fireDate             DateTime?
-  rate                 Decimal  @default(1) @db.Decimal(3, 2)
+  rate                 Decimal   @default(1) @db.Decimal(3, 2)
   salary               Int?
-  trudovoyDogovor      Boolean  @default(false)
-  prikazPriema         Boolean  @default(false)
-  soglasiePersDannyh   Boolean  @default(false)
-  nda                  Boolean  @default(false)
-  lichnayaKartochka    Boolean  @default(false)
-  zayavlenieUvolneniya Boolean  @default(false)
-  prikazUvolneniya     Boolean  @default(false)
+  trudovoyDogovor      Boolean   @default(false)
+  prikazPriema         Boolean   @default(false)
+  soglasiePersDannyh   Boolean   @default(false)
+  nda                  Boolean   @default(false)
+  lichnayaKartochka    Boolean   @default(false)
+  zayavlenieUvolneniya Boolean   @default(false)
+  prikazUvolneniya     Boolean   @default(false)
 
   @@unique([employeeId, companyId])
 }
@@ -344,4 +358,68 @@ model EmployeePass {
   employeeId String
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   number     String
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 7: Управление ценами WB
+// ──────────────────────────────────────────────────────────────────
+
+// Глобальные настройки KeyValue (D-02)
+// Ключи Phase 7: wbWalletPct, wbAcquiringPct, wbJemPct, wbCreditPct, wbOverheadPct, wbTaxPct
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+// Расчётные цены пользователя — до 3 слотов на WbCard (D-03)
+model CalculatedPrice {
+  id              String   @id @default(cuid())
+  wbCardId        String
+  wbCard          WbCard   @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
+  slot            Int // 1 | 2 | 3
+  name            String
+  sellerPrice     Float
+  drrPct          Float?
+  defectRatePct   Float?
+  deliveryCostRub Float?
+  snapshot        Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([wbCardId, slot])
+}
+
+// Акции WB — sync через /api/v1/calendar/promotions (D-04)
+// id = promotionID из WB API (не cuid — сопоставление прямое)
+model WbPromotion {
+  id            Int                       @id
+  name          String
+  description   String?
+  advantages    String[]                  @default([])
+  startDateTime DateTime
+  endDateTime   DateTime
+  type          String // "auto" | "regular"
+  rangingJson   Json?
+  source        String                    @default("API") // "API" | "EXCEL"
+  lastSyncedAt  DateTime                  @default(now())
+  createdAt     DateTime                  @default(now())
+  nomenclatures WbPromotionNomenclature[]
+}
+
+// Номенклатуры акций — связь nmId с WbPromotion (D-04)
+// Для regular — заполняется через API, для auto — через Excel upload
+model WbPromotionNomenclature {
+  id           String      @id @default(cuid())
+  promotionId  Int
+  promotion    WbPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  nmId         Int
+  inAction     Boolean     @default(false)
+  planPrice    Float?
+  planDiscount Float?
+  currentPrice Float?
+  status       String?
+
+  @@unique([promotionId, nmId])
 }
