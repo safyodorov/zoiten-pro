@@ -135,7 +135,7 @@ Plans:
 **Plans**: 12 plans
 Plans:
 - [ ] 07-00-PLAN.md — Wave 0 Infrastructure: vitest install, Excel canonical read, WB API smoke test, 5 RED test stubs, fixture copy
-- [ ] 07-01-PLAN.md — Wave 1 Prisma migration + schema changes (4 новые модели + 6 новых полей) + seed AppSetting
+- [x] 07-01-PLAN.md — Wave 1 Prisma migration + schema changes (4 новые модели + 6 новых полей) + seed AppSetting
 - [ ] 07-02-PLAN.md — Wave 1 lib/pricing-math.ts pure function + fallback resolvers + golden test GREEN (TDD)
 - [ ] 07-03-PLAN.md — Wave 2 lib/wb-api.ts расширения (4 новые функции: promotions + avgSalesSpeed7d) + integration в /api/wb-sync
 - [ ] 07-04-PLAN.md — Wave 3 API routes: /api/wb-promotions-sync + /api/wb-promotions-upload-excel (с parseAutoPromoExcel)

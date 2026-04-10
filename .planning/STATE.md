@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Phase 7 plans approved (12 plans, 9 waves)
-last_updated: "2026-04-10T06:47:44.496Z"
-last_activity: "2026-04-08 - Completed quick task 260408-syb: Создать модуль Сотрудники"
+status: Executing Phase 07
+stopped_at: Completed 07-01-PLAN.md (DB migration)
+last_updated: "2026-04-10T07:10:09.171Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 17
-  percent: 0
+  completed_plans: 18
 ---
 
 # Project State
@@ -21,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-05)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 06 — deployment
+**Current focus:** Phase 07 — prices-wb
 
 ## Current Position
 
-Phase: 06
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-08 - Completed quick task 260408-syb: Создать модуль Сотрудники
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 07 (prices-wb) — EXECUTING
+Plan: 1 of 12
 
 ## Performance Metrics
 
@@ -69,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05-ui-module-stubs P01 | 2min | 2 tasks | 5 files |
 | Phase 06 P01 | 87s | 2 tasks | 6 files |
 | Phase 06-deployment P02 | 139s | 1 tasks | 1 files |
+| Phase 07-prices-wb P01 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -110,6 +105,9 @@ Recent decisions affecting current work:
 - [Phase 06]: standalone build requires manual cp of public/ and .next/static/ after build
 - [Phase 06-deployment]: DEPLOY.md is single source of truth for VPS deployment — no improvisation required
 - [Phase 06-deployment]: SSL section deferred in DEPLOY.md until zoiten.pro DNS A record points to 85.198.97.89
+- [Phase 07-prices-wb]: Phase 7 DB: pricing overrides как поля в Category/Subcategory/Product (не отдельная таблица) — COALESCE быстрее JOIN'а на 1000-10k товарах
+- [Phase 07-prices-wb]: Phase 7 DB: AppSetting KeyValue (key PK TEXT, value TEXT) — генерическое хранилище глобальных ставок, seed 6 ключей через INSERT ON CONFLICT DO NOTHING
+- [Phase 07-prices-wb]: Phase 7 DB: WbPromotion.id = Int (= promotionID из WB API), не cuid — прямое сопоставление без lookup
 
 ### Roadmap Evolution
 
@@ -133,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T06:47:44.480Z
-Stopped at: Phase 7 plans approved (12 plans, 9 waves)
-Resume file: .planning/phases/07-prices-wb/07-00-PLAN.md
+Last session: 2026-04-10T07:09:38.474Z
+Stopped at: Completed 07-01-PLAN.md (DB migration)
+Resume file: None
