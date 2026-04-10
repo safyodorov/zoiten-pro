@@ -29,6 +29,7 @@ import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
 import { WbAutoPromoUploadButton } from "@/components/prices/WbAutoPromoUploadButton"
+import { PricesFilters } from "@/components/prices/PricesFilters"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Info } from "lucide-react"
 
@@ -62,9 +63,38 @@ const DEFAULT_RATES: Record<RateKey, number> = {
 // Page
 // ──────────────────────────────────────────────────────────────────
 
-export default async function PricesWbPage() {
+interface PricesWbPageProps {
+  searchParams: Promise<{
+    brands?: string
+    categories?: string
+    subcategories?: string
+    stock?: string
+    cardStock?: string
+  }>
+}
+
+export default async function PricesWbPage({ searchParams }: PricesWbPageProps) {
   // RBAC: VIEW достаточно для чтения таблицы (запись — через server actions с MANAGE)
   await requireSection("PRICES")
+
+  // ── 0. Разобрать searchParams (фильтры) ─────────────────────────
+  const {
+    brands: brandsParam,
+    categories: categoriesParam,
+    subcategories: subcategoriesParam,
+    stock: stockParam,
+    cardStock: cardStockParam,
+  } = await searchParams
+
+  const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
+  const selectedCategoryIds = categoriesParam
+    ? categoriesParam.split(",").filter(Boolean)
+    : []
+  const selectedSubcategoryIds = subcategoriesParam
+    ? subcategoriesParam.split(",").filter(Boolean)
+    : []
+  const productsInStockOnly = stockParam === "1"
+  const cardsInStockOnly = cardStockParam === "1"
 
   // ── 1. Найти WB marketplace ─────────────────────────────────────
   const wbMarketplace = await prisma.marketplace.findFirst({
@@ -81,37 +111,61 @@ export default async function PricesWbPage() {
     )
   }
 
+  // Составляем product-level фильтры для Prisma
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const productWhere: any = { deletedAt: null }
+  if (selectedBrandIds.length > 0) {
+    productWhere.brandId = { in: selectedBrandIds }
+  }
+  if (selectedCategoryIds.length > 0) {
+    productWhere.categoryId = { in: selectedCategoryIds }
+  }
+  if (selectedSubcategoryIds.length > 0) {
+    productWhere.subcategoryId = { in: selectedSubcategoryIds }
+  }
+
   // ── 2. Параллельная загрузка данных ─────────────────────────────
-  const [appSettings, promotions, linkedArticles, columnWidthsPref] =
-    await Promise.all([
-      // 6 глобальных ставок
-      prisma.appSetting.findMany({
-        where: { key: { in: [...RATE_KEYS] } },
-      }),
-      // Активные акции (endDateTime >= now) + номенклатуры
-      prisma.wbPromotion.findMany({
-        where: { endDateTime: { gte: new Date() } },
-        include: { nomenclatures: true },
-      }),
-      // Привязанные статьи WB для активных (не soft-deleted) товаров
-      prisma.marketplaceArticle.findMany({
-        where: {
-          marketplaceId: wbMarketplace.id,
-          product: { deletedAt: null },
-        },
-        include: {
-          product: {
-            include: {
-              cost: true,
-              subcategory: true,
-              category: true,
-            },
+  const [
+    appSettings,
+    promotions,
+    linkedArticles,
+    columnWidthsPref,
+    allBrands,
+    allCategories,
+    allSubcategories,
+  ] = await Promise.all([
+    // 6 глобальных ставок
+    prisma.appSetting.findMany({
+      where: { key: { in: [...RATE_KEYS] } },
+    }),
+    // Активные акции (endDateTime >= now) + номенклатуры
+    prisma.wbPromotion.findMany({
+      where: { endDateTime: { gte: new Date() } },
+      include: { nomenclatures: true },
+    }),
+    // Привязанные статьи WB с учётом фильтров бренд/категория/подкатегория
+    prisma.marketplaceArticle.findMany({
+      where: {
+        marketplaceId: wbMarketplace.id,
+        product: productWhere,
+      },
+      include: {
+        product: {
+          include: {
+            cost: true,
+            subcategory: true,
+            category: true,
           },
         },
-      }),
-      // Per-user сохранённые ширины столбцов таблицы (план 260410-mya)
-      getUserPreference<Record<string, number>>("prices.wb.columnWidths"),
-    ])
+      },
+    }),
+    // Per-user сохранённые ширины столбцов таблицы (план 260410-mya)
+    getUserPreference<Record<string, number>>("prices.wb.columnWidths"),
+    // Справочники для фильтров
+    prisma.brand.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.subcategory.findMany({ orderBy: { sortOrder: "asc" } }),
+  ])
 
   // ── 3. Построить ratesMap из AppSetting (fallback → DEFAULT_RATES) ──
   const rates: Record<RateKey, number> = { ...DEFAULT_RATES }
@@ -158,6 +212,8 @@ export default async function PricesWbPage() {
   for (const card of wbCards) {
     const product = articleToProduct.get(card.nmId)
     if (!product) continue
+    // Фильтр «Карточки с остатком» — отсеиваем карточки с нулевым остатком
+    if (cardsInStockOnly && (card.stockQty ?? 0) <= 0) continue
     if (!productToCards.has(product.id)) {
       productToCards.set(product.id, [])
     }
@@ -398,23 +454,42 @@ export default async function PricesWbPage() {
     })
   }
 
+  // Фильтр «Товар с остатком» — после агрегации totalStock
+  const filteredGroups = productsInStockOnly
+    ? groups.filter((g) => g.product.totalStock > 0)
+    : groups
+
   // Сортировка групп по названию Product (для детерминизма)
-  groups.sort((a, b) => a.product.name.localeCompare(b.product.name, "ru"))
+  filteredGroups.sort((a, b) =>
+    a.product.name.localeCompare(b.product.name, "ru"),
+  )
 
   return (
     <div className="space-y-4">
       <GlobalRatesBar initialRates={rates} />
 
-      {/* Кнопки шапки */}
-      <div className="flex flex-wrap gap-2">
-        <WbSyncButton />
-        <WbSyncSppButton />
-        <WbPromotionsSyncButton />
-        <WbAutoPromoUploadButton
-          autoPromotions={promotions
-            .filter((p) => p.type === "auto")
-            .map((p) => ({ id: p.id, name: p.name }))}
+      {/* Шапка: фильтры слева + кнопки синхронизации справа */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <PricesFilters
+          brands={allBrands.map((b) => ({ id: b.id, name: b.name }))}
+          categories={allCategories.map((c) => ({ id: c.id, name: c.name }))}
+          subcategories={allSubcategories.map((s) => ({ id: s.id, name: s.name }))}
+          selectedBrandIds={selectedBrandIds}
+          selectedCategoryIds={selectedCategoryIds}
+          selectedSubcategoryIds={selectedSubcategoryIds}
+          productsInStockOnly={productsInStockOnly}
+          cardsInStockOnly={cardsInStockOnly}
         />
+        <div className="ml-auto flex flex-wrap gap-2">
+          <WbSyncButton />
+          <WbSyncSppButton />
+          <WbPromotionsSyncButton />
+          <WbAutoPromoUploadButton
+            autoPromotions={promotions
+              .filter((p) => p.type === "auto")
+              .map((p) => ({ id: p.id, name: p.name }))}
+          />
+        </div>
       </div>
 
       {/* Empty state для promotions — призыв синхронизировать акции */}
@@ -430,7 +505,7 @@ export default async function PricesWbPage() {
       )}
 
       <PriceCalculatorTableWrapper
-        groups={groups}
+        groups={filteredGroups}
         initialColumnWidths={columnWidthsPref ?? {}}
       />
     </div>

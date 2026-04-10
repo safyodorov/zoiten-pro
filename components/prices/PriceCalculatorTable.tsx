@@ -485,7 +485,7 @@ export function PriceCalculatorTable({
                   minWidth: columnWidths.photo,
                   left: stickyLefts.photo,
                 }}
-                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative"
               >
                 Фото
                 <ColumnResizeHandle
@@ -500,7 +500,7 @@ export function PriceCalculatorTable({
                   minWidth: columnWidths.svodka,
                   left: stickyLefts.svodka,
                 }}
-                className="sticky z-40 bg-background border-r px-3 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+                className="sticky z-40 bg-background border-r px-3 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative"
               >
                 Сводка
                 <ColumnResizeHandle
@@ -515,7 +515,7 @@ export function PriceCalculatorTable({
                   minWidth: columnWidths.yarlyk,
                   left: stickyLefts.yarlyk,
                 }}
-                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative"
               >
                 Ярлык
                 <ColumnResizeHandle
@@ -530,7 +530,7 @@ export function PriceCalculatorTable({
                   minWidth: columnWidths.artikul,
                   left: stickyLefts.artikul,
                 }}
-                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
               >
                 Артикул
                 <ColumnResizeHandle
@@ -546,10 +546,7 @@ export function PriceCalculatorTable({
                     width: columnWidths[key],
                     minWidth: columnWidths[key],
                   }}
-                  className={cn(
-                    "px-2 py-2 text-[11px] font-medium text-muted-foreground align-bottom whitespace-normal break-words leading-tight relative",
-                    key === "status" ? "text-left" : "text-right",
-                  )}
+                  className="px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative"
                 >
                   {label}
                   <ColumnResizeHandle
