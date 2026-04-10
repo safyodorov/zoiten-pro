@@ -40,6 +40,7 @@
 - Fallback chain для per-product параметров: Product.override → Subcategory/Category.default → hardcoded
 - RBAC: read через `requireSection("PRICES")`, write через `requireSection("PRICES", "MANAGE")`
 - Покрытие vitest: pricing-math (golden test), pricing-fallback, pricing-settings, wb-promotions-api, excel-auto-promo
+- **UX таблицы:** регулируемые ширины столбцов (drag handle на правой границе, double-click → reset), перенос заголовков по словам, персистентное сохранение ширин per-user в таблицу `UserPreference` (debounced save, кросс-девайс), денежные значения отображаются без копеек (в БД хранятся полные)
 - Ozon — заглушка ComingSoon
 
 ### Себестоимость партий
