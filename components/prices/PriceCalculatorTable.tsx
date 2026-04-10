@@ -21,7 +21,6 @@
 "use client"
 
 import * as React from "react"
-import Image from "next/image"
 
 import { cn } from "@/lib/utils"
 import {
@@ -294,12 +293,11 @@ export function PriceCalculatorTable({
                         >
                           <div className="flex items-start justify-center">
                             {group.product.photoUrl ? (
-                              <Image
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
                                 src={group.product.photoUrl}
                                 alt={group.product.name}
-                                width={72}
-                                height={96}
-                                className="rounded border object-cover aspect-[3/4]"
+                                className="w-[72px] h-[96px] rounded border object-cover aspect-[3/4]"
                               />
                             ) : (
                               <div className="w-[72px] h-[96px] rounded border bg-muted" />
