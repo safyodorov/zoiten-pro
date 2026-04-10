@@ -19,11 +19,11 @@ import {
 } from "@/lib/pricing-math"
 import { GlobalRatesBar } from "@/components/prices/GlobalRatesBar"
 import {
-  PriceCalculatorTable,
   type ProductGroup,
   type PriceRow,
   type WbCardRowGroup,
 } from "@/components/prices/PriceCalculatorTable"
+import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculatorTableWrapper"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 
@@ -219,11 +219,24 @@ export default async function PricesWbPage() {
         deliveryCostRub: resolvedDelivery,
       }
 
+      // Контекст для модалки (план 07-09): productId + scope ids для
+      // server actions updateSubcategoryDefault / updateCategoryDefault.
+      const rowContext = {
+        productId: product.id,
+        subcategoryId: product.subcategoryId ?? null,
+        categoryId: product.categoryId ?? null,
+      }
+
       const priceRows: PriceRow[] = []
 
       // a) Текущая цена — берётся напрямую из WbCard
       const currentPriceBeforeDiscount = card.priceBeforeDiscount ?? 0
       const currentSellerDiscountPct = card.sellerDiscount ?? 0
+      const currentInputs: PricingInputs = {
+        ...baseInputs,
+        priceBeforeDiscount: currentPriceBeforeDiscount,
+        sellerDiscountPct: currentSellerDiscountPct,
+      }
       priceRows.push({
         id: `${card.id}-current`,
         type: "current",
@@ -231,11 +244,9 @@ export default async function PricesWbPage() {
         sellerPriceBeforeDiscount: currentPriceBeforeDiscount,
         sellerDiscountPct: currentSellerDiscountPct,
         ...baseRowFields,
-        computed: calculatePricing({
-          ...baseInputs,
-          priceBeforeDiscount: currentPriceBeforeDiscount,
-          sellerDiscountPct: currentSellerDiscountPct,
-        }),
+        computed: calculatePricing(currentInputs),
+        inputs: currentInputs,
+        context: rowContext,
       })
 
       // b) Regular акции для этой nmId (DESC по planPrice)
@@ -247,6 +258,11 @@ export default async function PricesWbPage() {
 
         const planPrice = nom.planPrice
         const planDiscount = nom.planDiscount ?? 0
+        const regularInputs: PricingInputs = {
+          ...baseInputs,
+          priceBeforeDiscount: planPrice,
+          sellerDiscountPct: planDiscount,
+        }
 
         regularRows.push({
           id: `${card.id}-regular-${promo.id}`,
@@ -257,11 +273,9 @@ export default async function PricesWbPage() {
           ...baseRowFields,
           promotionDescription: promo.description,
           promotionAdvantages: promo.advantages,
-          computed: calculatePricing({
-            ...baseInputs,
-            priceBeforeDiscount: planPrice,
-            sellerDiscountPct: planDiscount,
-          }),
+          computed: calculatePricing(regularInputs),
+          inputs: regularInputs,
+          context: rowContext,
         })
       }
       regularRows.sort(
@@ -278,6 +292,11 @@ export default async function PricesWbPage() {
 
         const planPrice = nom.planPrice
         const planDiscount = nom.planDiscount ?? 0
+        const autoInputs: PricingInputs = {
+          ...baseInputs,
+          priceBeforeDiscount: planPrice,
+          sellerDiscountPct: planDiscount,
+        }
 
         autoRows.push({
           id: `${card.id}-auto-${promo.id}`,
@@ -288,11 +307,9 @@ export default async function PricesWbPage() {
           ...baseRowFields,
           promotionDescription: promo.description,
           promotionAdvantages: promo.advantages,
-          computed: calculatePricing({
-            ...baseInputs,
-            priceBeforeDiscount: planPrice,
-            sellerDiscountPct: planDiscount,
-          }),
+          computed: calculatePricing(autoInputs),
+          inputs: autoInputs,
+          context: rowContext,
         })
       }
       autoRows.sort(
@@ -310,6 +327,14 @@ export default async function PricesWbPage() {
         const cpDrr = cp.drrPct ?? resolvedDrr
         const cpDefect = cp.defectRatePct ?? resolvedDefect
         const cpDelivery = cp.deliveryCostRub ?? resolvedDelivery
+        const calcInputs: PricingInputs = {
+          ...baseInputs,
+          drrPct: cpDrr,
+          defectRatePct: cpDefect,
+          deliveryCostRub: cpDelivery,
+          priceBeforeDiscount: cp.sellerPrice,
+          sellerDiscountPct: 0,
+        }
 
         priceRows.push({
           id: `${card.id}-calc-${cp.slot}`,
@@ -323,14 +348,9 @@ export default async function PricesWbPage() {
           defectRatePct: cpDefect,
           deliveryCostRub: cpDelivery,
           calculatedSlot: cp.slot as 1 | 2 | 3,
-          computed: calculatePricing({
-            ...baseInputs,
-            drrPct: cpDrr,
-            defectRatePct: cpDefect,
-            deliveryCostRub: cpDelivery,
-            priceBeforeDiscount: cp.sellerPrice,
-            sellerDiscountPct: 0,
-          }),
+          computed: calculatePricing(calcInputs),
+          inputs: calcInputs,
+          context: rowContext,
         })
       }
 
@@ -389,7 +409,7 @@ export default async function PricesWbPage() {
 
       {/* TODO (план 07-10): если promotions.length === 0 — показать Alert о синхронизации акций */}
 
-      <PriceCalculatorTable groups={groups} />
+      <PriceCalculatorTableWrapper groups={groups} />
     </div>
   )
 }

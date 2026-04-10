@@ -24,7 +24,11 @@ import * as React from "react"
 import Image from "next/image"
 
 import { cn } from "@/lib/utils"
-import { COLUMN_ORDER, type PricingOutputs } from "@/lib/pricing-math"
+import {
+  COLUMN_ORDER,
+  type PricingInputs,
+  type PricingOutputs,
+} from "@/lib/pricing-math"
 import { Badge } from "@/components/ui/badge"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
 
@@ -82,6 +86,20 @@ export interface PriceRow {
 
   /** Готовый расчёт юнит-экономики — 18 числовых полей. */
   computed: PricingOutputs
+
+  /** Полный набор inputs, использованных при серверном расчёте.
+   *  Позволяет модалке (план 07-09) начать с этих значений без повторного
+   *  запроса БД. */
+  inputs: PricingInputs
+
+  /** Дополнительный контекст для модалки (план 07-09) — нужен для server
+   *  actions updateProductOverride / updateSubcategoryDefault /
+   *  updateCategoryDefault / updateProductDelivery. */
+  context: {
+    productId: string
+    subcategoryId: string | null
+    categoryId: string | null
+  }
 }
 
 /** Группа ценовых строк, привязанных к одной WbCard. */
