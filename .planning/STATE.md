@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-prices-wb-05-PLAN.md (pricing server actions)
-last_updated: "2026-04-10T08:34:33.037Z"
+stopped_at: Completed 07-prices-wb-04-PLAN.md (WB promotions sync + Excel auto-promo upload routes)
+last_updated: "2026-04-10T08:34:49.548Z"
 progress:
   total_phases: 7
   completed_phases: 6
@@ -125,6 +125,8 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: fetchAvgSalesSpeed7d в /api/wb-sync обёрнут в try/catch (degraded mode) — sync не падает, если Sales API недоступен, поле в БД остаётся null
 - [Phase 07-prices-wb]: Zod схемы вынесены в lib/pricing-schemas.ts (не в app/actions/pricing.ts) — Next.js 15 'use server' файлы не экспортируют sync values, + vitest не может загружать auth chain
 - [Phase 07-prices-wb]: Prisma Json поле snapshot передаётся как 'as never' — устоявшийся паттерн проекта (wb-promotions-sync/route.ts:75)
+- [Phase 07-prices-wb]: parseAutoPromoExcel вынесен в lib/parse-auto-promo-excel.ts (pure TS) — route.ts тянет next/server, vitest падает на next-auth транзитивном импорте
+- [Phase 07-prices-wb]: Excel auto-акций: реальные индексы колонок S=18 (planDiscount), T=19 (status) — 20 колонок 0..19; план 07-04 ошибочно указывал T=19/U=20 (off-by-one), исправлено в парсере и Wave 0 тесте
 
 ### Roadmap Evolution
 
@@ -148,6 +150,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T08:33:24.540Z
-Stopped at: Completed 07-prices-wb-05-PLAN.md (pricing server actions)
+Last session: 2026-04-10T08:34:49.282Z
+Stopped at: Completed 07-prices-wb-04-PLAN.md (WB promotions sync + Excel auto-promo upload routes)
 Resume file: None
