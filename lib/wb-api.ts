@@ -492,3 +492,281 @@ export function parseCard(card: WbCardRaw) {
     tags,
   }
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 7: WB Promotions Calendar API + Statistics Sales API
+// ──────────────────────────────────────────────────────────────────
+//
+// Endpoints для синхронизации акций WB (D-04, D-05) и средней
+// скорости продаж за 7 дней (D-09).
+//
+// Rate limit Promotions Calendar: 10 req / 6 sec.
+//   → пауза 600ms между pagination/batch запросами
+//   → sleep(6000) + retry(1) при 429
+//
+// Base URL верифицирован smoke test'ом в Wave 0
+// (см. .planning/phases/07-prices-wb/07-WAVE0-NOTES.md секция 3):
+// хост `dp-calendar-api.wildberries.ru` (origin `s2sauth-calendar`).
+
+/** Базовый URL WB Promotions Calendar API. Верифицирован в Wave 0. */
+const PROMO_API = "https://dp-calendar-api.wildberries.ru"
+
+/** Пауза между запросами — 10 req/6sec даёт безопасный интервал 600ms. */
+const PROMO_RATE_DELAY_MS = 600
+
+/** Backoff при 429 — полный rate window + небольшой буфер. */
+const PROMO_429_BACKOFF_MS = 6000
+
+/** Raw структура акции из WB Promotions API (для upsert в WbPromotion). */
+export interface WbPromotionRaw {
+  id: number
+  name: string
+  description?: string
+  advantages?: string[]
+  startDateTime: string // RFC3339
+  endDateTime: string
+  type: string // "auto" | "regular" | other
+}
+
+/** Raw детали акции (advantages, description, ranging). */
+export interface WbPromotionDetailsRaw {
+  id: number
+  name?: string
+  description?: string
+  advantages?: string[]
+  ranging?: unknown[]
+}
+
+/** Raw номенклатура в акции (только для regular-акций). */
+export interface WbPromotionNomenclatureRaw {
+  nmID: number
+  price?: number
+  planPrice?: number
+  discount?: number
+  planDiscount?: number
+  inAction?: boolean
+}
+
+/** Helper: пауза в ms (для rate limiting). */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Получить список всех акций WB в окне [startDate, endDate].
+ *
+ *  Pagination через `limit=100` + `offset`. Между запросами пауза
+ *  `PROMO_RATE_DELAY_MS`. При 429 — один retry после `sleep(PROMO_429_BACKOFF_MS)`.
+ *
+ *  Используется в плане 07-04 для синхронизации акций (D-04).
+ */
+export async function fetchAllPromotions(
+  startDate: Date,
+  endDate: Date,
+): Promise<WbPromotionRaw[]> {
+  const token = getToken()
+  const all: WbPromotionRaw[] = []
+  let offset = 0
+  const limit = 100
+  let retried429 = false
+
+  while (true) {
+    const url =
+      `${PROMO_API}/api/v1/calendar/promotions` +
+      `?startDateTime=${encodeURIComponent(startDate.toISOString())}` +
+      `&endDateTime=${encodeURIComponent(endDate.toISOString())}` +
+      `&allPromo=true&limit=${limit}&offset=${offset}`
+
+    const res = await fetch(url, {
+      headers: { Authorization: token },
+    })
+
+    if (res.status === 429) {
+      if (retried429) {
+        throw new Error("WB Promotions API rate limit: 429 после retry")
+      }
+      retried429 = true
+      await sleep(PROMO_429_BACKOFF_MS)
+      continue
+    }
+    retried429 = false
+
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`WB Promotions API ${res.status}: ${body}`)
+    }
+
+    const data = await res.json()
+    const items = (data?.data?.promotions ?? data?.promotions ?? []) as WbPromotionRaw[]
+
+    if (items.length === 0) break
+    all.push(...items)
+
+    // Если пришла неполная страница — дальше идти нет смысла
+    if (items.length < limit) break
+
+    offset += items.length
+    await sleep(PROMO_RATE_DELAY_MS)
+  }
+
+  return all
+}
+
+/** Получить детали акций батчами по 10 ID.
+ *
+ *  WB API принимает до 10 promotionIDs за один запрос через query-параметр.
+ *  Между батчами пауза `PROMO_RATE_DELAY_MS`, при 429 — один retry.
+ *
+ *  Возвращает массив деталей (порядок не гарантирован — caller склеивает по `id`).
+ */
+export async function fetchPromotionDetails(
+  ids: number[],
+): Promise<WbPromotionDetailsRaw[]> {
+  if (ids.length === 0) return []
+  const token = getToken()
+  const details: WbPromotionDetailsRaw[] = []
+
+  for (let i = 0; i < ids.length; i += 10) {
+    const batch = ids.slice(i, i + 10)
+    const url =
+      `${PROMO_API}/api/v1/calendar/promotions/details` +
+      `?promotionIDs=${batch.join(",")}`
+
+    let attempt = 0
+    while (true) {
+      const res = await fetch(url, {
+        headers: { Authorization: token },
+      })
+
+      if (res.status === 429) {
+        if (attempt >= 1) {
+          throw new Error("WB Promotions details: 429 после retry")
+        }
+        attempt++
+        await sleep(PROMO_429_BACKOFF_MS)
+        continue
+      }
+
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(`WB Promotions details ${res.status}: ${body}`)
+      }
+
+      const data = await res.json()
+      const items = (data?.data?.promotions ??
+        data?.promotions ??
+        []) as WbPromotionDetailsRaw[]
+      details.push(...items)
+      break
+    }
+
+    if (i + 10 < ids.length) {
+      await sleep(PROMO_RATE_DELAY_MS)
+    }
+  }
+
+  return details
+}
+
+/** Получить номенклатуры одной regular-акции.
+ *
+ *  Для `type="auto"` WB возвращает 422 — silent return `[]` (D-06: auto обрабатывается через Excel).
+ *  При 429 — один retry после `sleep(PROMO_429_BACKOFF_MS)`.
+ */
+export async function fetchPromotionNomenclatures(
+  promotionId: number,
+): Promise<WbPromotionNomenclatureRaw[]> {
+  const token = getToken()
+  const url =
+    `${PROMO_API}/api/v1/calendar/promotions/nomenclatures` +
+    `?promotionID=${promotionId}&inAction=false&limit=1000`
+
+  let attempt = 0
+  while (true) {
+    const res = await fetch(url, { headers: { Authorization: token } })
+
+    // Auto-акция — silent return (D-06: обрабатывается через Excel)
+    if (res.status === 422) {
+      return []
+    }
+
+    if (res.status === 429) {
+      if (attempt >= 1) {
+        throw new Error(`WB nomenclatures ${promotionId}: 429 после retry`)
+      }
+      attempt++
+      await sleep(PROMO_429_BACKOFF_MS)
+      continue
+    }
+
+    if (!res.ok) {
+      const body = await res.text()
+      throw new Error(`WB nomenclatures ${promotionId} ${res.status}: ${body}`)
+    }
+
+    const data = await res.json()
+    const items = (data?.data?.nomenclatures ??
+      data?.nomenclatures ??
+      []) as WbPromotionNomenclatureRaw[]
+    return items
+  }
+}
+
+/** Получить среднюю скорость продаж за последние 7 дней.
+ *
+ *  Возвращает `Map<nmId, avgPerDay>`, где `avgPerDay = count(sales) / 7`.
+ *
+ *  Источник: WB Statistics Sales API `/api/v1/supplier/sales?dateFrom={7d_ago}`.
+ *  При 429 ждём 60 секунд (Statistics API даёт ~1 req/min) и делаем рекурсивный retry.
+ *  При любой другой ошибке — degraded mode: возвращаем пустой Map, поле в БД останется null.
+ *
+ *  D-09: записывается в `WbCard.avgSalesSpeed7d` при полной синхронизации.
+ */
+export async function fetchAvgSalesSpeed7d(
+  nmIds: number[],
+): Promise<Map<number, number>> {
+  const token = getToken()
+  const result = new Map<number, number>()
+  if (nmIds.length === 0) return result
+
+  const dateFrom = new Date()
+  dateFrom.setDate(dateFrom.getDate() - 7)
+  const dateFromIso = dateFrom.toISOString()
+
+  const url =
+    `https://statistics-api.wildberries.ru/api/v1/supplier/sales` +
+    `?dateFrom=${encodeURIComponent(dateFromIso)}&flag=0`
+
+  const res = await fetch(url, { headers: { Authorization: token } })
+
+  if (res.status === 429) {
+    // Statistics API даёт ~1 req/min → ждём минуту и делаем один retry
+    await sleep(60_000)
+    return fetchAvgSalesSpeed7d(nmIds)
+  }
+
+  if (!res.ok) {
+    console.error(`WB Sales API (avgSalesSpeed7d) ${res.status}`)
+    return result
+  }
+
+  const sales = (await res.json()) as Array<{ nmId?: number; nm_id?: number }>
+  if (!Array.isArray(sales)) return result
+
+  // Подсчитать количество продаж per nmId
+  const counts = new Map<number, number>()
+  for (const s of sales) {
+    const nm = s.nmId ?? s.nm_id
+    if (nm == null) continue
+    counts.set(nm, (counts.get(nm) ?? 0) + 1)
+  }
+
+  // Вернуть только запрошенные nmId
+  const requested = new Set(nmIds)
+  for (const [nmId, count] of counts) {
+    if (requested.has(nmId)) {
+      result.set(nmId, count / 7)
+    }
+  }
+
+  return result
+}

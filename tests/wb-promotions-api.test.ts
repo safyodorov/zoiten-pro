@@ -19,11 +19,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 describe("fetchAllPromotions — rate limit (mocked fetch)", () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // WB_API_TOKEN нужен для getToken() — в тестах стабим любой непустой
+    vi.stubEnv("WB_API_TOKEN", "test-token")
   })
 
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it("делает паузу ~600ms между pagination-запросами", async () => {
@@ -117,11 +120,13 @@ describe("fetchAllPromotions — rate limit (mocked fetch)", () => {
 describe("fetchPromotionDetails — батчи по 10 ID", () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.stubEnv("WB_API_TOKEN", "test-token")
   })
 
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
   })
 
   it("разбивает 25 promotionIDs на 3 батча (10+10+5)", async () => {
