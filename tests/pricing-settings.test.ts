@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest"
-import { appSettingValueSchema, isValidAppSettingKey } from "@/app/actions/pricing"
+import { appSettingValueSchema, isValidAppSettingKey } from "@/lib/pricing-schemas"
 
 // ──────────────────────────────────────────────────────────────────
-// RED stub — план 07-00 Wave 0
+// GREEN — план 07-05
 // ──────────────────────────────────────────────────────────────────
 //
 // Этот файл проверяет Zod-валидацию значений AppSetting и whitelist ключей
-// (D-02). Модуль @/app/actions/pricing будет создан в плане 07-04 — до тех
-// пор тесты падают с "Cannot find module" — это ожидаемое RED состояние.
+// (D-02). Чистые Zod-схемы живут в lib/pricing-schemas.ts (вынесены из
+// app/actions/pricing.ts, поскольку "use server" файлы Next.js 15 не
+// экспортируют синхронные значения). Actions в app/actions/pricing.ts
+// импортируют те же схемы из lib/pricing-schemas.
 //
 // Ключи AppSetting (6 штук):
 //   wbWalletPct, wbAcquiringPct, wbJemPct,
