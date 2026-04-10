@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-10-PLAN.md (WbPromotionsSyncButton + WbAutoPromoUploadButton + empty state Alert)
-last_updated: "2026-04-10T11:06:28.237Z"
+stopped_at: "Completed 07-11-PLAN.md + Phase 7 closeout (docs, deploy, миграция 20260409_prices_wb применена на VPS, https://zoiten.pro/prices/wb live)"
+last_updated: "2026-04-10T11:46:13.097Z"
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 30
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Plan: 11 of 12
 | Phase 07-prices-wb P07 | 15min | 2 tasks | 3 files |
 | Phase 07-prices-wb P09 | 18min | 1 tasks | 4 files |
 | Phase 07-prices-wb P10 | 159s | 3 tasks | 3 files |
+| Phase 07-prices-wb P11 | 31min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,7 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Scope checkboxes ДРР/Брак: checked=per-product (updateProductOverride), unchecked=subcategory/category default (updateSubcategoryDefault/updateCategoryDefault); Доставка всегда per-product по D-14
 - [Phase 07-prices-wb]: Plan 07-10: Native <select> в Dialog для выбора auto-акции (CLAUDE.md convention, не base-ui Select)
 - [Phase 07-prices-wb]: Plan 07-10: toast.loading/dismiss только для PromotionsSync (30-90 сек), Excel upload без loading toast
+- [Phase 07-prices-wb]: Plan 07-11: tsconfig exclude vitest.config.ts + tests/** — Rule 3 fix при прод deploy (npm ci --omit=dev не ставит vitest, tsc type-check падал)
 
 ### Roadmap Evolution
 
@@ -167,6 +169,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T11:06:28.234Z
-Stopped at: Completed 07-10-PLAN.md (WbPromotionsSyncButton + WbAutoPromoUploadButton + empty state Alert)
+Last session: 2026-04-10T11:46:13.092Z
+Stopped at: Completed 07-11-PLAN.md + Phase 7 closeout (docs, deploy, миграция 20260409_prices_wb применена на VPS, https://zoiten.pro/prices/wb live)
 Resume file: None
