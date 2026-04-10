@@ -226,6 +226,76 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 - Scope: Контент (bit 1), Аналитика (bit 2), Цены (bit 3), Отзывы (bit 5), Статистика (bit 6), Тарифы (bit 7)
 - Без scope Продвижения (акции недоступны)
 
+## Управление ценами WB — Phase 7
+
+### Домен
+
+Раздел `/prices/wb` — онлайн-калькулятор юнит-экономики WB карточек. Показывает для каждого Product связанные WbCards с ценовыми строками: Текущая + Regular акции + Auto акции + Расчётные (1-3 слота). Клик по строке → модалка с realtime пересчётом 30 колонок расчёта.
+
+### Модель данных (новые таблицы в Phase 7)
+
+- **AppSetting** (KeyValue) — 6 глобальных ставок: wbWalletPct (2.0), wbAcquiringPct (2.7), wbJemPct (1.0), wbCreditPct (7.0), wbOverheadPct (6.0), wbTaxPct (8.0)
+- **CalculatedPrice** — расчётные цены пользователя, uniqueness per (wbCardId, slot 1/2/3)
+- **WbPromotion** — акции WB с id = promotionID из WB API
+- **WbPromotionNomenclature** — связи nmId с акциями (regular через API, auto через Excel)
+
+### Новые поля в существующих таблицах
+
+- `Category.defaultDefectRatePct` — default процент брака per категория (fallback 2%)
+- `Subcategory.defaultDrrPct` — default ДРР per подкатегория (fallback 10%)
+- `Product.drrOverridePct`, `Product.defectRateOverridePct`, `Product.deliveryCostRub` — per-product overrides
+- `WbCard.avgSalesSpeed7d` — средняя скорость продаж за 7 дней (из Sales API)
+
+### Fallback chain для per-product параметров
+
+`Product.override → Subcategory/Category.default → hardcoded`
+
+Реализовано в `lib/pricing-math.ts`: функции `resolveDrrPct`, `resolveDefectRatePct`, `resolveDeliveryCostRub`.
+
+### WB Promotions Calendar API
+
+- Base URL: `https://dp-calendar-api.wildberries.ru` (верифицирован Wave 0)
+- Rate limit: 10 req / 6 sec → 600ms паузы между запросами, sleep(6000) + retry на 429
+- Endpoints: `/api/v1/calendar/promotions`, `/api/v1/calendar/promotions/details`, `/api/v1/calendar/promotions/nomenclatures`
+- **Auto-акции:** API возвращает 422 на `/nomenclatures` — данные загружаются через Excel из кабинета WB (D-06)
+
+### Pure function calculatePricing
+
+`lib/pricing-math.ts` — единственная source of truth для расчёта юнит-экономики. Используется и на сервере (RSC page), и на клиенте (модалка с realtime). Pure, детерминированная, без зависимостей.
+
+**Golden test:** `tests/pricing-math.test.ts` — nmId 800750522 → profit ≈ 567.68 ₽, ROI ≈ 26%, Re продаж ≈ 7%.
+
+### Routes
+
+- `/prices` → redirect на `/prices/wb`
+- `/prices/wb` — основной раздел (RSC + клиентские компоненты)
+- `/prices/ozon` — заглушка ComingSoon
+- `POST /api/wb-promotions-sync` — синхронизация акций (MANAGE)
+- `POST /api/wb-promotions-upload-excel` — загрузка Excel auto-акции (MANAGE)
+
+### RBAC
+
+- Read (`/prices/wb` rendering): `requireSection("PRICES")`
+- Write (все server actions, sync, upload): `requireSection("PRICES", "MANAGE")`
+- Все 7 server actions в `app/actions/pricing.ts` защищены
+
+### Компоненты
+
+- `GlobalRatesBar` — редактор 6 ставок с debounced save (500ms)
+- `PriceCalculatorTable` — главная таблица с rowSpan + sticky колонки + indicator strips
+- `PricingCalculatorDialog` — модалка юнит-экономики с realtime пересчётом
+- `WbPromotionsSyncButton`, `WbAutoPromoUploadButton` — кнопки шапки
+- `PromoTooltip` — wrapper shadcn Tooltip с description + advantages
+
+### Testing
+
+Phase 7 добавил vitest в проект. Запуск: `npm run test`. Покрытие:
+- `pricing-math.test.ts` — golden test + zero guards
+- `pricing-fallback.test.ts` — fallback chain
+- `pricing-settings.test.ts` — Zod валидация
+- `wb-promotions-api.test.ts` — mocked rate limit
+- `excel-auto-promo.test.ts` — реальный fixture парсинг
+
 ## VPS заметки
 
 - Zoiten ERP: /opt/zoiten-pro/ → порт 3001, systemd zoiten-erp.service

@@ -30,6 +30,18 @@
 - Создание товаров из выбранных карточек (чекбоксы + кнопки)
 - Фильтры по бренду/категории, пагинация, сортировка
 
+### Управление ценами — WB
+- Калькулятор юнит-экономики WB карточек — таблица 30 колонок расчёта с rowSpan + sticky колонками
+- 6 глобальных ставок (Кошелёк WB, Эквайринг, ВБ Джем, Кредит, Накладные, Налог) с debounced save
+- Синхронизация regular-акций через WB Promotions Calendar API (rate limit 10 req/6 sec)
+- Загрузка Excel отчётов auto-акций из кабинета WB
+- Realtime модалка пересчёта юнит-экономики — изменение ДРР/брака/скидок мгновенно пересчитывает прибыль, ROI, re-продажи
+- Расчётные цены: 1-3 слота на карточку, сохранение snapshot входных параметров
+- Fallback chain для per-product параметров: Product.override → Subcategory/Category.default → hardcoded
+- RBAC: read через `requireSection("PRICES")`, write через `requireSection("PRICES", "MANAGE")`
+- Покрытие vitest: pricing-math (golden test), pricing-fallback, pricing-settings, wb-promotions-api, excel-auto-promo
+- Ozon — заглушка ComingSoon
+
 ### Себестоимость партий
 - Inline-редактирование себестоимости товаров
 - Фильтры, поиск
@@ -90,6 +102,9 @@
 | Statistics | `GET /api/v1/supplier/sales` | СПП из продаж (fallback) |
 | Analytics | `POST /api/v2/nm-report/downloads` | Процент выкупа (CSV в ZIP) |
 | Публичный | `GET card.wb.ru/cards/v4/detail` | Цена покупателя для расчёта СПП |
+| Calendar | `GET dp-calendar-api.wildberries.ru/api/v1/calendar/promotions` | Список акций WB (Phase 7) |
+| Calendar | `GET /api/v1/calendar/promotions/details` | Детали акций — описание, преимущества |
+| Calendar | `GET /api/v1/calendar/promotions/nomenclatures` | nmId в regular-акциях (auto через Excel) |
 
 ### Скидка WB (СПП) — как работает
 
