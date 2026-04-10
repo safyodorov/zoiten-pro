@@ -94,7 +94,7 @@ export function GlobalRatesBar({ initialRates }: GlobalRatesBarProps) {
 
   return (
     <Card className="p-4 bg-muted/30 border">
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+      <div className="flex flex-wrap gap-4">
         {RATES.map(({ key, label }) => (
           <div key={key} className="flex flex-col gap-1">
             <Label

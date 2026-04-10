@@ -214,20 +214,20 @@ export function PriceCalculatorTable({
         <table className="w-full caption-bottom text-sm border-collapse">
           <thead className="sticky top-0 z-30 bg-background border-b">
             <tr>
-              {/* Sticky 1: Фото (w-32 — 128px, увеличено для читаемости) */}
-              <th className="sticky left-0 z-40 bg-background border-r w-32 px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 1: Фото (128px) */}
+              <th className="sticky left-0 z-40 bg-background border-r min-w-[128px] w-[128px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
                 Фото
               </th>
-              {/* Sticky 2: Сводка (left-32, w-60 — 128→368) */}
-              <th className="sticky left-32 z-40 bg-background border-r w-60 px-3 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 2: Сводка (left 128, width 200 → 328) */}
+              <th className="sticky left-[128px] z-40 bg-background border-r min-w-[200px] w-[200px] px-3 py-2 text-xs font-medium text-muted-foreground text-left">
                 Сводка
               </th>
-              {/* Sticky 3: Ярлык (left-[368px], w-20 — 368→448) */}
-              <th className="sticky left-[368px] z-40 bg-background border-r w-20 px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 3: Ярлык (left 328, width 72 → 400) */}
+              <th className="sticky left-[328px] z-40 bg-background border-r min-w-[72px] w-[72px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
                 Ярлык
               </th>
-              {/* Sticky 4: Артикул (left-[448px], w-28 — 448→560) */}
-              <th className="sticky left-[448px] z-40 bg-background border-r w-28 px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 4: Артикул (left 400, width 112 → 512) */}
+              <th className="sticky left-[400px] z-40 bg-background border-r min-w-[112px] w-[112px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
                 Артикул
               </th>
               {/* Статус цены (label строки) */}
@@ -285,11 +285,11 @@ export function PriceCalculatorTable({
                           "border-t border-t-border/60",
                       )}
                     >
-                      {/* Sticky 1: Фото (rowSpan всего Product) — w-32 (128px) */}
+                      {/* Sticky 1: Фото (rowSpan всего Product) — 128px */}
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
-                          className="sticky left-0 z-10 bg-background border-r w-32 align-top p-2 group-hover:bg-muted/50"
+                          className="sticky left-0 z-10 bg-background border-r min-w-[128px] w-[128px] align-top p-2 group-hover:bg-muted/50"
                         >
                           <div className="flex items-start justify-center">
                             {group.product.photoUrl ? (
@@ -310,7 +310,7 @@ export function PriceCalculatorTable({
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
-                          className="sticky left-32 z-10 bg-background border-r w-60 align-top p-3 group-hover:bg-muted/50"
+                          className="sticky left-[128px] z-10 bg-background border-r min-w-[200px] w-[200px] align-top p-3 group-hover:bg-muted/50"
                         >
                           <div className="flex flex-col gap-1">
                             <div className="text-sm font-medium leading-snug line-clamp-3">
@@ -338,7 +338,7 @@ export function PriceCalculatorTable({
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
-                          className="sticky left-[368px] z-10 bg-background border-r w-20 align-top p-2 text-sm group-hover:bg-muted/50"
+                          className="sticky left-[328px] z-10 bg-background border-r min-w-[72px] w-[72px] align-top p-2 text-sm group-hover:bg-muted/50"
                         >
                           {cardGroup.card.label ?? (
                             <span className="text-muted-foreground">—</span>
@@ -350,7 +350,7 @@ export function PriceCalculatorTable({
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
-                          className="sticky left-[448px] z-10 bg-background border-r w-28 align-top p-2 font-mono text-xs group-hover:bg-muted/50"
+                          className="sticky left-[400px] z-10 bg-background border-r min-w-[112px] w-[112px] align-top p-2 font-mono text-xs group-hover:bg-muted/50"
                         >
                           {cardGroup.card.nmId}
                         </td>
