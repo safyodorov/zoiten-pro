@@ -4,12 +4,12 @@ milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
 stopped_at: Completed 07-prices-wb-00-PLAN.md (Wave 0 infra)
-last_updated: "2026-04-10T07:49:05.509Z"
+last_updated: "2026-04-10T07:51:17.246Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -65,6 +65,7 @@ Plan: 2 of 12
 | Phase 06-deployment P02 | 139s | 1 tasks | 1 files |
 | Phase 07-prices-wb P01 | 3min | 2 tasks | 2 files |
 | Phase 07-prices-wb P00 | 21min | 2 tasks | 8 files |
+| Phase 07-prices-wb P02 | 25min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: [Phase 07-prices-wb]: WB Promotions Calendar base URL = https://dp-calendar-api.wildberries.ru (origin s2sauth-calendar), НЕ discounts-prices-api
 - [Phase 07-prices-wb]: [Phase 07-prices-wb]: Excel auto-акции парсится по индексам колонок (A=0, F=5, L=11, M=12, T=19, U=20), не по названиям — устойчиво к изменениям заголовков в кабинете WB
 - [Phase 07-prices-wb]: [Phase 07-prices-wb]: Golden test nmId 800750522 → profit 567.68, ROI ~26%, Re продаж ~7% (из canonical Excel, зафиксированы в 07-WAVE0-NOTES.md §2)
+- [Phase 07-prices-wb]: Pricing formulas извлечены напрямую из raw Excel cell formulas: acquiring/commission/credit/overhead/tax все от sellerPrice (I17*X%), не от priceAfterWallet
+- [Phase 07-prices-wb]: COLUMN_ORDER = 30 элементов (без Фото — rowSpan); compile-time assertion через conditional type
+- [Phase 07-prices-wb]: lib/pricing-math.ts — pure TypeScript module без импортов, используется одновременно в RSC (сервер) и realtime пересчёте (клиент)
 
 ### Roadmap Evolution
 
