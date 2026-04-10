@@ -160,6 +160,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260408-syb | Создать модуль Сотрудники — БД, CRUD, таблица, фильтры, модалка | 2026-04-08 | efb9ca8 | [260408-syb-crud](./quick/260408-syb-crud/) |
+| 260410-leh | Починить ширину колонок в /prices/wb и собрать GlobalRatesBar слева | 2026-04-10 | 142c62d | [260410-leh-wb-globalratesbar](./quick/260410-leh-wb-globalratesbar/) |
 
 ### Blockers/Concerns
 
