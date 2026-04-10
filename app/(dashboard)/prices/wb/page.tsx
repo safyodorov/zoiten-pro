@@ -46,6 +46,7 @@ const RATE_KEYS = [
   "wbCreditPct",
   "wbOverheadPct",
   "wbTaxPct",
+  "wbDefectRatePct",
 ] as const
 
 type RateKey = (typeof RATE_KEYS)[number]
@@ -57,6 +58,7 @@ const DEFAULT_RATES: Record<RateKey, number> = {
   wbCreditPct: 7.0,
   wbOverheadPct: 6.0,
   wbTaxPct: 8.0,
+  wbDefectRatePct: 2.0,
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -236,6 +238,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       const resolvedDefect = resolveDefectRatePct({
         productOverride: product.defectRateOverridePct ?? null,
         categoryDefault: product.category?.defaultDefectRatePct ?? null,
+        globalDefault: rates.wbDefectRatePct,
       })
       const resolvedDelivery = resolveDeliveryCostRub(
         product.deliveryCostRub ?? null,

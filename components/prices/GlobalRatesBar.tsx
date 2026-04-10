@@ -11,6 +11,7 @@
 "use client"
 
 import { useCallback, useRef, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
 import { Card } from "@/components/ui/card"
@@ -28,6 +29,7 @@ type RateKey =
   | "wbJemPct"
   | "wbCreditPct"
   | "wbOverheadPct"
+  | "wbDefectRatePct"
   | "wbTaxPct"
 
 interface RateSpec {
@@ -41,6 +43,7 @@ const RATES: readonly RateSpec[] = [
   { key: "wbJemPct", label: "Тариф Джем" },
   { key: "wbCreditPct", label: "Кредит" },
   { key: "wbOverheadPct", label: "Общие" },
+  { key: "wbDefectRatePct", label: "Брак" },
   { key: "wbTaxPct", label: "Налог" },
 ] as const
 
@@ -54,6 +57,8 @@ interface GlobalRatesBarProps {
 // ──────────────────────────────────────────────────────────────────
 
 export function GlobalRatesBar({ initialRates }: GlobalRatesBarProps) {
+  const router = useRouter()
+
   // Храним строковые значения — пользователь может временно печатать
   // невалидную строку ("2."), которую мы не хотим форматировать на лету.
   const [values, setValues] = useState<Record<RateKey, string>>(() => {
@@ -70,27 +75,32 @@ export function GlobalRatesBar({ initialRates }: GlobalRatesBarProps) {
   >({})
 
   /** Debounced save через updateAppSetting server action (500 ms). */
-  const handleChange = useCallback((key: RateKey, newValue: string) => {
-    setValues((prev) => ({ ...prev, [key]: newValue }))
+  const handleChange = useCallback(
+    (key: RateKey, newValue: string) => {
+      setValues((prev) => ({ ...prev, [key]: newValue }))
 
-    // Сброс pending таймера для этого ключа
-    const existingTimer = timersRef.current[key]
-    if (existingTimer) {
-      clearTimeout(existingTimer)
-    }
+      // Сброс pending таймера для этого ключа
+      const existingTimer = timersRef.current[key]
+      if (existingTimer) {
+        clearTimeout(existingTimer)
+      }
 
-    // Установка нового таймера
-    timersRef.current[key] = setTimeout(() => {
-      startTransition(async () => {
-        const result = await updateAppSetting(key, newValue)
-        if (result.ok) {
-          toast.success("Ставка сохранена")
-        } else {
-          toast.error(result.error || "Не удалось сохранить ставку")
-        }
-      })
-    }, 500)
-  }, [])
+      // Установка нового таймера
+      timersRef.current[key] = setTimeout(() => {
+        startTransition(async () => {
+          const result = await updateAppSetting(key, newValue)
+          if (result.ok) {
+            toast.success("Ставка сохранена")
+            // Обновляем RSC для пересчёта таблицы с новыми ставками
+            router.refresh()
+          } else {
+            toast.error(result.error || "Не удалось сохранить ставку")
+          }
+        })
+      }, 500)
+    },
+    [router],
+  )
 
   return (
     <Card className="p-4 bg-muted/30 border">

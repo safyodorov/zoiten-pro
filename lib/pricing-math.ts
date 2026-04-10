@@ -199,14 +199,16 @@ export function resolveDrrPct(params: {
 }
 
 /** Резолвит процент брака по fallback chain:
- *  Product.defectRateOverridePct → Category.defaultDefectRatePct → 2 (hardcoded).
+ *  Product.defectRateOverridePct → Category.defaultDefectRatePct → AppSetting.wbDefectRatePct → 2 (hardcoded).
  */
 export function resolveDefectRatePct(params: {
   productOverride: number | null
   categoryDefault: number | null
+  globalDefault?: number | null
 }): number {
   if (params.productOverride != null) return params.productOverride
   if (params.categoryDefault != null) return params.categoryDefault
+  if (params.globalDefault != null) return params.globalDefault
   return HARDCODED_DEFECT_RATE_PCT
 }
 

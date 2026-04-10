@@ -20,11 +20,12 @@ export const APP_SETTING_KEYS = [
   "wbCreditPct",
   "wbOverheadPct",
   "wbTaxPct",
+  "wbDefectRatePct",
 ] as const
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[number]
 
-/** Дефолтные значения 6 глобальных ставок. Используются как fallback в getPricingSettings,
+/** Дефолтные значения глобальных ставок. Используются как fallback в getPricingSettings,
  *  если миграция 07-01 не была применена или запись отсутствует. */
 export const APP_SETTING_DEFAULTS: Record<AppSettingKey, number> = {
   wbWalletPct: 2.0,
@@ -33,6 +34,7 @@ export const APP_SETTING_DEFAULTS: Record<AppSettingKey, number> = {
   wbCreditPct: 7.0,
   wbOverheadPct: 6.0,
   wbTaxPct: 8.0,
+  wbDefectRatePct: 2.0,
 }
 
 /** Проверка валидности ключа AppSetting. Используется тестами и защитой action'ов. */
