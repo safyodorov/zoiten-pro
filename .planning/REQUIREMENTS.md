@@ -105,7 +105,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PRICES-11**: Загрузка Excel отчёта из кабинета WB для auto-акций через `POST /api/wb-promotions-upload-excel` (multipart file + promotionId). Парсинг 6 колонок по индексам A=0/F=5/L=11/M=12/T=19/U=20, upsert в `WbPromotionNomenclature` по `@@unique([promotionId, nmId])`.
 - [x] **PRICES-12**: Новое поле `WbCard.avgSalesSpeed7d: Float?` заполняется при `/api/wb-sync` из WB Statistics Sales API (sales за 7 дней / 7). Отображается в колонке Сводка как «Скорость 7д: {N} шт/день», суммируется по всем WbCard одного Product.
 - [ ] **PRICES-13**: Подраздел `/prices/ozon` — заглушка `<ComingSoon sectionName="Управление ценами Ozon" />` по аналогии с `/cards/ozon`.
-- [ ] **PRICES-14**: RBAC: все страницы раздела требуют `requireSection("PRICES")`, все write actions (updateAppSetting, saveCalculatedPrice, updateProductOverride, синхронизация акций, загрузка Excel) требуют `requireSection("PRICES", "MANAGE")`.
+- [x] **PRICES-14**: RBAC: все страницы раздела требуют `requireSection("PRICES")`, все write actions (updateAppSetting, saveCalculatedPrice, updateProductOverride, синхронизация акций, загрузка Excel) требуют `requireSection("PRICES", "MANAGE")`.
 - [ ] **PRICES-15**: Tooltip на названии акции через shadcn `tooltip` (добавляется в Phase 7 через `npx shadcn add tooltip`), контент — `WbPromotion.description` + маркированный список `advantages[]`, max-width 384px.
 - [ ] **PRICES-16**: Подсветка значений Прибыль/Re продаж/ROI: `text-green-600 font-medium` при значении ≥0, `text-red-600 font-medium` при <0. Дополнительно префикс «+/−» для Re и ROI (дальтонизм safety).
 
@@ -222,7 +222,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | PRICES-11 | Phase 7 | Complete |
 | PRICES-12 | Phase 7 | Complete |
 | PRICES-13 | Phase 7 | Pending |
-| PRICES-14 | Phase 7 | Pending |
+| PRICES-14 | Phase 7 | Complete |
 | PRICES-15 | Phase 7 | Pending |
 | PRICES-16 | Phase 7 | Pending |
 

@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-prices-wb-03-PLAN.md (WB Promotions API + avgSalesSpeed7d)
-last_updated: "2026-04-10T08:19:23.361Z"
+stopped_at: Completed 07-prices-wb-05-PLAN.md (pricing server actions)
+last_updated: "2026-04-10T08:34:33.037Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 21
+  completed_plans: 23
 ---
 
 # Project State
@@ -67,6 +67,8 @@ Plan: 3 of 12
 | Phase 07-prices-wb P00 | 21min | 2 tasks | 8 files |
 | Phase 07-prices-wb P02 | 25min | 1 tasks | 3 files |
 | Phase 07-prices-wb P03 | 6min | 2 tasks | 3 files |
+| Phase 07-prices-wb P05 | 7min | 1 tasks | 3 files |
+| Phase 07-prices-wb P04 | 9min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -121,6 +123,8 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: PROMO_API = https://dp-calendar-api.wildberries.ru (origin s2sauth-calendar), рейт-лимит 10 req/6sec обрабатывается через sleep(600ms) между запросами + sleep(6000ms) retry(1) на 429
 - [Phase 07-prices-wb]: fetchPromotionNomenclatures silent return [] при 422 — auto-акции обрабатываются через Excel (D-06), не через API
 - [Phase 07-prices-wb]: fetchAvgSalesSpeed7d в /api/wb-sync обёрнут в try/catch (degraded mode) — sync не падает, если Sales API недоступен, поле в БД остаётся null
+- [Phase 07-prices-wb]: Zod схемы вынесены в lib/pricing-schemas.ts (не в app/actions/pricing.ts) — Next.js 15 'use server' файлы не экспортируют sync values, + vitest не может загружать auth chain
+- [Phase 07-prices-wb]: Prisma Json поле snapshot передаётся как 'as never' — устоявшийся паттерн проекта (wb-promotions-sync/route.ts:75)
 
 ### Roadmap Evolution
 
@@ -144,6 +148,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T08:18:34.825Z
-Stopped at: Completed 07-prices-wb-03-PLAN.md (WB Promotions API + avgSalesSpeed7d)
+Last session: 2026-04-10T08:33:24.540Z
+Stopped at: Completed 07-prices-wb-05-PLAN.md (pricing server actions)
 Resume file: None
