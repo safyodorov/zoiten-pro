@@ -6,7 +6,16 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
-import { fetchAllCards, parseCard, fetchAllPrices, fetchWbDiscounts, fetchStandardCommissions, fetchStocks, fetchBuyoutPercent } from "@/lib/wb-api"
+import {
+  fetchAllCards,
+  parseCard,
+  fetchAllPrices,
+  fetchWbDiscounts,
+  fetchStandardCommissions,
+  fetchStocks,
+  fetchBuyoutPercent,
+  fetchAvgSalesSpeed7d,
+} from "@/lib/wb-api"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -42,6 +51,16 @@ export async function POST(): Promise<NextResponse> {
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
     const discountMap = await fetchWbDiscounts(nmIds)
 
+    // 8. Phase 7 (D-09): средняя скорость продаж за 7 дней
+    //    Degraded mode — если Sales API недоступен, поле останется null,
+    //    основной sync не ломается.
+    let salesSpeedMap = new Map<number, number>()
+    try {
+      salesSpeedMap = await fetchAvgSalesSpeed7d(nmIds)
+    } catch (e) {
+      console.error("fetchAvgSalesSpeed7d failed:", e)
+    }
+
     let synced = 0
     const errors: string[] = []
 
@@ -57,6 +76,7 @@ export async function POST(): Promise<NextResponse> {
         const clubDiscount = priceData?.clubDiscount ?? null
         const stockQty = stockMap.get(card.nmId) ?? null
         const buyoutPct = buyoutMap.get(card.nmId) ?? null
+        const avgSalesSpeed7d = salesSpeedMap.get(card.nmId) ?? null
 
         const stdComm = commMap.get(raw.subjectID)
         const iuComm = card.category ? iuMap.get(card.category) : undefined
@@ -84,6 +104,7 @@ export async function POST(): Promise<NextResponse> {
             clubDiscount,
             stockQty,
             buyoutPercent: buyoutPct,
+            avgSalesSpeed7d,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,
@@ -114,6 +135,7 @@ export async function POST(): Promise<NextResponse> {
             clubDiscount,
             stockQty,
             buyoutPercent: buyoutPct,
+            avgSalesSpeed7d,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,
