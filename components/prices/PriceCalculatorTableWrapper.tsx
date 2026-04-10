@@ -22,6 +22,8 @@ import { PricingCalculatorDialog } from "@/components/prices/PricingCalculatorDi
 
 interface PriceCalculatorTableWrapperProps {
   groups: ProductGroup[]
+  /** Сохранённые ширины столбцов из UserPreference (план 260410-mya). */
+  initialColumnWidths?: Record<string, number>
 }
 
 interface DialogState {
@@ -31,6 +33,7 @@ interface DialogState {
 
 export function PriceCalculatorTableWrapper({
   groups,
+  initialColumnWidths,
 }: PriceCalculatorTableWrapperProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
@@ -47,7 +50,11 @@ export function PriceCalculatorTableWrapper({
 
   return (
     <>
-      <PriceCalculatorTable groups={groups} onRowClick={handleRowClick} />
+      <PriceCalculatorTable
+        groups={groups}
+        onRowClick={handleRowClick}
+        initialColumnWidths={initialColumnWidths}
+      />
       {dialog && (
         <PricingCalculatorDialog
           open={true}

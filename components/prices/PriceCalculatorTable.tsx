@@ -21,15 +21,17 @@
 "use client"
 
 import * as React from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import {
-  COLUMN_ORDER,
   type PricingInputs,
   type PricingOutputs,
 } from "@/lib/pricing-math"
 import { Badge } from "@/components/ui/badge"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
+import { setUserPreference } from "@/app/actions/user-preferences"
 
 // ──────────────────────────────────────────────────────────────────
 // Types (exported для использования в плане 07-08 + плане 07-09)
@@ -137,7 +139,126 @@ interface PriceCalculatorTableProps {
     row: PriceRow,
     productId: string,
   ) => void
+  /** Сохранённые ширины столбцов из UserPreference (план 260410-mya). */
+  initialColumnWidths?: Record<string, number>
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Column resize constants (план 260410-mya)
+// ──────────────────────────────────────────────────────────────────
+
+/** Ключи всех 30 колонок в порядке рендера.
+ *  Используется как ключ в columnWidths state + как id для drag-handle.
+ *  Первые 4 — sticky колонки, остальные 26 — скроллируемые. */
+const COLUMN_KEYS = [
+  // Sticky (4)
+  "photo",
+  "svodka",
+  "yarlyk",
+  "artikul",
+  // Scroll: Статус цены + 25 расчётных (соответствуют COLUMN_ORDER[4..29])
+  "status",
+  "buyoutPct",
+  "sellerPriceBeforeDiscount",
+  "sellerDiscountPct",
+  "sellerPrice",
+  "wbDiscountPct",
+  "priceAfterWbDiscount",
+  "clubDiscountPct",
+  "priceAfterClubDiscount",
+  "walletPct",
+  "priceAfterWallet",
+  "acquiringAmount",
+  "commFbwPct",
+  "commissionAmount",
+  "drrPct",
+  "drrAmount",
+  "jemAmount",
+  "transferAmount",
+  "costPrice",
+  "defectAmount",
+  "deliveryAmount",
+  "creditAmount",
+  "overheadAmount",
+  "taxAmount",
+  "profit",
+  "returnOnSalesPct",
+  "roiPct",
+] as const
+
+type ColumnKey = (typeof COLUMN_KEYS)[number]
+
+/** Дефолтные ширины колонок в px.
+ *  Sum ≈ 2480px → гарантированно шире любого экрана → скролл всегда работает. */
+const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
+  photo: 128,
+  svodka: 200,
+  yarlyk: 72,
+  artikul: 112,
+  status: 180,
+  buyoutPct: 80,
+  sellerPriceBeforeDiscount: 110,
+  sellerDiscountPct: 90,
+  sellerPrice: 100,
+  wbDiscountPct: 80,
+  priceAfterWbDiscount: 110,
+  clubDiscountPct: 80,
+  priceAfterClubDiscount: 110,
+  walletPct: 80,
+  priceAfterWallet: 110,
+  acquiringAmount: 95,
+  commFbwPct: 90,
+  commissionAmount: 100,
+  drrPct: 70,
+  drrAmount: 95,
+  jemAmount: 100,
+  transferAmount: 110,
+  costPrice: 100,
+  defectAmount: 90,
+  deliveryAmount: 100,
+  creditAmount: 95,
+  overheadAmount: 110,
+  taxAmount: 90,
+  profit: 100,
+  returnOnSalesPct: 90,
+  roiPct: 80,
+}
+
+const MIN_COLUMN_WIDTH = 60
+const RESIZE_SAVE_DEBOUNCE_MS = 500
+const PREFERENCE_KEY = "prices.wb.columnWidths"
+
+/** 26 скроллируемых колонок: ключ + label для рендера thead.
+ *  Порядок СТРОГО соответствует порядку td в tbody. */
+const SCROLL_COLUMNS: { key: ColumnKey; label: string }[] = [
+  { key: "status", label: "Статус цены" },
+  { key: "buyoutPct", label: "Процент выкупа" },
+  { key: "sellerPriceBeforeDiscount", label: "Цена для установки" },
+  { key: "sellerDiscountPct", label: "Скидка продавца" },
+  { key: "sellerPrice", label: "Цена продавца" },
+  { key: "wbDiscountPct", label: "Скидка WB" },
+  { key: "priceAfterWbDiscount", label: "Цена со скидкой WB" },
+  { key: "clubDiscountPct", label: "WB Клуб" },
+  { key: "priceAfterClubDiscount", label: "Цена со скидкой WB клуба" },
+  { key: "walletPct", label: "Кошелёк" },
+  { key: "priceAfterWallet", label: "Цена с WB кошельком" },
+  { key: "acquiringAmount", label: "Эквайринг" },
+  { key: "commFbwPct", label: "Комиссия, %" },
+  { key: "commissionAmount", label: "Комиссия, руб." },
+  { key: "drrPct", label: "ДРР, %" },
+  { key: "drrAmount", label: "Реклама, руб." },
+  { key: "jemAmount", label: "Тариф джем, руб." },
+  { key: "transferAmount", label: "К перечислению" },
+  { key: "costPrice", label: "Закупка, руб." },
+  { key: "defectAmount", label: "Брак, руб." },
+  { key: "deliveryAmount", label: "Доставка на маркеплейс, руб." },
+  { key: "creditAmount", label: "Кредит, руб." },
+  { key: "overheadAmount", label: "Общие расходы, руб." },
+  { key: "taxAmount", label: "Налог, руб." },
+  { key: "profit", label: "Прибыль, руб." },
+  { key: "returnOnSalesPct", label: "Re продаж, %" },
+  { key: "roiPct", label: "ROI, %" },
+]
 
 // ──────────────────────────────────────────────────────────────────
 // Helpers
@@ -149,6 +270,16 @@ function fmtMoney(n: number): string {
   return n.toLocaleString("ru-RU", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  })
+}
+
+/** Форматирование денег без дробной части (целые рубли, ру локаль).
+ *  Addendum 260410-mya: только отображение, расчёт в lib/pricing-math.ts остаётся precise. */
+function fmtMoneyInt(n: number): string {
+  if (!Number.isFinite(n)) return "—"
+  return Math.round(n).toLocaleString("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   })
 }
 
@@ -166,6 +297,13 @@ function fmtPctSimple(n: number | null | undefined): string {
   return `${(Math.round(n * 10) / 10).toFixed(1)}%`
 }
 
+/** Форматирование процента без дробной части, для колонок где пользователь
+ *  не хочет видеть десятые (addendum 260410-mya). */
+function fmtPctInt(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—"
+  return `${Math.round(n)}%`
+}
+
 /** Стандартный класс расчётной ячейки (text-xs, tabular-nums, right-align). */
 const CELL_CLASS =
   "px-2 py-1 h-10 text-xs leading-tight tabular-nums text-right align-middle"
@@ -177,6 +315,25 @@ function profitClass(value: number): string {
     : "text-red-600 dark:text-red-500 font-medium"
 }
 
+/** Drag handle на правой границе <th>. Захватывает mouse events и
+ *  двойным кликом сбрасывает колонку к дефолту. */
+function ColumnResizeHandle({
+  onMouseDown,
+  onDoubleClick,
+}: {
+  onMouseDown: (e: React.MouseEvent) => void
+  onDoubleClick: (e: React.MouseEvent) => void
+}) {
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
+      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-50"
+      title="Потяните чтобы изменить ширину. Двойной клик — сброс к дефолту."
+    />
+  )
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────────────────────────
@@ -184,7 +341,117 @@ function profitClass(value: number): string {
 export function PriceCalculatorTable({
   groups,
   onRowClick,
+  initialColumnWidths,
 }: PriceCalculatorTableProps) {
+  // ── Column widths state (план 260410-mya) ───────────────────────
+  // Merge: DEFAULT_WIDTHS + сохранённые значения (незнакомые ключи игнорируются)
+  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(
+    () => ({
+      ...DEFAULT_WIDTHS,
+      ...(initialColumnWidths ?? {}),
+    }),
+  )
+
+  // Debounced save таймер
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleSave = useCallback((widths: Record<ColumnKey, number>) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(async () => {
+      const result = await setUserPreference(PREFERENCE_KEY, widths)
+      if (!result.ok) {
+        toast.error(`Не удалось сохранить ширины: ${result.error}`)
+      }
+    }, RESIZE_SAVE_DEBOUNCE_MS)
+  }, [])
+
+  // Resize drag state — храним в ref чтобы не ре-рендерить на каждое движение
+  const resizeStateRef = useRef<{
+    key: ColumnKey
+    startX: number
+    startWidth: number
+  } | null>(null)
+  const rafIdRef = useRef<number | null>(null)
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    const state = resizeStateRef.current
+    if (!state) return
+    if (rafIdRef.current != null) return // throttle via rAF
+
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null
+      const s = resizeStateRef.current
+      if (!s) return
+      const delta = e.clientX - s.startX
+      const newWidth = Math.max(MIN_COLUMN_WIDTH, s.startWidth + delta)
+      setColumnWidths((prev) => ({ ...prev, [s.key]: newWidth }))
+    })
+  }, [])
+
+  const handleMouseUp = useCallback(() => {
+    resizeStateRef.current = null
+    if (rafIdRef.current != null) {
+      cancelAnimationFrame(rafIdRef.current)
+      rafIdRef.current = null
+    }
+    document.removeEventListener("mousemove", handleMouseMove)
+    document.removeEventListener("mouseup", handleMouseUp)
+    document.body.style.cursor = ""
+    document.body.style.userSelect = ""
+    // Сохранить актуальные widths (читаем из функционального setState для гарантии свежего значения)
+    setColumnWidths((current) => {
+      scheduleSave(current)
+      return current
+    })
+  }, [handleMouseMove, scheduleSave])
+
+  const startResize = useCallback(
+    (e: React.MouseEvent, key: ColumnKey) => {
+      e.preventDefault()
+      e.stopPropagation()
+      resizeStateRef.current = {
+        key,
+        startX: e.clientX,
+        startWidth: columnWidths[key],
+      }
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = "col-resize"
+      document.body.style.userSelect = "none"
+    },
+    [columnWidths, handleMouseMove, handleMouseUp],
+  )
+
+  const resetColumnWidth = useCallback(
+    (key: ColumnKey) => {
+      setColumnWidths((prev) => {
+        const next = { ...prev, [key]: DEFAULT_WIDTHS[key] }
+        scheduleSave(next)
+        return next
+      })
+    },
+    [scheduleSave],
+  )
+
+  // Cleanup на unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current)
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+    }
+  }, [handleMouseMove, handleMouseUp])
+
+  // Cumulative sticky left offsets (пересчитываются на каждый render)
+  const stickyLefts = {
+    photo: 0,
+    svodka: columnWidths.photo,
+    yarlyk: columnWidths.photo + columnWidths.svodka,
+    artikul:
+      columnWidths.photo + columnWidths.svodka + columnWidths.yarlyk,
+  }
+
   if (groups.length === 0) {
     return (
       <div className="rounded-md border py-16 text-center text-muted-foreground">
@@ -202,45 +469,93 @@ export function PriceCalculatorTable({
     )
   }
 
-  // ── Заголовки 26 расчётных колонок ───────────────────────────────
-  // COLUMN_ORDER содержит 30 элементов; первые 4 (Сводка / Статус цены /
-  // Ярлык / Артикул) рендерятся как sticky-колонки + label cell.
-  // В скроллируемой области — колонки [4..29] (26 штук).
-  const SCROLL_HEADERS = COLUMN_ORDER.slice(4)
-
   return (
     <div className="rounded-md border">
       <div className="relative overflow-x-auto">
-        <table className="w-full caption-bottom text-sm border-collapse">
+        <table
+          className="caption-bottom text-sm border-collapse table-fixed"
+          style={{ width: "max-content", minWidth: "100%" }}
+        >
           <thead className="sticky top-0 z-30 bg-background border-b">
-            <tr>
-              {/* Sticky 1: Фото (128px) */}
-              <th className="sticky left-0 z-40 bg-background border-r min-w-[128px] w-[128px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+            <tr className="min-h-[56px]">
+              {/* Sticky 1: Фото */}
+              <th
+                style={{
+                  width: columnWidths.photo,
+                  minWidth: columnWidths.photo,
+                  left: stickyLefts.photo,
+                }}
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+              >
                 Фото
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "photo")}
+                  onDoubleClick={() => resetColumnWidth("photo")}
+                />
               </th>
-              {/* Sticky 2: Сводка (left 128, width 200 → 328) */}
-              <th className="sticky left-[128px] z-40 bg-background border-r min-w-[200px] w-[200px] px-3 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 2: Сводка */}
+              <th
+                style={{
+                  width: columnWidths.svodka,
+                  minWidth: columnWidths.svodka,
+                  left: stickyLefts.svodka,
+                }}
+                className="sticky z-40 bg-background border-r px-3 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+              >
                 Сводка
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "svodka")}
+                  onDoubleClick={() => resetColumnWidth("svodka")}
+                />
               </th>
-              {/* Sticky 3: Ярлык (left 328, width 72 → 400) */}
-              <th className="sticky left-[328px] z-40 bg-background border-r min-w-[72px] w-[72px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 3: Ярлык */}
+              <th
+                style={{
+                  width: columnWidths.yarlyk,
+                  minWidth: columnWidths.yarlyk,
+                  left: stickyLefts.yarlyk,
+                }}
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative"
+              >
                 Ярлык
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "yarlyk")}
+                  onDoubleClick={() => resetColumnWidth("yarlyk")}
+                />
               </th>
-              {/* Sticky 4: Артикул (left 400, width 112 → 512) */}
-              <th className="sticky left-[400px] z-40 bg-background border-r min-w-[112px] w-[112px] px-2 py-2 text-xs font-medium text-muted-foreground text-left">
+              {/* Sticky 4: Артикул — правая граница sticky-зоны, shadow-разделитель */}
+              <th
+                style={{
+                  width: columnWidths.artikul,
+                  minWidth: columnWidths.artikul,
+                  left: stickyLefts.artikul,
+                }}
+                className="sticky z-40 bg-background border-r px-2 py-2 text-[11px] font-medium text-muted-foreground text-left align-bottom whitespace-normal break-words leading-tight relative shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
+              >
                 Артикул
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "artikul")}
+                  onDoubleClick={() => resetColumnWidth("artikul")}
+                />
               </th>
-              {/* Статус цены (label строки) */}
-              <th className="px-2 py-2 text-xs font-medium text-muted-foreground text-left min-w-[180px] whitespace-nowrap">
-                Статус цены
-              </th>
-              {/* 26 расчётных колонок */}
-              {SCROLL_HEADERS.map((header) => (
+              {/* Остальные 27 колонок — Статус цены + 26 расчётных */}
+              {SCROLL_COLUMNS.map(({ key, label }) => (
                 <th
-                  key={header}
-                  className="px-2 py-2 text-xs font-medium text-muted-foreground text-right whitespace-nowrap"
+                  key={key}
+                  style={{
+                    width: columnWidths[key],
+                    minWidth: columnWidths[key],
+                  }}
+                  className={cn(
+                    "px-2 py-2 text-[11px] font-medium text-muted-foreground align-bottom whitespace-normal break-words leading-tight relative",
+                    key === "status" ? "text-left" : "text-right",
+                  )}
                 >
-                  {header}
+                  {label}
+                  <ColumnResizeHandle
+                    onMouseDown={(e) => startResize(e, key)}
+                    onDoubleClick={() => resetColumnWidth(key)}
+                  />
                 </th>
               ))}
             </tr>
@@ -285,11 +600,16 @@ export function PriceCalculatorTable({
                           "border-t border-t-border/60",
                       )}
                     >
-                      {/* Sticky 1: Фото (rowSpan всего Product) — 128px */}
+                      {/* Sticky 1: Фото (rowSpan всего Product) */}
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
-                          className="sticky left-0 z-10 bg-background border-r min-w-[128px] w-[128px] align-top p-2 group-hover:bg-muted/50"
+                          style={{
+                            width: columnWidths.photo,
+                            minWidth: columnWidths.photo,
+                            left: stickyLefts.photo,
+                          }}
+                          className="sticky z-10 bg-background border-r align-top p-2 group-hover:bg-muted"
                         >
                           <div className="flex items-start justify-center">
                             {group.product.photoUrl ? (
@@ -310,7 +630,12 @@ export function PriceCalculatorTable({
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
-                          className="sticky left-[128px] z-10 bg-background border-r min-w-[200px] w-[200px] align-top p-3 group-hover:bg-muted/50"
+                          style={{
+                            width: columnWidths.svodka,
+                            minWidth: columnWidths.svodka,
+                            left: stickyLefts.svodka,
+                          }}
+                          className="sticky z-10 bg-background border-r align-top p-3 group-hover:bg-muted"
                         >
                           <div className="flex flex-col gap-1">
                             <div className="text-sm font-medium leading-snug line-clamp-3">
@@ -338,7 +663,12 @@ export function PriceCalculatorTable({
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
-                          className="sticky left-[328px] z-10 bg-background border-r min-w-[72px] w-[72px] align-top p-2 text-sm group-hover:bg-muted/50"
+                          style={{
+                            width: columnWidths.yarlyk,
+                            minWidth: columnWidths.yarlyk,
+                            left: stickyLefts.yarlyk,
+                          }}
+                          className="sticky z-10 bg-background border-r align-top p-2 text-sm group-hover:bg-muted"
                         >
                           {cardGroup.card.label ?? (
                             <span className="text-muted-foreground">—</span>
@@ -346,11 +676,16 @@ export function PriceCalculatorTable({
                         </td>
                       )}
 
-                      {/* Sticky 4: Артикул (rowSpan card) */}
+                      {/* Sticky 4: Артикул (rowSpan card) — shadow-разделитель */}
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
-                          className="sticky left-[400px] z-10 bg-background border-r min-w-[112px] w-[112px] align-top p-2 font-mono text-xs group-hover:bg-muted/50"
+                          style={{
+                            width: columnWidths.artikul,
+                            minWidth: columnWidths.artikul,
+                            left: stickyLefts.artikul,
+                          }}
+                          className="sticky z-10 bg-background border-r align-top p-2 font-mono text-xs group-hover:bg-muted shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
                         >
                           {cardGroup.card.nmId}
                         </td>
@@ -360,8 +695,12 @@ export function PriceCalculatorTable({
                           эту ячейку (первая не-sticky), чтобы визуально
                           маркировать тип строки. */}
                       <td
+                        style={{
+                          width: columnWidths.status,
+                          minWidth: columnWidths.status,
+                        }}
                         className={cn(
-                          "px-2 py-1 h-10 text-sm align-middle min-w-[180px]",
+                          "px-2 py-1 h-10 text-sm align-middle",
                           stripClass,
                         )}
                       >
@@ -389,109 +728,255 @@ export function PriceCalculatorTable({
                       </td>
 
                       {/* ── 26 расчётных колонок ─────────────────── */}
-                      {/* COLUMN_ORDER[4]: Процент выкупа (из WbCard) */}
-                      <td className={CELL_CLASS}>
+                      {/* COLUMN_ORDER[4]: Процент выкупа (из WbCard) — оставляем fmtPctSimple */}
+                      <td
+                        style={{
+                          width: columnWidths.buyoutPct,
+                          minWidth: columnWidths.buyoutPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
                         {fmtPctSimple(cardGroup.card.buyoutPct ?? null)}
                       </td>
                       {/* COLUMN_ORDER[5]: Цена для установки */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.sellerPriceBeforeDiscount)}
+                      <td
+                        style={{
+                          width: columnWidths.sellerPriceBeforeDiscount,
+                          minWidth: columnWidths.sellerPriceBeforeDiscount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.sellerPriceBeforeDiscount)}
                       </td>
                       {/* COLUMN_ORDER[6]: Скидка продавца % */}
-                      <td className={CELL_CLASS}>
-                        {fmtPctSimple(row.sellerDiscountPct)}
+                      <td
+                        style={{
+                          width: columnWidths.sellerDiscountPct,
+                          minWidth: columnWidths.sellerDiscountPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtPctInt(row.sellerDiscountPct)}
                       </td>
                       {/* COLUMN_ORDER[7]: Цена продавца (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.sellerPrice)}
+                      <td
+                        style={{
+                          width: columnWidths.sellerPrice,
+                          minWidth: columnWidths.sellerPrice,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.sellerPrice)}
                       </td>
                       {/* COLUMN_ORDER[8]: Скидка WB % */}
-                      <td className={CELL_CLASS}>
-                        {fmtPctSimple(row.wbDiscountPct)}
+                      <td
+                        style={{
+                          width: columnWidths.wbDiscountPct,
+                          minWidth: columnWidths.wbDiscountPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtPctInt(row.wbDiscountPct)}
                       </td>
                       {/* COLUMN_ORDER[9]: Цена со скидкой WB (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.priceAfterWbDiscount)}
+                      <td
+                        style={{
+                          width: columnWidths.priceAfterWbDiscount,
+                          minWidth: columnWidths.priceAfterWbDiscount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.priceAfterWbDiscount)}
                       </td>
                       {/* COLUMN_ORDER[10]: WB Клуб % */}
-                      <td className={CELL_CLASS}>
-                        {fmtPctSimple(row.clubDiscountPct)}
+                      <td
+                        style={{
+                          width: columnWidths.clubDiscountPct,
+                          minWidth: columnWidths.clubDiscountPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtPctInt(row.clubDiscountPct)}
                       </td>
                       {/* COLUMN_ORDER[11]: Цена со скидкой WB клуба (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.priceAfterClubDiscount)}
+                      <td
+                        style={{
+                          width: columnWidths.priceAfterClubDiscount,
+                          minWidth: columnWidths.priceAfterClubDiscount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.priceAfterClubDiscount)}
                       </td>
                       {/* COLUMN_ORDER[12]: Кошелёк % */}
-                      <td className={CELL_CLASS}>
-                        {fmtPctSimple(row.walletPct)}
+                      <td
+                        style={{
+                          width: columnWidths.walletPct,
+                          minWidth: columnWidths.walletPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtPctInt(row.walletPct)}
                       </td>
                       {/* COLUMN_ORDER[13]: Цена с WB кошельком (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.priceAfterWallet)}
+                      <td
+                        style={{
+                          width: columnWidths.priceAfterWallet,
+                          minWidth: columnWidths.priceAfterWallet,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.priceAfterWallet)}
                       </td>
                       {/* COLUMN_ORDER[14]: Эквайринг руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.acquiringAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.acquiringAmount,
+                          minWidth: columnWidths.acquiringAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.acquiringAmount)}
                       </td>
-                      {/* COLUMN_ORDER[15]: Комиссия % */}
-                      <td className={CELL_CLASS}>
+                      {/* COLUMN_ORDER[15]: Комиссия % — оставляем fmtPctSimple */}
+                      <td
+                        style={{
+                          width: columnWidths.commFbwPct,
+                          minWidth: columnWidths.commFbwPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
                         {fmtPctSimple(row.commFbwPct)}
                       </td>
                       {/* COLUMN_ORDER[16]: Комиссия руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.commissionAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.commissionAmount,
+                          minWidth: columnWidths.commissionAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.commissionAmount)}
                       </td>
                       {/* COLUMN_ORDER[17]: ДРР % */}
-                      <td className={CELL_CLASS}>
-                        {fmtPctSimple(row.drrPct)}
+                      <td
+                        style={{
+                          width: columnWidths.drrPct,
+                          minWidth: columnWidths.drrPct,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtPctInt(row.drrPct)}
                       </td>
                       {/* COLUMN_ORDER[18]: Реклама руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.drrAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.drrAmount,
+                          minWidth: columnWidths.drrAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.drrAmount)}
                       </td>
                       {/* COLUMN_ORDER[19]: Тариф джем руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.jemAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.jemAmount,
+                          minWidth: columnWidths.jemAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.jemAmount)}
                       </td>
                       {/* COLUMN_ORDER[20]: К перечислению (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.transferAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.transferAmount,
+                          minWidth: columnWidths.transferAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.transferAmount)}
                       </td>
                       {/* COLUMN_ORDER[21]: Закупка руб. */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.costPrice)}
+                      <td
+                        style={{
+                          width: columnWidths.costPrice,
+                          minWidth: columnWidths.costPrice,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.costPrice)}
                       </td>
                       {/* COLUMN_ORDER[22]: Брак руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.defectAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.defectAmount,
+                          minWidth: columnWidths.defectAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.defectAmount)}
                       </td>
                       {/* COLUMN_ORDER[23]: Доставка руб. */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.deliveryAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.deliveryAmount,
+                          minWidth: columnWidths.deliveryAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.deliveryAmount)}
                       </td>
                       {/* COLUMN_ORDER[24]: Кредит руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.creditAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.creditAmount,
+                          minWidth: columnWidths.creditAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.creditAmount)}
                       </td>
                       {/* COLUMN_ORDER[25]: Общие расходы руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.overheadAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.overheadAmount,
+                          minWidth: columnWidths.overheadAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.overheadAmount)}
                       </td>
                       {/* COLUMN_ORDER[26]: Налог руб. (output) */}
-                      <td className={CELL_CLASS}>
-                        {fmtMoney(row.computed.taxAmount)}
+                      <td
+                        style={{
+                          width: columnWidths.taxAmount,
+                          minWidth: columnWidths.taxAmount,
+                        }}
+                        className={CELL_CLASS}
+                      >
+                        {fmtMoneyInt(row.computed.taxAmount)}
                       </td>
                       {/* COLUMN_ORDER[27]: Прибыль руб. (подсветка) */}
                       <td
+                        style={{
+                          width: columnWidths.profit,
+                          minWidth: columnWidths.profit,
+                        }}
                         className={cn(
                           CELL_CLASS,
                           profitClass(row.computed.profit),
                         )}
                       >
-                        {fmtMoney(row.computed.profit)}
+                        {fmtMoneyInt(row.computed.profit)}
                       </td>
-                      {/* COLUMN_ORDER[28]: Re продаж % (подсветка) */}
+                      {/* COLUMN_ORDER[28]: Re продаж % (подсветка, с десятыми) */}
                       <td
+                        style={{
+                          width: columnWidths.returnOnSalesPct,
+                          minWidth: columnWidths.returnOnSalesPct,
+                        }}
                         className={cn(
                           CELL_CLASS,
                           profitClass(row.computed.returnOnSalesPct),
@@ -499,8 +984,12 @@ export function PriceCalculatorTable({
                       >
                         {fmtPct(row.computed.returnOnSalesPct, true)}
                       </td>
-                      {/* COLUMN_ORDER[29]: ROI % (подсветка) */}
+                      {/* COLUMN_ORDER[29]: ROI % (подсветка, с десятыми) */}
                       <td
+                        style={{
+                          width: columnWidths.roiPct,
+                          minWidth: columnWidths.roiPct,
+                        }}
                         className={cn(
                           CELL_CLASS,
                           profitClass(row.computed.roiPct),

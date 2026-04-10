@@ -61,6 +61,7 @@ model User {
   role            UserRole          @default(VIEWER)
   allowedSections ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
   sectionRoles    UserSectionRole[] // актуальный источник прав per раздел
+  preferences     UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
   isActive        Boolean           @default(true)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -79,6 +80,25 @@ model UserSectionRole {
   role    SectionRole
 
   @@unique([userId, section])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// User Preferences — персистентные настройки UI per-user (key/value JSON)
+// ──────────────────────────────────────────────────────────────────
+// Используется для хранения кастомизаций UI: ширины столбцов таблиц,
+// выбранные фильтры, предпочтения сортировок и т.п.
+// key формат: "<section>.<page>.<setting>" (например "prices.wb.columnWidths")
+model UserPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([userId])
 }
 
 // ──────────────────────────────────────────────────────────────────

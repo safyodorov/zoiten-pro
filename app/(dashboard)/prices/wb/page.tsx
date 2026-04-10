@@ -24,6 +24,7 @@ import {
   type WbCardRowGroup,
 } from "@/components/prices/PriceCalculatorTable"
 import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculatorTableWrapper"
+import { getUserPreference } from "@/app/actions/user-preferences"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
@@ -81,33 +82,36 @@ export default async function PricesWbPage() {
   }
 
   // ── 2. Параллельная загрузка данных ─────────────────────────────
-  const [appSettings, promotions, linkedArticles] = await Promise.all([
-    // 6 глобальных ставок
-    prisma.appSetting.findMany({
-      where: { key: { in: [...RATE_KEYS] } },
-    }),
-    // Активные акции (endDateTime >= now) + номенклатуры
-    prisma.wbPromotion.findMany({
-      where: { endDateTime: { gte: new Date() } },
-      include: { nomenclatures: true },
-    }),
-    // Привязанные статьи WB для активных (не soft-deleted) товаров
-    prisma.marketplaceArticle.findMany({
-      where: {
-        marketplaceId: wbMarketplace.id,
-        product: { deletedAt: null },
-      },
-      include: {
-        product: {
-          include: {
-            cost: true,
-            subcategory: true,
-            category: true,
+  const [appSettings, promotions, linkedArticles, columnWidthsPref] =
+    await Promise.all([
+      // 6 глобальных ставок
+      prisma.appSetting.findMany({
+        where: { key: { in: [...RATE_KEYS] } },
+      }),
+      // Активные акции (endDateTime >= now) + номенклатуры
+      prisma.wbPromotion.findMany({
+        where: { endDateTime: { gte: new Date() } },
+        include: { nomenclatures: true },
+      }),
+      // Привязанные статьи WB для активных (не soft-deleted) товаров
+      prisma.marketplaceArticle.findMany({
+        where: {
+          marketplaceId: wbMarketplace.id,
+          product: { deletedAt: null },
+        },
+        include: {
+          product: {
+            include: {
+              cost: true,
+              subcategory: true,
+              category: true,
+            },
           },
         },
-      },
-    }),
-  ])
+      }),
+      // Per-user сохранённые ширины столбцов таблицы (план 260410-mya)
+      getUserPreference<Record<string, number>>("prices.wb.columnWidths"),
+    ])
 
   // ── 3. Построить ratesMap из AppSetting (fallback → DEFAULT_RATES) ──
   const rates: Record<RateKey, number> = { ...DEFAULT_RATES }
@@ -425,7 +429,10 @@ export default async function PricesWbPage() {
         </Alert>
       )}
 
-      <PriceCalculatorTableWrapper groups={groups} />
+      <PriceCalculatorTableWrapper
+        groups={groups}
+        initialColumnWidths={columnWidthsPref ?? {}}
+      />
     </div>
   )
 }
