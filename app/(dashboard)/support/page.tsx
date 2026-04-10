@@ -6,7 +6,6 @@ export default async function SupportPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center gap-6">
       <div className="space-y-3">
-        <h1 className="text-2xl font-semibold text-gray-900">Служба поддержки</h1>
         <p className="text-gray-500 max-w-md mx-auto">
           Интеграция AI-бота поддержки в процессе. Модуль будет доступен после
           деплоя сервиса ai-cs-zoiten.

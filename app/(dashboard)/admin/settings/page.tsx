@@ -21,7 +21,6 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Настройки</h1>
       <SettingsTabs brands={brands} marketplaces={marketplaces} />
     </div>
   )

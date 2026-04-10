@@ -5,20 +5,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { ICON_MAP } from "@/components/layout/Sidebar"
-
-interface NavItem {
-  section: string
-  href: string
-  label: string
-  icon?: string
-}
+import { ICON_MAP, type NavItem } from "@/components/layout/nav-items"
 
 interface NavLinksProps {
   items: NavItem[]
+  collapsed?: boolean
 }
 
-export function NavLinks({ items }: NavLinksProps) {
+export function NavLinks({ items, collapsed = false }: NavLinksProps) {
   const pathname = usePathname()
 
   return (
@@ -31,15 +25,27 @@ export function NavLinks({ items }: NavLinksProps) {
           <Link
             key={item.href}
             href={item.href}
+            title={collapsed ? item.label : undefined}
             className={cn(
-              "flex items-center gap-2.5 px-4 py-2 text-sm transition-colors",
+              "flex items-center text-sm transition-colors",
+              collapsed ? "justify-center px-2 py-2.5 mx-1 my-0.5 rounded-md" : "gap-2.5 px-4 py-2",
               isActive
-                ? "bg-primary/10 text-primary font-medium border-r-2 border-primary"
+                ? collapsed
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "bg-primary/10 text-primary font-medium border-r-2 border-primary"
                 : "hover:bg-accent text-muted-foreground hover:text-foreground"
             )}
           >
-            {Icon && <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-primary" : "")} />}
-            {item.label}
+            {Icon && (
+              <Icon
+                className={cn(
+                  "shrink-0",
+                  collapsed ? "w-5 h-5" : "w-4 h-4",
+                  isActive ? "text-primary" : ""
+                )}
+              />
+            )}
+            {!collapsed && <span className="truncate">{item.label}</span>}
           </Link>
         )
       })}

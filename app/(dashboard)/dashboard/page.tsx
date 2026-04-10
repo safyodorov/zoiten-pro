@@ -31,9 +31,11 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Добро пожаловать, {session.user.name}</h1>
-        <p className="text-muted-foreground">Выберите раздел для работы</p>
+      <div className="mb-6">
+        <p className="text-lg text-foreground">
+          Добро пожаловать, <span className="font-semibold">{session.user.name}</span>
+        </p>
+        <p className="text-sm text-muted-foreground">Выберите раздел для работы</p>
       </div>
 
       {visibleSections.length === 0 ? (

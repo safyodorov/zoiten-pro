@@ -10,7 +10,6 @@ export default async function CardsLayout({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Карточки товаров</h1>
       <CardsTabs />
       {children}
     </div>

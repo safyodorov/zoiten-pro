@@ -76,9 +76,6 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Пользователи</h1>
-      </div>
       <UserTable users={userRows} availableEmployees={employeeOptions} />
     </div>
   )

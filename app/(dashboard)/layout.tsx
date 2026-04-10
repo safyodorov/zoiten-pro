@@ -1,9 +1,10 @@
 // app/(dashboard)/layout.tsx
-// Authenticated layout — sidebar + header wrapper
+// Authenticated layout — delegates UI to client DashboardShell (collapsible sidebar + dynamic header)
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { Sidebar } from "@/components/layout/Sidebar"
-import { Header } from "@/components/layout/Header"
+import { DashboardShell } from "@/components/layout/DashboardShell"
+import { LogoutForm } from "@/components/layout/LogoutForm"
+import { NAV_ITEMS } from "@/components/layout/nav-items"
 
 export default async function DashboardLayout({
   children,
@@ -17,16 +18,20 @@ export default async function DashboardLayout({
     redirect("/login")
   }
 
+  const isSuperadmin = session.user.role === "SUPERADMIN"
+  const allowedSections = session.user.allowedSections ?? []
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => isSuperadmin || allowedSections.includes(item.section)
+  )
+
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar
-        userRole={session.user.role}
-        allowedSections={session.user.allowedSections}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header user={session.user} />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
-      </div>
-    </div>
+    <DashboardShell
+      user={session.user}
+      navItems={visibleItems}
+      logoutForm={<LogoutForm />}
+    >
+      {children}
+    </DashboardShell>
   )
 }

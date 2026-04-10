@@ -32,7 +32,6 @@ export default async function EditProductPage({
   if (!product) notFound()
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Редактировать товар</h1>
       <ProductForm brands={brands} marketplaces={marketplaces} product={product} />
     </div>
   )

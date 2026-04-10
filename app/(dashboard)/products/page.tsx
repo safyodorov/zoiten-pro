@@ -107,8 +107,7 @@ export default async function ProductsPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Товары</h1>
+      <div className="flex items-center justify-end">
         <Link
           href="/products/new"
           className="inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90"

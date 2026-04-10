@@ -67,7 +67,6 @@ export default async function BatchesPage({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Себестоимость партий</h1>
       <div className="flex items-center gap-4 flex-wrap">
         <CostSearchInput defaultValue={q ?? ""} />
         <CostFilters

@@ -91,8 +91,7 @@ export default async function EmployeesPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Сотрудники</h1>
+      <div className="flex items-center justify-end">
         <span className="text-sm text-muted-foreground">{employees.length} чел.</span>
       </div>
 
