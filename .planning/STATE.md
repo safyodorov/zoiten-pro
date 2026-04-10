@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-09-PLAN.md (PricingCalculatorDialog + Wrapper + PriceRow extension)
-last_updated: "2026-04-10T10:59:28.905Z"
+stopped_at: Completed 07-10-PLAN.md (WbPromotionsSyncButton + WbAutoPromoUploadButton + empty state Alert)
+last_updated: "2026-04-10T11:06:28.237Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Plan: 10 of 12
 | Phase 07-prices-wb P06 | 3min | 2 tasks | 6 files |
 | Phase 07-prices-wb P07 | 15min | 2 tasks | 3 files |
 | Phase 07-prices-wb P09 | 18min | 1 tasks | 4 files |
+| Phase 07-prices-wb P10 | 159s | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: PriceRow расширен полями inputs (PricingInputs) и context (productId/subcategoryId/categoryId) — модалка работает без дополнительных DB-запросов, данные собираются RSC на сервере и передаются через props
 - [Phase 07-prices-wb]: Realtime пересчёт через useWatch({name: [5 полей]}) + useMemo → calculatePricing — rerender только правой колонки outputs, левая колонка inputs не перерисовывается
 - [Phase 07-prices-wb]: Scope checkboxes ДРР/Брак: checked=per-product (updateProductOverride), unchecked=subcategory/category default (updateSubcategoryDefault/updateCategoryDefault); Доставка всегда per-product по D-14
+- [Phase 07-prices-wb]: Plan 07-10: Native <select> в Dialog для выбора auto-акции (CLAUDE.md convention, не base-ui Select)
+- [Phase 07-prices-wb]: Plan 07-10: toast.loading/dismiss только для PromotionsSync (30-90 сек), Excel upload без loading toast
 
 ### Roadmap Evolution
 
@@ -164,6 +167,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T10:51:08.944Z
-Stopped at: Completed 07-09-PLAN.md (PricingCalculatorDialog + Wrapper + PriceRow extension)
+Last session: 2026-04-10T11:06:28.234Z
+Stopped at: Completed 07-10-PLAN.md (WbPromotionsSyncButton + WbAutoPromoUploadButton + empty state Alert)
 Resume file: None
