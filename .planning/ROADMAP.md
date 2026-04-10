@@ -141,7 +141,7 @@ Plans:
 - [x] 07-04-PLAN.md — Wave 3 API routes: /api/wb-promotions-sync + /api/wb-promotions-upload-excel (с parseAutoPromoExcel)
 - [x] 07-05-PLAN.md — Wave 3 app/actions/pricing.ts (7 server actions + Zod схемы) + pricing-settings тест GREEN
 - [x] 07-06-PLAN.md — Wave 4 UI foundation: shadcn tooltip install + /prices layout/redirect/ozon stub + PricesTabs
-- [ ] 07-07-PLAN.md — Wave 5 клиентские компоненты: GlobalRatesBar + PromoTooltip + PriceCalculatorTable (sticky + rowSpan + indicator strips)
+- [x] 07-07-PLAN.md — Wave 5 клиентские компоненты: GlobalRatesBar + PromoTooltip + PriceCalculatorTable (sticky + rowSpan + indicator strips)
 - [ ] 07-08-PLAN.md — Wave 6 RSC page /prices/wb — data assembly + server-side расчёт + render компонентов
 - [ ] 07-09-PLAN.md — Wave 7 PricingCalculatorDialog (realtime модалка) + PriceCalculatorTableWrapper (state) + human verification клик+save
 - [ ] 07-10-PLAN.md — Wave 8 WbPromotionsSyncButton + WbAutoPromoUploadButton + Alert empty state + human verification реального sync/upload

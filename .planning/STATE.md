@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: "Completed 07-prices-wb-06-PLAN.md (UI инфраструктура: tooltip, layout, redirect, табы)"
-last_updated: "2026-04-10T08:56:22.369Z"
+stopped_at: "Completed 07-prices-wb-07-PLAN.md (3 клиентских компонента: GlobalRatesBar, PromoTooltip, PriceCalculatorTable)"
+last_updated: "2026-04-10T09:28:29.510Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 
 ## Performance Metrics
 
@@ -70,6 +70,7 @@ Plan: 4 of 12
 | Phase 07-prices-wb P05 | 7min | 1 tasks | 3 files |
 | Phase 07-prices-wb P04 | 9min | 2 tasks | 4 files |
 | Phase 07-prices-wb P06 | 3min | 2 tasks | 6 files |
+| Phase 07-prices-wb P07 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,11 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Excel auto-акций: реальные индексы колонок S=18 (planDiscount), T=19 (status) — 20 колонок 0..19; план 07-04 ошибочно указывал T=19/U=20 (off-by-one), исправлено в парсере и Wave 0 тесте
 - [Phase 07-prices-wb]: shadcn tooltip создан вручную как @base-ui/react wrapper (не через CLI) — паттерн dialog.tsx, TooltipProvider встроен в Tooltip root для упрощения использования
 - [Phase 07-prices-wb]: PricesTabs визуально идентичен CardsTabs (pathname.startsWith + border-primary) — единый паттерн табов для разделов с подсекциями маркетплейсов
+- [Phase 07-prices-wb]: PriceCalculatorTable: COLUMN_ORDER разделён между sticky колонками (4 первых) и scroll-областью (26 остальных) — избегает дублирования заголовков
+- [Phase 07-prices-wb]: PriceRow расширен 10 input-полями (sellerDiscountPct/wbDiscountPct/clubDiscountPct/walletPct/commFbwPct/drrPct/defectRatePct/costPrice/deliveryCostRub) — плану 07-08 не нужны дополнительные запросы
+- [Phase 07-prices-wb]: base-ui TooltipTrigger использует render-prop для замены button на span (НЕ asChild как radix) — паттерн из components/ui/dialog.tsx
+- [Phase 07-prices-wb]: GlobalRatesBar: debounced save через useRef<Partial<Record<key, timer>>> — отдельный таймер на поле, чтобы изменение одного не сбрасывало pending save другого
+- [Phase 07-prices-wb]: Indicator strip (border-l-4 blue/purple/amber) рендерится на первой не-sticky ячейке (Статус цены), не на <tr> — чтобы не конфликтовать с sticky колонками
 
 ### Roadmap Evolution
 
@@ -153,6 +159,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T08:56:22.365Z
-Stopped at: Completed 07-prices-wb-06-PLAN.md (UI инфраструктура: tooltip, layout, redirect, табы)
+Last session: 2026-04-10T09:28:14.327Z
+Stopped at: Completed 07-prices-wb-07-PLAN.md (3 клиентских компонента: GlobalRatesBar, PromoTooltip, PriceCalculatorTable)
 Resume file: None
