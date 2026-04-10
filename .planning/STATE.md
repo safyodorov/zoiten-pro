@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 07-prices-wb-00-PLAN.md (Wave 0 infra)
-last_updated: "2026-04-10T07:51:17.246Z"
+stopped_at: Completed 07-prices-wb-03-PLAN.md (WB Promotions API + avgSalesSpeed7d)
+last_updated: "2026-04-10T08:19:23.361Z"
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-05)
 ## Current Position
 
 Phase: 07 (prices-wb) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Plan: 2 of 12
 | Phase 07-prices-wb P01 | 3min | 2 tasks | 2 files |
 | Phase 07-prices-wb P00 | 21min | 2 tasks | 8 files |
 | Phase 07-prices-wb P02 | 25min | 1 tasks | 3 files |
+| Phase 07-prices-wb P03 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,9 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Pricing formulas извлечены напрямую из raw Excel cell formulas: acquiring/commission/credit/overhead/tax все от sellerPrice (I17*X%), не от priceAfterWallet
 - [Phase 07-prices-wb]: COLUMN_ORDER = 30 элементов (без Фото — rowSpan); compile-time assertion через conditional type
 - [Phase 07-prices-wb]: lib/pricing-math.ts — pure TypeScript module без импортов, используется одновременно в RSC (сервер) и realtime пересчёте (клиент)
+- [Phase 07-prices-wb]: PROMO_API = https://dp-calendar-api.wildberries.ru (origin s2sauth-calendar), рейт-лимит 10 req/6sec обрабатывается через sleep(600ms) между запросами + sleep(6000ms) retry(1) на 429
+- [Phase 07-prices-wb]: fetchPromotionNomenclatures silent return [] при 422 — auto-акции обрабатываются через Excel (D-06), не через API
+- [Phase 07-prices-wb]: fetchAvgSalesSpeed7d в /api/wb-sync обёрнут в try/catch (degraded mode) — sync не падает, если Sales API недоступен, поле в БД остаётся null
 
 ### Roadmap Evolution
 
@@ -140,6 +144,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-10T07:49:05.506Z
-Stopped at: Completed 07-prices-wb-00-PLAN.md (Wave 0 infra)
+Last session: 2026-04-10T08:18:34.825Z
+Stopped at: Completed 07-prices-wb-03-PLAN.md (WB Promotions API + avgSalesSpeed7d)
 Resume file: None
