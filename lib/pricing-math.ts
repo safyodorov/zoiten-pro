@@ -130,55 +130,57 @@ export const HARDCODED_DEFECT_RATE_PCT = 2
 /** Hardcoded fallback для доставки на маркетплейс, ₽ (D-01). */
 export const HARDCODED_DELIVERY_COST_RUB = 30
 
-/** Порядок колонок в таблице «Управление ценами WB» — ровно 31 колонка.
+/** Порядок колонок в таблице «Управление ценами WB» — ровно 30 колонок.
  *
  *  Источник истины: `C:/Users/User/Desktop/Форма управления ценами.xlsx`,
- *  заголовки из 4-й строки (индекс 3). Используется планом 07-07
- *  (PriceCalculatorTable) для рендера колонок в правильном порядке.
+ *  заголовки из строки 9 (Excel 1-индекс), диапазон `A9:AE9`.
+ *  Используется планом 07-07 (PriceCalculatorTable) для рендера колонок.
  *
- *  **Не 30, а 31** — отклонение от плана 07-02, который ошибочно указывал «30 колонок».
- *  Excel-эталон содержит 31 колонку (включая identifying колонки Фото, Сводка,
- *  Статус цены, Ярлык, Артикул, Процент выкупа). Docs-комментарии ниже показывают
- *  соответствие колонки либо входу/выходу формул, либо идентифицирующему полю.
+ *  **30, не 31** — колонка «Фото» обрабатывается отдельно через rowSpan-группировку
+ *  в таблице и не входит в `COLUMN_ORDER` (см. `.planning/phases/07-prices-wb/07-WAVE0-NOTES.md`
+ *  секция 1).
+ *
+ *  Соответствие index → content:
+ *    - 0..4   identifying (Сводка / Статус цены / Ярлык / Артикул / Процент выкупа)
+ *    - 5..29  расчётные колонки формулы
  */
 export const COLUMN_ORDER = [
-  "Фото",                          //  1 — identifying: photo
-  "Сводка",                        //  2 — identifying: name + stock + sales speed
-  "Статус цены",                   //  3 — identifying: "Текущая цена" / название акции / "Расчетная цена N"
-  "Ярлык",                         //  4 — identifying: product tag
-  "Артикул",                       //  5 — identifying: nmId
-  "Процент выкупа",                //  6 — input: buyoutPct
-  "Цена для установки",            //  7 — input: priceBeforeDiscount
-  "Скидка продавца",               //  8 — input: sellerDiscountPct
-  "Цена продавца",                 //  9 — output: sellerPrice
-  "Скидка WB",                     // 10 — input: wbDiscountPct
-  "Цена со скидкой WB",            // 11 — output: priceAfterWbDiscount
-  "WB Клуб",                       // 12 — input: clubDiscountPct
-  "Цена со скидкой WB клуба",      // 13 — output: priceAfterClubDiscount
-  "Кошелёк",                       // 14 — input: walletPct
-  "Цена с WB кошельком",           // 15 — output: priceAfterWallet
-  "Эквайринг",                     // 16 — output: acquiringAmount
-  "Комиссия, %",                   // 17 — input: commFbwPct
-  "Комиссия, руб.",                // 18 — output: commissionAmount
-  "ДРР, %",                        // 19 — input: drrPct
-  "Реклама, руб.",                 // 20 — output: drrAmount
-  "Тариф джем, руб.",              // 21 — output: jemAmount
-  "К перечислению",                // 22 — output: transferAmount
-  "Закупка, руб.",                 // 23 — input: costPrice
-  "Брак, руб.",                    // 24 — output: defectAmount
-  "Доставка на маркеплейс, руб.",  // 25 — input/output: deliveryAmount (= deliveryCostRub)
-  "Кредит, руб.",                  // 26 — output: creditAmount
-  "Общие расходы, руб.",           // 27 — output: overheadAmount
-  "Налог, руб.",                   // 28 — output: taxAmount
-  "Прибыль, руб.",                 // 29 — output: profit
-  "Re продаж, %",                  // 30 — output: returnOnSalesPct
-  "ROI, %",                        // 31 — output: roiPct
+  "Сводка",                        //  1 — identifying: name + stock + sales speed
+  "Статус цены",                   //  2 — identifying: "Текущая цена" / название акции / "Расчетная цена N"
+  "Ярлык",                         //  3 — identifying: product tag
+  "Артикул",                       //  4 — identifying: nmId
+  "Процент выкупа",                //  5 — input: buyoutPct
+  "Цена для установки",            //  6 — input: priceBeforeDiscount
+  "Скидка продавца",               //  7 — input: sellerDiscountPct
+  "Цена продавца",                 //  8 — output: sellerPrice
+  "Скидка WB",                     //  9 — input: wbDiscountPct
+  "Цена со скидкой WB",            // 10 — output: priceAfterWbDiscount
+  "WB Клуб",                       // 11 — input: clubDiscountPct
+  "Цена со скидкой WB клуба",      // 12 — output: priceAfterClubDiscount
+  "Кошелёк",                       // 13 — input: walletPct
+  "Цена с WB кошельком",           // 14 — output: priceAfterWallet
+  "Эквайринг",                     // 15 — output: acquiringAmount
+  "Комиссия, %",                   // 16 — input: commFbwPct
+  "Комиссия, руб.",                // 17 — output: commissionAmount
+  "ДРР, %",                        // 18 — input: drrPct
+  "Реклама, руб.",                 // 19 — output: drrAmount
+  "Тариф джем, руб.",              // 20 — output: jemAmount
+  "К перечислению",                // 21 — output: transferAmount
+  "Закупка, руб.",                 // 22 — input: costPrice
+  "Брак, руб.",                    // 23 — output: defectAmount
+  "Доставка на маркеплейс, руб.",  // 24 — input/output: deliveryAmount (= deliveryCostRub)
+  "Кредит, руб.",                  // 25 — output: creditAmount
+  "Общие расходы, руб.",           // 26 — output: overheadAmount
+  "Налог, руб.",                   // 27 — output: taxAmount
+  "Прибыль, руб.",                 // 28 — output: profit
+  "Re продаж, %",                  // 29 — output: returnOnSalesPct
+  "ROI, %",                        // 30 — output: roiPct
 ] as const
 
-// Compile-time assertion: COLUMN_ORDER содержит ровно 31 элемент.
-// Если TypeScript подчёркивает эту строку — COLUMN_ORDER выше != 31 элементов.
+// Compile-time assertion: COLUMN_ORDER содержит ровно 30 элементов.
+// Если TypeScript подчёркивает эту строку — COLUMN_ORDER выше != 30 элементов.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _COLUMN_ORDER_LENGTH_CHECK: (typeof COLUMN_ORDER)["length"] extends 31 ? true : never = true as never
+const _COLUMN_ORDER_LENGTH_CHECK: (typeof COLUMN_ORDER)["length"] extends 30 ? true : never = true as never
 
 // ──────────────────────────────────────────────────────────────────
 // Fallback resolvers (D-01)

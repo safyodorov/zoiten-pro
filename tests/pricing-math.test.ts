@@ -138,17 +138,40 @@ describe("calculatePricing — zero guards", () => {
 })
 
 // ──────────────────────────────────────────────────────────────────
+// Club discount > 0 — убеждаемся, что transferAmount корректно
+// учитывает скидку клуба (ненулевой clubDiscount не ломает формулу)
+// ──────────────────────────────────────────────────────────────────
+
+describe("calculatePricing — club discount > 0", () => {
+  it("при clubDiscountPct=5 priceAfterClubDiscount пересчитывается, transferAmount остаётся конечным", () => {
+    const out = calculatePricing({ ...goldenInputs, clubDiscountPct: 5 })
+    // priceAfterWbDiscount = 5812.425
+    // priceAfterClubDiscount = 5812.425 × 0.95 = 5521.80375
+    expect(out.priceAfterClubDiscount).toBeCloseTo(5521.80375, 2)
+    // clubDiscountAmount = 5812.425 × 0.05 = 290.62125
+    expect(out.clubDiscountAmount).toBeCloseTo(290.62125, 2)
+    // Прибыль должна быть меньше golden (из-за вычета клубной скидки)
+    expect(out.profit).toBeLessThan(567.683)
+    expect(Number.isFinite(out.profit)).toBe(true)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
 // COLUMN_ORDER — структурная проверка
 // ──────────────────────────────────────────────────────────────────
 
 describe("COLUMN_ORDER", () => {
-  it("содержит ровно 31 колонку (как в canonical Excel)", () => {
-    expect(COLUMN_ORDER).toHaveLength(31)
+  it("содержит ровно 30 колонок (без Фото — rowSpan-группировка)", () => {
+    expect(COLUMN_ORDER).toHaveLength(30)
   })
 
-  it("первая колонка — Фото, последняя — ROI, %", () => {
-    expect(COLUMN_ORDER[0]).toBe("Фото")
+  it("первая колонка — Сводка, последняя — ROI, %", () => {
+    expect(COLUMN_ORDER[0]).toBe("Сводка")
     expect(COLUMN_ORDER[COLUMN_ORDER.length - 1]).toBe("ROI, %")
+  })
+
+  it("не содержит колонку Фото (она обрабатывается rowSpan)", () => {
+    expect(COLUMN_ORDER).not.toContain("Фото")
   })
 
   it("содержит все ключевые колонки формул", () => {
