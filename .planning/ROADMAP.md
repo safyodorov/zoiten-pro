@@ -18,6 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Products Module** - Full product CRUD, photo upload, soft delete, search, and 30-day cleanup (completed 2026-04-06)
 - [x] **Phase 5: UI & Module Stubs** - Animated landing page, stub tabs for future modules, support integration (completed 2026-04-06)
 - [x] **Phase 6: Deployment** - VPS setup, nginx, systemd, SSL, and production go-live (completed 2026-04-06)
+- [ ] **Phase 7: Управление ценами WB** - калькулятор юнит-экономики, синхронизация акций WB, загрузка Excel auto-акций, realtime модалка расчёта
 
 ## Phase Details
 
@@ -119,10 +120,37 @@ Plans:
 - [x] 06-01-PLAN.md — Deploy script, systemd service + timer, nginx server block, updated .env.example
 - [x] 06-02-PLAN.md — DEPLOY.md runbook — complete step-by-step VPS deployment guide
 
+### Phase 7: Управление ценами WB — калькулятор юнит-экономики с акциями и расчётными ценами
+
+**Goal**: Пользователь открывает `/prices/wb`, видит таблицу с группировкой по Product (Фото + Сводка + WbCard → ценовые строки), синхронизирует акции WB одной кнопкой, загружает Excel для auto-акций, кликает на строку → в модалке realtime меняет параметры (цена, ДРР, брак, доставка) и сохраняет расчётную цену в один из 3 слотов. Раздел `/prices/ozon` — заглушка ComingSoon.
+**Depends on**: Phase 6
+**Requirements**: PRICES-01, PRICES-02, PRICES-03, PRICES-04, PRICES-05, PRICES-06, PRICES-07, PRICES-08, PRICES-09, PRICES-10, PRICES-11, PRICES-12, PRICES-13, PRICES-14, PRICES-15, PRICES-16
+**Success Criteria** (what must be TRUE):
+  1. `/prices/wb` показывает таблицу только тех WB-карточек, которые привязаны к товарам через MarketplaceArticle (зелёная галочка). Soft-deleted товары исключены.
+  2. Таблица группирует строки по Product через rowSpan (Фото + Сводка объединены на все ценовые строки), sticky колонки (Фото, Сводка, Ярлык, Артикул) остаются при горизонтальном скролле 30+ колонок расчёта
+  3. Для каждой WbCard отображается порядок: «Текущая цена» → Regular акции (DESC by planPrice) → Auto акции (DESC by planPrice, только с Excel-данными) → Расчётные цены 1/2/3. Indicator strips: regular=blue, auto=purple, calculated=amber
+  4. Клик по любой ценовой строке открывает `PricingCalculatorDialog` с 2-колоночным layout (inputs/outputs), realtime пересчёт через pure function `calculatePricing` из `lib/pricing-math.ts`, сохранение расчётной цены в слот 1/2/3
+  5. Кнопка «Синхронизировать акции» загружает акции WB через Promotions Calendar API (окно [today, today+60d]) с rate limit compliant (600ms / 6000ms retry на 429); кнопка «Загрузить отчёт auto-акции» принимает Excel из кабинета WB и парсит 6 колонок (A/F/L/M/T/U)
+  6. Golden test nmId 800750522 → profit ≈ 567.68 ₽, ROI ≈ 26%, Re продаж ≈ 7% (tests/pricing-math.test.ts GREEN)
+**Plans**: 12 plans
+Plans:
+- [ ] 07-00-PLAN.md — Wave 0 Infrastructure: vitest install, Excel canonical read, WB API smoke test, 5 RED test stubs, fixture copy
+- [ ] 07-01-PLAN.md — Wave 1 Prisma migration + schema changes (4 новые модели + 6 новых полей) + seed AppSetting
+- [ ] 07-02-PLAN.md — Wave 1 lib/pricing-math.ts pure function + fallback resolvers + golden test GREEN (TDD)
+- [ ] 07-03-PLAN.md — Wave 2 lib/wb-api.ts расширения (4 новые функции: promotions + avgSalesSpeed7d) + integration в /api/wb-sync
+- [ ] 07-04-PLAN.md — Wave 3 API routes: /api/wb-promotions-sync + /api/wb-promotions-upload-excel (с parseAutoPromoExcel)
+- [ ] 07-05-PLAN.md — Wave 3 app/actions/pricing.ts (7 server actions + Zod схемы) + pricing-settings тест GREEN
+- [ ] 07-06-PLAN.md — Wave 4 UI foundation: shadcn tooltip install + /prices layout/redirect/ozon stub + PricesTabs
+- [ ] 07-07-PLAN.md — Wave 5 клиентские компоненты: GlobalRatesBar + PromoTooltip + PriceCalculatorTable (sticky + rowSpan + indicator strips)
+- [ ] 07-08-PLAN.md — Wave 6 RSC page /prices/wb — data assembly + server-side расчёт + render компонентов
+- [ ] 07-09-PLAN.md — Wave 7 PricingCalculatorDialog (realtime модалка) + PriceCalculatorTableWrapper (state) + human verification клик+save
+- [ ] 07-10-PLAN.md — Wave 8 WbPromotionsSyncButton + WbAutoPromoUploadButton + Alert empty state + human verification реального sync/upload
+- [ ] 07-11-PLAN.md — Wave 9 Docs (CLAUDE.md, README.md) + финальная валидация + deploy на VPS + end-to-end prod verification
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -132,3 +160,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Products Module | 4/4 | Complete   | 2026-04-06 |
 | 5. UI & Module Stubs | 2/2 | Complete   | 2026-04-06 |
 | 6. Deployment | 2/2 | Complete   | 2026-04-06 |
+| 7. Управление ценами WB | 0/12 | Planned | |

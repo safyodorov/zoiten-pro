@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-04-06T05:12:51.096Z"
-last_activity: 2026-04-06
+stopped_at: Phase 7 UI-SPEC approved
+last_updated: "2026-04-09T14:57:24.396Z"
+last_activity: "2026-04-08 - Completed quick task 260408-syb: Создать модуль Сотрудники"
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
   total_plans: 17
   completed_plans: 17
@@ -111,6 +111,10 @@ Recent decisions affecting current work:
 - [Phase 06-deployment]: DEPLOY.md is single source of truth for VPS deployment — no improvisation required
 - [Phase 06-deployment]: SSL section deferred in DEPLOY.md until zoiten.pro DNS A record points to 85.198.97.89
 
+### Roadmap Evolution
+
+- Phase 7 added: Управление ценами WB — калькулятор юнит-экономики с акциями и расчётными ценами (directory renamed to `07-prices-wb` for clarity)
+
 ### Pending Todos
 
 None yet.
@@ -129,6 +133,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-06T05:09:31.892Z
-Stopped at: Completed 06-02-PLAN.md
-Resume file: None
+Last session: 2026-04-09T14:57:24.374Z
+Stopped at: Phase 7 UI-SPEC approved
+Resume file: .planning/phases/07-prices-wb/07-UI-SPEC.md
