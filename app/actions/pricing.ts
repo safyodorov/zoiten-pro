@@ -333,3 +333,45 @@ export async function updateProductDelivery(
     return { ok: false, error: (e as Error).message }
   }
 }
+
+// ──────────────────────────────────────────────────────────────────
+// WbPromotion displayName — пользовательское название акции для UI.
+// Обновление глобально для всех строк этой акции. Не трогает name
+// (его перезаписывает WB API sync — displayName поверх как override).
+// ──────────────────────────────────────────────────────────────────
+
+export async function updateWbPromotionDisplayName(
+  promotionId: number,
+  displayName: string | null,
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRICES", "MANAGE")
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    return { ok: false, error: (e as Error).message }
+  }
+
+  if (!Number.isInteger(promotionId) || promotionId <= 0) {
+    return { ok: false, error: "Некорректный id акции" }
+  }
+
+  // Нормализация: пустая строка / только пробелы → null (восстанавливаем оригинал)
+  const normalized =
+    displayName && displayName.trim().length > 0 ? displayName.trim() : null
+
+  if (normalized && normalized.length > 200) {
+    return { ok: false, error: "Название слишком длинное (макс 200 символов)" }
+  }
+
+  try {
+    await prisma.wbPromotion.update({
+      where: { id: promotionId },
+      data: { displayName: normalized },
+    })
+    revalidatePath("/prices/wb")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}

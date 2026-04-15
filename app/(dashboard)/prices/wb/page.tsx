@@ -365,7 +365,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         regularRows.push({
           id: `${card.id}-regular-${promo.id}`,
           type: "regular",
-          label: promo.name,
+          label: promo.displayName ?? promo.name,
+          promotionId: promo.id,
           sellerPriceBeforeDiscount: priceBeforeDiscount,
           sellerDiscountPct,
           ...baseRowFields,
@@ -409,7 +410,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         autoRows.push({
           id: `${card.id}-auto-${promo.id}`,
           type: "auto",
-          label: promo.name,
+          label: promo.displayName ?? promo.name,
+          promotionId: promo.id,
           sellerPriceBeforeDiscount: priceBeforeDiscount,
           sellerDiscountPct,
           ...baseRowFields,

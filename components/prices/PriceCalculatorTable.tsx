@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
+import { EditablePromoName } from "@/components/prices/EditablePromoName"
 import { setUserPreference } from "@/app/actions/user-preferences"
 import { ChevronDown, Eye } from "lucide-react"
 
@@ -82,6 +83,8 @@ export interface PriceRow {
   deliveryCostRub: number
 
   // ── promo metadata (только для regular/auto) ─────────────────────
+  /** ID акции в WbPromotion — нужен для редактирования displayName. */
+  promotionId?: number
   promotionDescription?: string | null
   promotionAdvantages?: readonly string[] | null
   /** ISO-строка начала акции (для отображения сроков в тултипе). */
@@ -913,7 +916,14 @@ export function PriceCalculatorTable({
                             startDateTime={row.promotionStartDateTime}
                             endDateTime={row.promotionEndDateTime}
                           >
-                            {row.label}
+                            {row.promotionId != null ? (
+                              <EditablePromoName
+                                promotionId={row.promotionId}
+                                currentLabel={row.label}
+                              />
+                            ) : (
+                              row.label
+                            )}
                           </PromoTooltip>
                         )}
                         {row.type === "calculated" && (

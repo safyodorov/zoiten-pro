@@ -417,6 +417,9 @@ model CalculatedPrice {
 model WbPromotion {
   id            Int                       @id
   name          String
+  /// Пользовательское название для UI. Null → показывать name. Сохраняется
+  /// между синхронизациями (sync обновляет только name из WB API).
+  displayName   String?
   description   String?
   advantages    String[]                  @default([])
   startDateTime DateTime
