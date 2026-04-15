@@ -72,6 +72,10 @@ interface PricesWbPageProps {
     subcategories?: string
     stock?: string
     cardStock?: string
+    /** "0" = скрыть акции в таблице (regular+auto). По умолчанию показываем. */
+    promos?: string
+    /** "0" = скрыть расчётные цены. По умолчанию показываем. */
+    calc?: string
   }>
 }
 
@@ -86,6 +90,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     subcategories: subcategoriesParam,
     stock: stockParam,
     cardStock: cardStockParam,
+    promos: promosParam,
+    calc: calcParam,
   } = await searchParams
 
   const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
@@ -97,6 +103,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     : []
   const productsInStockOnly = stockParam === "1"
   const cardsInStockOnly = cardStockParam === "1"
+  // По умолчанию акции и расчётные цены показываем. Скрываем только при явном "0".
+  const showPromos = promosParam !== "0"
+  const showCalculated = calcParam !== "0"
 
   // ── 1. Найти WB marketplace ─────────────────────────────────────
   const wbMarketplace = await prisma.marketplace.findFirst({
@@ -325,7 +334,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         return sellerPrice / (1 - sellerDiscountPct / 100)
       }
 
-      // b) Regular акции для этой nmId (DESC по финальной цене продавца)
+      // b) Regular акции для этой nmId (DESC по финальной цене продавца).
+      // Если фильтр «Без акций» активен — пропускаем оба блока (regular + auto).
+      if (showPromos) {
       // planPrice из WB API = финальная цена продавца (после скидки продавца).
       // API часто не задаёт planDiscount — тогда берём текущую скидку с карточки
       // (акция не меняет структуру скидки, только минимальную цену).
@@ -412,8 +423,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         (a, b) => b.computed.sellerPrice - a.computed.sellerPrice,
       )
       priceRows.push(...autoRows)
+      } // end if (showPromos)
 
-      // d) Расчётные цены (slot 1, 2, 3) — по возрастанию slot
+      // d) Расчётные цены (slot 1, 2, 3) — по возрастанию slot.
+      // Если фильтр «Без расчётных цен» активен — пропускаем блок.
+      if (showCalculated) {
       // cp.sellerPrice = финальная цена продавца (хранится из модалки как
       // priceBeforeDiscount × (1 − sellerDiscountPct/100)).
       // cp.sellerDiscountPct — переопределение скидки (если задано в модалке),
@@ -458,6 +472,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           context: rowContext,
         })
       }
+      } // end if (showCalculated)
 
       cardGroups.push({
         card: {
@@ -524,6 +539,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           selectedSubcategoryIds={selectedSubcategoryIds}
           productsInStockOnly={productsInStockOnly}
           cardsInStockOnly={cardsInStockOnly}
+          showPromos={showPromos}
+          showCalculated={showCalculated}
         />
         <div className="ml-auto flex flex-wrap gap-2">
           <WbSyncButton />
