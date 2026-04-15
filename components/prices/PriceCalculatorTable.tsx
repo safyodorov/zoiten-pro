@@ -603,16 +603,18 @@ export function PriceCalculatorTable({
                           "border-t border-t-border/60",
                       )}
                     >
-                      {/* Sticky 1: Фото (rowSpan всего Product) */}
+                      {/* Sticky 1: Фото (rowSpan всего Product) — метаданные товара,
+                          не реагирует на клик (stopPropagation) и не подсвечивается на hover */}
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
+                          onClick={(e) => e.stopPropagation()}
                           style={{
                             width: columnWidths.photo,
                             minWidth: columnWidths.photo,
                             left: stickyLefts.photo,
                           }}
-                          className="sticky z-10 bg-background border-r align-top p-2 group-hover:bg-muted"
+                          className="sticky z-10 bg-background border-r align-top p-2 cursor-default"
                         >
                           <div className="flex items-start justify-center">
                             {group.product.photoUrl ? (
@@ -633,12 +635,13 @@ export function PriceCalculatorTable({
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
+                          onClick={(e) => e.stopPropagation()}
                           style={{
                             width: columnWidths.svodka,
                             minWidth: columnWidths.svodka,
                             left: stickyLefts.svodka,
                           }}
-                          className="sticky z-10 bg-background border-r align-top p-3 group-hover:bg-muted"
+                          className="sticky z-10 bg-background border-r align-top p-3 cursor-default"
                         >
                           <div className="flex flex-col gap-1">
                             <div className="text-sm font-medium leading-snug line-clamp-3">
@@ -666,12 +669,13 @@ export function PriceCalculatorTable({
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
+                          onClick={(e) => e.stopPropagation()}
                           style={{
                             width: columnWidths.yarlyk,
                             minWidth: columnWidths.yarlyk,
                             left: stickyLefts.yarlyk,
                           }}
-                          className="sticky z-10 bg-background border-r align-top p-2 text-sm group-hover:bg-muted"
+                          className="sticky z-10 bg-background border-r align-top p-2 text-sm cursor-default"
                         >
                           {cardGroup.card.label ?? (
                             <span className="text-muted-foreground">—</span>
@@ -679,16 +683,26 @@ export function PriceCalculatorTable({
                         </td>
                       )}
 
-                      {/* Sticky 4: Артикул (rowSpan card) — shadow-разделитель */}
+                      {/* Sticky 4: Артикул (rowSpan card) — shadow-разделитель.
+                          Клик копирует nmId в буфер (вместо открытия модалки). */}
                       {isFirstRowOfCard && (
                         <td
                           rowSpan={cardGroup.priceRows.length}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const nmId = String(cardGroup.card.nmId)
+                            navigator.clipboard
+                              ?.writeText(nmId)
+                              .then(() => toast.success(`Артикул ${nmId} скопирован`))
+                              .catch(() => toast.error("Не удалось скопировать"))
+                          }}
+                          title="Нажмите, чтобы скопировать артикул"
                           style={{
                             width: columnWidths.artikul,
                             minWidth: columnWidths.artikul,
                             left: stickyLefts.artikul,
                           }}
-                          className="sticky z-10 bg-background border-r align-top p-2 font-mono text-xs group-hover:bg-muted shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
+                          className="sticky z-10 bg-background border-r align-top p-2 font-mono text-xs cursor-copy hover:text-primary shadow-[4px_0_6px_-1px_rgba(0,0,0,0.08)]"
                         >
                           {cardGroup.card.nmId}
                         </td>
