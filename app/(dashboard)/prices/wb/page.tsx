@@ -141,6 +141,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     promotions,
     linkedArticles,
     columnWidthsPref,
+    hiddenColumnsPref,
     allBrands,
     allCategories,
     allSubcategories,
@@ -172,6 +173,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     }),
     // Per-user сохранённые ширины столбцов таблицы (план 260410-mya)
     getUserPreference<Record<string, number>>("prices.wb.columnWidths"),
+    // Per-user список скрытых колонок (фильтр «Вид»)
+    getUserPreference<string[]>("prices.wb.hiddenColumns"),
     // Справочники для фильтров
     prisma.brand.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
@@ -571,6 +574,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         <PriceCalculatorTableWrapper
           groups={filteredGroups}
           initialColumnWidths={columnWidthsPref ?? {}}
+          initialHiddenColumns={hiddenColumnsPref ?? []}
         />
       </div>
     </div>

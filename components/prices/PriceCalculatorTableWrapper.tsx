@@ -24,6 +24,8 @@ interface PriceCalculatorTableWrapperProps {
   groups: ProductGroup[]
   /** Сохранённые ширины столбцов из UserPreference (план 260410-mya). */
   initialColumnWidths?: Record<string, number>
+  /** Сохранённый список скрытых колонок (фильтр «Вид»). */
+  initialHiddenColumns?: string[]
 }
 
 interface DialogState {
@@ -34,6 +36,7 @@ interface DialogState {
 export function PriceCalculatorTableWrapper({
   groups,
   initialColumnWidths,
+  initialHiddenColumns,
 }: PriceCalculatorTableWrapperProps) {
   const [dialog, setDialog] = useState<DialogState | null>(null)
 
@@ -54,6 +57,7 @@ export function PriceCalculatorTableWrapper({
         groups={groups}
         onRowClick={handleRowClick}
         initialColumnWidths={initialColumnWidths}
+        initialHiddenColumns={initialHiddenColumns}
       />
       {dialog && (
         <PricingCalculatorDialog

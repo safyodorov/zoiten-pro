@@ -30,8 +30,11 @@ import {
   type PricingOutputs,
 } from "@/lib/pricing-math"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
 import { setUserPreference } from "@/app/actions/user-preferences"
+import { ChevronDown, Eye } from "lucide-react"
 
 // ──────────────────────────────────────────────────────────────────
 // Types (exported для использования в плане 07-08 + плане 07-09)
@@ -145,6 +148,8 @@ interface PriceCalculatorTableProps {
   ) => void
   /** Сохранённые ширины столбцов из UserPreference (план 260410-mya). */
   initialColumnWidths?: Record<string, number>
+  /** Список ключей скрытых колонок из UserPreference («Вид»). */
+  initialHiddenColumns?: string[]
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -231,6 +236,39 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
 const MIN_COLUMN_WIDTH = 60
 const RESIZE_SAVE_DEBOUNCE_MS = 500
 const PREFERENCE_KEY = "prices.wb.columnWidths"
+const HIDDEN_PREFERENCE_KEY = "prices.wb.hiddenColumns"
+
+/** Колонки, которые ПОЛЬЗОВАТЕЛЬ МОЖЕТ СКРЫТЬ через кнопку «Вид».
+ *  Из списка исключены: 4 sticky колонки (photo/svodka/yarlyk/artikul) и
+ *  «status» (колонка с названием строки — критична для понимания таблицы). */
+const HIDEABLE_COLUMN_KEYS: ColumnKey[] = [
+  "buyoutPct",
+  "sellerPriceBeforeDiscount",
+  "sellerDiscountPct",
+  "sellerPrice",
+  "wbDiscountPct",
+  "priceAfterWbDiscount",
+  "clubDiscountPct",
+  "priceAfterClubDiscount",
+  "walletPct",
+  "priceAfterWallet",
+  "acquiringAmount",
+  "commFbwPct",
+  "commissionAmount",
+  "drrPct",
+  "drrAmount",
+  "jemAmount",
+  "transferAmount",
+  "costPrice",
+  "defectAmount",
+  "deliveryAmount",
+  "creditAmount",
+  "overheadAmount",
+  "taxAmount",
+  "profit",
+  "returnOnSalesPct",
+  "roiPct",
+]
 
 /** 26 скроллируемых колонок: ключ + label для рендера thead.
  *  Порядок СТРОГО соответствует порядку td в tbody. */
@@ -319,6 +357,89 @@ function profitClass(value: number): string {
     : "text-red-600 dark:text-red-500 font-medium"
 }
 
+/** Dropdown «Вид» — выбор какие колонки скрыть в таблице. */
+function ColumnVisibilityDropdown({
+  hidden,
+  onToggle,
+  onReset,
+}: {
+  hidden: Set<ColumnKey>
+  onToggle: (key: ColumnKey) => void
+  onReset: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  const hiddenCount = hidden.size
+  const labelByKey = new Map(SCROLL_COLUMNS.map((c) => [c.key, c.label]))
+
+  return (
+    <div ref={ref} className="relative">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "gap-1.5",
+          hiddenCount > 0 && "border-primary text-primary",
+        )}
+      >
+        <Eye className="h-3.5 w-3.5" />
+        {hiddenCount > 0 ? `Вид (скрыто ${hiddenCount})` : "Вид"}
+        <ChevronDown
+          className={cn(
+            "h-3.5 w-3.5 transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </Button>
+      {open && (
+        <div className="absolute top-full right-0 mt-1 z-50 w-[280px] max-h-[400px] overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
+          <div className="flex items-center justify-between px-2 py-1.5 border-b mb-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Скрыть колонки
+            </span>
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs text-primary hover:underline disabled:text-muted-foreground disabled:no-underline"
+              disabled={hiddenCount === 0}
+            >
+              Показать все
+            </button>
+          </div>
+          {HIDEABLE_COLUMN_KEYS.map((key) => {
+            const label = labelByKey.get(key) ?? key
+            const isVisible = !hidden.has(key)
+            return (
+              <label
+                key={key}
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm"
+              >
+                <Checkbox
+                  checked={isVisible}
+                  onCheckedChange={() => onToggle(key)}
+                />
+                <span className="truncate">{label}</span>
+              </label>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Drag handle на правой границе <th>. Захватывает mouse events и
  *  двойным кликом сбрасывает колонку к дефолту. */
 function ColumnResizeHandle({
@@ -346,6 +467,7 @@ export function PriceCalculatorTable({
   groups,
   onRowClick,
   initialColumnWidths,
+  initialHiddenColumns,
 }: PriceCalculatorTableProps) {
   // ── Column widths state (план 260410-mya) ───────────────────────
   // Merge: DEFAULT_WIDTHS + сохранённые значения (незнакомые ключи игнорируются)
@@ -355,6 +477,49 @@ export function PriceCalculatorTable({
       ...(initialColumnWidths ?? {}),
     }),
   )
+
+  // ── Hidden columns state (фильтр «Вид») ─────────────────────────
+  const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
+    const valid = (initialHiddenColumns ?? []).filter((k): k is ColumnKey =>
+      HIDEABLE_COLUMN_KEYS.includes(k as ColumnKey),
+    )
+    return new Set(valid)
+  })
+
+  const hiddenSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleHiddenSave = useCallback((next: Set<ColumnKey>) => {
+    if (hiddenSaveTimerRef.current) clearTimeout(hiddenSaveTimerRef.current)
+    hiddenSaveTimerRef.current = setTimeout(async () => {
+      const result = await setUserPreference(
+        HIDDEN_PREFERENCE_KEY,
+        Array.from(next),
+      )
+      if (!result.ok) {
+        toast.error(`Не удалось сохранить вид таблицы: ${result.error}`)
+      }
+    }, 300)
+  }, [])
+
+  const toggleColumn = useCallback(
+    (key: ColumnKey) => {
+      setHiddenColumns((prev) => {
+        const next = new Set(prev)
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
+        scheduleHiddenSave(next)
+        return next
+      })
+    },
+    [scheduleHiddenSave],
+  )
+
+  const resetHiddenColumns = useCallback(() => {
+    setHiddenColumns(() => {
+      const empty = new Set<ColumnKey>()
+      scheduleHiddenSave(empty)
+      return empty
+    })
+  }, [scheduleHiddenSave])
 
   // Debounced save таймер
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -441,6 +606,7 @@ export function PriceCalculatorTable({
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      if (hiddenSaveTimerRef.current) clearTimeout(hiddenSaveTimerRef.current)
       if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current)
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
@@ -475,6 +641,14 @@ export function PriceCalculatorTable({
 
   return (
     <div className="rounded-md border h-full flex flex-col min-h-0">
+      {/* Toolbar: кнопка «Вид» для настройки видимости колонок */}
+      <div className="flex items-center justify-end gap-2 px-2 py-1 border-b bg-muted/20">
+        <ColumnVisibilityDropdown
+          hidden={hiddenColumns}
+          onToggle={toggleColumn}
+          onReset={resetHiddenColumns}
+        />
+      </div>
       {/* overflow-auto на ОБЕ оси + flex-1 — thead sticky работает
           внутри этого скролл-контейнера, шапка страницы не прокручивается. */}
       <div className="relative overflow-auto flex-1 min-h-0">
@@ -544,8 +718,11 @@ export function PriceCalculatorTable({
                   onDoubleClick={() => resetColumnWidth("artikul")}
                 />
               </th>
-              {/* Остальные 27 колонок — Статус цены + 26 расчётных */}
-              {SCROLL_COLUMNS.map(({ key, label }) => (
+              {/* Остальные 27 колонок — Статус цены + 26 расчётных.
+                  Скрытые через «Вид» не рендерим (status исключён из hideable). */}
+              {SCROLL_COLUMNS.filter(
+                ({ key }) => !hiddenColumns.has(key),
+              ).map(({ key, label }) => (
                 <th
                   key={key}
                   style={{
@@ -746,276 +923,48 @@ export function PriceCalculatorTable({
                         )}
                       </td>
 
-                      {/* ── 26 расчётных колонок ─────────────────── */}
-                      {/* COLUMN_ORDER[4]: Процент выкупа (из WbCard) — оставляем fmtPctSimple */}
-                      <td
-                        style={{
-                          width: columnWidths.buyoutPct,
-                          minWidth: columnWidths.buyoutPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctSimple(cardGroup.card.buyoutPct ?? null)}
-                      </td>
-                      {/* COLUMN_ORDER[5]: Цена для установки */}
-                      <td
-                        style={{
-                          width: columnWidths.sellerPriceBeforeDiscount,
-                          minWidth: columnWidths.sellerPriceBeforeDiscount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.sellerPriceBeforeDiscount)}
-                      </td>
-                      {/* COLUMN_ORDER[6]: Скидка продавца % */}
-                      <td
-                        style={{
-                          width: columnWidths.sellerDiscountPct,
-                          minWidth: columnWidths.sellerDiscountPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctInt(row.sellerDiscountPct)}
-                      </td>
-                      {/* COLUMN_ORDER[7]: Цена продавца (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.sellerPrice,
-                          minWidth: columnWidths.sellerPrice,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.sellerPrice)}
-                      </td>
-                      {/* COLUMN_ORDER[8]: Скидка WB % */}
-                      <td
-                        style={{
-                          width: columnWidths.wbDiscountPct,
-                          minWidth: columnWidths.wbDiscountPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctInt(row.wbDiscountPct)}
-                      </td>
-                      {/* COLUMN_ORDER[9]: Цена со скидкой WB (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.priceAfterWbDiscount,
-                          minWidth: columnWidths.priceAfterWbDiscount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.priceAfterWbDiscount)}
-                      </td>
-                      {/* COLUMN_ORDER[10]: WB Клуб % */}
-                      <td
-                        style={{
-                          width: columnWidths.clubDiscountPct,
-                          minWidth: columnWidths.clubDiscountPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctInt(row.clubDiscountPct)}
-                      </td>
-                      {/* COLUMN_ORDER[11]: Цена со скидкой WB клуба (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.priceAfterClubDiscount,
-                          minWidth: columnWidths.priceAfterClubDiscount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.priceAfterClubDiscount)}
-                      </td>
-                      {/* COLUMN_ORDER[12]: Кошелёк % */}
-                      <td
-                        style={{
-                          width: columnWidths.walletPct,
-                          minWidth: columnWidths.walletPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctInt(row.walletPct)}
-                      </td>
-                      {/* COLUMN_ORDER[13]: Цена с WB кошельком (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.priceAfterWallet,
-                          minWidth: columnWidths.priceAfterWallet,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.priceAfterWallet)}
-                      </td>
-                      {/* COLUMN_ORDER[14]: Эквайринг руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.acquiringAmount,
-                          minWidth: columnWidths.acquiringAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.acquiringAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[15]: Комиссия % — оставляем fmtPctSimple */}
-                      <td
-                        style={{
-                          width: columnWidths.commFbwPct,
-                          minWidth: columnWidths.commFbwPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctSimple(row.commFbwPct)}
-                      </td>
-                      {/* COLUMN_ORDER[16]: Комиссия руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.commissionAmount,
-                          minWidth: columnWidths.commissionAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.commissionAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[17]: ДРР % */}
-                      <td
-                        style={{
-                          width: columnWidths.drrPct,
-                          minWidth: columnWidths.drrPct,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtPctInt(row.drrPct)}
-                      </td>
-                      {/* COLUMN_ORDER[18]: Реклама руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.drrAmount,
-                          minWidth: columnWidths.drrAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.drrAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[19]: Тариф джем руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.jemAmount,
-                          minWidth: columnWidths.jemAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.jemAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[20]: К перечислению (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.transferAmount,
-                          minWidth: columnWidths.transferAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.transferAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[21]: Закупка руб. */}
-                      <td
-                        style={{
-                          width: columnWidths.costPrice,
-                          minWidth: columnWidths.costPrice,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.costPrice)}
-                      </td>
-                      {/* COLUMN_ORDER[22]: Брак руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.defectAmount,
-                          minWidth: columnWidths.defectAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.defectAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[23]: Доставка руб. */}
-                      <td
-                        style={{
-                          width: columnWidths.deliveryAmount,
-                          minWidth: columnWidths.deliveryAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.deliveryAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[24]: Кредит руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.creditAmount,
-                          minWidth: columnWidths.creditAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.creditAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[25]: Общие расходы руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.overheadAmount,
-                          minWidth: columnWidths.overheadAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.overheadAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[26]: Налог руб. (output) */}
-                      <td
-                        style={{
-                          width: columnWidths.taxAmount,
-                          minWidth: columnWidths.taxAmount,
-                        }}
-                        className={CELL_CLASS}
-                      >
-                        {fmtMoneyInt(row.computed.taxAmount)}
-                      </td>
-                      {/* COLUMN_ORDER[27]: Прибыль руб. (подсветка) */}
-                      <td
-                        style={{
-                          width: columnWidths.profit,
-                          minWidth: columnWidths.profit,
-                        }}
-                        className={cn(
-                          CELL_CLASS,
-                          profitClass(row.computed.profit),
-                        )}
-                      >
-                        {fmtMoneyInt(row.computed.profit)}
-                      </td>
-                      {/* COLUMN_ORDER[28]: Re продаж % (подсветка, с десятыми) */}
-                      <td
-                        style={{
-                          width: columnWidths.returnOnSalesPct,
-                          minWidth: columnWidths.returnOnSalesPct,
-                        }}
-                        className={cn(
-                          CELL_CLASS,
-                          profitClass(row.computed.returnOnSalesPct),
-                        )}
-                      >
-                        {fmtPct(row.computed.returnOnSalesPct, true)}
-                      </td>
-                      {/* COLUMN_ORDER[29]: ROI % (подсветка, с десятыми) */}
-                      <td
-                        style={{
-                          width: columnWidths.roiPct,
-                          minWidth: columnWidths.roiPct,
-                        }}
-                        className={cn(
-                          CELL_CLASS,
-                          profitClass(row.computed.roiPct),
-                        )}
-                      >
-                        {fmtPct(row.computed.roiPct, true)}
-                      </td>
+                      {/* ── 26 расчётных колонок (скрываемые через «Вид») ── */}
+                      {([
+                        ["buyoutPct", fmtPctSimple(cardGroup.card.buyoutPct ?? null)],
+                        ["sellerPriceBeforeDiscount", fmtMoneyInt(row.sellerPriceBeforeDiscount)],
+                        ["sellerDiscountPct", fmtPctInt(row.sellerDiscountPct)],
+                        ["sellerPrice", fmtMoneyInt(row.computed.sellerPrice)],
+                        ["wbDiscountPct", fmtPctInt(row.wbDiscountPct)],
+                        ["priceAfterWbDiscount", fmtMoneyInt(row.computed.priceAfterWbDiscount)],
+                        ["clubDiscountPct", fmtPctInt(row.clubDiscountPct)],
+                        ["priceAfterClubDiscount", fmtMoneyInt(row.computed.priceAfterClubDiscount)],
+                        ["walletPct", fmtPctInt(row.walletPct)],
+                        ["priceAfterWallet", fmtMoneyInt(row.computed.priceAfterWallet)],
+                        ["acquiringAmount", fmtMoneyInt(row.computed.acquiringAmount)],
+                        ["commFbwPct", fmtPctSimple(row.commFbwPct)],
+                        ["commissionAmount", fmtMoneyInt(row.computed.commissionAmount)],
+                        ["drrPct", fmtPctInt(row.drrPct)],
+                        ["drrAmount", fmtMoneyInt(row.computed.drrAmount)],
+                        ["jemAmount", fmtMoneyInt(row.computed.jemAmount)],
+                        ["transferAmount", fmtMoneyInt(row.computed.transferAmount)],
+                        ["costPrice", fmtMoneyInt(row.costPrice)],
+                        ["defectAmount", fmtMoneyInt(row.computed.defectAmount)],
+                        ["deliveryAmount", fmtMoneyInt(row.computed.deliveryAmount)],
+                        ["creditAmount", fmtMoneyInt(row.computed.creditAmount)],
+                        ["overheadAmount", fmtMoneyInt(row.computed.overheadAmount)],
+                        ["taxAmount", fmtMoneyInt(row.computed.taxAmount)],
+                        ["profit", fmtMoneyInt(row.computed.profit), profitClass(row.computed.profit)],
+                        ["returnOnSalesPct", fmtPct(row.computed.returnOnSalesPct, true), profitClass(row.computed.returnOnSalesPct)],
+                        ["roiPct", fmtPct(row.computed.roiPct, true), profitClass(row.computed.roiPct)],
+                      ] as [ColumnKey, string, string?][])
+                        .filter(([k]) => !hiddenColumns.has(k))
+                        .map(([k, content, extraClass]) => (
+                          <td
+                            key={k}
+                            style={{
+                              width: columnWidths[k],
+                              minWidth: columnWidths[k],
+                            }}
+                            className={extraClass ? cn(CELL_CLASS, extraClass) : CELL_CLASS}
+                          >
+                            {content}
+                          </td>
+                        ))}
                     </tr>
                   )
                 }),
