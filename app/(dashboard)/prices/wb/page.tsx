@@ -508,7 +508,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
   )
 
   return (
-    <div className="space-y-4">
+    // h-full + flex-col: шапка (ставки/фильтры/алерт) неподвижна,
+    // таблица снизу получает весь остаток высоты и имеет свой внутренний scroll.
+    <div className="flex flex-col h-full gap-4">
       <GlobalRatesBar initialRates={rates} />
 
       {/* Шапка: фильтры слева + кнопки синхронизации справа */}
@@ -547,10 +549,13 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         </Alert>
       )}
 
-      <PriceCalculatorTableWrapper
-        groups={filteredGroups}
-        initialColumnWidths={columnWidthsPref ?? {}}
-      />
+      {/* flex-1 + min-h-0: таблица занимает оставшееся место и сама скроллится */}
+      <div className="flex-1 min-h-0">
+        <PriceCalculatorTableWrapper
+          groups={filteredGroups}
+          initialColumnWidths={columnWidthsPref ?? {}}
+        />
+      </div>
     </div>
   )
 }

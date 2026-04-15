@@ -474,8 +474,10 @@ export function PriceCalculatorTable({
   }
 
   return (
-    <div className="rounded-md border">
-      <div className="relative overflow-x-auto">
+    <div className="rounded-md border h-full flex flex-col min-h-0">
+      {/* overflow-auto на ОБЕ оси + flex-1 — thead sticky работает
+          внутри этого скролл-контейнера, шапка страницы не прокручивается. */}
+      <div className="relative overflow-auto flex-1 min-h-0">
         <table
           className="caption-bottom text-sm border-collapse table-fixed"
           style={{ width: "max-content", minWidth: "100%" }}

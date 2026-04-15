@@ -7,6 +7,7 @@ export const maxDuration = 300
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { execSync } from "node:child_process"
 
 export async function POST(): Promise<NextResponse> {
@@ -122,6 +123,11 @@ export async function POST(): Promise<NextResponse> {
     }
 
     console.log(`[СПП sync] v4(curl): ${v4Success} | fallback: ${v4Failed ? "да" : "нет"} | updated: ${updated}`)
+
+    // Инвалидация RSC кэша — чтобы /prices/wb и /cards/wb показали свежую СПП
+    // в том числе в расчётных строках (они используют card.discountWb через baseRowFields).
+    revalidatePath("/prices/wb")
+    revalidatePath("/cards/wb")
 
     return NextResponse.json({
       updated,

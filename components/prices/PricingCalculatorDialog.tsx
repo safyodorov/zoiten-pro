@@ -50,7 +50,9 @@ import type { PriceRow } from "@/components/prices/PriceCalculatorTable"
 // c coerce (input unknown → output number). `register(name, {valueAsNumber: true})`
 // сам приводит значение input'а к числу перед валидацией Zod.
 const formSchema = z.object({
-  priceBeforeDiscount: z
+  // Пользователь вводит Цену продавца (финальную, после скидки).
+  // priceBeforeDiscount = sellerPrice / (1 − sellerDiscountPct/100) вычисляется автоматически.
+  sellerPrice: z
     .number({ message: "Введите число" })
     .min(0, "Цена не может быть отрицательной"),
   sellerDiscountPct: z.number({ message: "Введите число" }).min(0).max(100),
@@ -98,10 +100,13 @@ export function PricingCalculatorDialog({
   const initialName =
     row.type === "calculated" ? row.label : `Расчётная цена ${initialSlot}`
 
+  // Начальная Цена продавца (после скидки) — берём из готового серверного расчёта.
+  const initialSellerPrice = row.computed.sellerPrice
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      priceBeforeDiscount: row.inputs.priceBeforeDiscount,
+      sellerPrice: initialSellerPrice,
       sellerDiscountPct: row.inputs.sellerDiscountPct,
       drrPct: row.inputs.drrPct,
       defectRatePct: row.inputs.defectRatePct,
@@ -113,11 +118,12 @@ export function PricingCalculatorDialog({
     },
   })
 
-  // Realtime outputs через useWatch + useMemo
+  // Realtime outputs через useWatch + useMemo.
+  // priceBeforeDiscount вычисляется из sellerPrice и sellerDiscountPct.
   const watched = useWatch({
     control: form.control,
     name: [
-      "priceBeforeDiscount",
+      "sellerPrice",
       "sellerDiscountPct",
       "drrPct",
       "defectRatePct",
@@ -125,18 +131,27 @@ export function PricingCalculatorDialog({
     ],
   })
 
+  const [sellerPriceNum, sellerDiscountNum] = [
+    Number(watched[0]) || 0,
+    Number(watched[1]) || 0,
+  ]
+  const derivedPriceBeforeDiscount =
+    sellerDiscountNum >= 100 || sellerDiscountNum < 0
+      ? sellerPriceNum
+      : sellerPriceNum / (1 - sellerDiscountNum / 100)
+
   const liveOutputs = useMemo(() => {
-    const [pBefore, sDisc, drr, defect, delivery] = watched
+    const [, , drr, defect, delivery] = watched
     const inputs: PricingInputs = {
       ...row.inputs,
-      priceBeforeDiscount: Number(pBefore) || 0,
-      sellerDiscountPct: Number(sDisc) || 0,
+      priceBeforeDiscount: derivedPriceBeforeDiscount,
+      sellerDiscountPct: sellerDiscountNum,
       drrPct: Number(drr) || 0,
       defectRatePct: Number(defect) || 0,
       deliveryCostRub: Number(delivery) || 0,
     }
     return calculatePricing(inputs)
-  }, [watched, row.inputs])
+  }, [watched, row.inputs, derivedPriceBeforeDiscount, sellerDiscountNum])
 
   // ── Submit ──────────────────────────────────────────────────────
   const onSubmit = (values: FormValues) => {
@@ -230,13 +245,17 @@ export function PricingCalculatorDialog({
           }
         }
 
-        // 4. Сохранить расчётную цену
-        const sellerPrice =
-          values.priceBeforeDiscount * (1 - values.sellerDiscountPct / 100)
+        // 4. Сохранить расчётную цену.
+        // Пользователь ввёл sellerPrice (финальную). priceBeforeDiscount — derived.
+        const priceBeforeDiscount =
+          values.sellerDiscountPct >= 100 || values.sellerDiscountPct < 0
+            ? values.sellerPrice
+            : values.sellerPrice / (1 - values.sellerDiscountPct / 100)
+        const sellerPrice = values.sellerPrice
 
         const snapshotInputs: PricingInputs = {
           ...row.inputs,
-          priceBeforeDiscount: values.priceBeforeDiscount,
+          priceBeforeDiscount,
           sellerDiscountPct: values.sellerDiscountPct,
           drrPct: values.drrPct,
           defectRatePct: values.defectRatePct,
@@ -296,8 +315,8 @@ export function PricingCalculatorDialog({
             Расчёт юнит-экономики: {card.name ?? "Карточка"}
           </DialogTitle>
           <DialogDescription>
-            Артикул: {card.nmId} · Исходная цена:{" "}
-            {fmtMoney(row.inputs.priceBeforeDiscount)} ₽
+            Артикул: {card.nmId} · Текущая цена продавца:{" "}
+            {fmtMoney(row.computed.sellerPrice)} ₽
           </DialogDescription>
         </DialogHeader>
 
@@ -310,16 +329,14 @@ export function PricingCalculatorDialog({
               </h3>
 
               <div className="flex flex-col gap-1">
-                <Label htmlFor="priceBeforeDiscount">
-                  Цена продавца до скидки, ₽
-                </Label>
+                <Label htmlFor="sellerPrice">Цена продавца, ₽</Label>
                 <Input
-                  id="priceBeforeDiscount"
+                  id="sellerPrice"
                   type="number"
                   step="0.01"
                   min="0"
                   className="h-9"
-                  {...form.register("priceBeforeDiscount", {
+                  {...form.register("sellerPrice", {
                     valueAsNumber: true,
                   })}
                 />
@@ -338,6 +355,12 @@ export function PricingCalculatorDialog({
                     valueAsNumber: true,
                   })}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Цена для установки:{" "}
+                  <span className="text-foreground tabular-nums">
+                    {fmtMoney(derivedPriceBeforeDiscount)} ₽
+                  </span>
+                </p>
               </div>
 
               <div className="flex flex-col gap-1">
