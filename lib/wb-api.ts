@@ -368,7 +368,9 @@ export async function fetchWbDiscounts(
         const buyerPriceRub = sizeWithPrice.price.product / 100
         const sellerPrice = sellerPriceMap?.get(nmId)?.discountedPrice ?? 0
         if (sellerPrice > 0 && buyerPriceRub > 0) {
-          const spp = Math.round((1 - buyerPriceRub / sellerPrice) * 100)
+          // Точность до 0.1% (раньше Math.round терял до 0.5%).
+          const spp =
+            Math.round((1 - buyerPriceRub / sellerPrice) * 1000) / 10
           if (spp > 0 && spp < 100) {
             discountMap.set(nmId, spp)
             v4Count++
@@ -402,7 +404,11 @@ export async function fetchWbDiscounts(
           const missingSet = new Set(missingNmIds)
           for (const item of data) {
             if (missingSet.has(item.nmId) && item.spp != null && item.spp > 0) {
-              discountMap.set(item.nmId, Math.round(item.spp))
+              // Sales API может возвращать float — округлим до 0.1% для консистентности.
+              discountMap.set(
+                item.nmId,
+                Math.round(Number(item.spp) * 10) / 10,
+              )
             }
           }
         }

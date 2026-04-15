@@ -67,7 +67,9 @@ export async function POST(): Promise<NextResponse> {
           const buyerPriceRub = sizeWithPrice.price.product / 100
           const sellerPrice = sellerPrices.get(nmId) ?? 0
           if (sellerPrice > 0 && buyerPriceRub > 0) {
-            const spp = Math.round((1 - buyerPriceRub / sellerPrice) * 100)
+            // Округление до 1 десятичного знака (точность СПП в отображении)
+            const spp =
+              Math.round((1 - buyerPriceRub / sellerPrice) * 1000) / 10
             if (spp > 0 && spp < 100) {
               await prisma.wbCard.update({
                 where: { nmId },

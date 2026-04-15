@@ -180,7 +180,7 @@ model WbCard {
   priceBeforeDiscount Float? // цена продавца до скидки, руб
   sellerDiscount      Int? // скидка продавца, %
   price               Float? // цена продавца со скидкой, руб
-  discountWb          Int? // скидка WB (СПП), %
+  discountWb          Float? // скидка WB (СПП), % — с точностью до 0.1%
   clubDiscount        Int? // скидка WB клуба, %
   stockQty            Int? // остаток товара, шт
   buyoutPercent       Float? // процент выкупа за месяц, %

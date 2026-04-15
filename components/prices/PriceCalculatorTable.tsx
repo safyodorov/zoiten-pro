@@ -939,7 +939,7 @@ export function PriceCalculatorTable({
                         ["sellerPriceBeforeDiscount", fmtMoneyInt(row.sellerPriceBeforeDiscount)],
                         ["sellerDiscountPct", fmtPctInt(row.sellerDiscountPct)],
                         ["sellerPrice", fmtMoneyInt(row.computed.sellerPrice)],
-                        ["wbDiscountPct", fmtPctInt(row.wbDiscountPct)],
+                        ["wbDiscountPct", fmtPctSimple(row.wbDiscountPct)],
                         ["priceAfterWbDiscount", fmtMoneyInt(row.computed.priceAfterWbDiscount)],
                         ["clubDiscountPct", fmtPctInt(row.clubDiscountPct)],
                         ["priceAfterClubDiscount", fmtMoneyInt(row.computed.priceAfterClubDiscount)],
