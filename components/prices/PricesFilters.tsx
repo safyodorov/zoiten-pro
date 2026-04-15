@@ -254,7 +254,7 @@ export function PricesFilters({
       {/* Карточки: без остатка / с остатком */}
       <SingleChoiceDropdown
         options={[
-          { value: "all", label: "Карточки без фильтра", isDefault: true },
+          { value: "all", label: "Карточки все", isDefault: true },
           { value: "in", label: "Карточки с остатком" },
         ]}
         value={cardsInStockOnly ? "in" : "all"}
