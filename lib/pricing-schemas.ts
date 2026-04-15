@@ -75,6 +75,7 @@ export const saveCalculatedPriceSchema = z.object({
   slot: slotSchema,
   name: z.string().min(1, "Название обязательно").max(100, "Название слишком длинное"),
   sellerPrice: z.number().positive("Цена продавца должна быть > 0"),
+  sellerDiscountPct: z.number().min(0).max(100).nullable().optional(),
   drrPct: z.number().min(0).max(100).nullable().optional(),
   defectRatePct: z.number().min(0).max(100).nullable().optional(),
   deliveryCostRub: z.number().min(0).nullable().optional(),

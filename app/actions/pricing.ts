@@ -165,6 +165,7 @@ export async function saveCalculatedPrice(
         slot: parsed.data.slot,
         name: parsed.data.name,
         sellerPrice: parsed.data.sellerPrice,
+        sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
         drrPct: parsed.data.drrPct ?? null,
         defectRatePct: parsed.data.defectRatePct ?? null,
         deliveryCostRub: parsed.data.deliveryCostRub ?? null,
@@ -174,6 +175,7 @@ export async function saveCalculatedPrice(
       update: {
         name: parsed.data.name,
         sellerPrice: parsed.data.sellerPrice,
+        sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
         drrPct: parsed.data.drrPct ?? null,
         defectRatePct: parsed.data.defectRatePct ?? null,
         deliveryCostRub: parsed.data.deliveryCostRub ?? null,

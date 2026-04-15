@@ -81,6 +81,10 @@ export interface PriceRow {
   // ── promo metadata (только для regular/auto) ─────────────────────
   promotionDescription?: string | null
   promotionAdvantages?: readonly string[] | null
+  /** ISO-строка начала акции (для отображения сроков в тултипе). */
+  promotionStartDateTime?: string | null
+  /** ISO-строка конца акции. */
+  promotionEndDateTime?: string | null
 
   // ── calculated metadata (только для calculated) ──────────────────
   calculatedSlot?: 1 | 2 | 3
@@ -713,6 +717,8 @@ export function PriceCalculatorTable({
                           <PromoTooltip
                             description={row.promotionDescription}
                             advantages={row.promotionAdvantages}
+                            startDateTime={row.promotionStartDateTime}
+                            endDateTime={row.promotionEndDateTime}
                           >
                             {row.label}
                           </PromoTooltip>

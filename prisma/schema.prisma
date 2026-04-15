@@ -398,13 +398,14 @@ model CalculatedPrice {
   id              String   @id @default(cuid())
   wbCardId        String
   wbCard          WbCard   @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
-  slot            Int // 1 | 2 | 3
-  name            String
-  sellerPrice     Float
-  drrPct          Float?
-  defectRatePct   Float?
-  deliveryCostRub Float?
-  snapshot        Json
+  slot              Int // 1 | 2 | 3
+  name              String
+  sellerPrice       Float
+  sellerDiscountPct Float?
+  drrPct            Float?
+  defectRatePct     Float?
+  deliveryCostRub   Float?
+  snapshot          Json
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

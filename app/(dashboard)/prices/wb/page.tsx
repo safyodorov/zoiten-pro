@@ -314,75 +314,110 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         context: rowContext,
       })
 
-      // b) Regular акции для этой nmId (DESC по planPrice)
+      // Хелпер: из финальной цены продавца и скидки % восстанавливаем
+      // «Цену для установки» (priceBeforeDiscount).
+      //   sellerPrice = priceBeforeDiscount × (1 − sellerDiscountPct/100)
+      //   ⇒ priceBeforeDiscount = sellerPrice / (1 − sellerDiscountPct/100)
+      // При sellerDiscountPct ≥ 100 деление на 0/отрицательное → возвращаем sellerPrice
+      // как безопасный fallback (в реальности такое невозможно).
+      const deriveBefore = (sellerPrice: number, sellerDiscountPct: number) => {
+        if (sellerDiscountPct >= 100 || sellerDiscountPct < 0) return sellerPrice
+        return sellerPrice / (1 - sellerDiscountPct / 100)
+      }
+
+      // b) Regular акции для этой nmId (DESC по финальной цене продавца)
+      // planPrice из WB API = финальная цена продавца (после скидки продавца).
+      // API часто не задаёт planDiscount — тогда берём текущую скидку с карточки
+      // (акция не меняет структуру скидки, только минимальную цену).
       const regularRows: PriceRow[] = []
       for (const promo of promotions) {
         if (promo.type === "auto") continue
         const nom = promo.nomenclatures.find((n) => n.nmId === card.nmId)
         if (!nom || nom.planPrice == null) continue
 
-        const planPrice = nom.planPrice
-        const planDiscount = nom.planDiscount ?? 0
+        const finalSellerPrice = nom.planPrice
+        const sellerDiscountPct =
+          nom.planDiscount != null && nom.planDiscount > 0
+            ? nom.planDiscount
+            : currentSellerDiscountPct
+        const priceBeforeDiscount = deriveBefore(finalSellerPrice, sellerDiscountPct)
+
         const regularInputs: PricingInputs = {
           ...baseInputs,
-          priceBeforeDiscount: planPrice,
-          sellerDiscountPct: planDiscount,
+          priceBeforeDiscount,
+          sellerDiscountPct,
         }
 
         regularRows.push({
           id: `${card.id}-regular-${promo.id}`,
           type: "regular",
           label: promo.name,
-          sellerPriceBeforeDiscount: planPrice,
-          sellerDiscountPct: planDiscount,
+          sellerPriceBeforeDiscount: priceBeforeDiscount,
+          sellerDiscountPct,
           ...baseRowFields,
           promotionDescription: promo.description,
           promotionAdvantages: promo.advantages,
+          promotionStartDateTime: promo.startDateTime.toISOString(),
+          promotionEndDateTime: promo.endDateTime.toISOString(),
           computed: calculatePricing(regularInputs),
           inputs: regularInputs,
           context: rowContext,
         })
       }
+      // Сортировка по ФИНАЛЬНОЙ цене продавца (то что видит покупатель) DESC
       regularRows.sort(
-        (a, b) => b.sellerPriceBeforeDiscount - a.sellerPriceBeforeDiscount,
+        (a, b) => b.computed.sellerPrice - a.computed.sellerPrice,
       )
       priceRows.push(...regularRows)
 
       // c) Auto акции (только те, у которых planPrice задан — из Excel)
+      // planPrice из Excel = финальная цена продавца, planDiscount = скидка продавца.
+      // Если planDiscount отсутствует — fallback на текущую скидку.
       const autoRows: PriceRow[] = []
       for (const promo of promotions) {
         if (promo.type !== "auto") continue
         const nom = promo.nomenclatures.find((n) => n.nmId === card.nmId)
         if (!nom || nom.planPrice == null) continue
 
-        const planPrice = nom.planPrice
-        const planDiscount = nom.planDiscount ?? 0
+        const finalSellerPrice = nom.planPrice
+        const sellerDiscountPct =
+          nom.planDiscount != null && nom.planDiscount > 0
+            ? nom.planDiscount
+            : currentSellerDiscountPct
+        const priceBeforeDiscount = deriveBefore(finalSellerPrice, sellerDiscountPct)
+
         const autoInputs: PricingInputs = {
           ...baseInputs,
-          priceBeforeDiscount: planPrice,
-          sellerDiscountPct: planDiscount,
+          priceBeforeDiscount,
+          sellerDiscountPct,
         }
 
         autoRows.push({
           id: `${card.id}-auto-${promo.id}`,
           type: "auto",
           label: promo.name,
-          sellerPriceBeforeDiscount: planPrice,
-          sellerDiscountPct: planDiscount,
+          sellerPriceBeforeDiscount: priceBeforeDiscount,
+          sellerDiscountPct,
           ...baseRowFields,
           promotionDescription: promo.description,
           promotionAdvantages: promo.advantages,
+          promotionStartDateTime: promo.startDateTime.toISOString(),
+          promotionEndDateTime: promo.endDateTime.toISOString(),
           computed: calculatePricing(autoInputs),
           inputs: autoInputs,
           context: rowContext,
         })
       }
       autoRows.sort(
-        (a, b) => b.sellerPriceBeforeDiscount - a.sellerPriceBeforeDiscount,
+        (a, b) => b.computed.sellerPrice - a.computed.sellerPrice,
       )
       priceRows.push(...autoRows)
 
       // d) Расчётные цены (slot 1, 2, 3) — по возрастанию slot
+      // cp.sellerPrice = финальная цена продавца (хранится из модалки как
+      // priceBeforeDiscount × (1 − sellerDiscountPct/100)).
+      // cp.sellerDiscountPct — переопределение скидки (если задано в модалке),
+      // иначе fallback на текущую скидку с карточки.
       const cardCalcs = calculatedPrices
         .filter((cp) => cp.wbCardId === card.id)
         .sort((a, b) => a.slot - b.slot)
@@ -392,22 +427,27 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         const cpDrr = cp.drrPct ?? resolvedDrr
         const cpDefect = cp.defectRatePct ?? resolvedDefect
         const cpDelivery = cp.deliveryCostRub ?? resolvedDelivery
+        const cpSellerDiscountPct =
+          cp.sellerDiscountPct ?? currentSellerDiscountPct
+        const cpPriceBeforeDiscount = deriveBefore(
+          cp.sellerPrice,
+          cpSellerDiscountPct,
+        )
         const calcInputs: PricingInputs = {
           ...baseInputs,
           drrPct: cpDrr,
           defectRatePct: cpDefect,
           deliveryCostRub: cpDelivery,
-          priceBeforeDiscount: cp.sellerPrice,
-          sellerDiscountPct: 0,
+          priceBeforeDiscount: cpPriceBeforeDiscount,
+          sellerDiscountPct: cpSellerDiscountPct,
         }
 
         priceRows.push({
           id: `${card.id}-calc-${cp.slot}`,
           type: "calculated",
           label: cp.name,
-          // Расчётная цена хранит уже Цену продавца — скидка продавца 0
-          sellerPriceBeforeDiscount: cp.sellerPrice,
-          sellerDiscountPct: 0,
+          sellerPriceBeforeDiscount: cpPriceBeforeDiscount,
+          sellerDiscountPct: cpSellerDiscountPct,
           ...baseRowFields,
           drrPct: cpDrr,
           defectRatePct: cpDefect,

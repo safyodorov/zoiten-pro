@@ -256,6 +256,7 @@ export function PricingCalculatorDialog({
           slot: values.slot,
           name: calculatedName,
           sellerPrice,
+          sellerDiscountPct: values.sellerDiscountPct,
           drrPct: values.drrPct,
           defectRatePct: values.defectRatePct,
           deliveryCostRub: values.deliveryCostRub,
