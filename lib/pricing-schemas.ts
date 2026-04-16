@@ -121,10 +121,10 @@ export const CALC_FIELD_MAP: Record<EditableParamKey, string> = {
   deliveryCostRub: "deliveryCostRub",
 }
 
-/** Zod для одного параметра модалки. */
+/** Zod для одного параметра модалки.
+ *  value=null означает «сбросить override» — применить глобальное значение. */
 const paramOverrideSchema = z.object({
   value: z.number().min(0).nullable(),
-  scopeSlot: z.boolean(), // true → CalculatedPrice.X, false → Product.XOverride
 })
 
 /** Zod схема для сохранения расчётной цены (создание нового слота). */

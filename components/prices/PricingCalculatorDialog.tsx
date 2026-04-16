@@ -38,14 +38,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { calculatePricing, type PricingInputs } from "@/lib/pricing-math"
-import {
-  saveCalculatedPrice,
-  saveRowEdits,
-  resetParamOverride,
-} from "@/app/actions/pricing"
+import { saveCalculatedPrice, saveRowEdits } from "@/app/actions/pricing"
 import type { PriceRow } from "@/components/prices/PriceCalculatorTable"
 import type { EditableParamKey } from "@/lib/pricing-schemas"
 
@@ -98,8 +93,9 @@ const INPUT_KEY_MAP: Record<EditableParamKey, keyof PricingInputs> = {
 // Schema
 // ──────────────────────────────────────────────────────────────────
 
-// Zod-схему строим динамически через rawShape, но тип FormValues объявляем
-// явно ниже — zod.infer не справляется со spread-объектом (теряет ключи).
+// Zod-схему строим динамически через rawShape.
+// Для каждого param: value (number) + isReset (boolean — флаг «применить глобальные»).
+// На Save: если isReset=true, отправляем value=null (сервер очищает override).
 const formSchemaShape: Record<string, z.ZodTypeAny> = {
   sellerPrice: z
     .number({ message: "Введите число" })
@@ -111,7 +107,7 @@ const formSchemaShape: Record<string, z.ZodTypeAny> = {
 }
 for (const p of EDITABLE_PARAMS) {
   formSchemaShape[p.key] = z.number({ message: "Введите число" }).min(0)
-  formSchemaShape[`${p.key}_scopeSlot`] = z.boolean()
+  formSchemaShape[`${p.key}_isReset`] = z.boolean()
 }
 const formSchema = z.object(formSchemaShape)
 
@@ -134,18 +130,18 @@ type FormValues = {
   overheadPct: number
   taxPct: number
   deliveryCostRub: number
-  buyoutPct_scopeSlot: boolean
-  clubDiscountPct_scopeSlot: boolean
-  walletPct_scopeSlot: boolean
-  acquiringPct_scopeSlot: boolean
-  commissionPct_scopeSlot: boolean
-  jemPct_scopeSlot: boolean
-  drrPct_scopeSlot: boolean
-  defectRatePct_scopeSlot: boolean
-  creditPct_scopeSlot: boolean
-  overheadPct_scopeSlot: boolean
-  taxPct_scopeSlot: boolean
-  deliveryCostRub_scopeSlot: boolean
+  buyoutPct_isReset: boolean
+  clubDiscountPct_isReset: boolean
+  walletPct_isReset: boolean
+  acquiringPct_isReset: boolean
+  commissionPct_isReset: boolean
+  jemPct_isReset: boolean
+  drrPct_isReset: boolean
+  defectRatePct_isReset: boolean
+  creditPct_isReset: boolean
+  overheadPct_isReset: boolean
+  taxPct_isReset: boolean
+  deliveryCostRub_isReset: boolean
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -190,8 +186,7 @@ export function PricingCalculatorDialog({
     (acc, p) => {
       const inputKey = INPUT_KEY_MAP[p.key]
       acc[p.key] = row.inputs[inputKey] as number
-      // По умолчанию scope = slot (как было с ДРР до рефакторинга)
-      acc[`${p.key}_scopeSlot`] = true
+      acc[`${p.key}_isReset`] = false
       return acc
     },
     {} as Record<string, unknown>,
@@ -263,16 +258,20 @@ export function PricingCalculatorDialog({
   const saveExistingDisabled = sellerPriceChanged || sellerDiscountChanged
 
   // ── Helpers: формирование params map для action'ов ──────────────
+  // isReset=true → value: null (сервер очищает override).
+  // isReset=false → отправляем текущее значение.
   const buildParamsMap = (
     values: FormValues,
-  ): Record<string, { value: number; scopeSlot: boolean }> => {
-    const params: Record<string, { value: number; scopeSlot: boolean }> = {}
+  ): Record<string, { value: number | null }> => {
+    const params: Record<string, { value: number | null }> = {}
     for (const p of EDITABLE_PARAMS) {
-      const value = (values as unknown as Record<string, number>)[p.key]
-      const scopeSlot =
-        isCalcRow &&
-        (values as unknown as Record<string, boolean>)[`${p.key}_scopeSlot`]
-      params[p.key] = { value: Number(value) || 0, scopeSlot: !!scopeSlot }
+      const rawValue = (values as unknown as Record<string, number>)[p.key]
+      const isReset = !!(values as unknown as Record<string, boolean>)[
+        `${p.key}_isReset`
+      ]
+      params[p.key] = {
+        value: isReset ? null : Number(rawValue) || 0,
+      }
     }
     return params
   }
@@ -353,22 +352,13 @@ export function PricingCalculatorDialog({
     })
   }
 
-  // ── Reset override ──────────────────────────────────────────────
+  // ── ↻ «Применить глобальные» ────────────────────────────────────
+  // Только ЛОКАЛЬНО подставляет globalValue в поле и поднимает isReset=true.
+  // Реальный сброс override в БД — на кнопке «Сохранить».
   const onResetParam = (key: EditableParamKey) => {
-    startTransition(async () => {
-      const result = await resetParamOverride({
-        productId: row.context.productId,
-        calculatedPriceId: isCalcRow ? row.calculatedPriceId ?? null : null,
-        paramKey: key,
-      })
-      if (result.ok) {
-        toast.success("Сброшено к глобальному — перезагружаю…")
-        onOpenChange(false)
-        router.refresh()
-      } else {
-        toast.error(result.error || "Не удалось сбросить")
-      }
-    })
+    const globalValue = row.globalValues[key]
+    form.setValue(key, globalValue, { shouldDirty: true })
+    form.setValue(`${key}_isReset`, true, { shouldDirty: true })
   }
 
   // ── Formatting ──────────────────────────────────────────────────
@@ -463,7 +453,6 @@ export function PricingCalculatorDialog({
                       key={p.key}
                       param={p}
                       form={form}
-                      showScopeCheckbox={isCalcRow}
                       isPending={isPending}
                       onReset={onResetParam}
                     />
@@ -636,23 +625,33 @@ export function PricingCalculatorDialog({
 function ParamRow({
   param,
   form,
-  showScopeCheckbox,
   isPending,
   onReset,
 }: {
   param: ParamDef
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: any
-  showScopeCheckbox: boolean
   isPending: boolean
   onReset: (key: EditableParamKey) => void
 }) {
-  const scopeKey = `${param.key}_scopeSlot`
+  const isResetKey = `${param.key}_isReset`
+  const isReset = form.watch(isResetKey) === true
   return (
     <div className="flex items-end gap-2">
       <div className="flex-1 min-w-0">
-        <Label htmlFor={param.key} className="text-xs">
+        <Label
+          htmlFor={param.key}
+          className={cn(
+            "text-xs",
+            isReset && "text-primary",
+          )}
+        >
           {param.label}, {param.unit}
+          {isReset && (
+            <span className="ml-1 text-[10px] text-primary/80">
+              (глобальное)
+            </span>
+          )}
         </Label>
         <Input
           id={param.key}
@@ -660,21 +659,21 @@ function ParamRow({
           min="0"
           max={param.max}
           step={param.step ?? "0.01"}
-          className="h-8 text-sm"
-          {...form.register(param.key, { valueAsNumber: true })}
+          className={cn(
+            "h-8 text-sm",
+            isReset && "border-primary/40 bg-primary/5",
+          )}
+          {...form.register(param.key, {
+            valueAsNumber: true,
+            // При ручном вводе снимаем «глобальный» флаг — значение теперь override
+            onChange: () => {
+              if (form.getValues(isResetKey)) {
+                form.setValue(isResetKey, false)
+              }
+            },
+          })}
         />
       </div>
-      {showScopeCheckbox && (
-        <label className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0 pb-1.5 whitespace-nowrap cursor-pointer">
-          <Checkbox
-            checked={form.watch(scopeKey) === true}
-            onCheckedChange={(c: boolean | string) =>
-              form.setValue(scopeKey, c === true)
-            }
-          />
-          <span>только этот&nbsp;расчёт</span>
-        </label>
-      )}
       <Button
         type="button"
         variant="ghost"
@@ -682,7 +681,7 @@ function ParamRow({
         className="h-8 w-8 shrink-0"
         onClick={() => onReset(param.key)}
         disabled={isPending}
-        title="Применить глобальные — сбросить override"
+        title="Применить глобальные — подставить значение без override"
       >
         <RotateCcw className="h-3.5 w-3.5" />
       </Button>

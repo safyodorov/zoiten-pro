@@ -1,16 +1,14 @@
 // components/prices/PriceCalculatorTableWrapper.tsx
-// Phase 7 (план 07-09): клиентская обёртка над PriceCalculatorTable —
-// управляет state открытой модалки PricingCalculatorDialog.
-//
-// RSC страница /prices/wb/page.tsx не может использовать useState,
-// поэтому обёртка нужна чтобы:
-//  1. Хранить selectedRow/card для открытой модалки
-//  2. Передавать onRowClick в серверную таблицу
-//  3. Рендерить <PricingCalculatorDialog> условно при наличии state
+// Клиентская обёртка над PriceCalculatorTable:
+//   1. Управляет state открытой модалки PricingCalculatorDialog
+//   2. Хранит selectedCalcIds для массового удаления расчётных цен
+//   3. Рендерит вспомогательный UI (модалка + дальнейшее)
 
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 import {
   PriceCalculatorTable,
@@ -19,6 +17,7 @@ import {
   type WbCardRowGroup,
 } from "@/components/prices/PriceCalculatorTable"
 import { PricingCalculatorDialog } from "@/components/prices/PricingCalculatorDialog"
+import { deleteCalculatedPrices } from "@/app/actions/pricing"
 
 interface PriceCalculatorTableWrapperProps {
   groups: ProductGroup[]
@@ -38,17 +37,51 @@ export function PriceCalculatorTableWrapper({
   initialColumnWidths,
   initialHiddenColumns,
 }: PriceCalculatorTableWrapperProps) {
+  const router = useRouter()
   const [dialog, setDialog] = useState<DialogState | null>(null)
+  const [selectedCalcIds, setSelectedCalcIds] = useState<Set<string>>(new Set())
+  const [, startTransition] = useTransition()
 
   const handleRowClick = (
     card: WbCardRowGroup["card"],
     row: PriceRow,
     productId: string,
   ) => {
-    // Найти Product name для DialogTitle
     const group = groups.find((g) => g.product.id === productId)
     const productName = group?.product.name ?? "Карточка"
     setDialog({ card: { ...card, name: productName }, row })
+  }
+
+  const toggleCalcSelection = (calcId: string) => {
+    setSelectedCalcIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(calcId)) next.delete(calcId)
+      else next.add(calcId)
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedCalcIds(new Set())
+
+  const handleDeleteSelected = () => {
+    const ids = Array.from(selectedCalcIds)
+    if (ids.length === 0) return
+    const ok = window.confirm(
+      `Удалить расчётных цен: ${ids.length}? Действие нельзя отменить.`,
+    )
+    if (!ok) return
+    startTransition(async () => {
+      const result = await deleteCalculatedPrices(ids)
+      if (result.ok) {
+        toast.success(
+          `Удалено расчётных цен: ${result.data?.deleted ?? ids.length}`,
+        )
+        clearSelection()
+        router.refresh()
+      } else {
+        toast.error(result.error || "Не удалось удалить")
+      }
+    })
   }
 
   return (
@@ -58,7 +91,13 @@ export function PriceCalculatorTableWrapper({
         onRowClick={handleRowClick}
         initialColumnWidths={initialColumnWidths}
         initialHiddenColumns={initialHiddenColumns}
+        selectedCalcIds={selectedCalcIds}
+        onToggleCalcSelection={toggleCalcSelection}
+        onDeleteSelected={
+          selectedCalcIds.size > 0 ? handleDeleteSelected : undefined
+        }
       />
+
       {dialog && (
         <PricingCalculatorDialog
           open={true}

@@ -35,6 +35,10 @@ import { Info } from "lucide-react"
 
 export const dynamic = "force-dynamic"
 
+// Хардкод-фоллбэки (совпадают с HARDCODED_* в lib/pricing-math.ts)
+const HARDCODED_DRR_PCT_FALLBACK = 10
+const HARDCODED_DELIVERY_FALLBACK = 30
+
 // ──────────────────────────────────────────────────────────────────
 // Константы: ключи и дефолты 6 глобальных ставок (AppSetting)
 // ──────────────────────────────────────────────────────────────────
@@ -324,6 +328,25 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         categoryId: product.categoryId ?? null,
       }
 
+      // «Глобальные» значения каждого параметра — fallback-цепочка БЕЗ учёта
+      // Product.XOverride и CalculatedPrice.X. Используются модалкой при «↻».
+      const globalValues = {
+        buyoutPct: card.buyoutPercent ?? 100,
+        clubDiscountPct: card.clubDiscount ?? 0,
+        walletPct: rates.wbWalletPct,
+        acquiringPct: rates.wbAcquiringPct,
+        commissionPct: card.commFbwIu ?? card.commFbwStd ?? 0,
+        jemPct: rates.wbJemPct,
+        drrPct:
+          product.subcategory?.defaultDrrPct ?? HARDCODED_DRR_PCT_FALLBACK,
+        defectRatePct:
+          product.category?.defaultDefectRatePct ?? rates.wbDefectRatePct,
+        creditPct: rates.wbCreditPct,
+        overheadPct: rates.wbOverheadPct,
+        taxPct: rates.wbTaxPct,
+        deliveryCostRub: HARDCODED_DELIVERY_FALLBACK,
+      }
+
       const priceRows: PriceRow[] = []
 
       // a) Текущая цена — берётся напрямую из WbCard
@@ -344,6 +367,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         computed: calculatePricing(currentInputs),
         inputs: currentInputs,
         context: rowContext,
+        globalValues,
       })
 
       // Хелпер: из финальной цены продавца и скидки % восстанавливаем
@@ -397,6 +421,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           computed: calculatePricing(regularInputs),
           inputs: regularInputs,
           context: rowContext,
+          globalValues,
         })
       }
       // Сортировка по ФИНАЛЬНОЙ цене продавца (то что видит покупатель) DESC
@@ -442,6 +467,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           computed: calculatePricing(autoInputs),
           inputs: autoInputs,
           context: rowContext,
+          globalValues,
         })
       }
       autoRows.sort(
@@ -521,6 +547,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           computed: calculatePricing(calcInputs),
           inputs: calcInputs,
           context: rowContext,
+          globalValues,
         })
       }
       } // end if (showCalculated)

@@ -35,7 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
 import { EditablePromoName } from "@/components/prices/EditablePromoName"
 import { setUserPreference } from "@/app/actions/user-preferences"
-import { ChevronDown, Eye } from "lucide-react"
+import { ChevronDown, Eye, Trash2 } from "lucide-react"
 
 // ──────────────────────────────────────────────────────────────────
 // Types (exported для использования в плане 07-08 + плане 07-09)
@@ -113,6 +113,25 @@ export interface PriceRow {
     subcategoryId: string | null
     categoryId: string | null
   }
+
+  /** «Глобальные» значения каждого редактируемого параметра — что было бы,
+   *  если бы НИ ОДНОГО Product.XOverride / CalculatedPrice.X не было.
+   *  Используются модалкой при клике «↻ глобальное» — подставляет в инпут
+   *  это значение и помечает поле флагом isReset. */
+  globalValues: {
+    buyoutPct: number
+    clubDiscountPct: number
+    walletPct: number
+    acquiringPct: number
+    commissionPct: number
+    jemPct: number
+    drrPct: number
+    defectRatePct: number
+    creditPct: number
+    overheadPct: number
+    taxPct: number
+    deliveryCostRub: number
+  }
 }
 
 /** Группа ценовых строк, привязанных к одной WbCard. */
@@ -155,6 +174,12 @@ interface PriceCalculatorTableProps {
   initialColumnWidths?: Record<string, number>
   /** Список ключей скрытых колонок из UserPreference («Вид»). */
   initialHiddenColumns?: string[]
+  /** Set ID выбранных для удаления расчётных цен. */
+  selectedCalcIds?: Set<string>
+  /** Колбэк toggle для чекбокса выбора расчётной цены. */
+  onToggleCalcSelection?: (calcId: string) => void
+  /** Колбэк клика «Удалить выбранные» (показывается в toolbar, когда селекшн непустой). */
+  onDeleteSelected?: () => void
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -473,6 +498,9 @@ export function PriceCalculatorTable({
   onRowClick,
   initialColumnWidths,
   initialHiddenColumns,
+  selectedCalcIds,
+  onToggleCalcSelection,
+  onDeleteSelected,
 }: PriceCalculatorTableProps) {
   // ── Column widths state (план 260410-mya) ───────────────────────
   // Merge: DEFAULT_WIDTHS + сохранённые значения (незнакомые ключи игнорируются)
@@ -646,8 +674,19 @@ export function PriceCalculatorTable({
 
   return (
     <div className="rounded-md border h-full flex flex-col min-h-0">
-      {/* Toolbar: кнопка «Вид» для настройки видимости колонок */}
+      {/* Toolbar: «Удалить выбранные» (когда селекшн непустой) + «Вид» */}
       <div className="flex items-center justify-end gap-2 px-2 py-1 border-b bg-muted/20">
+        {onDeleteSelected && selectedCalcIds && selectedCalcIds.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDeleteSelected}
+            className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Удалить выбранные ({selectedCalcIds.size})
+          </Button>
+        )}
         <ColumnVisibilityDropdown
           hidden={hiddenColumns}
           onToggle={toggleColumn}
@@ -934,8 +973,28 @@ export function PriceCalculatorTable({
                           </PromoTooltip>
                         )}
                         {row.type === "calculated" && (
-                          <span className="text-sm font-medium">
-                            {row.label}
+                          <span className="inline-flex items-center gap-2 text-sm font-medium">
+                            {row.calculatedPriceId && onToggleCalcSelection && (
+                              <span
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex"
+                              >
+                                <Checkbox
+                                  checked={
+                                    selectedCalcIds?.has(
+                                      row.calculatedPriceId,
+                                    ) ?? false
+                                  }
+                                  onCheckedChange={() =>
+                                    onToggleCalcSelection(
+                                      row.calculatedPriceId as string,
+                                    )
+                                  }
+                                  aria-label="Выбрать расчётную цену для удаления"
+                                />
+                              </span>
+                            )}
+                            <span>{row.label}</span>
                           </span>
                         )}
                       </td>
