@@ -488,19 +488,23 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         .sort((a, b) => a.slot - b.slot)
 
       for (const cp of cardCalcs) {
-        // Per-slot overrides (если заданы — иначе fallback chain от product)
-        const cpDrr = cp.drrPct ?? resolvedDrr
-        const cpDefect = cp.defectRatePct ?? resolvedDefect
-        const cpDelivery = cp.deliveryCostRub ?? resolvedDelivery
-        const cpBuyout = cp.buyoutPct ?? resolvedBuyout
-        const cpClubDiscount = cp.clubDiscountPct ?? resolvedClubDiscount
-        const cpCommission = cp.commissionPct ?? resolvedCommission
-        const cpWallet = cp.walletPct ?? resolvedWallet
-        const cpAcquiring = cp.acquiringPct ?? resolvedAcquiring
-        const cpJem = cp.jemPct ?? resolvedJem
-        const cpCredit = cp.creditPct ?? resolvedCredit
-        const cpOverhead = cp.overheadPct ?? resolvedOverhead
-        const cpTax = cp.taxPct ?? resolvedTax
+        // Per-slot overrides (если заданы) → глобальные значения БЕЗ учёта
+        // Product.XOverride. Это обеспечивает полную ИЗОЛЯЦИЮ расчётных слотов
+        // от изменений на уровне товара: пользователь, меняющий параметр через
+        // Текущую/Акционную строку, не должен случайно изменить и расчётные.
+        // Если нужно применить новое значение к слоту — редактируй слот напрямую.
+        const cpDrr = cp.drrPct ?? globalValues.drrPct
+        const cpDefect = cp.defectRatePct ?? globalValues.defectRatePct
+        const cpDelivery = cp.deliveryCostRub ?? globalValues.deliveryCostRub
+        const cpBuyout = cp.buyoutPct ?? globalValues.buyoutPct
+        const cpClubDiscount = cp.clubDiscountPct ?? globalValues.clubDiscountPct
+        const cpCommission = cp.commissionPct ?? globalValues.commissionPct
+        const cpWallet = cp.walletPct ?? globalValues.walletPct
+        const cpAcquiring = cp.acquiringPct ?? globalValues.acquiringPct
+        const cpJem = cp.jemPct ?? globalValues.jemPct
+        const cpCredit = cp.creditPct ?? globalValues.creditPct
+        const cpOverhead = cp.overheadPct ?? globalValues.overheadPct
+        const cpTax = cp.taxPct ?? globalValues.taxPct
         const cpCostPrice = cp.costPrice ?? costPrice
         const cpSellerDiscountPct =
           cp.sellerDiscountPct ?? currentSellerDiscountPct
