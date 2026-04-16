@@ -35,7 +35,6 @@ import { calculatePricing, type PricingInputs } from "@/lib/pricing-math"
 import {
   saveCalculatedPrice,
   updateProductOverride,
-  updateSubcategoryDefault,
   updateCategoryDefault,
   updateProductDelivery,
 } from "@/app/actions/pricing"
@@ -157,41 +156,20 @@ export function PricingCalculatorDialog({
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
       try {
-        // 1. Scope updates для ДРР
-        if (values.drrPct !== row.inputs.drrPct) {
-          if (values.drrScopeProduct) {
-            const r = await updateProductOverride({
-              productId: row.context.productId,
-              field: "drrOverridePct",
-              value: values.drrPct,
-            })
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить ДРР")
-              return
-            }
-          } else if (row.context.subcategoryId) {
-            const r = await updateSubcategoryDefault(
-              row.context.subcategoryId,
-              values.drrPct,
-            )
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить ДРР подкатегории")
-              return
-            }
-            toast.info("ДРР обновлён для всех товаров подкатегории")
-          } else {
-            toast.warning(
-              "Подкатегория не указана — ДРР сохранён только на товаре",
-            )
-            const r = await updateProductOverride({
-              productId: row.context.productId,
-              field: "drrOverridePct",
-              value: values.drrPct,
-            })
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить ДРР")
-              return
-            }
+        // 1. ДРР: область применения
+        //   checked  = "только этот расчёт" → сохраняется в CalculatedPrice.drrPct
+        //              (per-slot override, остальные расчёты/строки не трогаются)
+        //   unchecked = на весь артикул → Product.drrOverridePct обновляется
+        //              + CalculatedPrice.drrPct обнуляется, чтобы падал в fallback
+        if (!values.drrScopeProduct) {
+          const r = await updateProductOverride({
+            productId: row.context.productId,
+            field: "drrOverridePct",
+            value: values.drrPct,
+          })
+          if (!r.ok) {
+            toast.error(r.error || "Не удалось сохранить ДРР")
+            return
           }
         }
 
@@ -276,7 +254,9 @@ export function PricingCalculatorDialog({
           name: calculatedName,
           sellerPrice,
           sellerDiscountPct: values.sellerDiscountPct,
-          drrPct: values.drrPct,
+          // ДРР: чек = per-slot override; без чека — сохраняем null, чтобы
+          // CalculatedPrice падал в fallback chain (новое Product.drrOverridePct).
+          drrPct: values.drrScopeProduct ? values.drrPct : null,
           defectRatePct: values.defectRatePct,
           deliveryCostRub: values.deliveryCostRub,
           snapshot,
@@ -381,7 +361,7 @@ export function PricingCalculatorDialog({
                       form.setValue("drrScopeProduct", c === true)
                     }
                   />
-                  только этот товар
+                  только этот расчёт
                 </label>
               </div>
 

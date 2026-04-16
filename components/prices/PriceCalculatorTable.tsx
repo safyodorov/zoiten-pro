@@ -732,7 +732,12 @@ export function PriceCalculatorTable({
                     width: columnWidths[key],
                     minWidth: columnWidths[key],
                   }}
-                  className="px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative"
+                  className={cn(
+                    "px-2 py-2 text-[11px] font-medium text-muted-foreground text-center align-middle whitespace-normal break-words leading-tight relative",
+                    // Акцентная подсветка ключевой колонки — «Цена с WB кошельком»
+                    key === "priceAfterWallet" &&
+                      "bg-primary/10 text-primary font-semibold border-x border-primary/40",
+                  )}
                 >
                   {label}
                   <ColumnResizeHandle
@@ -970,7 +975,13 @@ export function PriceCalculatorTable({
                               width: columnWidths[k],
                               minWidth: columnWidths[k],
                             }}
-                            className={extraClass ? cn(CELL_CLASS, extraClass) : CELL_CLASS}
+                            className={cn(
+                              CELL_CLASS,
+                              extraClass,
+                              // Акцентная подсветка ключевой колонки
+                              k === "priceAfterWallet" &&
+                                "bg-primary/5 font-semibold border-x border-primary/40 text-primary",
+                            )}
                           >
                             {content}
                           </td>
