@@ -242,9 +242,20 @@ model Product {
   barcodes              Barcode[]
   cost                  ProductCost? // One-to-one: product → cost record
   // Phase 7: Pricing overrides (D-01)
-  drrOverridePct        Float?
-  defectRateOverridePct Float?
-  deliveryCostRub       Float?
+  // ── Pricing overrides (Phase 7 + 2026-04-16 extension) ──
+  drrOverridePct          Float?
+  defectRateOverridePct   Float?
+  deliveryCostRub         Float?
+  // Per-product overrides, 2026-04-16: перекрывают card.X / rates.X / subcategory/category defaults
+  buyoutOverridePct       Float?
+  clubDiscountOverridePct Float?
+  walletOverridePct       Float?
+  acquiringOverridePct    Float?
+  commissionOverridePct   Float?
+  jemOverridePct          Float?
+  creditOverridePct       Float?
+  overheadOverridePct     Float?
+  taxOverridePct          Float?
   deletedAt             DateTime? // Soft delete: null = active
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
@@ -405,6 +416,17 @@ model CalculatedPrice {
   drrPct            Float?
   defectRatePct     Float?
   deliveryCostRub   Float?
+  // Per-slot overrides, 2026-04-16: перекрывают Product.*Override / card.X / rates.X
+  buyoutPct         Float?
+  clubDiscountPct   Float?
+  walletPct         Float?
+  acquiringPct      Float?
+  commissionPct     Float?
+  jemPct            Float?
+  creditPct         Float?
+  overheadPct       Float?
+  taxPct            Float?
+  costPrice         Float?
   snapshot          Json
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

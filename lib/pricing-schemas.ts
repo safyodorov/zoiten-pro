@@ -69,22 +69,121 @@ export const appSettingValueSchema = z
 /** Zod схема для slot (1|2|3). */
 export const slotSchema = z.number().int().min(1).max(3)
 
-/** Zod схема для сохранения расчётной цены. */
+/** Ключи редактируемых в модалке параметров (2026-04-16).
+ *  Каждый ключ — имя колонки и в Product override-поле (с суффиксом OverridePct),
+ *  и в CalculatedPrice per-slot override-поле. */
+export const EDITABLE_PARAM_KEYS = [
+  "buyoutPct",
+  "clubDiscountPct",
+  "walletPct",
+  "acquiringPct",
+  "commissionPct",
+  "jemPct",
+  "drrPct",
+  "defectRatePct",
+  "creditPct",
+  "overheadPct",
+  "taxPct",
+  "deliveryCostRub",
+] as const
+
+export type EditableParamKey = (typeof EDITABLE_PARAM_KEYS)[number]
+
+/** Маппинг ключ модалки → поле Product. */
+export const PRODUCT_FIELD_MAP: Record<EditableParamKey, string> = {
+  buyoutPct: "buyoutOverridePct",
+  clubDiscountPct: "clubDiscountOverridePct",
+  walletPct: "walletOverridePct",
+  acquiringPct: "acquiringOverridePct",
+  commissionPct: "commissionOverridePct",
+  jemPct: "jemOverridePct",
+  drrPct: "drrOverridePct",
+  defectRatePct: "defectRateOverridePct",
+  creditPct: "creditOverridePct",
+  overheadPct: "overheadOverridePct",
+  taxPct: "taxOverridePct",
+  deliveryCostRub: "deliveryCostRub",
+}
+
+/** Маппинг ключ модалки → поле CalculatedPrice. */
+export const CALC_FIELD_MAP: Record<EditableParamKey, string> = {
+  buyoutPct: "buyoutPct",
+  clubDiscountPct: "clubDiscountPct",
+  walletPct: "walletPct",
+  acquiringPct: "acquiringPct",
+  commissionPct: "commissionPct",
+  jemPct: "jemPct",
+  drrPct: "drrPct",
+  defectRatePct: "defectRatePct",
+  creditPct: "creditPct",
+  overheadPct: "overheadPct",
+  taxPct: "taxPct",
+  deliveryCostRub: "deliveryCostRub",
+}
+
+/** Zod для одного параметра модалки. */
+const paramOverrideSchema = z.object({
+  value: z.number().min(0).nullable(),
+  scopeSlot: z.boolean(), // true → CalculatedPrice.X, false → Product.XOverride
+})
+
+/** Zod схема для сохранения расчётной цены (создание нового слота). */
 export const saveCalculatedPriceSchema = z.object({
   wbCardId: z.string().min(1, "wbCardId обязателен"),
   slot: slotSchema,
   name: z.string().min(1, "Название обязательно").max(100, "Название слишком длинное"),
   sellerPrice: z.number().positive("Цена продавца должна быть > 0"),
   sellerDiscountPct: z.number().min(0).max(100).nullable().optional(),
+  costPrice: z.number().min(0).nullable().optional(),
+  /** Override-поля параметров: для каждого ключа value + scopeSlot. */
+  params: z.record(z.string(), paramOverrideSchema).optional(),
+  snapshot: z.record(z.string(), z.any()), // JSON полный слепок параметров
+  // Legacy поля (обратная совместимость — саморефакторится в params)
   drrPct: z.number().min(0).max(100).nullable().optional(),
   defectRatePct: z.number().min(0).max(100).nullable().optional(),
   deliveryCostRub: z.number().min(0).nullable().optional(),
-  snapshot: z.record(z.string(), z.any()), // JSON полный слепок параметров
 })
 
-/** Zod схема для обновления product override полей. */
+/** Zod схема для сохранения изменений в ТЕКУЩУЮ строку (кнопка «Сохранить»).
+ *  - `calculatedPriceId = null` → non-calc строка (Текущая/Regular/Auto), все параметры
+ *    пишутся ТОЛЬКО в Product overrides (scopeSlot игнорируется, всегда false).
+ *  - `calculatedPriceId != null` → calc строка, параметры пишутся per scopeSlot. */
+export const saveRowEditsSchema = z.object({
+  wbCardId: z.string().min(1, "wbCardId обязателен"),
+  productId: z.string().min(1, "productId обязателен"),
+  calculatedPriceId: z.string().nullable(),
+  params: z.record(z.string(), paramOverrideSchema),
+})
+
+/** Zod схема для сброса override (кнопка «↻ глобальное»).
+ *  Очищает Product.XOverride (и CalculatedPrice.X, если calculatedPriceId задан). */
+export const resetParamOverrideSchema = z.object({
+  productId: z.string().min(1),
+  calculatedPriceId: z.string().nullable(),
+  paramKey: z.string().refine(
+    (k): k is EditableParamKey =>
+      (EDITABLE_PARAM_KEYS as readonly string[]).includes(k),
+    "Недопустимый ключ параметра",
+  ),
+})
+
+/** Zod схема для обновления product override полей (legacy, ещё используется кодом).
+ *  Расширена всеми 11 override-полями (оставляется совместимость). */
 export const updateProductOverrideSchema = z.object({
   productId: z.string().min(1, "productId обязателен"),
-  field: z.enum(["drrOverridePct", "defectRateOverridePct"]),
-  value: z.number().min(0).max(100).nullable(),
+  field: z.enum([
+    "drrOverridePct",
+    "defectRateOverridePct",
+    "deliveryCostRub",
+    "buyoutOverridePct",
+    "clubDiscountOverridePct",
+    "walletOverridePct",
+    "acquiringOverridePct",
+    "commissionOverridePct",
+    "jemOverridePct",
+    "creditOverridePct",
+    "overheadOverridePct",
+    "taxOverridePct",
+  ]),
+  value: z.number().min(0).nullable(),
 })

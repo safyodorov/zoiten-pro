@@ -1,22 +1,31 @@
 // components/prices/PricingCalculatorDialog.tsx
-// Phase 7 (план 07-09): модалка юнит-экономики с realtime пересчётом
-// и сохранением расчётной цены в слот 1/2/3.
+// Phase 7 + 2026-04-16: расширенная модалка юнит-экономики.
 //
-// UI-SPEC (D-14, D-15):
-// - 2-колоночный layout (inputs слева, outputs справа)
-// - Realtime пересчёт через useWatch + useMemo → calculatePricing (latency < 100ms)
-// - Чекбоксы «только этот товар» для ДРР и Брак управляют вызовом
-//   updateProductOverride vs updateSubcategoryDefault/updateCategoryDefault
-// - Native <select> для выбора слота (CLAUDE.md convention — НЕ base-ui Select)
-// - useTransition для submit (показывает "Сохранение…" и блокирует кнопки)
+// 15 редактируемых параметров + 2 кнопки сохранения:
+//  - «Сохранить» — пишет изменения в ТЕКУЩУЮ строку (calc slot или Product).
+//    Disabled при изменении sellerPrice / sellerDiscountPct (они всегда в новый слот).
+//  - «Сохранить как расчётную цену» — создаёт/обновляет слот 1/2/3 со всеми параметрами.
+//
+// Для каждого параметра (кроме seller* и costPrice):
+//  - Input с текущим значением
+//  - Чекбокс «только этот расчёт» (hidden на non-calc строках)
+//    CHECKED  → CalculatedPrice.X (per-slot)
+//    UNCHECKED → Product.XOverride (per-product)
+//  - Кнопка «↻» — сбрасывает override в Product + slot (сервер), перезагружает страницу.
+//
+// Особые поля:
+//  - sellerPrice, sellerDiscountPct — только новый слот. Без чекбокса и кнопки сброса.
+//  - costPrice — только новый слот (saveCalculatedPrice). Без чекбокса.
 
 "use client"
 
 import { useMemo, useTransition } from "react"
 import { useForm, useWatch } from "react-hook-form"
+import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
+import { RotateCcw } from "lucide-react"
 
 import {
   Dialog,
@@ -34,37 +43,110 @@ import { cn } from "@/lib/utils"
 import { calculatePricing, type PricingInputs } from "@/lib/pricing-math"
 import {
   saveCalculatedPrice,
-  updateProductOverride,
-  updateCategoryDefault,
-  updateProductDelivery,
+  saveRowEdits,
+  resetParamOverride,
 } from "@/app/actions/pricing"
 import type { PriceRow } from "@/components/prices/PriceCalculatorTable"
+import type { EditableParamKey } from "@/lib/pricing-schemas"
+
+// ──────────────────────────────────────────────────────────────────
+// Editable params config
+// ──────────────────────────────────────────────────────────────────
+
+interface ParamDef {
+  key: EditableParamKey
+  label: string
+  unit: "%" | "₽"
+  /** Максимум (для %). */
+  max?: number
+  /** Step для инпута. */
+  step?: string
+}
+
+const EDITABLE_PARAMS: ParamDef[] = [
+  { key: "buyoutPct", label: "Процент выкупа", unit: "%", max: 100, step: "0.1" },
+  { key: "clubDiscountPct", label: "WB Клуб", unit: "%", max: 100, step: "0.1" },
+  { key: "walletPct", label: "Кошелёк", unit: "%", max: 100, step: "0.1" },
+  { key: "acquiringPct", label: "Эквайринг", unit: "%", max: 100, step: "0.1" },
+  { key: "commissionPct", label: "Комиссия", unit: "%", max: 100, step: "0.01" },
+  { key: "jemPct", label: "Тариф Джем", unit: "%", max: 100, step: "0.1" },
+  { key: "drrPct", label: "ДРР", unit: "%", max: 100, step: "0.1" },
+  { key: "defectRatePct", label: "Брак", unit: "%", max: 100, step: "0.1" },
+  { key: "creditPct", label: "Кредит", unit: "%", max: 100, step: "0.1" },
+  { key: "overheadPct", label: "Общие расходы", unit: "%", max: 100, step: "0.1" },
+  { key: "taxPct", label: "Налог", unit: "%", max: 100, step: "0.1" },
+  { key: "deliveryCostRub", label: "Доставка", unit: "₽", step: "0.01" },
+]
+
+// Маппинг param key → PricingInputs key для чтения fallback-значений из row.inputs
+const INPUT_KEY_MAP: Record<EditableParamKey, keyof PricingInputs> = {
+  buyoutPct: "buyoutPct",
+  clubDiscountPct: "clubDiscountPct",
+  walletPct: "walletPct",
+  acquiringPct: "acquiringPct",
+  commissionPct: "commFbwPct",
+  jemPct: "jemPct",
+  drrPct: "drrPct",
+  defectRatePct: "defectRatePct",
+  creditPct: "creditPct",
+  overheadPct: "overheadPct",
+  taxPct: "taxPct",
+  deliveryCostRub: "deliveryCostRub",
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Schema
 // ──────────────────────────────────────────────────────────────────
 
-// ВАЖНО: используем z.number() (не z.coerce.number), потому что
-// react-hook-form 7.72 + zod 4.x + zodResolver создают type mismatch
-// c coerce (input unknown → output number). `register(name, {valueAsNumber: true})`
-// сам приводит значение input'а к числу перед валидацией Zod.
-const formSchema = z.object({
-  // Пользователь вводит Цену продавца (финальную, после скидки).
-  // priceBeforeDiscount = sellerPrice / (1 − sellerDiscountPct/100) вычисляется автоматически.
+// Zod-схему строим динамически через rawShape, но тип FormValues объявляем
+// явно ниже — zod.infer не справляется со spread-объектом (теряет ключи).
+const formSchemaShape: Record<string, z.ZodTypeAny> = {
   sellerPrice: z
     .number({ message: "Введите число" })
     .min(0, "Цена не может быть отрицательной"),
   sellerDiscountPct: z.number({ message: "Введите число" }).min(0).max(100),
-  drrPct: z.number({ message: "Введите число" }).min(0).max(100),
-  defectRatePct: z.number({ message: "Введите число" }).min(0).max(100),
-  deliveryCostRub: z.number({ message: "Введите число" }).min(0),
-  drrScopeProduct: z.boolean(),
-  defectScopeProduct: z.boolean(),
+  costPrice: z.number({ message: "Введите число" }).min(0),
   slot: z.number().int().min(1).max(3),
   calculatedName: z.string().max(100),
-})
+}
+for (const p of EDITABLE_PARAMS) {
+  formSchemaShape[p.key] = z.number({ message: "Введите число" }).min(0)
+  formSchemaShape[`${p.key}_scopeSlot`] = z.boolean()
+}
+const formSchema = z.object(formSchemaShape)
 
-type FormValues = z.infer<typeof formSchema>
+// Явный тип FormValues со всеми полями
+type FormValues = {
+  sellerPrice: number
+  sellerDiscountPct: number
+  costPrice: number
+  slot: number
+  calculatedName: string
+  buyoutPct: number
+  clubDiscountPct: number
+  walletPct: number
+  acquiringPct: number
+  commissionPct: number
+  jemPct: number
+  drrPct: number
+  defectRatePct: number
+  creditPct: number
+  overheadPct: number
+  taxPct: number
+  deliveryCostRub: number
+  buyoutPct_scopeSlot: boolean
+  clubDiscountPct_scopeSlot: boolean
+  walletPct_scopeSlot: boolean
+  acquiringPct_scopeSlot: boolean
+  commissionPct_scopeSlot: boolean
+  jemPct_scopeSlot: boolean
+  drrPct_scopeSlot: boolean
+  defectRatePct_scopeSlot: boolean
+  creditPct_scopeSlot: boolean
+  overheadPct_scopeSlot: boolean
+  taxPct_scopeSlot: boolean
+  deliveryCostRub_scopeSlot: boolean
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Props
@@ -92,189 +174,204 @@ export function PricingCalculatorDialog({
   row,
 }: PricingCalculatorDialogProps) {
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
-  // Initial form values — из серверного inputs
   const initialSlot =
     row.type === "calculated" && row.calculatedSlot ? row.calculatedSlot : 1
   const initialName =
     row.type === "calculated" ? row.label : `Расчётная цена ${initialSlot}`
-
-  // Начальная Цена продавца (после скидки) — берём из готового серверного расчёта.
   const initialSellerPrice = row.computed.sellerPrice
 
+  // На non-calc строках нет слота → чекбоксы «только этот расчёт» скрываем
+  const isCalcRow = row.type === "calculated"
+
+  // Дефолты для 12 редактируемых параметров — из row.inputs (resolved values)
+  const paramDefaults = EDITABLE_PARAMS.reduce(
+    (acc, p) => {
+      const inputKey = INPUT_KEY_MAP[p.key]
+      acc[p.key] = row.inputs[inputKey] as number
+      // По умолчанию scope = slot (как было с ДРР до рефакторинга)
+      acc[`${p.key}_scopeSlot`] = true
+      return acc
+    },
+    {} as Record<string, unknown>,
+  )
+
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    // zodResolver теряет структуру типа при dynamic shape — кастуем явно
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       sellerPrice: initialSellerPrice,
       sellerDiscountPct: row.inputs.sellerDiscountPct,
-      drrPct: row.inputs.drrPct,
-      defectRatePct: row.inputs.defectRatePct,
-      deliveryCostRub: row.inputs.deliveryCostRub,
-      drrScopeProduct: true,
-      defectScopeProduct: true,
+      costPrice: row.inputs.costPrice,
       slot: initialSlot,
       calculatedName: initialName,
-    },
+      ...paramDefaults,
+    } as FormValues,
   })
 
-  // Realtime outputs через useWatch + useMemo.
-  // priceBeforeDiscount вычисляется из sellerPrice и sellerDiscountPct.
-  const watched = useWatch({
-    control: form.control,
-    name: [
-      "sellerPrice",
-      "sellerDiscountPct",
-      "drrPct",
-      "defectRatePct",
-      "deliveryCostRub",
-    ],
-  })
-
-  const [sellerPriceNum, sellerDiscountNum] = [
-    Number(watched[0]) || 0,
-    Number(watched[1]) || 0,
-  ]
-  const derivedPriceBeforeDiscount =
-    sellerDiscountNum >= 100 || sellerDiscountNum < 0
-      ? sellerPriceNum
-      : sellerPriceNum / (1 - sellerDiscountNum / 100)
+  // Следим за всеми полями для realtime пересчёта
+  const watchedValues = useWatch({ control: form.control })
 
   const liveOutputs = useMemo(() => {
-    const [, , drr, defect, delivery] = watched
+    const sellerPriceNum = Number(watchedValues.sellerPrice) || 0
+    const sellerDiscountNum = Number(watchedValues.sellerDiscountPct) || 0
+    const priceBeforeDiscount =
+      sellerDiscountNum >= 100 || sellerDiscountNum < 0
+        ? sellerPriceNum
+        : sellerPriceNum / (1 - sellerDiscountNum / 100)
+
     const inputs: PricingInputs = {
       ...row.inputs,
-      priceBeforeDiscount: derivedPriceBeforeDiscount,
+      priceBeforeDiscount,
       sellerDiscountPct: sellerDiscountNum,
-      drrPct: Number(drr) || 0,
-      defectRatePct: Number(defect) || 0,
-      deliveryCostRub: Number(delivery) || 0,
+      costPrice: Number(watchedValues.costPrice) || 0,
+      buyoutPct: Number(watchedValues.buyoutPct) || 0,
+      clubDiscountPct: Number(watchedValues.clubDiscountPct) || 0,
+      walletPct: Number(watchedValues.walletPct) || 0,
+      acquiringPct: Number(watchedValues.acquiringPct) || 0,
+      commFbwPct: Number(watchedValues.commissionPct) || 0,
+      jemPct: Number(watchedValues.jemPct) || 0,
+      drrPct: Number(watchedValues.drrPct) || 0,
+      defectRatePct: Number(watchedValues.defectRatePct) || 0,
+      creditPct: Number(watchedValues.creditPct) || 0,
+      overheadPct: Number(watchedValues.overheadPct) || 0,
+      taxPct: Number(watchedValues.taxPct) || 0,
+      deliveryCostRub: Number(watchedValues.deliveryCostRub) || 0,
     }
     return calculatePricing(inputs)
-  }, [watched, row.inputs, derivedPriceBeforeDiscount, sellerDiscountNum])
+  }, [watchedValues, row.inputs])
 
-  // ── Submit ──────────────────────────────────────────────────────
-  const onSubmit = (values: FormValues) => {
+  // Derived: Цена для установки
+  const derivedPriceBeforeDiscount = useMemo(() => {
+    const sp = Number(watchedValues.sellerPrice) || 0
+    const sd = Number(watchedValues.sellerDiscountPct) || 0
+    if (sd >= 100 || sd < 0) return sp
+    return sp / (1 - sd / 100)
+  }, [watchedValues.sellerPrice, watchedValues.sellerDiscountPct])
+
+  // «Сохранить» disabled, если изменились sellerPrice или sellerDiscountPct
+  const sellerPriceChanged =
+    Math.abs((Number(watchedValues.sellerPrice) || 0) - initialSellerPrice) >
+    0.001
+  const sellerDiscountChanged =
+    Math.abs(
+      (Number(watchedValues.sellerDiscountPct) || 0) -
+        row.inputs.sellerDiscountPct,
+    ) > 0.001
+  const saveExistingDisabled = sellerPriceChanged || sellerDiscountChanged
+
+  // ── Helpers: формирование params map для action'ов ──────────────
+  const buildParamsMap = (
+    values: FormValues,
+  ): Record<string, { value: number; scopeSlot: boolean }> => {
+    const params: Record<string, { value: number; scopeSlot: boolean }> = {}
+    for (const p of EDITABLE_PARAMS) {
+      const value = (values as unknown as Record<string, number>)[p.key]
+      const scopeSlot =
+        isCalcRow &&
+        (values as unknown as Record<string, boolean>)[`${p.key}_scopeSlot`]
+      params[p.key] = { value: Number(value) || 0, scopeSlot: !!scopeSlot }
+    }
+    return params
+  }
+
+  // ── Submit: «Сохранить» (существующая строка) ───────────────────
+  const onSaveExisting = (values: FormValues) => {
     startTransition(async () => {
-      try {
-        // 1. ДРР: область применения
-        //   checked  = "только этот расчёт" → сохраняется в CalculatedPrice.drrPct
-        //              (per-slot override, остальные расчёты/строки не трогаются)
-        //   unchecked = на весь артикул → Product.drrOverridePct обновляется
-        //              + CalculatedPrice.drrPct обнуляется, чтобы падал в fallback
-        if (!values.drrScopeProduct) {
-          const r = await updateProductOverride({
-            productId: row.context.productId,
-            field: "drrOverridePct",
-            value: values.drrPct,
-          })
-          if (!r.ok) {
-            toast.error(r.error || "Не удалось сохранить ДРР")
-            return
-          }
-        }
+      const result = await saveRowEdits({
+        wbCardId: card.id,
+        productId: row.context.productId,
+        calculatedPriceId: isCalcRow ? row.calculatedPriceId ?? null : null,
+        params: buildParamsMap(values),
+      })
 
-        // 2. Scope updates для Брака
-        if (values.defectRatePct !== row.inputs.defectRatePct) {
-          if (values.defectScopeProduct) {
-            const r = await updateProductOverride({
-              productId: row.context.productId,
-              field: "defectRateOverridePct",
-              value: values.defectRatePct,
-            })
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить процент брака")
-              return
-            }
-          } else if (row.context.categoryId) {
-            const r = await updateCategoryDefault(
-              row.context.categoryId,
-              values.defectRatePct,
-            )
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить брак категории")
-              return
-            }
-            toast.info("Процент брака обновлён для всех товаров категории")
-          } else {
-            toast.warning(
-              "Категория не указана — брак сохранён только на товаре",
-            )
-            const r = await updateProductOverride({
-              productId: row.context.productId,
-              field: "defectRateOverridePct",
-              value: values.defectRatePct,
-            })
-            if (!r.ok) {
-              toast.error(r.error || "Не удалось сохранить процент брака")
-              return
-            }
-          }
-        }
-
-        // 3. Доставка (всегда per-product — D-14)
-        if (values.deliveryCostRub !== row.inputs.deliveryCostRub) {
-          const r = await updateProductDelivery(
-            row.context.productId,
-            values.deliveryCostRub,
-          )
-          if (!r.ok) {
-            toast.error(r.error || "Не удалось сохранить доставку")
-            return
-          }
-        }
-
-        // 4. Сохранить расчётную цену.
-        // Пользователь ввёл sellerPrice (финальную). priceBeforeDiscount — derived.
-        const priceBeforeDiscount =
-          values.sellerDiscountPct >= 100 || values.sellerDiscountPct < 0
-            ? values.sellerPrice
-            : values.sellerPrice / (1 - values.sellerDiscountPct / 100)
-        const sellerPrice = values.sellerPrice
-
-        const snapshotInputs: PricingInputs = {
-          ...row.inputs,
-          priceBeforeDiscount,
-          sellerDiscountPct: values.sellerDiscountPct,
-          drrPct: values.drrPct,
-          defectRatePct: values.defectRatePct,
-          deliveryCostRub: values.deliveryCostRub,
-        }
-        const snapshot: Record<string, unknown> = {
-          inputs: snapshotInputs,
-          outputs: liveOutputs,
-          savedAt: new Date().toISOString(),
-        }
-
-        const calculatedName =
-          values.calculatedName.trim() || `Расчётная цена ${values.slot}`
-
-        const result = await saveCalculatedPrice({
-          wbCardId: card.id,
-          slot: values.slot,
-          name: calculatedName,
-          sellerPrice,
-          sellerDiscountPct: values.sellerDiscountPct,
-          // ДРР: чек = per-slot override; без чека — сохраняем null, чтобы
-          // CalculatedPrice падал в fallback chain (новое Product.drrOverridePct).
-          drrPct: values.drrScopeProduct ? values.drrPct : null,
-          defectRatePct: values.defectRatePct,
-          deliveryCostRub: values.deliveryCostRub,
-          snapshot,
-        })
-
-        if (result.ok) {
-          toast.success(`Расчётная цена «${calculatedName}» сохранена`)
-          onOpenChange(false)
-        } else {
-          toast.error(result.error || "Не удалось сохранить расчёт")
-        }
-      } catch (e) {
-        toast.error((e as Error).message || "Ошибка сохранения")
+      if (result.ok) {
+        toast.success("Изменения сохранены")
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || "Не удалось сохранить")
       }
     })
   }
 
-  // ── Formatting helpers ──────────────────────────────────────────
+  // ── Submit: «Сохранить как расчётную цену» (новый/текущий слот) ─
+  const onSaveAsCalculated = (values: FormValues) => {
+    startTransition(async () => {
+      const priceBeforeDiscount =
+        values.sellerDiscountPct >= 100 || values.sellerDiscountPct < 0
+          ? values.sellerPrice
+          : values.sellerPrice / (1 - values.sellerDiscountPct / 100)
+
+      const snapshotInputs: PricingInputs = {
+        ...row.inputs,
+        priceBeforeDiscount,
+        sellerDiscountPct: values.sellerDiscountPct,
+        costPrice: values.costPrice,
+        buyoutPct: values.buyoutPct as number,
+        clubDiscountPct: values.clubDiscountPct as number,
+        walletPct: values.walletPct as number,
+        acquiringPct: values.acquiringPct as number,
+        commFbwPct: values.commissionPct as number,
+        jemPct: values.jemPct as number,
+        drrPct: values.drrPct as number,
+        defectRatePct: values.defectRatePct as number,
+        creditPct: values.creditPct as number,
+        overheadPct: values.overheadPct as number,
+        taxPct: values.taxPct as number,
+        deliveryCostRub: values.deliveryCostRub as number,
+      }
+      const snapshot: Record<string, unknown> = {
+        inputs: snapshotInputs,
+        outputs: liveOutputs,
+        savedAt: new Date().toISOString(),
+      }
+
+      const calculatedName =
+        values.calculatedName.trim() || `Расчётная цена ${values.slot}`
+
+      const result = await saveCalculatedPrice({
+        wbCardId: card.id,
+        slot: values.slot,
+        name: calculatedName,
+        sellerPrice: values.sellerPrice,
+        sellerDiscountPct: values.sellerDiscountPct,
+        costPrice: values.costPrice,
+        params: buildParamsMap(values),
+        snapshot,
+      })
+
+      if (result.ok) {
+        toast.success(`Расчётная цена «${calculatedName}» сохранена`)
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || "Не удалось сохранить расчёт")
+      }
+    })
+  }
+
+  // ── Reset override ──────────────────────────────────────────────
+  const onResetParam = (key: EditableParamKey) => {
+    startTransition(async () => {
+      const result = await resetParamOverride({
+        productId: row.context.productId,
+        calculatedPriceId: isCalcRow ? row.calculatedPriceId ?? null : null,
+        paramKey: key,
+      })
+      if (result.ok) {
+        toast.success("Сброшено к глобальному — перезагружаю…")
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || "Не удалось сбросить")
+      }
+    })
+  }
+
+  // ── Formatting ──────────────────────────────────────────────────
   const fmtMoney = (n: number) =>
     Number.isFinite(n)
       ? n.toLocaleString("ru-RU", {
@@ -289,7 +386,7 @@ export function PricingCalculatorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-5xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Расчёт юнит-экономики: {card.name ?? "Карточка"}
@@ -300,12 +397,12 @@ export function PricingCalculatorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        <form>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* ── Левая колонка — Inputs ─────────────────────────── */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Входные параметры
+                Цена и скидка
               </h3>
 
               <div className="flex flex-col gap-1">
@@ -316,9 +413,7 @@ export function PricingCalculatorDialog({
                   step="0.01"
                   min="0"
                   className="h-9"
-                  {...form.register("sellerPrice", {
-                    valueAsNumber: true,
-                  })}
+                  {...form.register("sellerPrice", { valueAsNumber: true })}
                 />
               </div>
 
@@ -335,7 +430,7 @@ export function PricingCalculatorDialog({
                     valueAsNumber: true,
                   })}
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Цена для установки:{" "}
                   <span className="text-foreground tabular-nums">
                     {fmtMoney(derivedPriceBeforeDiscount)} ₽
@@ -344,85 +439,44 @@ export function PricingCalculatorDialog({
               </div>
 
               <div className="flex flex-col gap-1">
-                <Label htmlFor="drrPct">ДРР, %</Label>
+                <Label htmlFor="costPrice">Закупка (себестоимость), ₽</Label>
                 <Input
-                  id="drrPct"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  className="h-9"
-                  {...form.register("drrPct", { valueAsNumber: true })}
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                  <Checkbox
-                    checked={form.watch("drrScopeProduct")}
-                    onCheckedChange={(c) =>
-                      form.setValue("drrScopeProduct", c === true)
-                    }
-                  />
-                  только этот расчёт
-                </label>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="defectRatePct">Процент брака, %</Label>
-                <Input
-                  id="defectRatePct"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="100"
-                  className="h-9"
-                  {...form.register("defectRatePct", { valueAsNumber: true })}
-                />
-                <label className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                  <Checkbox
-                    checked={form.watch("defectScopeProduct")}
-                    onCheckedChange={(c) =>
-                      form.setValue("defectScopeProduct", c === true)
-                    }
-                  />
-                  только этот товар
-                </label>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="deliveryCostRub">
-                  Доставка на маркетплейс, ₽
-                </Label>
-                <Input
-                  id="deliveryCostRub"
+                  id="costPrice"
                   type="number"
                   step="0.01"
                   min="0"
                   className="h-9"
-                  {...form.register("deliveryCostRub", {
-                    valueAsNumber: true,
-                  })}
+                  {...form.register("costPrice", { valueAsNumber: true })}
                 />
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Себестоимость применяется только при сохранении в слот
+                </p>
               </div>
 
-              <div className="pt-4 border-t space-y-1 text-xs text-muted-foreground">
-                <div>
-                  Себестоимость:{" "}
-                  <span className="text-foreground tabular-nums">
-                    {fmtMoney(row.inputs.costPrice)} ₽
-                  </span>
+              <div className="pt-2 border-t">
+                <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Параметры расчёта
+                </h3>
+                <div className="space-y-2">
+                  {EDITABLE_PARAMS.map((p) => (
+                    <ParamRow
+                      key={p.key}
+                      param={p}
+                      form={form}
+                      showScopeCheckbox={isCalcRow}
+                      isPending={isPending}
+                      onReset={onResetParam}
+                    />
+                  ))}
                 </div>
-                <div>
-                  Скидка WB (СПП):{" "}
-                  <span className="text-foreground tabular-nums">
-                    {fmtPct(row.inputs.wbDiscountPct)}
-                  </span>
-                </div>
-                <div>
-                  Комиссия ИУ FBW:{" "}
-                  <span className="text-foreground tabular-nums">
-                    {fmtPct(row.inputs.commFbwPct)}
-                  </span>
-                </div>
-                <div>Глобальные ставки применяются автоматически</div>
+              </div>
+
+              <div className="pt-2 border-t text-[11px] text-muted-foreground">
+                Скидка WB (СПП):{" "}
+                <span className="text-foreground tabular-nums">
+                  {fmtPct(row.inputs.wbDiscountPct)}
+                </span>{" "}
+                · применяется из данных WB
               </div>
             </div>
 
@@ -457,22 +511,13 @@ export function PricingCalculatorDialog({
                   label="Комиссия"
                   value={fmtMoney(liveOutputs.commissionAmount)}
                 />
-                <OutputRow
-                  label="ДРР"
-                  value={fmtMoney(liveOutputs.drrAmount)}
-                />
-                <OutputRow
-                  label="Джем"
-                  value={fmtMoney(liveOutputs.jemAmount)}
-                />
+                <OutputRow label="ДРР" value={fmtMoney(liveOutputs.drrAmount)} />
+                <OutputRow label="Джем" value={fmtMoney(liveOutputs.jemAmount)} />
                 <OutputRow
                   label="К перечислению"
                   value={fmtMoney(liveOutputs.transferAmount)}
                 />
-                <OutputRow
-                  label="Брак"
-                  value={fmtMoney(liveOutputs.defectAmount)}
-                />
+                <OutputRow label="Брак" value={fmtMoney(liveOutputs.defectAmount)} />
                 <OutputRow
                   label="Доставка"
                   value={fmtMoney(liveOutputs.deliveryAmount)}
@@ -485,13 +530,9 @@ export function PricingCalculatorDialog({
                   label="Общие расходы"
                   value={fmtMoney(liveOutputs.overheadAmount)}
                 />
-                <OutputRow
-                  label="Налог"
-                  value={fmtMoney(liveOutputs.taxAmount)}
-                />
+                <OutputRow label="Налог" value={fmtMoney(liveOutputs.taxAmount)} />
               </dl>
 
-              {/* Highlighted card — profit/Re/ROI */}
               <div className="mt-4 bg-muted/50 p-3 rounded-md space-y-2">
                 <OutputRow
                   label="Прибыль"
@@ -533,14 +574,14 @@ export function PricingCalculatorDialog({
                 htmlFor="slot-select"
                 className="text-sm whitespace-nowrap"
               >
-                Сохранить в слот:
+                Слот для сохранения:
               </label>
               <select
                 id="slot-select"
                 className="h-9 rounded border border-input bg-transparent px-2 text-sm"
                 value={form.watch("slot")}
                 onChange={(e) =>
-                  form.setValue("slot", Number(e.target.value))
+                  form.setValue("slot", Number(e.target.value) as 1 | 2 | 3)
                 }
               >
                 <option value={1}>Слот 1</option>
@@ -549,7 +590,7 @@ export function PricingCalculatorDialog({
               </select>
               <Input
                 placeholder="Название (опционально)"
-                className="h-9 flex-1 min-w-[200px]"
+                className="h-9 flex-1 min-w-[160px]"
                 {...form.register("calculatedName")}
               />
               <Button
@@ -560,7 +601,24 @@ export function PricingCalculatorDialog({
               >
                 Отмена
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={form.handleSubmit(onSaveExisting)}
+                disabled={isPending || saveExistingDisabled}
+                title={
+                  saveExistingDisabled
+                    ? "Изменение цены продавца или скидки сохраняется только в новый слот"
+                    : "Сохранить изменения в текущую строку"
+                }
+              >
+                Сохранить
+              </Button>
+              <Button
+                type="button"
+                onClick={form.handleSubmit(onSaveAsCalculated)}
+                disabled={isPending}
+              >
                 {isPending ? "Сохранение…" : "Сохранить как расчётную цену"}
               </Button>
             </div>
@@ -572,7 +630,68 @@ export function PricingCalculatorDialog({
 }
 
 // ──────────────────────────────────────────────────────────────────
-// OutputRow — небольшой хелпер-компонент для правой колонки
+// ParamRow — строка одного параметра (Label + Input + чекбокс + ↻)
+// ──────────────────────────────────────────────────────────────────
+
+function ParamRow({
+  param,
+  form,
+  showScopeCheckbox,
+  isPending,
+  onReset,
+}: {
+  param: ParamDef
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: any
+  showScopeCheckbox: boolean
+  isPending: boolean
+  onReset: (key: EditableParamKey) => void
+}) {
+  const scopeKey = `${param.key}_scopeSlot`
+  return (
+    <div className="flex items-end gap-2">
+      <div className="flex-1 min-w-0">
+        <Label htmlFor={param.key} className="text-xs">
+          {param.label}, {param.unit}
+        </Label>
+        <Input
+          id={param.key}
+          type="number"
+          min="0"
+          max={param.max}
+          step={param.step ?? "0.01"}
+          className="h-8 text-sm"
+          {...form.register(param.key, { valueAsNumber: true })}
+        />
+      </div>
+      {showScopeCheckbox && (
+        <label className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0 pb-1.5 whitespace-nowrap cursor-pointer">
+          <Checkbox
+            checked={form.watch(scopeKey) === true}
+            onCheckedChange={(c: boolean | string) =>
+              form.setValue(scopeKey, c === true)
+            }
+          />
+          <span>только этот&nbsp;расчёт</span>
+        </label>
+      )}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 shrink-0"
+        onClick={() => onReset(param.key)}
+        disabled={isPending}
+        title="Применить глобальные — сбросить override"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────
+// OutputRow
 // ──────────────────────────────────────────────────────────────────
 
 function OutputRow({

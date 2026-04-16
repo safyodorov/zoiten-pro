@@ -26,7 +26,12 @@ import {
   isValidAppSettingKey,
   appSettingValueSchema,
   saveCalculatedPriceSchema,
+  saveRowEditsSchema,
+  resetParamOverrideSchema,
   updateProductOverrideSchema,
+  PRODUCT_FIELD_MAP,
+  CALC_FIELD_MAP,
+  type EditableParamKey,
 } from "@/lib/pricing-schemas"
 
 // ──────────────────────────────────────────────────────────────────
@@ -152,40 +157,202 @@ export async function saveCalculatedPrice(
     return { ok: false, error: parsed.error.issues[0].message }
   }
 
+  // Разложим params (если заданы) на cp-fields и product-updates
+  const cpFields: Record<string, number | null> = {}
+  const productUpdates: Record<string, number | null> = {}
+  if (parsed.data.params) {
+    for (const [key, p] of Object.entries(parsed.data.params)) {
+      const k = key as EditableParamKey
+      const cpField = CALC_FIELD_MAP[k]
+      const prodField = PRODUCT_FIELD_MAP[k]
+      if (!cpField || !prodField) continue
+      if (p.scopeSlot) {
+        // per-slot: в CalculatedPrice.X, Product.XOverride не трогаем
+        cpFields[cpField] = p.value
+      } else {
+        // per-product: в Product.XOverride, CalculatedPrice.X обнуляем
+        productUpdates[prodField] = p.value
+        cpFields[cpField] = null
+      }
+    }
+  }
+  // Legacy поля (обратная совместимость) — dominate cpFields только если не заданы через params
+  if (parsed.data.drrPct !== undefined && cpFields.drrPct === undefined)
+    cpFields.drrPct = parsed.data.drrPct
+  if (parsed.data.defectRatePct !== undefined && cpFields.defectRatePct === undefined)
+    cpFields.defectRatePct = parsed.data.defectRatePct
+  if (parsed.data.deliveryCostRub !== undefined && cpFields.deliveryCostRub === undefined)
+    cpFields.deliveryCostRub = parsed.data.deliveryCostRub
+
   try {
-    const saved = await prisma.calculatedPrice.upsert({
-      where: {
-        wbCardId_slot: {
+    // Атомарно: Product overrides + CalculatedPrice upsert
+    const result = await prisma.$transaction(async (tx) => {
+      if (Object.keys(productUpdates).length > 0) {
+        // productId не приходит напрямую в saveCalculatedPrice — достаём через wbCard
+        const card = await tx.wbCard.findUnique({
+          where: { id: parsed.data.wbCardId },
+          select: { nmId: true },
+        })
+        if (card) {
+          // Находим Product через MarketplaceArticle (slug=wb + article=nmId)
+          const article = await tx.marketplaceArticle.findFirst({
+            where: {
+              article: String(card.nmId),
+              marketplace: { slug: "wb" },
+            },
+            select: { productId: true },
+          })
+          if (article) {
+            await tx.product.update({
+              where: { id: article.productId },
+              data: productUpdates,
+            })
+          }
+        }
+      }
+
+      const saved = await tx.calculatedPrice.upsert({
+        where: {
+          wbCardId_slot: {
+            wbCardId: parsed.data.wbCardId,
+            slot: parsed.data.slot,
+          },
+        },
+        create: {
           wbCardId: parsed.data.wbCardId,
           slot: parsed.data.slot,
+          name: parsed.data.name,
+          sellerPrice: parsed.data.sellerPrice,
+          sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
+          costPrice: parsed.data.costPrice ?? null,
+          ...cpFields,
+          snapshot: parsed.data.snapshot as never,
         },
-      },
-      create: {
-        wbCardId: parsed.data.wbCardId,
-        slot: parsed.data.slot,
-        name: parsed.data.name,
-        sellerPrice: parsed.data.sellerPrice,
-        sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
-        drrPct: parsed.data.drrPct ?? null,
-        defectRatePct: parsed.data.defectRatePct ?? null,
-        deliveryCostRub: parsed.data.deliveryCostRub ?? null,
-        // Prisma Json field: передаём как unknown чтобы обойти strict типы InputJsonValue
-        snapshot: parsed.data.snapshot as never,
-      },
-      update: {
-        name: parsed.data.name,
-        sellerPrice: parsed.data.sellerPrice,
-        sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
-        drrPct: parsed.data.drrPct ?? null,
-        defectRatePct: parsed.data.defectRatePct ?? null,
-        deliveryCostRub: parsed.data.deliveryCostRub ?? null,
-        // Prisma Json field: передаём как unknown чтобы обойти strict типы InputJsonValue
-        snapshot: parsed.data.snapshot as never,
-      },
+        update: {
+          name: parsed.data.name,
+          sellerPrice: parsed.data.sellerPrice,
+          sellerDiscountPct: parsed.data.sellerDiscountPct ?? null,
+          costPrice: parsed.data.costPrice ?? null,
+          ...cpFields,
+          snapshot: parsed.data.snapshot as never,
+        },
+      })
+      return saved
     })
 
     revalidatePath("/prices/wb")
-    return { ok: true, data: { id: saved.id } }
+    return { ok: true, data: { id: result.id } }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** Сохранить изменения параметров в ТЕКУЩУЮ строку (кнопка «Сохранить»).
+ *  Для каждого параметра: если scopeSlot=true и calculatedPriceId задан → пишется
+ *  в CalculatedPrice.X; иначе пишется в Product.XOverride (и CalculatedPrice.X
+ *  обнуляется, если слот задан — чтобы свежий Product.override не перебивался
+ *  устаревшим slot override).
+ *  НЕ ТРОГАЕТ: sellerPrice, sellerDiscountPct, costPrice — они сохраняются только
+ *  через saveCalculatedPrice (создание нового слота).
+ */
+export async function saveRowEdits(
+  input: z.infer<typeof saveRowEditsSchema>,
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRICES", "MANAGE")
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    return { ok: false, error: (e as Error).message }
+  }
+
+  const parsed = saveRowEditsSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message }
+  }
+
+  const productUpdates: Record<string, number | null> = {}
+  const cpUpdates: Record<string, number | null> = {}
+
+  for (const [key, p] of Object.entries(parsed.data.params)) {
+    const k = key as EditableParamKey
+    const cpField = CALC_FIELD_MAP[k]
+    const prodField = PRODUCT_FIELD_MAP[k]
+    if (!cpField || !prodField) continue
+
+    // Non-calc строка → всё в Product (scopeSlot игнорируется)
+    if (parsed.data.calculatedPriceId == null) {
+      productUpdates[prodField] = p.value
+    } else if (p.scopeSlot) {
+      // Calc + per-slot → CalculatedPrice.X (Product не трогаем)
+      cpUpdates[cpField] = p.value
+    } else {
+      // Calc + per-product → Product.XOverride + CalculatedPrice.X=null
+      productUpdates[prodField] = p.value
+      cpUpdates[cpField] = null
+    }
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (Object.keys(productUpdates).length > 0) {
+        await tx.product.update({
+          where: { id: parsed.data.productId },
+          data: productUpdates,
+        })
+      }
+      if (parsed.data.calculatedPriceId && Object.keys(cpUpdates).length > 0) {
+        await tx.calculatedPrice.update({
+          where: { id: parsed.data.calculatedPriceId },
+          data: cpUpdates,
+        })
+      }
+    })
+    revalidatePath("/prices/wb")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+/** Очистить override параметра («↻ глобальное»).
+ *  Всегда очищает Product.XOverride. Если задан calculatedPriceId — дополнительно
+ *  очищает CalculatedPrice.X, чтобы значение действительно вернулось к fallback.
+ */
+export async function resetParamOverride(
+  input: z.infer<typeof resetParamOverrideSchema>,
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRICES", "MANAGE")
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    return { ok: false, error: (e as Error).message }
+  }
+
+  const parsed = resetParamOverrideSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0].message }
+  }
+
+  const prodField = PRODUCT_FIELD_MAP[parsed.data.paramKey]
+  const cpField = CALC_FIELD_MAP[parsed.data.paramKey]
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: parsed.data.productId },
+        data: { [prodField]: null },
+      })
+      if (parsed.data.calculatedPriceId) {
+        await tx.calculatedPrice.update({
+          where: { id: parsed.data.calculatedPriceId },
+          data: { [cpField]: null },
+        })
+      }
+    })
+    revalidatePath("/prices/wb")
+    return { ok: true }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }

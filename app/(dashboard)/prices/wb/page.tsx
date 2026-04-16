@@ -242,7 +242,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     const cardGroups: WbCardRowGroup[] = []
 
     for (const { card, product } of cardRefs) {
-      // Resolved per-product параметры (fallback chain) — единожды на WbCard
+      // ── Fallback chain для per-product параметров (D-01 + 2026-04-16) ──
+      // Priority: Product.override → source (card / rates / subcategory) → default.
+      // Для calc-строк накладывается ещё один слой (CalculatedPrice.*) ниже.
       const resolvedDrr = resolveDrrPct({
         productOverride: product.drrOverridePct ?? null,
         subcategoryDefault: product.subcategory?.defaultDrrPct ?? null,
@@ -256,11 +258,29 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         product.deliveryCostRub ?? null,
       )
 
+      // Per-product override → card source → default для buyout / clubDiscount / commission
+      const resolvedBuyout =
+        product.buyoutOverridePct ?? card.buyoutPercent ?? 100
+      const resolvedClubDiscount =
+        product.clubDiscountOverridePct ?? card.clubDiscount ?? 0
+      const resolvedCommission =
+        product.commissionOverridePct ??
+        card.commFbwIu ??
+        card.commFbwStd ??
+        0
+
+      // Per-product override → rates (global AppSetting) для глобальных ставок
+      const resolvedWallet = product.walletOverridePct ?? rates.wbWalletPct
+      const resolvedAcquiring =
+        product.acquiringOverridePct ?? rates.wbAcquiringPct
+      const resolvedJem = product.jemOverridePct ?? rates.wbJemPct
+      const resolvedCredit = product.creditOverridePct ?? rates.wbCreditPct
+      const resolvedOverhead =
+        product.overheadOverridePct ?? rates.wbOverheadPct
+      const resolvedTax = product.taxOverridePct ?? rates.wbTaxPct
+
       const costPrice = product.cost?.costPrice ?? 0
-      const buyoutPct = card.buyoutPercent ?? 100
-      const commFbwPct = card.commFbwIu ?? card.commFbwStd ?? 0
       const wbDiscountPct = card.discountWb ?? 0
-      const clubDiscountPct = card.clubDiscount ?? 0
 
       // Базовые inputs для calculatePricing (перекрываются на каждой строке)
       const baseInputs: Omit<
@@ -268,28 +288,28 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         "priceBeforeDiscount" | "sellerDiscountPct"
       > = {
         wbDiscountPct,
-        clubDiscountPct,
-        commFbwPct,
+        clubDiscountPct: resolvedClubDiscount,
+        commFbwPct: resolvedCommission,
         costPrice,
-        buyoutPct,
+        buyoutPct: resolvedBuyout,
         drrPct: resolvedDrr,
         defectRatePct: resolvedDefect,
         deliveryCostRub: resolvedDelivery,
-        walletPct: rates.wbWalletPct,
-        acquiringPct: rates.wbAcquiringPct,
-        jemPct: rates.wbJemPct,
-        creditPct: rates.wbCreditPct,
-        overheadPct: rates.wbOverheadPct,
-        taxPct: rates.wbTaxPct,
+        walletPct: resolvedWallet,
+        acquiringPct: resolvedAcquiring,
+        jemPct: resolvedJem,
+        creditPct: resolvedCredit,
+        overheadPct: resolvedOverhead,
+        taxPct: resolvedTax,
       }
 
       // Общие «видимые» input-поля, которые попадают в каждую PriceRow
       // (таблица рендерит их как значения колонок — см. PriceRow interface).
       const baseRowFields = {
         wbDiscountPct,
-        clubDiscountPct,
-        walletPct: rates.wbWalletPct,
-        commFbwPct,
+        clubDiscountPct: resolvedClubDiscount,
+        walletPct: resolvedWallet,
+        commFbwPct: resolvedCommission,
         drrPct: resolvedDrr,
         costPrice,
         defectRatePct: resolvedDefect,
@@ -442,10 +462,20 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         .sort((a, b) => a.slot - b.slot)
 
       for (const cp of cardCalcs) {
-        // Per-calc overrides (если заданы — иначе fallback chain)
+        // Per-slot overrides (если заданы — иначе fallback chain от product)
         const cpDrr = cp.drrPct ?? resolvedDrr
         const cpDefect = cp.defectRatePct ?? resolvedDefect
         const cpDelivery = cp.deliveryCostRub ?? resolvedDelivery
+        const cpBuyout = cp.buyoutPct ?? resolvedBuyout
+        const cpClubDiscount = cp.clubDiscountPct ?? resolvedClubDiscount
+        const cpCommission = cp.commissionPct ?? resolvedCommission
+        const cpWallet = cp.walletPct ?? resolvedWallet
+        const cpAcquiring = cp.acquiringPct ?? resolvedAcquiring
+        const cpJem = cp.jemPct ?? resolvedJem
+        const cpCredit = cp.creditPct ?? resolvedCredit
+        const cpOverhead = cp.overheadPct ?? resolvedOverhead
+        const cpTax = cp.taxPct ?? resolvedTax
+        const cpCostPrice = cp.costPrice ?? costPrice
         const cpSellerDiscountPct =
           cp.sellerDiscountPct ?? currentSellerDiscountPct
         const cpPriceBeforeDiscount = deriveBefore(
@@ -453,10 +483,20 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           cpSellerDiscountPct,
         )
         const calcInputs: PricingInputs = {
-          ...baseInputs,
+          wbDiscountPct,
+          clubDiscountPct: cpClubDiscount,
+          commFbwPct: cpCommission,
+          costPrice: cpCostPrice,
+          buyoutPct: cpBuyout,
           drrPct: cpDrr,
           defectRatePct: cpDefect,
           deliveryCostRub: cpDelivery,
+          walletPct: cpWallet,
+          acquiringPct: cpAcquiring,
+          jemPct: cpJem,
+          creditPct: cpCredit,
+          overheadPct: cpOverhead,
+          taxPct: cpTax,
           priceBeforeDiscount: cpPriceBeforeDiscount,
           sellerDiscountPct: cpSellerDiscountPct,
         }
@@ -467,11 +507,17 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           label: cp.name,
           sellerPriceBeforeDiscount: cpPriceBeforeDiscount,
           sellerDiscountPct: cpSellerDiscountPct,
-          ...baseRowFields,
+          // Row fields — per-slot resolved values
+          wbDiscountPct,
+          clubDiscountPct: cpClubDiscount,
+          walletPct: cpWallet,
+          commFbwPct: cpCommission,
           drrPct: cpDrr,
+          costPrice: cpCostPrice,
           defectRatePct: cpDefect,
           deliveryCostRub: cpDelivery,
           calculatedSlot: cp.slot as 1 | 2 | 3,
+          calculatedPriceId: cp.id,
           computed: calculatePricing(calcInputs),
           inputs: calcInputs,
           context: rowContext,

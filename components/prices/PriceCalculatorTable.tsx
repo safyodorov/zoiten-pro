@@ -94,6 +94,8 @@ export interface PriceRow {
 
   // ── calculated metadata (только для calculated) ──────────────────
   calculatedSlot?: 1 | 2 | 3
+  /** Реальный Prisma ID CalculatedPrice (для server action'ов в модалке). */
+  calculatedPriceId?: string
 
   /** Готовый расчёт юнит-экономики — 18 числовых полей. */
   computed: PricingOutputs
