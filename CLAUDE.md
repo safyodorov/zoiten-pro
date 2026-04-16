@@ -99,7 +99,7 @@ WbCard (карточки WB — парсинг из Wildberries API)
   ├── priceBeforeDiscount: Float?  (цена до скидки продавца, руб)
   ├── sellerDiscount: Int?         (скидка продавца, %)
   ├── price: Float?                (цена продавца со скидкой, руб)
-  ├── discountWb: Int?             (скидка WB / СПП, %)
+  ├── discountWb: Float?           (скидка WB / СПП, % с точностью до 0.1)
   ├── clubDiscount: Int?           (скидка WB клуба, %)
   ├── stockQty: Int?               (остаток товара, шт)
   ├── buyoutPercent: Float?        (процент выкупа за месяц, %)
@@ -203,6 +203,8 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 - Поэтому используем `execSync('curl ...')` из Node.js
 - Это решение далось тяжело — НЕ МЕНЯТЬ на fetch!
 
+**Точность СПП:** хранится в `WbCard.discountWb` как `Float` с шагом 0.1% (`Math.round(x × 1000) / 10`). Раньше был `Int` — `Math.round` терял до 0.5% в каждой синхронизации, что каскадом искажало `priceAfterWbDiscount` и всю юнит-экономику.
+
 **Ограничения v4 API:**
 - Батч максимум **20 артикулов** (30+ блокируется PoW challenge)
 - Пауза **3 сек** между батчами
@@ -288,7 +290,17 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 
 - Read (`/prices/wb` rendering): `requireSection("PRICES")`
 - Write (все server actions, sync, upload): `requireSection("PRICES", "MANAGE")`
-- Все 7 server actions в `app/actions/pricing.ts` защищены
+- Все server actions в `app/actions/pricing.ts` защищены
+
+### Редактируемое название акции
+
+`WbPromotion.displayName` (nullable) — override для UI. WB API sync пишет только `name` и не трогает `displayName`, Excel-загрузка auto-акций тоже не трогает. Render использует `displayName ?? name`. Инлайн-редактирование через `EditablePromoName` в ячейке «Статус цены» (карандаш при hover → input → Enter/Esc). Пустая строка → `null` → восстановление оригинала. Server action `updateWbPromotionDisplayName` с `revalidatePath("/prices/wb")`.
+
+### Семантика planPrice / sellerPrice
+
+`planPrice` из WB Promotions API и из Excel auto-акции = **финальная цена продавца** (после скидки продавца, то что видит покупатель до СПП), НЕ priceBeforeDiscount. `planDiscount` = требуемая скидка продавца (fallback на `card.sellerDiscount` для regular-акций, где planDiscount часто отсутствует). При рендере `priceBeforeDiscount` восстанавливается как `sellerPrice / (1 − sellerDiscountPct/100)`.
+
+`CalculatedPrice.sellerPrice` тоже хранится как финальная цена; есть отдельное поле `sellerDiscountPct` (nullable) — override скидки продавца на уровне слота. В модалке пользователь вводит **Цену продавца** (финальную), priceBeforeDiscount считается автоматически.
 
 ### Компоненты
 
