@@ -592,7 +592,15 @@ export function PricingCalculatorDialog({
               </Button>
               <Button
                 type="button"
-                variant="secondary"
+                variant="destructive"
+                onClick={form.handleSubmit(onSaveAsCalculated)}
+                disabled={isPending}
+              >
+                {isPending ? "Сохранение…" : "Сохранить как расчётную цену"}
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
                 onClick={form.handleSubmit(onSaveExisting)}
                 disabled={isPending || saveExistingDisabled}
                 title={
@@ -602,13 +610,6 @@ export function PricingCalculatorDialog({
                 }
               >
                 Сохранить
-              </Button>
-              <Button
-                type="button"
-                onClick={form.handleSubmit(onSaveAsCalculated)}
-                disabled={isPending}
-              >
-                {isPending ? "Сохранение…" : "Сохранить как расчётную цену"}
               </Button>
             </div>
           </DialogFooter>
