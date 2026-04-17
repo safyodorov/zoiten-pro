@@ -1,14 +1,14 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: "Служба поддержки WB"
-status: Roadmap planned
-stopped_at: "Roadmap milestone v1.1 создан 2026-04-17: Phase 8..13 (MVP Отзывы+Вопросы, Возвраты, Чат+Автоответы, Шаблоны+Обжалование, Профиль покупателя+Мессенджеры, Статистика). Следующий шаг — /gsd:plan-phase 8. Phase 7 UAT отложен (10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md)."
-last_updated: "2026-04-17T00:00:00.000Z"
+milestone_name: Служба поддержки WB
+status: Executing Phase 08
+stopped_at: "Roadmap v1.1 создан — Phase 8..13 с success criteria и Traceability. Следующий шаг: `/gsd:plan-phase 8` для декомпозиции MVP Отзывы+Вопросы на планы."
+last_updated: "2026-04-17T13:03:29.030Z"
 progress:
   total_phases: 13
   completed_phases: 7
-  total_plans: 30
+  total_plans: 33
   completed_plans: 30
 ---
 
@@ -19,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Milestone v1.1 — Служба поддержки WB (roadmap planned, Phase 8..13)
+**Current focus:** Phase 08 — support-mvp
 
 ## Current Position
 
-Phase: Phase 08 (support-mvp) — planning pending
-Plan: —
-Status: Roadmap planned, awaiting `/gsd:plan-phase 8`
-Last activity: 2026-04-17 — Roadmap v1.1 создан: Phase 8..13 с success criteria, Traceability заполнена для SUP-01..SUP-40
+Phase: 08 (support-mvp) — EXECUTING
+Plan: 1 of 4
 
 ## Performance Metrics
 

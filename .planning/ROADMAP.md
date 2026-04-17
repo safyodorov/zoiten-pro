@@ -178,7 +178,7 @@ Plans:
   5. Cron раз в 15 минут подтягивает новые отзывы и вопросы из WB, скачивает медиа локально, обновляет sidebar-бейдж «количество новых». Кнопка «Синхронизировать» в шапке запускает `/api/support-sync` вручную с toast состояниями
 **Plans**: 4 plans
 Plans:
-- [ ] 08-01-PLAN.md — БД (4 модели + 5 enum) + WB Feedbacks/Questions клиент + RBAC foundation + Wave 0 test stubs
+- [x] 08-01-PLAN.md — БД (4 модели + 5 enum) + WB Feedbacks/Questions клиент + RBAC foundation + Wave 0 test stubs
 - [ ] 08-02-PLAN.md — Sync /api/support-sync + cron (15 мин отзывы/вопросы, раз в сутки cleanup) + медиа-загрузка
 - [ ] 08-03-PLAN.md — Лента /support (RSC, карточки с индикатор-полосами, фильтры, pagination) + sidebar badge, ЗАМЕНА заглушки ai-cs-zoiten
 - [ ] 08-04-PLAN.md — Диалог /support/[ticketId] (3-колоночный) + server actions (reply/assign/updateStatus) + SupportSyncButton
