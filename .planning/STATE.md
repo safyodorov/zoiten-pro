@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: Ready to execute
-stopped_at: "UI/UX round 2: свёртываемый sidebar + название раздела в header (коммит 02c911d), PricesFilters бренд/категория/подкатегория + 2 toggle остатков + центр заголовков (139e4ab), глобальная «Брак» ставка в GlobalRatesBar (a0253b0), fix WB promotions API query params promotionIDs+inAction (8f5bc3d), nginx proxy_read_timeout 600s. 10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md"
-last_updated: "2026-04-10T20:10:00.000Z"
+milestone: v1.1
+milestone_name: "Служба поддержки WB"
+status: Defining requirements
+stopped_at: "Милстоун v1.1 Служба поддержки стартовал 2026-04-17. Phase 7 UAT отложен по решению пользователя (10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md — вернуться позже)."
+last_updated: "2026-04-17T00:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -16,15 +16,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-05)
+See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 07 — prices-wb
+**Current focus:** Milestone v1.1 — Служба поддержки WB (requirements stage)
 
 ## Current Position
 
-Phase: 07 (prices-wb) — EXECUTING
-Plan: 12 of 12
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-17 — Milestone v1.1 Служба поддержки WB started
 
 ## Performance Metrics
 
