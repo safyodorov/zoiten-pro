@@ -137,7 +137,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 ### Диалог `/support/[ticketId]`
 
 - [ ] **SUP-13**: Страница диалога — 3-колоночный layout: левая панель (карточка покупателя с ссылкой «Все обращения», карточка товара, причина возврата/фото брака для RETURN), центр (хронологический чат с входящими слева и исходящими справа, метки типа «Отзыв/Вопрос/Чат/Возврат/Автоответ», превью медиа с раскрытием), правая панель (статус dropdown, назначение менеджера dropdown, канал readonly, даты, статус обжалования для APPEALED).
-- [ ] **SUP-14**: Нижняя sticky-панель ответа — textarea + кнопки «Выбрать шаблон» (модалка поиска), «Отправить» (server action → WB API PATCH → запись `SupportMessage` с direction=OUTBOUND). Для канала RETURN вместо/рядом — кнопки «Одобрить/Отклонить/Пересмотреть». Для канала FEEDBACK — кнопка «Обжаловать отзыв».
+- [x] **SUP-14**: Нижняя sticky-панель ответа — textarea + кнопки «Выбрать шаблон» (модалка поиска), «Отправить» (server action → WB API PATCH → запись `SupportMessage` с direction=OUTBOUND). Для канала RETURN вместо/рядом — кнопки «Одобрить/Отклонить/Пересмотреть». Для канала FEEDBACK — кнопка «Обжаловать отзыв».
 - [ ] **SUP-15**: Ручное назначение менеджера — dropdown по `User` где `sectionRoles.section = SUPPORT`, запись в `SupportTicket.assignedToId` с revalidatePath.
 - [ ] **SUP-16**: Ручная смена статуса тикета — dropdown `NEW → IN_PROGRESS → ANSWERED → CLOSED`, переход в `APPEALED` только через действие «Обжаловать».
 
@@ -145,8 +145,8 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 - [x] **SUP-17**: WB Returns API интеграция в `lib/wb-support-api.ts` — методы `listReturns`, `approveReturn`, `rejectReturn`, `reconsiderReturn` с тестами.
 - [x] **SUP-18**: Страница `/support/returns` — таблица заявок с колонками: Товар (фото+nmId+название), Покупатель, Причина, Фото брака (превью), Дата заявки, Решение (PENDING/APPROVED/REJECTED), Кто принял (менеджер+дата), Пересмотрено (да/нет), Действия.
-- [ ] **SUP-19**: Действия по возврату — кнопки «Одобрить» (PUT /api/v1/returns/{id}/approve), «Отклонить» (PUT reject с причиной), «Пересмотреть» (PUT reconsider, доступна только если статус REJECTED). Решение фиксируется в `ReturnDecision` с `decidedById`, `decidedAt`, `reason`, `reconsidered`.
-- [ ] **SUP-20**: Логика состояний возврата: `PENDING → APPROVED | REJECTED`, `REJECTED → APPROVED` (через Пересмотреть, выставляет `reconsidered=true`), `APPROVED` финальный (кнопки действий disabled).
+- [x] **SUP-19**: Действия по возврату — кнопки «Одобрить» (PUT /api/v1/returns/{id}/approve), «Отклонить» (PUT reject с причиной), «Пересмотреть» (PUT reconsider, доступна только если статус REJECTED). Решение фиксируется в `ReturnDecision` с `decidedById`, `decidedAt`, `reason`, `reconsidered`.
+- [x] **SUP-20**: Логика состояний возврата: `PENDING → APPROVED | REJECTED`, `REJECTED → APPROVED` (через Пересмотреть, выставляет `reconsidered=true`), `APPROVED` финальный (кнопки действий disabled).
 
 ### Чат + Автоответы
 
@@ -326,13 +326,13 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-11 | Phase 8 | Pending |
 | SUP-12 | Phase 8 | Pending |
 | SUP-13 | Phase 8 | Pending |
-| SUP-14 | Phase 8, Phase 9, Phase 11 | Pending |
+| SUP-14 | Phase 8, Phase 9, Phase 11 | Complete |
 | SUP-15 | Phase 8 | Pending |
 | SUP-16 | Phase 8 | Pending |
 | SUP-17 | Phase 9 | Complete |
 | SUP-18 | Phase 9 | Complete |
-| SUP-19 | Phase 9 | Pending |
-| SUP-20 | Phase 9 | Pending |
+| SUP-19 | Phase 9 | Complete |
+| SUP-20 | Phase 9 | Complete |
 | SUP-21 | Phase 10 | Pending |
 | SUP-22 | Phase 10 | Pending |
 | SUP-23 | Phase 10 | Pending |

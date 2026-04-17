@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to execute
-stopped_at: Completed 09-03-PLAN.md — /support/returns RSC страница с 9 колонками и 6 фильтрами, общий MultiSelectDropdown, пункт «Возвраты» в sidebar. 09-04 параллельно.
-last_updated: "2026-04-17T19:28:40.125Z"
+status: Phase complete — ready for verification
+stopped_at: "Completed 09-04-PLAN.md Task 1+2 (server actions + UI + 17 GREEN тестов), deploy на VPS пройден (service active); Task 3 = checkpoint:human-verify ожидает UAT resume-signal"
+last_updated: "2026-04-17T19:34:29.009Z"
 progress:
   total_phases: 13
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 37
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -77,6 +77,7 @@ Plan: 4 of 4
 | Phase 09-returns P01 | 8min | 3 tasks | 7 files |
 | Phase 09-returns P02 | 5min | 2 tasks | 5 files |
 | Phase 09-returns P03 | 6min | 3 tasks | 5 files |
+| Phase 09-returns P04 | 7min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,9 @@ Recent decisions affecting current work:
 - [Phase 09-returns]: syncReturns update блок НЕ трогает returnState/status — защита от sync-race с локальными решениями менеджера. Unit-test 2 пинит контракт через expect(upsertCall.update).not.toHaveProperty.
 - [Phase 09-returns]: Plan 09-03: MultiSelectDropdown извлечён в components/ui/ через copy-first — inline-копии в PricesFilters/SupportFilters/ProductFilters не трогаем (защита Phase 7/8 от регрессии, unified-refactor = отдельный Quick Task)
 - [Phase 09-returns]: Plan 09-03: Record<K, V> вместо Map в props ReturnsTable — RSC → client boundary не сериализует Map, Object.fromEntries на сервере перед передачей
+- [Phase 09-returns]: Plan 09-04: WB-first transaction order (PATCH → Decision+update) — если WB throws, Decision НЕ создаётся, returnState не меняется
+- [Phase 09-returns]: Plan 09-04: action picker approve1 > autorefund1 > approvecc1 — автоматический выбор WB action, избегает хардкодов в UI
+- [Phase 09-returns]: Plan 09-04: vi.resetAllMocks (не clearAllMocks) в beforeEach — очищает mockResolvedValueOnce queue, иначе queue переливается между тестами и съедает rejection mocks
 
 ### Roadmap Evolution
 
@@ -188,6 +192,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T19:28:33.509Z
-Stopped at: Completed 09-03-PLAN.md — /support/returns RSC страница с 9 колонками и 6 фильтрами, общий MultiSelectDropdown, пункт «Возвраты» в sidebar. 09-04 параллельно.
+Last session: 2026-04-17T19:34:18.428Z
+Stopped at: Completed 09-04-PLAN.md Task 1+2 (server actions + UI + 17 GREEN тестов), deploy на VPS пройден (service active); Task 3 = checkpoint:human-verify ожидает UAT resume-signal
 Resume file: None
