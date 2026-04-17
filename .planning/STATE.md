@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to plan
-stopped_at: "Roadmap v1.1 создан — Phase 8..13 с success criteria и Traceability. Следующий шаг: `/gsd:plan-phase 8` для декомпозиции MVP Отзывы+Вопросы на планы."
-last_updated: "2026-04-17T13:30:50.563Z"
+status: Ready to execute
+stopped_at: "Completed 09-01-PLAN.md — foundation для Phase 9 (миграция + WB Returns API клиент + Wave 0 stubs). Следующий план: 09-02 (syncReturns)."
+last_updated: "2026-04-17T19:16:02.086Z"
 progress:
   total_phases: 13
   completed_phases: 8
-  total_plans: 33
-  completed_plans: 34
+  total_plans: 37
+  completed_plans: 35
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 08 — support-mvp
+**Current focus:** Phase 09 — returns
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: 09 (returns) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -74,6 +74,7 @@ Plan: Not started
 | Phase 07-prices-wb P09 | 18min | 1 tasks | 4 files |
 | Phase 07-prices-wb P10 | 159s | 3 tasks | 3 files |
 | Phase 07-prices-wb P11 | 31min | 2 tasks | 3 files |
+| Phase 09-returns P01 | 8min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,10 @@ Recent decisions affecting current work:
 - [Phase 07-prices-wb]: Plan 07-10: Native <select> в Dialog для выбора auto-акции (CLAUDE.md convention, не base-ui Select)
 - [Phase 07-prices-wb]: Plan 07-10: toast.loading/dismiss только для PromotionsSync (30-90 сек), Excel upload без loading toast
 - [Phase 07-prices-wb]: Plan 07-11: tsconfig exclude vitest.config.ts + tests/** — Rule 3 fix при прод deploy (npm ci --omit=dev не ставит vitest, tsc type-check падал)
+- [Phase 09-returns]: Два WB токена: WB_API_TOKEN (bit 5 Feedbacks) + WB_RETURNS_TOKEN (bit 11 Buyers Returns) — существующий scope не расширяем, архитектура supports two tokens через callApi(baseUrl, token, ...)
+- [Phase 09-returns]: ReturnDecision = audit log (N decisions per ticket из-за reconsider) + денормализация актуального состояния в SupportTicket.returnState для быстрой фильтрации без JOIN
+- [Phase 09-returns]: callWb рефакторен в callApi(baseUrl, token, path, init) без breaking changes — два wrapper'a (callWb для Feedbacks, callReturnsApi для Returns) делят одну 429-retry логику
+- [Phase 09-returns]: Миграция 20260417_phase9_returns создана вручную (migration.sql) — локальной PG нет, применится через deploy.sh на VPS в Plan 09-04
 
 ### Roadmap Evolution
 
@@ -175,6 +180,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T00:00:00.000Z
-Stopped at: Roadmap v1.1 создан — Phase 8..13 с success criteria и Traceability. Следующий шаг: `/gsd:plan-phase 8` для декомпозиции MVP Отзывы+Вопросы на планы.
+Last session: 2026-04-17T19:16:02.083Z
+Stopped at: Completed 09-01-PLAN.md — foundation для Phase 9 (миграция + WB Returns API клиент + Wave 0 stubs). Следующий план: 09-02 (syncReturns).
 Resume file: None

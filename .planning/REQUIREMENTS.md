@@ -143,7 +143,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 ### Возвраты `/support/returns`
 
-- [ ] **SUP-17**: WB Returns API интеграция в `lib/wb-support-api.ts` — методы `listReturns`, `approveReturn`, `rejectReturn`, `reconsiderReturn` с тестами.
+- [x] **SUP-17**: WB Returns API интеграция в `lib/wb-support-api.ts` — методы `listReturns`, `approveReturn`, `rejectReturn`, `reconsiderReturn` с тестами.
 - [ ] **SUP-18**: Страница `/support/returns` — таблица заявок с колонками: Товар (фото+nmId+название), Покупатель, Причина, Фото брака (превью), Дата заявки, Решение (PENDING/APPROVED/REJECTED), Кто принял (менеджер+дата), Пересмотрено (да/нет), Действия.
 - [ ] **SUP-19**: Действия по возврату — кнопки «Одобрить» (PUT /api/v1/returns/{id}/approve), «Отклонить» (PUT reject с причиной), «Пересмотреть» (PUT reconsider, доступна только если статус REJECTED). Решение фиксируется в `ReturnDecision` с `decidedById`, `decidedAt`, `reason`, `reconsidered`.
 - [ ] **SUP-20**: Логика состояний возврата: `PENDING → APPROVED | REJECTED`, `REJECTED → APPROVED` (через Пересмотреть, выставляет `reconsidered=true`), `APPROVED` финальный (кнопки действий disabled).
@@ -329,7 +329,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-14 | Phase 8, Phase 9, Phase 11 | Pending |
 | SUP-15 | Phase 8 | Pending |
 | SUP-16 | Phase 8 | Pending |
-| SUP-17 | Phase 9 | Pending |
+| SUP-17 | Phase 9 | Complete |
 | SUP-18 | Phase 9 | Pending |
 | SUP-19 | Phase 9 | Pending |
 | SUP-20 | Phase 9 | Pending |
