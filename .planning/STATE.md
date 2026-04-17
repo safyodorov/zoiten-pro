@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: "Completed 09-02-PLAN.md — syncReturns() интегрирован в POST/cron с backward-compat, 5 GREEN integration тестов. Следующий план: 09-03 (UI List)."
-last_updated: "2026-04-17T19:22:22.950Z"
+stopped_at: Completed 09-03-PLAN.md — /support/returns RSC страница с 9 колонками и 6 фильтрами, общий MultiSelectDropdown, пункт «Возвраты» в sidebar. 09-04 параллельно.
+last_updated: "2026-04-17T19:28:40.125Z"
 progress:
   total_phases: 13
   completed_phases: 8
   total_plans: 37
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 09 (returns) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Plan: 3 of 4
 | Phase 07-prices-wb P11 | 31min | 2 tasks | 3 files |
 | Phase 09-returns P01 | 8min | 3 tasks | 7 files |
 | Phase 09-returns P02 | 5min | 2 tasks | 5 files |
+| Phase 09-returns P03 | 6min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,8 @@ Recent decisions affecting current work:
 - [Phase 09-returns]: Option A для cron — единый /api/cron/support-sync-reviews вызывает syncSupport + syncReturns (отдельный returns cron не создаётся). SUP-07 не упоминает returns cron, единый 15-мин tick достаточен.
 - [Phase 09-returns]: Backward-compat response POST /api/support-sync: spread supportResult ПЕРВЫМ → новые поля (synced/support/returns/errors) после — флат поля feedbacksSynced/questionsSynced/mediaSaved для SupportSyncButton Phase 8 читаются без касаний клиента.
 - [Phase 09-returns]: syncReturns update блок НЕ трогает returnState/status — защита от sync-race с локальными решениями менеджера. Unit-test 2 пинит контракт через expect(upsertCall.update).not.toHaveProperty.
+- [Phase 09-returns]: Plan 09-03: MultiSelectDropdown извлечён в components/ui/ через copy-first — inline-копии в PricesFilters/SupportFilters/ProductFilters не трогаем (защита Phase 7/8 от регрессии, unified-refactor = отдельный Quick Task)
+- [Phase 09-returns]: Plan 09-03: Record<K, V> вместо Map в props ReturnsTable — RSC → client boundary не сериализует Map, Object.fromEntries на сервере перед передачей
 
 ### Roadmap Evolution
 
@@ -185,6 +188,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T19:22:22.946Z
-Stopped at: Completed 09-02-PLAN.md — syncReturns() интегрирован в POST/cron с backward-compat, 5 GREEN integration тестов. Следующий план: 09-03 (UI List).
+Last session: 2026-04-17T19:28:33.509Z
+Stopped at: Completed 09-03-PLAN.md — /support/returns RSC страница с 9 колонками и 6 фильтрами, общий MultiSelectDropdown, пункт «Возвраты» в sidebar. 09-04 параллельно.
 Resume file: None
