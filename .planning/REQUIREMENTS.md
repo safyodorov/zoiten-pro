@@ -109,6 +109,80 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **PRICES-15**: Tooltip на названии акции через shadcn `tooltip` (добавляется в Phase 7 через `npx shadcn add tooltip`), контент — `WbPromotion.description` + маркированный список `advantages[]`, max-width 384px.
 - [x] **PRICES-16**: Подсветка значений Прибыль/Re продаж/ROI: `text-green-600 font-medium` при значении ≥0, `text-red-600 font-medium` при <0. Дополнительно префикс «+/−» для Re и ROI (дальтонизм safety).
 
+## v1.1 Requirements — Служба поддержки WB
+
+Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Users\User\Downloads\PRD Служба поддержки WB — Zoiten ERP.md`.
+
+### Инфраструктура и модели данных
+
+- [ ] **SUP-01**: Prisma миграция — модели `SupportTicket`, `SupportMessage`, `SupportMedia`, `Customer`, `ReturnDecision`, `ResponseTemplate`, `AutoReplyConfig`, `ManagerSupportStats` + enums (`TicketChannel`, `TicketStatus`, `AppealStatus`, `Direction`, `MediaType`, `ReturnDecisionType`, `TemplateChannel`). Обратные relations на `User` и `WbCard` через nmId.
+- [ ] **SUP-02**: Модуль `lib/wb-support-api.ts` покрывает Feedbacks (list/reply/report) и Questions (list/reply/report) с vitest-тестами (mock HTTP). Заготовлен интерфейс для Chat/Returns/Templates API. Чат-эндпоинты используют curl-fallback реактивно (только при 403).
+- [ ] **SUP-03**: RBAC — все страницы `/support/*` требуют `requireSection("SUPPORT")`, все write server actions и API routes — `requireSection("SUPPORT", "MANAGE")`.
+- [ ] **SUP-04**: Хранение медиа на VPS — путь `/var/www/zoiten-uploads/support/{ticketId}/{messageId}/{filename}`, обслуживается nginx. Запись в `SupportMedia` с `expiresAt = createdAt + 1 год`.
+- [ ] **SUP-05**: Cron очистки медиа `GET /api/cron/support-media-cleanup` с `CRON_SECRET` — раз в сутки удаляет файлы и записи `SupportMedia` где `expiresAt < now()`.
+
+### Синхронизация WB → ERP
+
+- [ ] **SUP-06**: `POST /api/support-sync` — полная синхронизация отзывов, вопросов, чатов (counts/unread → детали), заявок на возврат. Upsert по `wbExternalId`. Идемпотентно.
+- [ ] **SUP-07**: Cron-синхронизация отзывов и вопросов — `GET /api/cron/support-sync-reviews` (каждые 15 мин), чатов — `GET /api/cron/support-sync-chat` (каждые 5 мин), статусов обжалований — `GET /api/cron/support-sync-appeals` (раз в час). Все с `CRON_SECRET`.
+- [ ] **SUP-08**: Скачивание медиа из отзывов и чатов локально — при синхронизации фото/видео из WB URL копируется в `/var/www/zoiten-uploads/support/...`, `SupportMedia.localPath` проставляется.
+- [ ] **SUP-09**: Кнопка «Синхронизировать» в шапке `/support` запускает `POST /api/support-sync` с toast loading/success/error состояниями.
+
+### Лента тикетов `/support`
+
+- [ ] **SUP-10**: Главная страница `/support` — объединённая лента тикетов (отзывы + вопросы + чаты + возвраты + мессенджеры) как RSC, карточка с иконкой канала, статусом, покупателем, товаром (nmId + фото), датой, превью текста, рейтингом (для отзывов), назначенным менеджером. Цветные индикатор-полосы слева: NEW=красный, IN_PROGRESS=жёлтый, ANSWERED=зелёный, CLOSED=серый, APPEALED=фиолетовый.
+- [ ] **SUP-11**: Фильтры ленты — канал (все/отзывы/вопросы/чат/возвраты/мессенджер), статус, товар/nmId, менеджер, диапазон дат, toggle «только неотвеченные». Фильтры через searchParams, MultiSelectDropdown с чекбоксами (паттерн проекта).
+- [ ] **SUP-12**: Sidebar — бейдж с суммарным количеством новых необработанных тикетов рядом с пунктом «Служба поддержки», обновляется при клике/синхронизации.
+
+### Диалог `/support/[ticketId]`
+
+- [ ] **SUP-13**: Страница диалога — 3-колоночный layout: левая панель (карточка покупателя с ссылкой «Все обращения», карточка товара, причина возврата/фото брака для RETURN), центр (хронологический чат с входящими слева и исходящими справа, метки типа «Отзыв/Вопрос/Чат/Возврат/Автоответ», превью медиа с раскрытием), правая панель (статус dropdown, назначение менеджера dropdown, канал readonly, даты, статус обжалования для APPEALED).
+- [ ] **SUP-14**: Нижняя sticky-панель ответа — textarea + кнопки «Выбрать шаблон» (модалка поиска), «Отправить» (server action → WB API PATCH → запись `SupportMessage` с direction=OUTBOUND). Для канала RETURN вместо/рядом — кнопки «Одобрить/Отклонить/Пересмотреть». Для канала FEEDBACK — кнопка «Обжаловать отзыв».
+- [ ] **SUP-15**: Ручное назначение менеджера — dropdown по `User` где `sectionRoles.section = SUPPORT`, запись в `SupportTicket.assignedToId` с revalidatePath.
+- [ ] **SUP-16**: Ручная смена статуса тикета — dropdown `NEW → IN_PROGRESS → ANSWERED → CLOSED`, переход в `APPEALED` только через действие «Обжаловать».
+
+### Возвраты `/support/returns`
+
+- [ ] **SUP-17**: WB Returns API интеграция в `lib/wb-support-api.ts` — методы `listReturns`, `approveReturn`, `rejectReturn`, `reconsiderReturn` с тестами.
+- [ ] **SUP-18**: Страница `/support/returns` — таблица заявок с колонками: Товар (фото+nmId+название), Покупатель, Причина, Фото брака (превью), Дата заявки, Решение (PENDING/APPROVED/REJECTED), Кто принял (менеджер+дата), Пересмотрено (да/нет), Действия.
+- [ ] **SUP-19**: Действия по возврату — кнопки «Одобрить» (PUT /api/v1/returns/{id}/approve), «Отклонить» (PUT reject с причиной), «Пересмотреть» (PUT reconsider, доступна только если статус REJECTED). Решение фиксируется в `ReturnDecision` с `decidedById`, `decidedAt`, `reason`, `reconsidered`.
+- [ ] **SUP-20**: Логика состояний возврата: `PENDING → APPROVED | REJECTED`, `REJECTED → APPROVED` (через Пересмотреть, выставляет `reconsidered=true`), `APPROVED` финальный (кнопки действий disabled).
+
+### Чат + Автоответы
+
+- [ ] **SUP-21**: WB Chat API интеграция — `listChats`, `getMessages(chatId)`, `sendMessage(chatId, text, media)`, `getUnreadCount`. При получении 403 от Node.js `fetch()` автоматический fallback на `execSync('curl ...')` (паттерн `wb-api.ts` v4).
+- [ ] **SUP-22**: Отправка сообщений в чат через UI диалога — текст + опциональный upload фото/видео (multipart), запись `SupportMessage` с direction=OUTBOUND и `SupportMedia` для каждого файла.
+- [ ] **SUP-23**: `AutoReplyConfig` — singleton-запись с полями: isEnabled, workdayStart/End (HH:MM), workDays (Int[]), messageText, timezone (default Europe/Moscow), updatedById.
+- [ ] **SUP-24**: Страница `/support/auto-reply` — форма настроек автоответа (переключатель, время, дни Пн-Вс чекбоксы, textarea с переменными `{имя_покупателя}`, `{название_товара}`), кнопка «Синхронизировать с WB» (POST /api/v1/seller/chats/auto-reply).
+- [ ] **SUP-25**: Автоответы в ленте и диалоге помечаются `isAutoReply=true` и визуальной иконкой «🤖» рядом с сообщением. Применяется только к каналу CHAT.
+
+### Шаблоны ответов + Обжалование
+
+- [ ] **SUP-26**: `ResponseTemplate` CRUD — страница `/support/templates` с таблицей (Название, Канал, Тег ситуации, Товар/Общий, Активен), форма создания/редактирования (name, text, channel=FEEDBACK|QUESTION|CHAT, situationTag, опциональная привязка к WbCard.id).
+- [ ] **SUP-27**: Синхронизация шаблонов с WB — кнопка «Синхронизировать шаблоны» (GET list → upsert по wbTemplateId), «Опубликовать в WB» на локальном шаблоне (POST → сохраняет wbTemplateId), обновление (PUT), удаление (DELETE + из БД).
+- [ ] **SUP-28**: Модалка «Выбрать шаблон» при ответе — поиск по тексту/тегу ситуации, группировка: сначала шаблоны с `nmId = currentTicket.nmId`, затем общие. Выбор → подставка текста в textarea ответа.
+- [ ] **SUP-29**: Обжалование отзыва — кнопка «Обжаловать» в диалоге FEEDBACK → модалка с выпадающим списком причин (из WB API или справочника) + свободный текст → POST /api/v1/feedbacks/report → `appealId` + `appealStatus=PENDING`, `ticket.status=APPEALED`.
+- [ ] **SUP-30**: Cron поллинг статусов обжалований (раз в час) — для всех `SupportTicket` где `appealStatus=PENDING` → GET /api/v1/feedbacks/report/{appealId} → обновление `appealStatus` на APPROVED/REJECTED с датой.
+- [ ] **SUP-31**: Индикатор обжалования в ленте и карточке тикета — иконка + бейдж: нет / 🕐 ожидание / ✅ одобрено / ❌ отклонено.
+
+### Профиль покупателя + Мессенджеры
+
+- [ ] **SUP-32**: Автоматическая линковка тикетов к `Customer` через `wbUserId` — при sync если `Customer.wbUserId` найден, тикет связывается, иначе создаётся новый `Customer`.
+- [ ] **SUP-33**: Страница профиля покупателя `/support/customers/[customerId]` — все тикеты этого покупателя по всем каналам в хронологии, итого по каналам (N отзывов/вопросов/чатов/возвратов), средний рейтинг отзывов, внутренняя заметка (textarea).
+- [ ] **SUP-34**: Ручное создание тикета MESSENGER — форма (канал из выпадающего: Telegram/WhatsApp/другое, телефон/имя покупателя, текст обращения, опциональная привязка к товару через WbCard), создаёт `SupportTicket` с `channel=MESSENGER`, `wbExternalId=null`.
+- [ ] **SUP-35**: Merge дубликатов `Customer` — действие в профиле «Связать с другим покупателем» → выбор целевого `Customer` → перенос всех тикетов + удаление исходного.
+
+### Статистика
+
+- [ ] **SUP-36**: Страница `/support/stats` с двумя вкладками — «По товарам» и «По менеджерам». Фильтры: период (7д / 30д / квартал / кастом dateFrom-dateTo), товар/категория (для вкладки товаров), менеджер (для вкладки менеджеров).
+- [ ] **SUP-37**: Метрики по товарам (aggregation SQL по `SupportTicket` + `ReturnDecision` с фильтром по nmId): кол-во отзывов, средний рейтинг, процент ответов (answered/total), возвраты (total / approved / rejected), топ причин возвратов, кол-во вопросов, среднее время ответа (сек).
+- [ ] **SUP-38**: Метрики по менеджерам (из `ManagerSupportStats` + live-расчёт за текущий день): всего обработано, отзывы/вопросы/чаты/возвраты отвечено, % одобрения возвратов, среднее время ответа, кол-во автоответов.
+- [ ] **SUP-39**: Денормализованная таблица `ManagerSupportStats` — обновляется cron-ом раз в сутки `GET /api/cron/support-stats-refresh` (03:00 МСК), уникальность `(userId, period)` где period = начало месяца.
+
+### Навигация и UX
+
+- [ ] **SUP-40**: Пункт «Служба поддержки» в левом sidebar с иконкой `HeadphonesIcon` + бейдж количества новых тикетов. Подпункты: «Все обращения», «Возвраты», «Шаблоны», «Автоответы», «Статистика».
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
@@ -125,6 +199,14 @@ Deferred to future milestone. Tracked but not in current roadmap.
 - **ADV-02**: Audit log / change history for products
 - **ADV-03**: Automated ABC classification from sales data
 - **ADV-04**: Multiple product photos / gallery
+
+### Support — Future Enhancements
+
+- **SUP-FUT-01**: Webhook endpoint `POST /api/support-webhook` — заменить polling когда WB выпустит webhooks
+- **SUP-FUT-02**: Ozon-интеграция для службы поддержки (отзывы/вопросы/чат Ozon)
+- **SUP-FUT-03**: AI-ассистент для автосаггесчена ответа на отзыв/вопрос
+- **SUP-FUT-04**: Алёрт при превышении 80% диска в `/var/www/zoiten-uploads/support/`
+- **SUP-FUT-05**: Rate-limiting dashboard для мониторинга WB API 429 ответов
 
 ## Out of Scope
 
@@ -148,6 +230,12 @@ Explicitly excluded. Documented to prevent scope creep.
 | Фильтры по бренду/категории в `/prices/wb` | Deferred (паттерн есть в `/cards/wb`) |
 | Массовые расчёты («применить ставку X ко всем товарам категории Y») | Deferred |
 | Удаление `CalculatedPrice` из UI | Deferred |
+| Webhooks для отзывов/вопросов | WB API не поддерживает (на 2026-04), используем polling |
+| Ozon служба поддержки | Фокус milestone v1.1 только на WB; Ozon-интеграция отдельным milestone |
+| AI-саггешн ответа на отзыв | Отложено до валидации базового потока операторами |
+| S3/облачное хранение медиа | VPS достаточно при объёме 50-200 SKU и TTL 1 год |
+| Push-уведомления о новых тикетах | Веб-приложение, достаточно sidebar бейджа и частой синхронизации |
+| Отчёты статистики в Excel/PDF | Deferred — live-дашборд покрывает основные сценарии |
 
 ## Traceability
 
@@ -228,3 +316,4 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
+*Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned*
