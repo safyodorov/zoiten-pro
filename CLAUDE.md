@@ -251,15 +251,24 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 - `Category.defaultDefectRatePct` — default процент брака per категория (fallback 2%)
 - `Subcategory.defaultDrrPct` — default ДРР per подкатегория (fallback 10%)
 - `Product.drrOverridePct`, `Product.defectRateOverridePct`, `Product.deliveryCostRub` — per-product overrides
+- `Product.buyoutOverridePct`, `clubDiscountOverridePct`, `walletOverridePct`, `acquiringOverridePct`, `commissionOverridePct`, `jemOverridePct`, `creditOverridePct`, `overheadOverridePct`, `taxOverridePct` — 9 per-product override полей (2026-04-16)
+- `CalculatedPrice.buyoutPct`, `clubDiscountPct`, `walletPct`, `acquiringPct`, `commissionPct`, `jemPct`, `creditPct`, `overheadPct`, `taxPct`, `costPrice`, `deliveryCostRub` — per-slot override полей (2026-04-16). `drrPct`, `defectRatePct`, `sellerDiscountPct` были ранее.
 - `WbCard.avgSalesSpeed7d` — средняя скорость продаж за 7 дней (из Sales API)
+- `WbCard.discountWb` — Float с точностью до 0.1% (раньше Int)
 
 ### Fallback chain для per-product параметров
 
+**Non-calc строки** (Текущая / Regular / Auto):
 - **ДРР:** `Product.drrOverridePct → Subcategory.defaultDrrPct → 10% hardcoded`
 - **Брак:** `Product.defectRateOverridePct → Category.defaultDefectRatePct → AppSetting.wbDefectRatePct → 2% hardcoded`
 - **Доставка:** `Product.deliveryCostRub → 30₽ hardcoded`
+- **Прочие:** `Product.XOverridePct → card.X / rates.wbX → default`
 
-Реализовано в `lib/pricing-math.ts`: функции `resolveDrrPct`, `resolveDefectRatePct` (принимает `globalDefault` из `rates.wbDefectRatePct`), `resolveDeliveryCostRub`.
+**Расчётные строки** (изолированы от Product overrides!):
+- Все параметры: `CalculatedPrice.X → globalValue (source/default)` — БЕЗ Product.XOverride
+- Это обеспечивает изоляцию слотов: изменение параметра через Текущую/Акционную строку не утекает в расчётные. Чтобы применить к слоту — редактируй слот напрямую.
+
+Реализовано в `lib/pricing-math.ts` (`resolveDrrPct`, `resolveDefectRatePct`, `resolveDeliveryCostRub` — legacy) и в `app/(dashboard)/prices/wb/page.tsx` (inline resolvers для новых параметров).
 
 ### WB Promotions Calendar API
 
@@ -301,6 +310,30 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 `planPrice` из WB Promotions API и из Excel auto-акции = **финальная цена продавца** (после скидки продавца, то что видит покупатель до СПП), НЕ priceBeforeDiscount. `planDiscount` = требуемая скидка продавца (fallback на `card.sellerDiscount` для regular-акций, где planDiscount часто отсутствует). При рендере `priceBeforeDiscount` восстанавливается как `sellerPrice / (1 − sellerDiscountPct/100)`.
 
 `CalculatedPrice.sellerPrice` тоже хранится как финальная цена; есть отдельное поле `sellerDiscountPct` (nullable) — override скидки продавца на уровне слота. В модалке пользователь вводит **Цену продавца** (финальную), priceBeforeDiscount считается автоматически.
+
+### Редактирование параметров в модалке (2026-04-16)
+
+Модалка юнит-экономики позволяет редактировать 13 параметров (Процент выкупа, WB Клуб, Кошелёк, Эквайринг, Комиссия, Тариф Джем, ДРР, Брак, Кредит, Общие расходы, Налог, Доставка, Закупка) + sellerPrice + sellerDiscountPct.
+
+**Кнопки сохранения:**
+- **«Сохранить как расчётную цену»** (`saveCalculatedPrice`) — создаёт/перезаписывает выбранный слот 1/2/3. Все параметры записываются как per-slot override. sellerPrice/sellerDiscountPct/costPrice сохраняются ТОЛЬКО через эту кнопку.
+- **«Сохранить»** (`saveRowEdits`) — scope определяется типом строки, откуда вошли:
+  - Текущая / Regular / Auto → пишется в `Product.XOverride` (через fallback обновляет все non-calc строки товара)
+  - Расчётная → пишется только в `CalculatedPrice.X` (только этот слот, другие слоты не трогаются)
+  - Disabled если изменились sellerPrice или sellerDiscountPct (они только в новый слот)
+  - costPrice silently игнорируется (только через новый слот)
+
+**«↻ Применить глобальные»** — кнопка-иконка справа от каждого поля:
+- Только ЛОКАЛЬНО подставляет `row.globalValues[key]` в форму + флаг isReset=true
+- Модалка не закрывается
+- При ручном вводе в поле флаг снимается
+- При нажатии «Сохранить» — если isReset, отправляется `value: null` → сервер обнуляет override на соответствующем уровне (Product.XOverride для non-calc, CalculatedPrice.X для calc)
+
+`row.globalValues` вычисляются на сервере в page.tsx — это fallback chain БЕЗ Product/calc overrides: `card.X / rates.wbX / subcategory-default / hardcoded`.
+
+### Удаление расчётных цен
+
+Чекбокс слева от названия в каждой calc-строке → добавляет calculatedPriceId в Set → в toolbar таблицы появляется «Удалить выбранные (N)». Server action `deleteCalculatedPrices(ids[])` + `revalidatePath`. Клик по чекбоксу через `stopPropagation`, чтобы не открывалась модалка.
 
 ### Компоненты
 

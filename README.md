@@ -36,10 +36,16 @@
 - 7 глобальных ставок (Кошелёк WB, Эквайринг, ВБ Джем, Кредит, Накладные, **Брак**, Налог) с debounced save + мгновенный `router.refresh()` после сохранения
 - Синхронизация regular-акций через WB Promotions Calendar API (rate limit 10 req/6 sec)
 - Загрузка Excel отчётов auto-акций из кабинета WB
-- Realtime модалка пересчёта юнит-экономики — пользователь вводит **Цену продавца** (финальную), priceBeforeDiscount вычисляется из скидки продавца автоматически; изменение ДРР/брака/скидок мгновенно пересчитывает прибыль, ROI, re-продажи
-- Расчётные цены: 1-3 слота на карточку, хранятся sellerPrice + sellerDiscountPct + snapshot входных параметров — возможно переопределить скидку продавца на уровне слота
+- Realtime модалка пересчёта юнит-экономики — пользователь вводит **Цену продавца** (финальную), priceBeforeDiscount вычисляется из скидки продавца автоматически; изменение любых параметров мгновенно пересчитывает прибыль, ROI, re-продажи
+- **13 редактируемых параметров в модалке** (Процент выкупа, WB Клуб, Кошелёк, Эквайринг, Комиссия, Тариф Джем, ДРР, Брак, Кредит, Общие расходы, Налог, Доставка, Закупка) + seller fields. Для каждого: инпут + **«↻ применить глобальные»** (локально подставляет значение без override и помечает флагом isReset — фактический сброс в БД при Сохранении)
+- Две кнопки сохранения:
+  - **«Сохранить как расчётную цену»** — создаёт/перезаписывает слот 1/2/3 (все параметры как per-slot override, включая sellerPrice/sellerDiscountPct/costPrice)
+  - **«Сохранить»** — scope определяется типом строки, откуда вошли: Текущая/Regular/Auto → Product.XOverride (обновляет все non-calc строки товара); Расчётная → только этот CalculatedPrice.X. Disabled при изменении sellerPrice или sellerDiscountPct (они только в новый слот)
+- Расчётные цены: до 3 слотов на карточку. **Изолированы** от Product.XOverride — fallback chain для calc-строк: `CalculatedPrice.X ?? globalValue (source/default)`, без product-уровня
+- Удаление расчётных цен: чекбокс на каждой calc-строке + кнопка «Удалить выбранные (N)» в toolbar таблицы (`deleteCalculatedPrices` server action)
 - Логика цен унифицирована: **Цена продавца** (финальная) + **Скидка продавца %** + **Цена для установки** (вычисляемая) для всех типов строк (Текущая / Regular / Auto / Расчётная); planPrice из WB API интерпретируется как финальная цена, planDiscount — как скидка продавца (fallback на текущую с карточки)
-- Fallback chain: **Брак** Product.override → Category.default → AppSetting.wbDefectRatePct → 2% hardcoded; **ДРР** Product.override → Subcategory.default → 10% hardcoded
+- Fallback chain для non-calc: **Брак** Product.override → Category.default → AppSetting.wbDefectRatePct → 2% hardcoded; **ДРР** Product.override → Subcategory.default → 10% hardcoded. Для прочих: `Product.XOverride → card.X / rates.wbX → default`
+- Подсвечена акцентным цветом ключевая колонка **«Цена с WB кошельком, руб.»** (primary-fon + рамки по бокам + полужирный)
 - **Фильтры** (single-choice dropdown, компактные): Бренд / Категория / Подкатегория + Товар (весь/с остатком) + Карточки (все/с остатком) + Акции (с/без) + Расчётные цены (с/без); состояние в URL
 - **Вид** — кнопка настройки видимости 26 data-колонок (checkbox-список, persist в `UserPreference`, primary-подсветка + счётчик скрытых)
 - **Sticky шапка**: GlobalRatesBar, фильтры, кнопки синхронизации и заголовок таблицы остаются на месте при скролле (flex-col h-full + overflow-auto внутри контейнера таблицы)
