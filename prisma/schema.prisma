@@ -49,22 +49,24 @@ enum Availability {
 // ──────────────────────────────────────────────────────────────────
 
 model User {
-  id              String            @id @default(cuid())
-  email           String            @unique
-  name            String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
-  firstName       String?
-  lastName        String?
-  employeeId      String?           @unique
-  employee        Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  password        String // bcrypt hash — never return to client
-  plainPassword   String? // plain text для просмотра суперадмином (только внутренняя ERP)
-  role            UserRole          @default(VIEWER)
-  allowedSections ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
-  sectionRoles    UserSectionRole[] // актуальный источник прав per раздел
-  preferences     UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
+  firstName        String?
+  lastName         String?
+  employeeId       String?           @unique
+  employee         Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  password         String // bcrypt hash — never return to client
+  plainPassword    String? // plain text для просмотра суперадмином (только внутренняя ERP)
+  role             UserRole          @default(VIEWER)
+  allowedSections  ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
+  sectionRoles     UserSectionRole[] // актуальный источник прав per раздел
+  preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
+  assignedTickets  SupportTicket[]   @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
+  authoredMessages SupportMessage[]  @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 enum SectionRole {
@@ -220,27 +222,27 @@ model WbCommissionIu {
 // ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id                    String               @id @default(cuid())
-  sku                   String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
-  name                  String               @db.VarChar(100)
-  photoUrl              String?
-  brandId               String
-  brand                 Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  categoryId            String?
-  category              Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  subcategoryId         String?
-  subcategory           Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
-  label                 String?              @db.VarChar(100)
-  abcStatus             AbcStatus?
-  availability          Availability         @default(IN_STOCK)
-  weightKg              Float?
-  heightCm              Float?
-  widthCm               Float?
-  depthCm               Float?
+  id                      String               @id @default(cuid())
+  sku                     String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
+  name                    String               @db.VarChar(100)
+  photoUrl                String?
+  brandId                 String
+  brand                   Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  categoryId              String?
+  category                Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId           String?
+  subcategory             Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  label                   String?              @db.VarChar(100)
+  abcStatus               AbcStatus?
+  availability            Availability         @default(IN_STOCK)
+  weightKg                Float?
+  heightCm                Float?
+  widthCm                 Float?
+  depthCm                 Float?
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
-  articles              MarketplaceArticle[]
-  barcodes              Barcode[]
-  cost                  ProductCost? // One-to-one: product → cost record
+  articles                MarketplaceArticle[]
+  barcodes                Barcode[]
+  cost                    ProductCost? // One-to-one: product → cost record
   // Phase 7: Pricing overrides (D-01)
   // ── Pricing overrides (Phase 7 + 2026-04-16 extension) ──
   drrOverridePct          Float?
@@ -256,9 +258,9 @@ model Product {
   creditOverridePct       Float?
   overheadOverridePct     Float?
   taxOverridePct          Float?
-  deletedAt             DateTime? // Soft delete: null = active
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  deletedAt               DateTime? // Soft delete: null = active
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -406,9 +408,9 @@ model AppSetting {
 
 // Расчётные цены пользователя — до 3 слотов на WbCard (D-03)
 model CalculatedPrice {
-  id              String   @id @default(cuid())
-  wbCardId        String
-  wbCard          WbCard   @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  wbCardId          String
+  wbCard            WbCard   @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
   slot              Int // 1 | 2 | 3
   name              String
   sellerPrice       Float
@@ -428,8 +430,8 @@ model CalculatedPrice {
   taxPct            Float?
   costPrice         Float?
   snapshot          Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([wbCardId, slot])
 }
@@ -468,4 +470,124 @@ model WbPromotionNomenclature {
   status       String?
 
   @@unique([promotionId, nmId])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Служба поддержки — Phase 8 (v1.1)
+// ──────────────────────────────────────────────────────────────────
+// Единая модель для всех каналов поддержки: отзывы/вопросы WB (Phase 8),
+// возвраты (Phase 9), чаты WB (Phase 10), апелляции (Phase 11),
+// мессенджеры (Phase 12). Ticket = одна нить общения, Message = одно
+// сообщение, Media = вложения. Customer — для Phase 12 (MVP не создаёт).
+
+enum TicketChannel {
+  FEEDBACK // отзыв WB (Phase 8)
+  QUESTION // вопрос WB (Phase 8)
+  CHAT // Phase 10
+  RETURN // Phase 9
+  MESSENGER // Phase 12
+}
+
+enum TicketStatus {
+  NEW
+  IN_PROGRESS
+  ANSWERED
+  CLOSED
+  APPEALED // Phase 11
+}
+
+enum AppealStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+// Customer — карточка покупателя (Phase 12). В Phase 8 записи не создаются,
+// т.к. WB Feedbacks/Questions API не возвращает wbUserId.
+model Customer {
+  id        String          @id @default(cuid())
+  wbUserId  String?         @unique
+  phone     String?
+  name      String?
+  note      String?         @db.Text
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  tickets   SupportTicket[]
+}
+
+// SupportTicket — одна нить общения (отзыв, вопрос, возврат и т.п.).
+// Связь с WbCard через nmId — БЕЗ FK (паттерн проекта, см. CLAUDE.md).
+// wbExternalId: String? — WB возвращает cuid-like 20-символьные строки.
+model SupportTicket {
+  id            String           @id @default(cuid())
+  channel       TicketChannel
+  wbExternalId  String? // ID из WB API (feedback.id / question.id)
+  customerId    String?
+  customer      Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  nmId          Int? // связь с WbCard.nmId без FK
+  status        TicketStatus     @default(NEW)
+  assignedToId  String?
+  assignedTo    User?            @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  rating        Int? // productValuation 1-5 (только FEEDBACK)
+  appealStatus  AppealStatus? // Phase 11
+  appealId      String? // Phase 11
+  lastMessageAt DateTime?
+  previewText   String?          @db.Text // первые 140 символов последнего INBOUND
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  resolvedAt    DateTime?
+  messages      SupportMessage[]
+
+  @@unique([channel, wbExternalId])
+  @@index([status])
+  @@index([channel])
+  @@index([nmId])
+  @@index([assignedToId])
+  @@index([createdAt])
+}
+
+// SupportMessage — отдельное сообщение внутри тикета.
+// authorId: null = INBOUND покупатель или OUTBOUND от WB system.
+model SupportMessage {
+  id          String         @id @default(cuid())
+  ticketId    String
+  ticket      SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  direction   Direction
+  text        String?        @db.Text
+  authorId    String?
+  author      User?          @relation("SupportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  isAutoReply Boolean        @default(false) // Phase 10
+  media       SupportMedia[]
+  sentAt      DateTime       @default(now())
+  wbSentAt    DateTime? // createdDate из WB API
+
+  @@index([ticketId, sentAt])
+}
+
+// SupportMedia — вложения к сообщениям. localPath заполняется Plan 08-02
+// после скачивания в /var/www/zoiten-uploads/support/{ticketId}/{messageId}/.
+// expiresAt = createdAt + 1 год — cron удаляет по истечении.
+model SupportMedia {
+  id        String         @id @default(cuid())
+  messageId String
+  message   SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  type      MediaType
+  wbUrl     String         @db.Text
+  localPath String?        @db.Text
+  sizeBytes Int?
+  createdAt DateTime       @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
