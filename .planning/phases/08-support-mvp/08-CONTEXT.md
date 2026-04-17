@@ -33,8 +33,15 @@
 
 **Plan 08-01 — БД + WB API клиент + RBAC:**
 - Prisma миграция: модели `SupportTicket`, `SupportMessage`, `SupportMedia`, `Customer` + enums `TicketChannel`, `TicketStatus`, `AppealStatus`, `Direction`, `MediaType`
+- ⚠ **CRITICAL (from RESEARCH.md):** `SupportTicket.wbExternalId: String?` (НЕ `Int` — WB API возвращает 20-символьные cuid-like строки типа `"YX52RZEBhH9mrcYdEJuD"`)
+- ⚠ **CRITICAL (from RESEARCH.md):** Customer-таблица создаётся ПУСТОЙ в Phase 8 (модель нужна для Phase 12). В Phase 8 `SupportTicket.customerId = null` для ВСЕХ создаваемых тикетов, т.к. WB Feedbacks/Questions API НЕ отдаёт `wbUserId`/`userName`. Линковка покупателей — Phase 12 (через Chat API или ручной merge).
 - Обратные relations на `User` (assignedTo, authorId) и `WbCard` через nmId (не FK)
 - `lib/wb-support-api.ts` — методы для Feedbacks (list, reply, report), Questions (list, reply, report). Типизированные ответы
+- ⚠ **CRITICAL (from RESEARCH.md):** Reply endpoints:
+  - Feedbacks NEW answer: `POST /api/v1/feedbacks/answer` body `{id, text}`
+  - Feedbacks EDIT answer: `PATCH /api/v1/feedbacks/answer` body `{id, text}`
+  - Questions answer (unified): `PATCH /api/v1/questions` body `{id, answer: {text}, state: "wbRu"}`
+  - **НЕ `PATCH /api/v1/feedbacks/{id}`** как было в PRD — этот endpoint не существует
 - vitest-тесты на `wb-support-api.ts` с mock fetch
 - `requireSection("SUPPORT")` уже существует (Phase 5), но надо добавить `"MANAGE"` проверки в будущих write actions
 - nginx конфиг обновление — `alias /var/www/zoiten-uploads/support/` для `/uploads/support/`
@@ -75,9 +82,9 @@
 - `SupportTicket.channel: TicketChannel` (enum FEEDBACK/QUESTION/CHAT/RETURN/MESSENGER — все 5 значений, чтобы не мигрировать в следующих фазах; но в Phase 8 используем только FEEDBACK и QUESTION)
 - `SupportTicket.status: TicketStatus` (NEW/IN_PROGRESS/ANSWERED/CLOSED/APPEALED — все значения)
 - `AppealStatus` enum присутствует, но в Phase 8 не используется (Phase 11)
-- `SupportTicket.wbExternalId` — ID из WB API (feedbackId, questionId); composite uniqueness `@@unique([channel, wbExternalId])`
+- `SupportTicket.wbExternalId: String?` — ID из WB API (feedbackId, questionId — 20-символьные cuid-like строки); composite uniqueness `@@unique([channel, wbExternalId])`
 - `SupportTicket.nmId: Int?` — артикул; связь с WbCard через nmId (не FK) — паттерн проекта
-- `SupportTicket.customerId: String?` — nullable в Phase 8 (линковка и полноценная модель в Phase 12), но Customer создаём при первом вхождении wbUserId
+- `SupportTicket.customerId: String?` — nullable. **В Phase 8 ВСЕГДА null** (WB Feedbacks/Questions API не отдаёт wbUserId). Customer-таблица создаётся пустой, заполняться начнёт в Phase 10 (Chat API даёт userID) и Phase 12 (линковка + merge).
 - `SupportMessage.direction: Direction` (INBOUND/OUTBOUND), `authorId: String?` (null=покупатель)
 - `SupportMedia.localPath: String?` — путь в `/var/www/zoiten-uploads/support/...`
 - `SupportMedia.expiresAt: DateTime` — `createdAt + 1 год`
@@ -98,14 +105,28 @@
 
 ### WB Feedbacks/Questions API
 
-Base URL (уточнить при research): `https://feedbacks-api.wildberries.ru`
+Base URL (VERIFIED в RESEARCH.md): `https://feedbacks-api.wildberries.ru`
 
-Endpoints (из PRD, требуется верификация в research):
-- `GET /api/v1/feedbacks?isAnswered=false&dateFrom=<ts>&dateTo=<ts>&take=100&skip=0`
-- `PATCH /api/v1/feedbacks/{id}` body `{ text: "..." }`
-- `POST /api/v1/feedbacks/report` body `{ feedbackId, reason, description }` (Phase 11, не трогаем)
-- `GET /api/v1/questions?isAnswered=false&...` (аналогично)
-- `PATCH /api/v1/questions/{id}` body `{ text: "..." }`
+Endpoints (VERIFIED через WB Swagger + SDK):
+- `GET /api/v1/feedbacks?isAnswered=false&dateFrom=<unix_ts>&dateTo=<unix_ts>&take=5000&skip=0` (max take=5000, pagination через skip)
+- `GET /api/v1/questions?isAnswered=false&...&take=10000&skip=0` (max take=10000)
+- `POST /api/v1/feedbacks/answer` body `{ id: string, text: string }` — ответ на новый отзыв
+- `PATCH /api/v1/feedbacks/answer` body `{ id: string, text: string }` — редактирование существующего ответа
+- `PATCH /api/v1/questions` body `{ id: string, answer: { text: string }, state: "wbRu" }` — ответ на вопрос (unified endpoint)
+- `POST /api/v1/feedbacks/report` — Phase 11, не трогаем
+
+**Rate limit:** WB возвращает заголовок `X-Ratelimit-Retry` (секунды) при 429 — читать его. Между запросами пауза 600ms (паттерн проекта). Fallback на 429 без header: sleep 6000ms.
+
+**Response для feedbacks:**
+- `id: string` (cuid-like, 20 символов) — это `wbExternalId`
+- `photoLinks: Array<{fullSize: string, miniSize: string}>` — медиа-фото
+- `video: {previewImage, link (HLS m3u8), durationSec} | null` — единичное видео
+- `productDetails.nmId: number` — артикул
+- `productValuation: 1..5` — рейтинг
+- `text: string` — текст отзыва
+- `answer: {text, editable, createDate} | null` — ответ продавца (если уже отвечен)
+- `wbUserId` / `userName` — **НЕТ** в ответе (покупатель анонимизирован)
+- `createdDate: ISO 8601 string`
 
 Scope токена: bit 5 (Отзывы) — уже есть в `WB_API_TOKEN` на VPS (`/etc/zoiten.pro.env`).
 
@@ -176,7 +197,7 @@ TLS fingerprint / curl fallback: НЕ нужен для Feedbacks/Questions API 
 💬 Отзыв / ❓ Вопрос / 🗨️ Чат / 🔄 Возврат / 📩 Мессенджер — через Lucide вариант (MessageSquare, HelpCircle, MessageCircle, RotateCw, Inbox).
 
 ### Имя покупателя
-Если `Customer.name` есть — показывать; иначе `Покупатель #${wbUserId.slice(-6)}` (PRD 11.4).
+В Phase 8 **покупатель всегда анонимный** (WB API не отдаёт wbUserId/userName). Показывать: «Покупатель» (FEEDBACK без userName) или `${userName}` если WB всё же прислал (в Questions API userName иногда приходит). Запасной вариант: `Покупатель #${ticketId.slice(-6)}` (последние 6 символов wbExternalId).
 
 ### Превью текста в карточке
 Первые 140 символов, обрезка по слову, многоточие.
