@@ -7,6 +7,8 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { SupportDialog } from "@/components/support/SupportDialog"
 import { ReplyPanel } from "@/components/support/ReplyPanel"
+import { ReturnActionsPanel } from "@/components/support/ReturnActionsPanel"
+import { ReturnInfoPanel } from "@/components/support/ReturnInfoPanel"
 import { TicketSidePanel } from "@/components/support/TicketSidePanel"
 import { SupportSyncButton } from "@/components/support/SupportSyncButton"
 import { ChevronLeft } from "lucide-react"
@@ -86,6 +88,7 @@ export default async function TicketPage({
 
   const canReply =
     ticket.channel === "FEEDBACK" || ticket.channel === "QUESTION"
+  const isReturn = ticket.channel === "RETURN"
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px)] -m-6">
@@ -134,6 +137,13 @@ export default async function TicketPage({
               </Link>
             </section>
           )}
+          {isReturn && (
+            <ReturnInfoPanel
+              price={ticket.price}
+              wbComment={ticket.wbComment}
+              srid={ticket.srid}
+            />
+          )}
         </aside>
         <div className="flex flex-col min-h-0">
           <SupportDialog messages={messages} />
@@ -143,10 +153,17 @@ export default async function TicketPage({
               disabled={ticket.status === "CLOSED"}
             />
           )}
-          {!canReply && (
+          {isReturn && (
+            <ReturnActionsPanel
+              ticketId={ticket.id}
+              returnState={ticket.returnState}
+              wbActions={ticket.wbActions}
+            />
+          )}
+          {!canReply && !isReturn && (
             <div className="border-t p-3 text-xs text-muted-foreground text-center">
               Ответ через интерфейс доступен для каналов «Отзыв» и «Вопрос».
-              Чат/возврат/мессенджер — в следующих фазах.
+              Чат/мессенджер — в следующих фазах.
             </div>
           )}
         </div>
