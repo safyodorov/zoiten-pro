@@ -64,6 +64,7 @@ model User {
   preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
   assignedTickets  SupportTicket[]   @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
   authoredMessages SupportMessage[]  @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
+  returnDecisions  ReturnDecision[]  @relation("ReturnDecider") // Phase 9 — audit log решений по возвратам
   isActive         Boolean           @default(true)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -549,12 +550,24 @@ model SupportTicket {
   resolvedAt    DateTime?
   messages      SupportMessage[]
 
+  // ── Phase 9: Возвраты ──
+  wbClaimStatus   Int? // оригинальный status из WB (denormalized, для диагностики)
+  wbClaimStatusEx Int? // status_ex из WB
+  wbClaimType     Int? // claim_type из WB
+  wbActions       String[]         @default([]) // актуальные action strings из WB (для UI кнопок)
+  wbComment       String?          @db.Text // wb_comment — длинная инструкция покупателю
+  srid            String? // Shipment ID из WB (для связки с заказом)
+  price           Float? // price из заявки (рубли)
+  returnState     ReturnState? // локальное состояние (PENDING/APPROVED/REJECTED)
+  returnDecisions ReturnDecision[] @relation("ReturnDecisions")
+
   @@unique([channel, wbExternalId])
   @@index([status])
   @@index([channel])
   @@index([nmId])
   @@index([assignedToId])
   @@index([createdAt])
+  @@index([returnState])
 }
 
 // SupportMessage — отдельное сообщение внутри тикета.
@@ -590,4 +603,41 @@ model SupportMedia {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 9 — Возвраты
+// ──────────────────────────────────────────────────────────────────
+
+enum ReturnDecisionAction {
+  APPROVE // approve1, autorefund1, approvecc1
+  REJECT // rejectcustom
+  RECONSIDER // повторный approve* после REJECT
+}
+
+enum ReturnState {
+  PENDING // заявка открыта, решения нет
+  APPROVED // одобрен (финал)
+  REJECTED // отклонён (можно пересмотреть)
+}
+
+// ReturnDecision — история решений по заявке на возврат (audit log).
+// Один ticket → до N decisions (из-за «пересмотреть»).
+// Актуальное состояние денормализовано в SupportTicket.returnState для быстрой фильтрации.
+model ReturnDecision {
+  id           String               @id @default(cuid())
+  ticketId     String
+  ticket       SupportTicket        @relation("ReturnDecisions", fields: [ticketId], references: [id], onDelete: Cascade)
+  action       ReturnDecisionAction
+  wbAction     String // оригинальный WB action (autorefund1/approve1/approvecc1/rejectcustom)
+  reason       String?              @db.Text // comment для rejectcustom или approvecc1
+  decidedById  String
+  decidedBy    User                 @relation("ReturnDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt    DateTime             @default(now())
+  reconsidered Boolean              @default(false) // true для RECONSIDER action
+  wbResponseOk Boolean              @default(true) // false если WB API вернул ошибку (но попытку фиксируем)
+  wbError      String?              @db.Text
+
+  @@index([ticketId, decidedAt])
+  @@index([decidedById])
 }
