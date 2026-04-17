@@ -96,6 +96,7 @@ export async function syncSupport(
             nmId: fb.productDetails?.nmId ?? null,
             rating: fb.productValuation ?? null,
             previewText,
+            status: fb.answer?.text ? "ANSWERED" : undefined,
           },
         })
 
@@ -195,6 +196,7 @@ export async function syncSupport(
           update: {
             nmId: q.productDetails?.nmId ?? null,
             previewText,
+            status: q.answer?.text ? "ANSWERED" : undefined,
           },
         })
         const inbound = await tx.supportMessage.findFirst({

@@ -183,6 +183,83 @@ describe("syncSupport", () => {
     ).toBe("Ответ")
   })
 
+  it("повышает status NEW → ANSWERED при повторном sync, если WB feedback получил ответ", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const base = {
+      id: "FX1",
+      text: "текст",
+      productValuation: 5,
+      createdDate: "",
+      state: "wbRu",
+      productDetails: {
+        imtId: 1,
+        nmId: 7,
+        productName: "",
+        supplierArticle: "",
+        brandName: "",
+      },
+      photoLinks: [],
+      video: null,
+    }
+    // 1-й sync: без ответа → NEW
+    listFeedbacks.mockResolvedValueOnce([{ ...base, answer: null }]).mockResolvedValueOnce([])
+    listQuestions.mockResolvedValue([])
+    const { syncSupport } = await import("@/lib/support-sync")
+    await syncSupport()
+    expect(prismaState.tickets[0].status).toBe("NEW")
+
+    // 2-й sync: ответ появился в WB кабинете → status должен стать ANSWERED
+    listFeedbacks
+      .mockResolvedValueOnce([
+        {
+          ...base,
+          answer: { text: "Спасибо", state: "wbRu", editable: true, createDate: "" },
+        },
+      ])
+      .mockResolvedValueOnce([])
+    await syncSupport()
+    expect(prismaState.tickets).toHaveLength(1)
+    expect(prismaState.tickets[0].status).toBe("ANSWERED")
+  })
+
+  it("повышает status NEW → ANSWERED для QUESTION при повторном sync", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const base = {
+      id: "QX1",
+      text: "вопрос?",
+      createdDate: "",
+      state: "wbRu",
+      productDetails: {
+        imtId: 1,
+        nmId: 9,
+        productName: "",
+        supplierArticle: "",
+        brandName: "",
+      },
+    }
+    listFeedbacks.mockResolvedValue([])
+    listQuestions.mockResolvedValueOnce([{ ...base, answer: null }]).mockResolvedValueOnce([])
+    const { syncSupport } = await import("@/lib/support-sync")
+    await syncSupport()
+    expect(prismaState.tickets[0].status).toBe("NEW")
+
+    listQuestions
+      .mockResolvedValueOnce([
+        {
+          ...base,
+          answer: { text: "Ответ", state: "wbRu", editable: true, createDate: "" },
+        },
+      ])
+      .mockResolvedValueOnce([])
+    await syncSupport()
+    expect(prismaState.tickets).toHaveLength(1)
+    expect(prismaState.tickets[0].status).toBe("ANSWERED")
+  })
+
   it("обрабатывает QUESTION: создаёт ticket QUESTION и INBOUND message", async () => {
     const { listFeedbacks, listQuestions } = (await import(
       "@/lib/wb-support-api"
