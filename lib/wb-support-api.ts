@@ -1,14 +1,25 @@
-// Клиент WB Feedbacks + Questions API.
-// Scope токена: bit 5 (Отзывы).
-// В отличие от card.wb.ru v4 (см. lib/wb-api.ts), feedbacks-api не блокируется
+// Клиент WB Feedbacks + Questions + Returns API.
+// Phase 8: Feedbacks + Questions (scope bit 5 "Отзывы", WB_API_TOKEN).
+// Phase 9: Returns/Claims (scope bit 11 "Buyers Returns", WB_RETURNS_TOKEN).
+// В отличие от card.wb.ru v4 (см. lib/wb-api.ts), эти API не блокируются
 // по TLS fingerprint — используем нативный fetch.
 
 const FEEDBACKS_API = "https://feedbacks-api.wildberries.ru"
+const RETURNS_API = "https://returns-api.wildberries.ru" // Phase 9
 const RATE_LIMIT_FALLBACK_MS = 6000
 
+// Токен Phase 8 (Feedbacks/Questions) — scope bit 5
 function getToken(): string {
   const token = process.env.WB_API_TOKEN
   if (!token) throw new Error("WB_API_TOKEN не настроен")
+  return token
+}
+
+// Токен Phase 9 (Returns/Claims) — scope bit 11 "Buyers Returns".
+// Fallback на WB_API_TOKEN для dev/test окружений.
+function getReturnsToken(): string {
+  const token = process.env.WB_RETURNS_TOKEN ?? process.env.WB_API_TOKEN
+  if (!token) throw new Error("WB_RETURNS_TOKEN или WB_API_TOKEN не настроен")
   return token
 }
 
@@ -72,11 +83,16 @@ export interface ListParams {
   dateTo?: number
 }
 
-// ── Внутренний helper с 429 retry ─────────────────────────────
+// ── Внутренний helper с 429 retry (параметризованный) ─────────
 
-async function callWb(path: string, init: RequestInit, attempt = 0): Promise<Response> {
-  const token = getToken()
-  const res = await fetch(`${FEEDBACKS_API}${path}`, {
+async function callApi(
+  baseUrl: string,
+  token: string,
+  path: string,
+  init: RequestInit,
+  attempt = 0
+): Promise<Response> {
+  const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: token,
@@ -89,11 +105,17 @@ async function callWb(path: string, init: RequestInit, attempt = 0): Promise<Res
     const retry = Number(res.headers.get("X-Ratelimit-Retry")) || 0
     const waitMs = retry > 0 ? retry * 1000 : RATE_LIMIT_FALLBACK_MS
     await new Promise((r) => setTimeout(r, waitMs))
-    return callWb(path, init, 1)
+    return callApi(baseUrl, token, path, init, 1)
   }
 
   if (res.status === 401) throw new Error("Неверный токен WB API")
-  if (res.status === 403) throw new Error("Нет доступа — проверьте scope токена (bit 5)")
+  if (res.status === 403) {
+    // Разный scope-hint для разных API: Feedbacks bit 5, Returns bit 11.
+    const scopeHint = baseUrl.includes("returns-api")
+      ? "bit 11 Buyers Returns (WB_RETURNS_TOKEN)"
+      : "bit 5"
+    throw new Error(`Нет доступа — проверьте scope токена (${scopeHint})`)
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "")
@@ -101,6 +123,20 @@ async function callWb(path: string, init: RequestInit, attempt = 0): Promise<Res
   }
 
   return res
+}
+
+// Feedbacks/Questions API — использует WB_API_TOKEN (scope bit 5)
+async function callWb(path: string, init: RequestInit, attempt = 0): Promise<Response> {
+  return callApi(FEEDBACKS_API, getToken(), path, init, attempt)
+}
+
+// Returns API — использует WB_RETURNS_TOKEN (scope bit 11 Buyers Returns)
+async function callReturnsApi(
+  path: string,
+  init: RequestInit,
+  attempt = 0
+): Promise<Response> {
+  return callApi(RETURNS_API, getReturnsToken(), path, init, attempt)
 }
 
 // ── Feedbacks ─────────────────────────────────────────────────
@@ -158,6 +194,109 @@ export async function replyQuestion(id: string, text: string): Promise<{ ok: tru
   await callWb("/api/v1/questions", {
     method: "PATCH",
     body: JSON.stringify({ id, answer: { text }, state: "wbRu" }),
+  })
+  return { ok: true }
+}
+
+// ── WB Buyers Returns API (Phase 9) ──────────────────────────
+
+// Canonical Claim schema из WB Returns API.
+// Важные особенности:
+//   - photos / video_paths возвращаются БЕЗ схемы ("//photos.wbstatic.net/..."),
+//     перед fetch-ом надо добавить "https:" префикс.
+//   - actions[] динамический — не хардкодить строки, всегда брать из свежего GET.
+//   - status, status_ex, claim_type — integer enum, WB их публично не документирует;
+//     храним as-is в SupportTicket.wbClaimStatus/wbClaimStatusEx/wbClaimType.
+export interface Claim {
+  id: string // UUID v4
+  claim_type: number // enum integer
+  status: number // status integer
+  status_ex: number // status_ex integer
+  nm_id: number // артикул WB
+  user_comment: string // причина покупателя
+  wb_comment?: string // инструкция WB (не продавца) покупателю
+  dt: string // ISO 8601 — когда заявка подана
+  imt_name: string // название товара (денормализованное)
+  order_dt?: string // ISO 8601 — дата заказа
+  dt_update?: string // ISO 8601 — последнее обновление
+  photos?: string[] // //photos.wbstatic.net/... (без схемы!)
+  video_paths?: string[] // //video.wbstatic.net/...
+  actions: string[] // ["autorefund1", "approve1", "rejectcustom", ...]
+  price?: number // рубли
+  currency_code?: string // "643" = RUB
+  srid?: string // Shipment ID
+}
+
+export interface ListReturnsParams {
+  is_archive: boolean // обязательный — false = под рассмотрением, true = архив
+  limit?: number // default 50, max 200
+  offset?: number // default 0
+  id?: string // UUID фильтр
+  nm_id?: number // артикул фильтр
+}
+
+export interface ListReturnsResult {
+  claims: Claim[]
+  total: number
+}
+
+// ── Returns API methods ──────────────────────────────────────
+
+export async function listReturns(p: ListReturnsParams): Promise<ListReturnsResult> {
+  const qs = new URLSearchParams()
+  qs.set("is_archive", String(p.is_archive))
+  if (p.limit !== undefined) qs.set("limit", String(p.limit))
+  if (p.offset !== undefined) qs.set("offset", String(p.offset))
+  if (p.id !== undefined) qs.set("id", p.id)
+  if (p.nm_id !== undefined) qs.set("nm_id", String(p.nm_id))
+
+  const res = await callReturnsApi(`/api/v1/claims?${qs}`, { method: "GET" })
+  const json = (await res.json()) as { claims?: Claim[]; total?: number }
+  return { claims: json.claims ?? [], total: json.total ?? 0 }
+}
+
+// Одобрить заявку: action = "approve1" | "autorefund1" | "approvecc1".
+// comment обязателен только для "rejectcustom" (см. rejectReturn); для
+// "approvecc1" — опциональный «одобрить с пояснением».
+export async function approveReturn(
+  id: string,
+  wbAction: string,
+  comment?: string
+): Promise<{ ok: true }> {
+  const body: { id: string; action: string; comment?: string } = {
+    id,
+    action: wbAction,
+  }
+  if (comment !== undefined) body.comment = comment
+  await callReturnsApi("/api/v1/claim", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+  return { ok: true }
+}
+
+// Отклонить заявку — action всегда "rejectcustom", comment обязателен 10-1000 символов.
+export async function rejectReturn(id: string, reason: string): Promise<{ ok: true }> {
+  if (reason.length < 10 || reason.length > 1000) {
+    throw new Error("Причина должна быть от 10 до 1000 символов")
+  }
+  await callReturnsApi("/api/v1/claim", {
+    method: "PATCH",
+    body: JSON.stringify({ id, action: "rejectcustom", comment: reason }),
+  })
+  return { ok: true }
+}
+
+// Пересмотреть отклонённую заявку — повторный approve* action.
+// Работает, только если WB снова вернул "approve1" (или аналог) в actions[]
+// после предыдущего rejectcustom. Без comment — семантика повторного одобрения.
+export async function reconsiderReturn(
+  id: string,
+  wbAction: string
+): Promise<{ ok: true }> {
+  await callReturnsApi("/api/v1/claim", {
+    method: "PATCH",
+    body: JSON.stringify({ id, action: wbAction }),
   })
   return { ok: true }
 }
