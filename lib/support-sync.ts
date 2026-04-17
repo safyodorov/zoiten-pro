@@ -6,12 +6,16 @@ import { prisma } from "@/lib/prisma"
 import {
   listFeedbacks,
   listQuestions,
+  listReturns,
   type Feedback,
   type Question,
+  type Claim,
 } from "@/lib/wb-support-api"
 import { downloadMediaBatch, type DownloadItem } from "@/lib/support-media"
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000
+const RETURNS_PAGE_LIMIT = 200
+const RETURNS_PAGE_PAUSE_MS = 600
 
 export interface SyncResult {
   feedbacksSynced: number
@@ -271,4 +275,209 @@ export async function syncSupport(
   }
 
   return { feedbacksSynced, questionsSynced, mediaSaved, errors }
+}
+
+// ── Phase 9: синхронизация возвратов (Returns/Claims) ──────────
+
+export interface SyncReturnsResult {
+  synced: number
+  created: number
+  updated: number
+  mediaDownloaded: number
+  errors: string[]
+}
+
+// //photos.wbstatic.net/... → https://photos.wbstatic.net/...
+// Уже https://... URL-ы не трогаем.
+function normalizeWbUrl(url: string): string {
+  if (url.startsWith("//")) return `https:${url}`
+  return url
+}
+
+async function fetchAllClaims(isArchive: boolean): Promise<Claim[]> {
+  const out: Claim[] = []
+  for (let offset = 0; ; offset += RETURNS_PAGE_LIMIT) {
+    const { claims } = await listReturns({
+      is_archive: isArchive,
+      limit: RETURNS_PAGE_LIMIT,
+      offset,
+    })
+    out.push(...claims)
+    if (claims.length < RETURNS_PAGE_LIMIT) break
+    await new Promise((r) => setTimeout(r, RETURNS_PAGE_PAUSE_MS))
+  }
+  return out
+}
+
+export async function syncReturns(): Promise<SyncReturnsResult> {
+  const result: SyncReturnsResult = {
+    synced: 0,
+    created: 0,
+    updated: 0,
+    mediaDownloaded: 0,
+    errors: [],
+  }
+  const mediaQueue: DownloadItem[] = []
+
+  // 1. Загрузить обе страницы (под рассмотрением + архив)
+  let allClaims: Claim[] = []
+  try {
+    const pending = await fetchAllClaims(false)
+    const archive = await fetchAllClaims(true)
+    allClaims = [...pending, ...archive]
+  } catch (err) {
+    result.errors.push(
+      `listReturns: ${err instanceof Error ? err.message : "unknown"}`
+    )
+    return result
+  }
+
+  // 2. Per-claim transaction — идемпотентный upsert
+  for (const claim of allClaims) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Определяем create vs update через findUnique перед upsert —
+        // чтобы правильно посчитать created/updated счётчики.
+        const existing = await tx.supportTicket.findUnique({
+          where: {
+            channel_wbExternalId: {
+              channel: "RETURN",
+              wbExternalId: claim.id,
+            },
+          },
+          select: { id: true },
+        })
+        const isCreate = !existing
+
+        const previewText = (claim.user_comment ?? "").slice(0, 140)
+        const wbCreatedAt = claim.dt ? new Date(claim.dt) : null
+
+        const ticket = await tx.supportTicket.upsert({
+          where: {
+            channel_wbExternalId: {
+              channel: "RETURN",
+              wbExternalId: claim.id,
+            },
+          },
+          create: {
+            channel: "RETURN",
+            wbExternalId: claim.id,
+            customerId: null,
+            nmId: claim.nm_id,
+            status: "NEW",
+            returnState: "PENDING",
+            wbClaimStatus: claim.status,
+            wbClaimStatusEx: claim.status_ex,
+            wbClaimType: claim.claim_type,
+            wbActions: claim.actions ?? [],
+            wbComment: claim.wb_comment ?? null,
+            srid: claim.srid ?? null,
+            price: claim.price ?? null,
+            previewText,
+            lastMessageAt: wbCreatedAt,
+          },
+          update: {
+            // ⚠ НЕ трогаем returnState/status — локальные решения защищены
+            wbClaimStatus: claim.status,
+            wbClaimStatusEx: claim.status_ex,
+            wbActions: claim.actions ?? [],
+            wbComment: claim.wb_comment ?? null,
+            previewText,
+          },
+        })
+
+        if (isCreate) result.created++
+        else result.updated++
+
+        // 1 INBOUND message per ticket (user_comment)
+        const inbound = await tx.supportMessage.findFirst({
+          where: { ticketId: ticket.id, direction: "INBOUND" },
+          select: { id: true },
+        })
+        if (!inbound) {
+          const msg = await tx.supportMessage.create({
+            data: {
+              ticketId: ticket.id,
+              direction: "INBOUND",
+              text: claim.user_comment,
+              authorId: null,
+              wbSentAt: wbCreatedAt,
+            },
+          })
+
+          // photos
+          for (const photo of claim.photos ?? []) {
+            const url = normalizeWbUrl(photo)
+            await tx.supportMedia.create({
+              data: {
+                messageId: msg.id,
+                type: "IMAGE",
+                wbUrl: url,
+                expiresAt: new Date(Date.now() + YEAR_MS),
+              },
+            })
+            mediaQueue.push({
+              wbUrl: url,
+              ticketId: ticket.id,
+              messageId: msg.id,
+            })
+          }
+
+          // videos
+          for (const videoUrl of claim.video_paths ?? []) {
+            const url = normalizeWbUrl(videoUrl)
+            await tx.supportMedia.create({
+              data: {
+                messageId: msg.id,
+                type: "VIDEO",
+                wbUrl: url,
+                expiresAt: new Date(Date.now() + YEAR_MS),
+              },
+            })
+            mediaQueue.push({
+              wbUrl: url,
+              ticketId: ticket.id,
+              messageId: msg.id,
+            })
+          }
+        }
+
+        result.synced++
+      })
+    } catch (err) {
+      result.errors.push(
+        `claim ${claim.id}: ${err instanceof Error ? err.message : "unknown"}`
+      )
+    }
+  }
+
+  // 3. Скачать медиа вне транзакций (параллельно, не блокируя БД)
+  if (mediaQueue.length > 0) {
+    try {
+      const downloadResults = await downloadMediaBatch(mediaQueue, 5)
+      for (const r of downloadResults) {
+        if (r.localPath) {
+          try {
+            await prisma.supportMedia.updateMany({
+              where: { wbUrl: r.wbUrl, messageId: r.messageId },
+              data: { localPath: r.localPath, sizeBytes: r.sizeBytes },
+            })
+            result.mediaDownloaded++
+          } catch (err) {
+            result.errors.push(
+              `Media update ${r.wbUrl}: ${err instanceof Error ? err.message : "unknown"}`
+            )
+          }
+        } else if (r.error) {
+          result.errors.push(`Media download ${r.wbUrl}: ${r.error}`)
+        }
+      }
+    } catch (err) {
+      result.errors.push(
+        `media batch: ${err instanceof Error ? err.message : "unknown"}`
+      )
+    }
+  }
+
+  return result
 }
