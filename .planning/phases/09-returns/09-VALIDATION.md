@@ -1,10 +1,11 @@
 ---
 phase: 9
 slug: returns
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-17
+approved: 2026-04-17
 ---
 
 # Phase 9 — Validation Strategy
@@ -75,11 +76,15 @@ created: 2026-04-17
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (token scope + live claim fixture + 3 test stubs)
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter after planner approval
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (token scope + live claim fixture + 3 test stubs)
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter after planner approval
 
-**Approval:** pending
+**Approval:** approved 2026-04-17
+
+### Revision history
+
+- **2026-04-17** — revision from checker feedback: applied fixes to plans 09-02 (Warnings 5, 8), 09-03 (Blockers 2, 3 + Warning 4), 09-04 (Blocker 1 + Warning 7). All blockers addressed. `nyquist_compliant: true`.
