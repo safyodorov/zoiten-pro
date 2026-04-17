@@ -313,7 +313,47 @@ Explicitly excluded. Documented to prevent scope creep.
 | PRICES-14 | Phase 7 | Complete |
 | PRICES-15 | Phase 7 | Complete |
 | PRICES-16 | Phase 7 | Complete |
+| SUP-01 | Phase 8 | Pending |
+| SUP-02 | Phase 8 | Pending |
+| SUP-03 | Phase 8 | Pending |
+| SUP-04 | Phase 8 | Pending |
+| SUP-05 | Phase 8 | Pending |
+| SUP-06 | Phase 8 | Pending |
+| SUP-07 | Phase 8, Phase 10, Phase 11 | Pending |
+| SUP-08 | Phase 8 | Pending |
+| SUP-09 | Phase 8 | Pending |
+| SUP-10 | Phase 8 | Pending |
+| SUP-11 | Phase 8 | Pending |
+| SUP-12 | Phase 8 | Pending |
+| SUP-13 | Phase 8 | Pending |
+| SUP-14 | Phase 8, Phase 9, Phase 11 | Pending |
+| SUP-15 | Phase 8 | Pending |
+| SUP-16 | Phase 8 | Pending |
+| SUP-17 | Phase 9 | Pending |
+| SUP-18 | Phase 9 | Pending |
+| SUP-19 | Phase 9 | Pending |
+| SUP-20 | Phase 9 | Pending |
+| SUP-21 | Phase 10 | Pending |
+| SUP-22 | Phase 10 | Pending |
+| SUP-23 | Phase 10 | Pending |
+| SUP-24 | Phase 10 | Pending |
+| SUP-25 | Phase 10 | Pending |
+| SUP-26 | Phase 11 | Pending |
+| SUP-27 | Phase 11 | Pending |
+| SUP-28 | Phase 11 | Pending |
+| SUP-29 | Phase 11 | Pending |
+| SUP-30 | Phase 11 | Pending |
+| SUP-31 | Phase 11 | Pending |
+| SUP-32 | Phase 12 | Pending |
+| SUP-33 | Phase 12 | Pending |
+| SUP-34 | Phase 12 | Pending |
+| SUP-35 | Phase 12 | Pending |
+| SUP-36 | Phase 13 | Pending |
+| SUP-37 | Phase 13 | Pending |
+| SUP-38 | Phase 13 | Pending |
+| SUP-39 | Phase 13 | Pending |
+| SUP-40 | Phase 8 | Pending |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
-*Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned*
+*Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned (Phase 8..13)*

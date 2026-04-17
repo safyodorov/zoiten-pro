@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: "Служба поддержки WB"
-status: Defining requirements
-stopped_at: "Милстоун v1.1 Служба поддержки стартовал 2026-04-17. Phase 7 UAT отложен по решению пользователя (10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md — вернуться позже)."
+status: Roadmap planned
+stopped_at: "Roadmap milestone v1.1 создан 2026-04-17: Phase 8..13 (MVP Отзывы+Вопросы, Возвраты, Чат+Автоответы, Шаблоны+Обжалование, Профиль покупателя+Мессенджеры, Статистика). Следующий шаг — /gsd:plan-phase 8. Phase 7 UAT отложен (10 HUMAN-UAT пунктов pending в 07-HUMAN-UAT.md)."
 last_updated: "2026-04-17T00:00:00.000Z"
 progress:
-  total_phases: 7
+  total_phases: 13
   completed_phases: 7
-  total_plans: 29
+  total_plans: 30
   completed_plans: 30
 ---
 
@@ -19,22 +19,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Milestone v1.1 — Служба поддержки WB (requirements stage)
+**Current focus:** Milestone v1.1 — Служба поддержки WB (roadmap planned, Phase 8..13)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 08 (support-mvp) — planning pending
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-17 — Milestone v1.1 Служба поддержки WB started
+Status: Roadmap planned, awaiting `/gsd:plan-phase 8`
+Last activity: 2026-04-17 — Roadmap v1.1 создан: Phase 8..13 с success criteria, Traceability заполнена для SUP-01..SUP-40
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 30
 - Average duration: -
-- Total execution time: 0 hours
+- Total execution time: -
 
 **By Phase:**
 
@@ -44,7 +44,7 @@ Last activity: 2026-04-17 — Milestone v1.1 Служба поддержки WB 
 
 **Recent Trend:**
 
-- Last 5 plans: none yet
+- Last 5 plans: Phase 07 P07..P11
 - Trend: -
 
 *Updated after each plan completion*
@@ -152,6 +152,7 @@ Recent decisions affecting current work:
 ### Roadmap Evolution
 
 - Phase 7 added: Управление ценами WB — калькулятор юнит-экономики с акциями и расчётными ценами (directory renamed to `07-prices-wb` for clarity)
+- Milestone v1.1 added (2026-04-17): +40 requirements (SUP-01..SUP-40), +6 phases (Phase 8..13) — Служба поддержки WB (отзывы/вопросы → возвраты → чат → шаблоны/обжалование → профиль/мессенджеры → статистика)
 
 ### Pending Todos
 
@@ -170,9 +171,12 @@ None yet.
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
 - Phase 1: Auth.js v5 TypeScript session augmentation syntax differs from v4 — verify before writing RBAC checks
 - Phase 5: ai-cs-zoiten repo has unknown API surface — may need discovery spike before integration
+- Phase 7: UAT pending (10 HUMAN-UAT пунктов) — отложен по решению пользователя, вернуться после v1.1
+- Phase 8: Нужен доступ к WB Feedbacks/Questions API — scope токена проверить (bit 5 Отзывы уже есть в WB_API_TOKEN)
+- Phase 10: WB Chat API может блокироваться Node.js fetch() по TLS fingerprint — заготовить curl-fallback реактивно как в wb-api.ts v4
 
 ## Session Continuity
 
-Last session: 2026-04-10T20:10:00.000Z
-Stopped at: UI/UX round 2 задеплоено — свёртываемый sidebar, название раздела в header, PricesFilters, глобальная Брак ставка, fix WB promotions API (promotionIDs repeated + inAction=true), nginx timeout 600s. 10 HUMAN-UAT по Phase 7 pending.
+Last session: 2026-04-17T00:00:00.000Z
+Stopped at: Roadmap v1.1 создан — Phase 8..13 с success criteria и Traceability. Следующий шаг: `/gsd:plan-phase 8` для декомпозиции MVP Отзывы+Вопросы на планы.
 Resume file: None
