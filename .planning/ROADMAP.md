@@ -194,7 +194,12 @@ Plans:
   3. Менеджер пересматривает ранее отклонённую заявку через кнопку «Пересмотреть» → статус переходит REJECTED → APPROVED, `reconsidered=true`
   4. В диалоге тикета с каналом RETURN на sticky-панели появляются кнопки «Одобрить/Отклонить/Пересмотреть» вместо/рядом с textarea ответа
   5. Состояния возврата соблюдают логику: PENDING → APPROVED | REJECTED, REJECTED → APPROVED через «Пересмотреть», APPROVED финальное (действия disabled)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 09-01-PLAN.md — Foundation: Prisma миграция (ReturnDecision + 8 полей SupportTicket + 2 enum) + WB Claims API клиент + Wave 0 test stubs
+- [ ] 09-02-PLAN.md — Sync: syncReturns() + интеграция в POST /api/support-sync и cron /api/cron/support-sync-reviews (15 мин, Option A)
+- [ ] 09-03-PLAN.md — UI List: страница /support/returns с таблицей 9 колонок + 6 фильтров + пагинация + sidebar пункт «Возвраты»
+- [ ] 09-04-PLAN.md — UI Actions: ReturnActionsPanel (Одобрить/Отклонить/Пересмотреть) в диалоге /support/[ticketId] + 3 server actions + human UAT
 **UI hint**: yes
 
 ### Phase 10: Чат + Автоответы
