@@ -55,7 +55,7 @@ approved: 2026-04-17
 - [ ] `tests/wb-returns-api.test.ts` — stub GET /api/v1/claims + PATCH /api/v1/claim (SUP-17)
 - [ ] `tests/support-sync-returns.test.ts` — stub idempotent upsert on @@unique([channel, wbExternalId]) для RETURN (SUP-17)
 - [ ] `tests/return-actions.test.ts` — stub approve/reject/reconsider server actions с RBAC + ReturnDecision create (SUP-19, SUP-20)
-- [ ] **VPS token scope check** — убедиться, что `WB_API_TOKEN` имеет bit 11 (Buyers Returns). Без этого блокируем все live-операции. Wave 0 live curl spike на staging, если не подтверждено — планы откатываются до добавления scope.
+- [ ] **VPS token setup** — добавить отдельный `WB_RETURNS_TOKEN` в `/etc/zoiten.pro.env` (scope bit 11 Buyers Returns). Существующий `WB_API_TOKEN` не имеет bit 11, расширять его не удобно — архитектура использует два токена. Проверить: `curl "https://returns-api.wildberries.ru/api/v1/claims?is_archive=false&limit=1" -H "Authorization: $WB_RETURNS_TOKEN"` возвращает 200/429 (не 401).
 - [ ] **Live claim fixture** — получить 1 реальный возврат из WB API и сохранить raw JSON в `.planning/phases/09-returns/fixtures/claim-sample.json` для unit-тестов
 
 *Existing infrastructure (vitest, Phase 8 support-*.test.ts паттерны) полностью переиспользуется.*
