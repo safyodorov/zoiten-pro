@@ -4,6 +4,10 @@ vi.mock("@/lib/support-sync", () => ({
   syncSupport: vi
     .fn()
     .mockResolvedValue({ feedbacksSynced: 0, questionsSynced: 0, mediaSaved: 0, errors: [] }),
+  // Phase 9: cron также вызывает syncReturns() после syncSupport
+  syncReturns: vi
+    .fn()
+    .mockResolvedValue({ synced: 0, created: 0, updated: 0, mediaDownloaded: 0, errors: [] }),
 }))
 
 beforeEach(() => {
