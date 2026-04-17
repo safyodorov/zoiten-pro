@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Executing Phase 08
+status: Ready to plan
 stopped_at: "Roadmap v1.1 создан — Phase 8..13 с success criteria и Traceability. Следующий шаг: `/gsd:plan-phase 8` для декомпозиции MVP Отзывы+Вопросы на планы."
-last_updated: "2026-04-17T13:03:29.030Z"
+last_updated: "2026-04-17T13:30:50.563Z"
 progress:
   total_phases: 13
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 33
-  completed_plans: 30
+  completed_plans: 34
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 
 ## Current Position
 
-Phase: 08 (support-mvp) — EXECUTING
-Plan: 1 of 4
+Phase: 9
+Plan: Not started
 
 ## Performance Metrics
 
