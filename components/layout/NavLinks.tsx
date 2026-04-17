@@ -10,9 +10,14 @@ import { ICON_MAP, type NavItem } from "@/components/layout/nav-items"
 interface NavLinksProps {
   items: NavItem[]
   collapsed?: boolean
+  supportBadgeCount?: number
 }
 
-export function NavLinks({ items, collapsed = false }: NavLinksProps) {
+export function NavLinks({
+  items,
+  collapsed = false,
+  supportBadgeCount,
+}: NavLinksProps) {
   const pathname = usePathname()
 
   return (
@@ -21,14 +26,23 @@ export function NavLinks({ items, collapsed = false }: NavLinksProps) {
         const isActive =
           pathname === item.href || pathname.startsWith(item.href + "/")
         const Icon = item.icon ? ICON_MAP[item.icon] : null
+        const showBadge =
+          item.href === "/support" &&
+          supportBadgeCount !== undefined &&
+          supportBadgeCount > 0
+        const count = supportBadgeCount ?? 0
+        const badgeLabelExpanded = count > 99 ? "99+" : String(count)
+        const badgeLabelCollapsed = count > 9 ? "9+" : String(count)
         return (
           <Link
             key={item.href}
             href={item.href}
             title={collapsed ? item.label : undefined}
             className={cn(
-              "flex items-center text-sm transition-colors",
-              collapsed ? "justify-center px-2 py-2.5 mx-1 my-0.5 rounded-md" : "gap-2.5 px-4 py-2",
+              "flex items-center text-sm transition-colors relative",
+              collapsed
+                ? "justify-center px-2 py-2.5 mx-1 my-0.5 rounded-md"
+                : "gap-2.5 px-4 py-2",
               isActive
                 ? collapsed
                   ? "bg-primary/10 text-primary font-medium"
@@ -46,6 +60,16 @@ export function NavLinks({ items, collapsed = false }: NavLinksProps) {
               />
             )}
             {!collapsed && <span className="truncate">{item.label}</span>}
+            {showBadge && !collapsed && (
+              <span className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-medium">
+                {badgeLabelExpanded}
+              </span>
+            )}
+            {showBadge && collapsed && (
+              <span className="absolute top-1 right-1 min-w-[14px] h-[14px] px-1 rounded-full bg-red-500 text-white text-[9px] font-medium flex items-center justify-center">
+                {badgeLabelCollapsed}
+              </span>
+            )}
           </Link>
         )
       })}

@@ -32,9 +32,16 @@ interface DashboardShellProps {
   navItems: NavItem[]
   logoutForm: ReactNode
   children: ReactNode
+  supportBadgeCount?: number
 }
 
-export function DashboardShell({ user, navItems, logoutForm, children }: DashboardShellProps) {
+export function DashboardShell({
+  user,
+  navItems,
+  logoutForm,
+  children,
+  supportBadgeCount,
+}: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -63,7 +70,7 @@ export function DashboardShell({ user, navItems, logoutForm, children }: Dashboa
   return (
     <SidebarContext.Provider value={{ collapsed, toggle, mounted }}>
       <div className="flex h-screen bg-background">
-        <Sidebar items={navItems} />
+        <Sidebar items={navItems} supportBadgeCount={supportBadgeCount} />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header user={user} logoutForm={logoutForm} />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
