@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 12-01-PLAN.md (3 tasks — миграция + syncChats + 5 actions)
-last_updated: "2026-04-18T10:55:18.630Z"
+stopped_at: Completed 12-02-PLAN.md (3 tasks — RSC профиль + 5 компонент + интеграция)
+last_updated: "2026-04-18T11:03:32.013Z"
 progress:
   total_phases: 13
   completed_phases: 11
   total_plans: 48
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 12 (customer-messenger) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -86,6 +86,7 @@ Plan: 2 of 3
 | Phase 10-chat-autoreply P03 | 4min | 2 tasks | 5 files |
 | Phase 10 P04 | 8min | 3 tasks | 8 files |
 | Phase 12 P01 | 5min | 3 tasks | 10 files |
+| Phase 12 P02 | 4min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,9 @@ Recent decisions affecting current work:
 - [Phase 12]: Phase 12-01: hybrid customer linking — CHAT auto через namespace chat:<chatID>, others manual через UI Plan 12-02
 - [Phase 12]: Phase 12-01: pgcrypto gen_random_uuid() для idempotent backfill CHAT customers в миграции
 - [Phase 12]: Phase 12-01: lib/customer-aggregations.ts — pure helpers без Prisma/Next зависимостей для Plan 12-02 RSC
+- [Phase 12]: Phase 12-02: RSC page + lib/customer-aggregations pure helpers — agregation на JS без GROUP BY
+- [Phase 12]: Phase 12-02: SupportTicketCard → client (useRouter.push с preventDefault/stopPropagation для inline-клика имени покупателя внутри outer Link)
+- [Phase 12]: Phase 12-02: searchCustomers RBAC SUPPORT (не MANAGE) — read-only, VIEWER разрешён; debounce 300ms vs 500ms для save
 
 ### Roadmap Evolution
 
@@ -223,6 +227,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T10:55:18.531Z
-Stopped at: Completed 12-01-PLAN.md (3 tasks — миграция + syncChats + 5 actions)
+Last session: 2026-04-18T11:03:24.825Z
+Stopped at: Completed 12-02-PLAN.md (3 tasks — RSC профиль + 5 компонент + интеграция)
 Resume file: None
