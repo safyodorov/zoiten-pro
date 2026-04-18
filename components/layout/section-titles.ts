@@ -22,6 +22,10 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/batches/, title: "Себестоимость партий" },
   { match: /^\/purchase-plan/, title: "План закупок" },
   { match: /^\/sales-plan/, title: "План продаж" },
+  { match: /^\/support\/templates\/new/, title: "Новый шаблон ответа" },
+  { match: /^\/support\/templates\/[^/]+\/edit/, title: "Редактирование шаблона" },
+  { match: /^\/support\/templates/, title: "Шаблоны ответов" },
+  { match: /^\/support\/returns/, title: "Возвраты" },
   { match: /^\/support/, title: "Служба поддержки" },
   { match: /^\/employees/, title: "Сотрудники" },
 
