@@ -6,6 +6,8 @@
 // updateTicketStatus → ручное изменение статуса (без APPEALED — резерв Phase 11).
 
 import { revalidatePath } from "next/cache"
+import { promises as fs } from "node:fs"
+import path from "node:path"
 import { prisma } from "@/lib/prisma"
 import { requireSection } from "@/lib/rbac"
 import { auth } from "@/lib/auth"
@@ -15,10 +17,31 @@ import {
   approveReturn as wbApproveReturn,
   rejectReturn as wbRejectReturn,
   reconsiderReturn as wbReconsiderReturn,
+  sendChatMessage,
 } from "@/lib/wb-support-api"
-import type { TicketStatus } from "@prisma/client"
+import type { MediaType, TicketStatus } from "@prisma/client"
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
+
+// ── Phase 10 Plan 03 — CHAT multipart upload константы ──
+const CHAT_UPLOAD_DIR = process.env.UPLOAD_DIR || "/var/www/zoiten-uploads"
+const CHAT_MAX_FILE_BYTES = 5 * 1024 * 1024
+const CHAT_MAX_TOTAL_BYTES = 30 * 1024 * 1024
+const CHAT_ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "application/pdf",
+])
+
+function sanitizeChatFilename(name: string): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9.\-_]/g, "_")
+  const trimmed = cleaned.slice(-128)
+  return trimmed || `file_${Date.now()}`
+}
+
+function mimeToMediaType(mime: string): MediaType {
+  return mime === "application/pdf" ? "DOCUMENT" : "IMAGE"
+}
 
 const MANUAL_STATUSES: TicketStatus[] = [
   "NEW",
@@ -411,6 +434,144 @@ export async function reconsiderReturn(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Ошибка",
+    }
+  }
+}
+
+// ── Phase 10 Plan 03 — sendChatMessageAction ────────────────────
+// Multipart-отправка ответа в WB Buyer Chat (только channel=CHAT).
+// Порядок: requireSection → validation → ticket guards → WB API first → local persist.
+// WB-first защищает от неконсистентного состояния БД (паттерн Phase 9 approveReturn).
+// Локальные файлы пишутся в /var/www/zoiten-uploads/support/{ticketId}/{messageId}/
+// (тот же путь, что Phase 8 downloadMediaBatch — nginx отдаёт через /uploads/).
+export async function sendChatMessageAction(
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const ticketId = (formData.get("ticketId") as string | null) ?? ""
+    if (!ticketId) return { ok: false, error: "ticketId обязателен" }
+
+    const text = ((formData.get("text") as string | null) ?? "").trim()
+    const files = (formData.getAll("files") as unknown[]).filter(
+      (f): f is File => f instanceof File && f.size > 0
+    )
+
+    if (!text && files.length === 0) {
+      return { ok: false, error: "Пустое сообщение" }
+    }
+    if (text.length > 1000) {
+      return { ok: false, error: "Текст превышает 1000 символов" }
+    }
+
+    let totalBytes = 0
+    for (const f of files) {
+      if (!CHAT_ALLOWED_MIME.has(f.type)) {
+        return {
+          ok: false,
+          error: `Недопустимый формат: ${f.name} (${f.type})`,
+        }
+      }
+      if (f.size > CHAT_MAX_FILE_BYTES) {
+        return { ok: false, error: `Файл ${f.name} больше 5 МБ` }
+      }
+      totalBytes += f.size
+    }
+    if (totalBytes > CHAT_MAX_TOTAL_BYTES) {
+      return { ok: false, error: "Суммарный размер файлов больше 30 МБ" }
+    }
+
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: ticketId },
+      select: {
+        id: true,
+        channel: true,
+        chatReplySign: true,
+        wbExternalId: true,
+      },
+    })
+    if (!ticket) return { ok: false, error: "Тикет не найден" }
+    if (ticket.channel !== "CHAT") {
+      return { ok: false, error: "Канал тикета не CHAT" }
+    }
+    if (!ticket.chatReplySign) {
+      return {
+        ok: false,
+        error: "Нет replySign для чата — запустите синхронизацию",
+      }
+    }
+
+    // Prebuild буферы — File stream читается однократно.
+    const wbFiles = await Promise.all(
+      files.map(async (f) => ({
+        name: f.name,
+        data: Buffer.from(await f.arrayBuffer()),
+        contentType: f.type,
+      }))
+    )
+
+    // ── WB-first: при ошибке WB ничего локально не меняем ──
+    try {
+      await sendChatMessage({
+        replySign: ticket.chatReplySign,
+        message: text || undefined,
+        files: wbFiles.length > 0 ? wbFiles : undefined,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Ошибка WB API"
+      return { ok: false, error: `WB: ${msg}` }
+    }
+
+    // ── После успеха WB: локальная запись ──
+    const now = new Date()
+    const yearMs = 365 * 24 * 60 * 60 * 1000
+
+    const msg = await prisma.supportMessage.create({
+      data: {
+        ticketId: ticket.id,
+        direction: "OUTBOUND",
+        text: text || null,
+        authorId: userId,
+        isAutoReply: false,
+        wbSentAt: now,
+        sentAt: now,
+      },
+    })
+
+    if (wbFiles.length > 0) {
+      const dir = path.join(CHAT_UPLOAD_DIR, "support", ticket.id, msg.id)
+      await fs.mkdir(dir, { recursive: true })
+      for (const f of wbFiles) {
+        const localPath = path.join(dir, sanitizeChatFilename(f.name))
+        await fs.writeFile(localPath, f.data)
+        await prisma.supportMedia.create({
+          data: {
+            messageId: msg.id,
+            type: mimeToMediaType(f.contentType),
+            wbUrl: "",
+            localPath,
+            sizeBytes: f.data.length,
+            expiresAt: new Date(Date.now() + yearMs),
+          },
+        })
+      }
+    }
+
+    await prisma.supportTicket.update({
+      where: { id: ticket.id },
+      data: { status: "ANSWERED", lastMessageAt: now },
+    })
+
+    revalidatePath("/support")
+    revalidatePath(`/support/${ticketId}`)
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка отправки",
     }
   }
 }
