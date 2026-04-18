@@ -122,6 +122,37 @@ systemctl daemon-reload
 systemctl enable --now zoiten-returns-sync.timer
 echo "✓ zoiten-returns-sync.timer активирован (интервал 15 мин)"
 
+# ── Phase 13: systemd timer для /api/cron/support-stats-refresh (раз в сутки 03:00 МСК) ──
+echo "==> [Phase 13] Настройка systemd timer zoiten-stats-refresh (daily 03:00 МСК)..."
+cat > /etc/systemd/system/zoiten-stats-refresh.service <<'SVC'
+[Unit]
+Description=Zoiten Support Stats Refresh (ManagerSupportStats upsert для текущего месяца)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/zoiten.pro.env
+ExecStart=/usr/bin/curl -fsS --max-time 300 -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3001/api/cron/support-stats-refresh
+SVC
+
+cat > /etc/systemd/system/zoiten-stats-refresh.timer <<'TMR'
+[Unit]
+Description=Zoiten Support Stats Refresh (daily 03:00 Europe/Moscow)
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 Europe/Moscow
+Persistent=true
+Unit=zoiten-stats-refresh.service
+
+[Install]
+WantedBy=timers.target
+TMR
+
+systemctl daemon-reload
+systemctl enable --now zoiten-stats-refresh.timer
+echo "✓ zoiten-stats-refresh.timer активирован (OnCalendar=*-*-* 03:00:00 Europe/Moscow)"
+
 echo "==> Building application..."
 npm run build
 
