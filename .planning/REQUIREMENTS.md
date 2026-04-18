@@ -174,9 +174,9 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 ### Статистика
 
-- [ ] **SUP-36**: Страница `/support/stats` с двумя вкладками — «По товарам» и «По менеджерам». Фильтры: период (7д / 30д / квартал / кастом dateFrom-dateTo), товар/категория (для вкладки товаров), менеджер (для вкладки менеджеров).
-- [ ] **SUP-37**: Метрики по товарам (aggregation SQL по `SupportTicket` + `ReturnDecision` с фильтром по nmId): кол-во отзывов, средний рейтинг, процент ответов (answered/total), возвраты (total / approved / rejected), топ причин возвратов, кол-во вопросов, среднее время ответа (сек).
-- [ ] **SUP-38**: Метрики по менеджерам (из `ManagerSupportStats` + live-расчёт за текущий день): всего обработано, отзывы/вопросы/чаты/возвраты отвечено, % одобрения возвратов, среднее время ответа, кол-во автоответов.
+- [x] **SUP-36**: Страница `/support/stats` с двумя вкладками — «По товарам» и «По менеджерам». Фильтры: период (7д / 30д / квартал / кастом dateFrom-dateTo), товар/категория (для вкладки товаров), менеджер (для вкладки менеджеров).
+- [x] **SUP-37**: Метрики по товарам (aggregation SQL по `SupportTicket` + `ReturnDecision` с фильтром по nmId): кол-во отзывов, средний рейтинг, процент ответов (answered/total), возвраты (total / approved / rejected), топ причин возвратов, кол-во вопросов, среднее время ответа (сек).
+- [x] **SUP-38**: Метрики по менеджерам (из `ManagerSupportStats` + live-расчёт за текущий день): всего обработано, отзывы/вопросы/чаты/возвраты отвечено, % одобрения возвратов, среднее время ответа, кол-во автоответов.
 - [x] **SUP-39**: Денормализованная таблица `ManagerSupportStats` — обновляется cron-ом раз в сутки `GET /api/cron/support-stats-refresh` (03:00 МСК), уникальность `(userId, period)` где period = начало месяца.
 
 ### Навигация и UX
@@ -348,9 +348,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-33 | Phase 12 | Complete |
 | SUP-34 | Phase 12 | Complete |
 | SUP-35 | Phase 12 | Complete |
-| SUP-36 | Phase 13 | Pending |
-| SUP-37 | Phase 13 | Pending |
-| SUP-38 | Phase 13 | Pending |
+| SUP-36 | Phase 13 | Complete |
+| SUP-37 | Phase 13 | Complete |
+| SUP-38 | Phase 13 | Complete |
 | SUP-39 | Phase 13 | Complete |
 | SUP-40 | Phase 8 | Pending |
 

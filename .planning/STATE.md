@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 13-01-PLAN.md (ManagerSupportStats migration + date-periods + support-stats helpers + Wave 0 tests)
-last_updated: "2026-04-18T16:22:56.535Z"
+stopped_at: Completed 13-02-PLAN.md (UI /support/stats RSC + 6 компонентов + 10 GREEN tests)
+last_updated: "2026-04-18T16:30:22.816Z"
 progress:
   total_phases: 13
   completed_phases: 12
   total_plans: 51
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 13 (statistics) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Plan: 2 of 3
 | Phase 12 P02 | 4min | 3 tasks | 12 files |
 | Phase 12 P03 | 15min | 3 tasks | 8 files |
 | Phase 13-statistics P01 | 4min | 3 tasks | 7 files |
+| Phase 13-statistics P02 | 5min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,9 @@ Recent decisions affecting current work:
 - [Phase 12]: D-11: MergeCustomerDialog — 2-step state (search→confirm) с AlertTriangle warning, без nested AlertDialog
 - [Phase 12]: D-12: MESSENGER тикет полностью скрывает ReplyPanel/ChatReplyPanel/ReturnActionsPanel, inline hint с messengerContact в <code>
 - [Phase 13-statistics]: Phase 13-01: ManagerSupportStats денормализованная таблица (userId+period unique) + 2 composite индекса + lib/date-periods.ts (календарный Q D-05) + lib/support-stats.ts (6 helpers с  CTE avg response time)
+- [Phase 13-statistics]: Phase 13-02: Next.js 15 запрещает произвольные экспорты из Page (parseStatsSearchParams не валидный export field) → helpers в app/(dashboard)/support/stats/search-params.ts
+- [Phase 13-statistics]: Phase 13-02: parseStatsSearchParams per-field salvage (drop только невалидные поля из issues.path[0]) вместо full-fallback — tab=invalid+period=7d → period сохраняется
+- [Phase 13-statistics]: Phase 13-02: StatsTabs + PeriodFilter URL-driven (useSearchParams + router.push), без локального client state — back/forward нативно, shareable URLs
 
 ### Roadmap Evolution
 
@@ -233,6 +237,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T16:22:56.532Z
-Stopped at: Completed 13-01-PLAN.md (ManagerSupportStats migration + date-periods + support-stats helpers + Wave 0 tests)
+Last session: 2026-04-18T16:30:13.568Z
+Stopped at: Completed 13-02-PLAN.md (UI /support/stats RSC + 6 компонентов + 10 GREEN tests)
 Resume file: None
