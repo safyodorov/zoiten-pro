@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 12-02-PLAN.md (3 tasks — RSC профиль + 5 компонент + интеграция)
-last_updated: "2026-04-18T11:03:32.013Z"
+stopped_at: "Checkpoint: Phase 12 Plan 03 deploy completed (service active, MessengerType enum exists, 2598 CHAT Customers backfilled), awaiting Human UAT approval"
+last_updated: "2026-04-18T11:12:41.898Z"
 progress:
   total_phases: 13
-  completed_phases: 11
+  completed_phases: 12
   total_plans: 48
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -87,6 +87,7 @@ Plan: 3 of 3
 | Phase 10 P04 | 8min | 3 tasks | 8 files |
 | Phase 12 P01 | 5min | 3 tasks | 10 files |
 | Phase 12 P02 | 4min | 3 tasks | 12 files |
+| Phase 12 P03 | 15min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -197,6 +198,9 @@ Recent decisions affecting current work:
 - [Phase 12]: Phase 12-02: RSC page + lib/customer-aggregations pure helpers — agregation на JS без GROUP BY
 - [Phase 12]: Phase 12-02: SupportTicketCard → client (useRouter.push с preventDefault/stopPropagation для inline-клика имени покупателя внутри outer Link)
 - [Phase 12]: Phase 12-02: searchCustomers RBAC SUPPORT (не MANAGE) — read-only, VIEWER разрешён; debounce 300ms vs 500ms для save
+- [Phase 12]: D-10: /support/new форма всегда создаёт нового Customer (customerId=null); picker existing отложен v1.2
+- [Phase 12]: D-11: MergeCustomerDialog — 2-step state (search→confirm) с AlertTriangle warning, без nested AlertDialog
+- [Phase 12]: D-12: MESSENGER тикет полностью скрывает ReplyPanel/ChatReplyPanel/ReturnActionsPanel, inline hint с messengerContact в <code>
 
 ### Roadmap Evolution
 
@@ -227,6 +231,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:03:24.825Z
-Stopped at: Completed 12-02-PLAN.md (3 tasks — RSC профиль + 5 компонент + интеграция)
+Last session: 2026-04-18T11:12:36.746Z
+Stopped at: Checkpoint: Phase 12 Plan 03 deploy completed (service active, MessengerType enum exists, 2598 CHAT Customers backfilled), awaiting Human UAT approval
 Resume file: None
