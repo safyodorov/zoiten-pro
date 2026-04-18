@@ -167,10 +167,10 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 ### Профиль покупателя + Мессенджеры
 
-- [ ] **SUP-32**: Автоматическая линковка тикетов к `Customer` через `wbUserId` — при sync если `Customer.wbUserId` найден, тикет связывается, иначе создаётся новый `Customer`.
+- [x] **SUP-32**: Автоматическая линковка тикетов к `Customer` через `wbUserId` — при sync если `Customer.wbUserId` найден, тикет связывается, иначе создаётся новый `Customer`.
 - [ ] **SUP-33**: Страница профиля покупателя `/support/customers/[customerId]` — все тикеты этого покупателя по всем каналам в хронологии, итого по каналам (N отзывов/вопросов/чатов/возвратов), средний рейтинг отзывов, внутренняя заметка (textarea).
-- [ ] **SUP-34**: Ручное создание тикета MESSENGER — форма (канал из выпадающего: Telegram/WhatsApp/другое, телефон/имя покупателя, текст обращения, опциональная привязка к товару через WbCard), создаёт `SupportTicket` с `channel=MESSENGER`, `wbExternalId=null`.
-- [ ] **SUP-35**: Merge дубликатов `Customer` — действие в профиле «Связать с другим покупателем» → выбор целевого `Customer` → перенос всех тикетов + удаление исходного.
+- [x] **SUP-34**: Ручное создание тикета MESSENGER — форма (канал из выпадающего: Telegram/WhatsApp/другое, телефон/имя покупателя, текст обращения, опциональная привязка к товару через WbCard), создаёт `SupportTicket` с `channel=MESSENGER`, `wbExternalId=null`.
+- [x] **SUP-35**: Merge дубликатов `Customer` — действие в профиле «Связать с другим покупателем» → выбор целевого `Customer` → перенос всех тикетов + удаление исходного.
 
 ### Статистика
 
@@ -344,10 +344,10 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-29 | Phase 11 | Complete |
 | SUP-30 | Phase 11 | Pending |
 | SUP-31 | Phase 11 | Complete |
-| SUP-32 | Phase 12 | Pending |
+| SUP-32 | Phase 12 | Complete |
 | SUP-33 | Phase 12 | Pending |
-| SUP-34 | Phase 12 | Pending |
-| SUP-35 | Phase 12 | Pending |
+| SUP-34 | Phase 12 | Complete |
+| SUP-35 | Phase 12 | Complete |
 | SUP-36 | Phase 13 | Pending |
 | SUP-37 | Phase 13 | Pending |
 | SUP-38 | Phase 13 | Pending |

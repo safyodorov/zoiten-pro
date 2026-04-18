@@ -256,7 +256,7 @@ Plans:
   5. MESSENGER-тикеты появляются в общей ленте `/support` с иконкой Inbox + бейдж подтипа (Tg/Wa/Др) под каналом; открываются в /support/[ticketId] БЕЗ ReplyPanel (вместо — read-only hint с messengerContact)
 **Plans**: 3 plans
 Plans:
-- [ ] 12-01-PLAN.md — Foundation: Prisma миграция + enum MessengerType + SQL backfill + syncChats auto-upsert Customer + 5 server actions + 5 test файлов GREEN (Wave 0 stubs)
+- [x] 12-01-PLAN.md — Foundation: Prisma миграция + enum MessengerType + SQL backfill + syncChats auto-upsert Customer + 5 server actions + 5 test файлов GREEN (Wave 0 stubs)
 - [ ] 12-02-PLAN.md — UI профиль /support/customers/[id] (5 компонент) + LinkCustomerButton в TicketSidePanel + кликабельное имя в SupportTicketCard (client)
 - [ ] 12-03-PLAN.md — /support/new + NewMessengerTicketForm + MergeCustomerDialog + MESSENGER hint в диалоге + messengerType бейдж в ленте + deploy + UAT
 **UI hint**: yes
@@ -292,5 +292,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Возвраты | 0/TBD | Planned | |
 | 10. Чат + Автоответы | 4/4 | Complete   | 2026-04-18 |
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
-| 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 0/3 | Planned | |
+| 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 1/3 | In Progress|  |
 | 13. Статистика | 0/TBD | Planned | |

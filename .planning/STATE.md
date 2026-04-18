@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase complete — ready for verification
-stopped_at: Completed 10-04-PLAN.md (3 tasks — Task 4 = human-verify checkpoint, awaiting-uat)
-last_updated: "2026-04-18T09:51:55.393Z"
+status: Ready to execute
+stopped_at: Completed 12-01-PLAN.md (3 tasks — миграция + syncChats + 5 actions)
+last_updated: "2026-04-18T10:55:18.630Z"
 progress:
   total_phases: 13
   completed_phases: 11
-  total_plans: 45
-  completed_plans: 46
+  total_plans: 48
+  completed_plans: 47
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 10 — chat-autoreply
+**Current focus:** Phase 12 — customer-messenger
 
 ## Current Position
 
-Phase: 10 (chat-autoreply) — EXECUTING
-Plan: 4 of 4
+Phase: 12 (customer-messenger) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Plan: 4 of 4
 | Phase 10-chat-autoreply P02 | 20min | 3 tasks | 6 files |
 | Phase 10-chat-autoreply P03 | 4min | 2 tasks | 5 files |
 | Phase 10 P04 | 8min | 3 tasks | 8 files |
+| Phase 12 P01 | 5min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,9 @@ Recent decisions affecting current work:
 - [Phase 10-chat-autoreply]: FormData (не POJO) в server action для File[] multipart upload через Next.js 'use server'
 - [Phase 10-chat-autoreply]: Client + server validation дублируются: security требует серверную, UX — клиентскую
 - [Phase 10]: Plan 10-04: AutoReplyConfig UI + saveAutoReplyConfig singleton upsert + systemd timer 5min для /api/cron/support-sync-chat — Phase 10 complete, awaiting-uat
+- [Phase 12]: Phase 12-01: hybrid customer linking — CHAT auto через namespace chat:<chatID>, others manual через UI Plan 12-02
+- [Phase 12]: Phase 12-01: pgcrypto gen_random_uuid() для idempotent backfill CHAT customers в миграции
+- [Phase 12]: Phase 12-01: lib/customer-aggregations.ts — pure helpers без Prisma/Next зависимостей для Plan 12-02 RSC
 
 ### Roadmap Evolution
 
@@ -219,6 +223,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T09:51:55.391Z
-Stopped at: Completed 10-04-PLAN.md (3 tasks — Task 4 = human-verify checkpoint, awaiting-uat)
+Last session: 2026-04-18T10:55:18.531Z
+Stopped at: Completed 12-01-PLAN.md (3 tasks — миграция + syncChats + 5 actions)
 Resume file: None
