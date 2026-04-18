@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 11-02-PLAN.md (1 task, 6 server actions + 18 GREEN тестов, cfd38db)
-last_updated: "2026-04-18T06:08:52.716Z"
+stopped_at: "Completed 11-03-PLAN.md (2 tasks, 9 новых + 4 расширенных файла, picker+ReplyPanel, 8 GREEN тестов: 618f9d0, aac3b30)"
+last_updated: "2026-04-18T06:17:49.255Z"
 progress:
   total_phases: 13
   completed_phases: 9
   total_plans: 45
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 11 (templates-appeals) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Plan: 3 of 4
 | Phase 09-returns P04 | 7min | 3 tasks | 5 files |
 | Phase 11-templates-appeals P01 | 10min | 3 tasks | 8 files |
 | Phase 11-templates-appeals P02 | 3min | 1 tasks | 2 files |
+| Phase 11-templates-appeals P03 | 5min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,9 @@ Recent decisions affecting current work:
 - [Phase 11-templates-appeals]: Phase 11-01: ResponseTemplate @@unique([name, channel]) (не [name]) — одно имя допустимо в разных каналах; AppealRecord.reason: String (денормализованный label, не id) — устойчивость к изменениям справочника
 - [Phase 11-templates-appeals]: Phase 11-02: Zod 4.x API z.enum([...], { message: "..." }) — errorMap из zod 3.x deprecated; план использовал устаревший синтаксис
 - [Phase 11-templates-appeals]: Phase 11-02: ActionResultWith<T> вместо дженерика ActionResult<T=void> — Record<string, never> intersection не совместим с discriminated union
+- [Phase 11-templates-appeals]: Phase 11-03: groupTemplatesForPicker pure helper экспортирован из TemplatePickerModal — unit тесты обходят vitest/React env issue без React/base-ui импортов
+- [Phase 11-templates-appeals]: Phase 11-03: RSC prefetch шаблонов канала тикета → client picker через props (один round-trip вместо client server action)
+- [Phase 11-templates-appeals]: Phase 11-03: TemplateForm nmId Zod transform (z.union.transform) вместо z.coerce.number — RHF 7.72 + zod 4.x + zodResolver несовместимы с coerce
 
 ### Roadmap Evolution
 
@@ -199,6 +203,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T06:08:52.712Z
-Stopped at: Completed 11-02-PLAN.md (1 task, 6 server actions + 18 GREEN тестов, cfd38db)
+Last session: 2026-04-18T06:17:49.252Z
+Stopped at: Completed 11-03-PLAN.md (2 tasks, 9 новых + 4 расширенных файла, picker+ReplyPanel, 8 GREEN тестов: 618f9d0, aac3b30)
 Resume file: None
