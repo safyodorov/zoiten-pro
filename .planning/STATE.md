@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: "Checkpoint: Phase 12 Plan 03 deploy completed (service active, MessengerType enum exists, 2598 CHAT Customers backfilled), awaiting Human UAT approval"
-last_updated: "2026-04-18T11:12:41.898Z"
+stopped_at: Completed 13-01-PLAN.md (ManagerSupportStats migration + date-periods + support-stats helpers + Wave 0 tests)
+last_updated: "2026-04-18T16:22:56.535Z"
 progress:
   total_phases: 13
   completed_phases: 12
-  total_plans: 48
-  completed_plans: 49
+  total_plans: 51
+  completed_plans: 50
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 12 — customer-messenger
+**Current focus:** Phase 13 — statistics
 
 ## Current Position
 
-Phase: 12 (customer-messenger) — EXECUTING
-Plan: 3 of 3
+Phase: 13 (statistics) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -88,6 +88,7 @@ Plan: 3 of 3
 | Phase 12 P01 | 5min | 3 tasks | 10 files |
 | Phase 12 P02 | 4min | 3 tasks | 12 files |
 | Phase 12 P03 | 15min | 3 tasks | 8 files |
+| Phase 13-statistics P01 | 4min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -201,6 +202,7 @@ Recent decisions affecting current work:
 - [Phase 12]: D-10: /support/new форма всегда создаёт нового Customer (customerId=null); picker existing отложен v1.2
 - [Phase 12]: D-11: MergeCustomerDialog — 2-step state (search→confirm) с AlertTriangle warning, без nested AlertDialog
 - [Phase 12]: D-12: MESSENGER тикет полностью скрывает ReplyPanel/ChatReplyPanel/ReturnActionsPanel, inline hint с messengerContact в <code>
+- [Phase 13-statistics]: Phase 13-01: ManagerSupportStats денормализованная таблица (userId+period unique) + 2 composite индекса + lib/date-periods.ts (календарный Q D-05) + lib/support-stats.ts (6 helpers с  CTE avg response time)
 
 ### Roadmap Evolution
 
@@ -231,6 +233,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T11:12:36.746Z
-Stopped at: Checkpoint: Phase 12 Plan 03 deploy completed (service active, MessengerType enum exists, 2598 CHAT Customers backfilled), awaiting Human UAT approval
+Last session: 2026-04-18T16:22:56.532Z
+Stopped at: Completed 13-01-PLAN.md (ManagerSupportStats migration + date-periods + support-stats helpers + Wave 0 tests)
 Resume file: None
