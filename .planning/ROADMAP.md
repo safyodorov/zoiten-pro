@@ -271,7 +271,11 @@ Plans:
   3. Вкладка «По менеджерам»: всего обработано, отзывы/вопросы/чаты/возвраты отвечено, % одобрения возвратов, среднее время ответа, кол-во автоответов
   4. Cron раз в сутки в 03:00 МСК обновляет денормализованную таблицу `ManagerSupportStats` (уникальность `(userId, period)`, period = начало месяца)
   5. Текущий день считается live поверх `ManagerSupportStats` — не ждёт ночной cron
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 13-01-PLAN.md — Foundation: Prisma миграция ManagerSupportStats + 2 индекса + lib/date-periods.ts + lib/support-stats.ts (6 helpers) + Wave 0 stubs (4 test файла, 25+ GREEN)
+- [ ] 13-02-PLAN.md — UI: RSC /support/stats (SUP-36/37/38) + 7 компонентов (StatsTabs, PeriodFilter, ProductStatsTab, ManagerStatsTab, TopReturnReasonsList, AutoRepliesSummary) + nav+title integration
+- [ ] 13-03-PLAN.md — Cron + Deploy + UAT: /api/cron/support-stats-refresh (SUP-39) + systemd timer 03:00 МСК + human UAT + milestone v1.1 complete
 **UI hint**: yes
 
 ## Progress
@@ -293,4 +297,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 10. Чат + Автоответы | 4/4 | Complete   | 2026-04-18 |
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
-| 13. Статистика | 0/TBD | Planned | |
+| 13. Статистика | 0/3 | Planned | |
