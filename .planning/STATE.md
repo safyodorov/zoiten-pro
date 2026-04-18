@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: "Completed 11-03-PLAN.md (2 tasks, 9 новых + 4 расширенных файла, picker+ReplyPanel, 8 GREEN тестов: 618f9d0, aac3b30)"
-last_updated: "2026-04-18T06:17:49.255Z"
+stopped_at: "Completed 10-01-PLAN.md (3 tasks, 2 modified + 7 new: Prisma AutoReplyConfig + WB Chat API + Wave 0 stubs: f5a8568, 3323bef, 671bd38)"
+last_updated: "2026-04-18T09:29:02.562Z"
 progress:
   total_phases: 13
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 45
-  completed_plans: 41
+  completed_plans: 43
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 11 — templates-appeals
+**Current focus:** Phase 10 — chat-autoreply
 
 ## Current Position
 
-Phase: 11 (templates-appeals) — EXECUTING
-Plan: 4 of 4
+Phase: 10 (chat-autoreply) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -81,6 +81,7 @@ Plan: 4 of 4
 | Phase 11-templates-appeals P01 | 10min | 3 tasks | 8 files |
 | Phase 11-templates-appeals P02 | 3min | 1 tasks | 2 files |
 | Phase 11-templates-appeals P03 | 5min | 2 tasks | 13 files |
+| Phase 10-chat-autoreply P01 | 15min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -173,6 +174,10 @@ Recent decisions affecting current work:
 - [Phase 11-templates-appeals]: Phase 11-03: groupTemplatesForPicker pure helper экспортирован из TemplatePickerModal — unit тесты обходят vitest/React env issue без React/base-ui импортов
 - [Phase 11-templates-appeals]: Phase 11-03: RSC prefetch шаблонов канала тикета → client picker через props (один round-trip вместо client server action)
 - [Phase 11-templates-appeals]: Phase 11-03: TemplateForm nmId Zod transform (z.union.transform) вместо z.coerce.number — RHF 7.72 + zod 4.x + zodResolver несовместимы с coerce
+- [Phase 10-chat-autoreply]: Phase 10-01: WB_CHAT_TOKEN scope bit 9 (3-й токен архитектура) + fallback на WB_API_TOKEN, паттерн Phase 9 getReturnsToken
+- [Phase 10-chat-autoreply]: Phase 10-01: callApi isFormData branch — если body instanceof FormData, не ставим JSON Content-Type (fetch сам выставит multipart с boundary). Phase 8/9 regression защищён.
+- [Phase 10-chat-autoreply]: Phase 10-01: AutoReplyConfig = Prisma singleton (id String @id = 'default'), seed через INSERT ON CONFLICT DO NOTHING в миграции
+- [Phase 10-chat-autoreply]: Phase 10-01: SupportMessage.wbEventId @unique — идемпотентный cursor-based sync WB events (upsert ON CONFLICT на eventID из /api/v1/seller/events)
 
 ### Roadmap Evolution
 
@@ -203,6 +208,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T06:17:49.252Z
-Stopped at: Completed 11-03-PLAN.md (2 tasks, 9 новых + 4 расширенных файла, picker+ReplyPanel, 8 GREEN тестов: 618f9d0, aac3b30)
+Last session: 2026-04-18T09:28:51.771Z
+Stopped at: Completed 10-01-PLAN.md (3 tasks, 2 modified + 7 new: Prisma AutoReplyConfig + WB Chat API + Wave 0 stubs: f5a8568, 3323bef, 671bd38)
 Resume file: None

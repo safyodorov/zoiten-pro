@@ -150,7 +150,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 ### Чат + Автоответы
 
-- [ ] **SUP-21**: WB Chat API интеграция — `listChats`, `getMessages(chatId)`, `sendMessage(chatId, text, media)`, `getUnreadCount`. При получении 403 от Node.js `fetch()` автоматический fallback на `execSync('curl ...')` (паттерн `wb-api.ts` v4).
+- [x] **SUP-21**: WB Chat API интеграция — `listChats`, `getMessages(chatId)`, `sendMessage(chatId, text, media)`, `getUnreadCount`. При получении 403 от Node.js `fetch()` автоматический fallback на `execSync('curl ...')` (паттерн `wb-api.ts` v4).
 - [ ] **SUP-22**: Отправка сообщений в чат через UI диалога — текст + опциональный upload фото/видео (multipart), запись `SupportMessage` с direction=OUTBOUND и `SupportMedia` для каждого файла.
 - [ ] **SUP-23**: `AutoReplyConfig` — singleton-запись с полями: isEnabled, workdayStart/End (HH:MM), workDays (Int[]), messageText, timezone (default Europe/Moscow), updatedById.
 - [ ] **SUP-24**: Страница `/support/auto-reply` — форма настроек автоответа (переключатель, время, дни Пн-Вс чекбоксы, textarea с переменными `{имя_покупателя}`, `{название_товара}`), кнопка «Синхронизировать с WB» (POST /api/v1/seller/chats/auto-reply).
@@ -333,7 +333,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-18 | Phase 9 | Complete |
 | SUP-19 | Phase 9 | Complete |
 | SUP-20 | Phase 9 | Complete |
-| SUP-21 | Phase 10 | Pending |
+| SUP-21 | Phase 10 | Complete |
 | SUP-22 | Phase 10 | Pending |
 | SUP-23 | Phase 10 | Pending |
 | SUP-24 | Phase 10 | Pending |
