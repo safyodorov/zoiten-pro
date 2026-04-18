@@ -20,6 +20,7 @@ import {
   sendChatMessage,
 } from "@/lib/wb-support-api"
 import type { MediaType, TicketStatus } from "@prisma/client"
+import { autoReplyConfigSchema } from "@/lib/pricing-schemas"
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -572,6 +573,65 @@ export async function sendChatMessageAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Ошибка отправки",
+    }
+  }
+}
+
+// ── Phase 10 Plan 04 — AutoReplyConfig settings ─────────────────
+// saveAutoReplyConfig — singleton upsert id="default" + updatedById.
+// Zod-валидация через autoReplyConfigSchema из @/lib/pricing-schemas
+// (vitest не грузит auth chain из "use server" файлов — Phase 7 decision).
+// RBAC: SUPPORT + MANAGE (write guard).
+
+export async function saveAutoReplyConfig(
+  formData: FormData
+): Promise<ActionResult> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const rawIsEnabled = formData.get("isEnabled")
+    const raw = {
+      isEnabled: rawIsEnabled === "true" || rawIsEnabled === "on",
+      workdayStart: String(formData.get("workdayStart") ?? ""),
+      workdayEnd: String(formData.get("workdayEnd") ?? ""),
+      workDays: formData
+        .getAll("workDays")
+        .map((v) => Number.parseInt(String(v), 10))
+        .filter((n) => Number.isFinite(n)),
+      messageText: String(formData.get("messageText") ?? ""),
+      timezone: String(formData.get("timezone") ?? "Europe/Moscow"),
+    }
+
+    const parsed = autoReplyConfigSchema.safeParse(raw)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Невалидные данные",
+      }
+    }
+
+    await prisma.autoReplyConfig.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        ...parsed.data,
+        updatedById: userId,
+      },
+      update: {
+        ...parsed.data,
+        updatedById: userId,
+      },
+    })
+
+    revalidatePath("/support/auto-reply")
+    revalidatePath("/support")
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка сохранения",
     }
   }
 }

@@ -187,3 +187,39 @@ export const updateProductOverrideSchema = z.object({
   ]),
   value: z.number().min(0).nullable(),
 })
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 10: AutoReplyConfig
+// ──────────────────────────────────────────────────────────────────
+
+/** Zod-схема настроек автоответа в WB-чате (AutoReplyConfig singleton, id='default').
+ *  - workdayStart/End: HH:MM 00:00..23:59
+ *  - workDays: ISO 8601 (1=Mon..7=Sun)
+ *  - messageText: 1..1000 символов, поддерживает {имя_покупателя} / {название_товара}
+ *  - timezone: IANA (Europe/Moscow, Europe/Kaliningrad, Asia/Yekaterinburg, UTC) */
+export const autoReplyConfigSchema = z.object({
+  isEnabled: z.boolean(),
+  workdayStart: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "workdayStart должен быть в формате HH:MM"),
+  workdayEnd: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "workdayEnd должен быть в формате HH:MM"),
+  workDays: z
+    .array(
+      z
+        .number()
+        .int()
+        .min(1, "День недели — 1..7 (ISO 8601)")
+        .max(7, "День недели — 1..7 (ISO 8601)"),
+    )
+    .max(7, "Максимум 7 дней")
+    .default([]),
+  messageText: z
+    .string()
+    .min(1, "Текст не может быть пустым")
+    .max(1000, "Максимум 1000 символов"),
+  timezone: z.string().min(1).max(64).default("Europe/Moscow"),
+})
+
+export type AutoReplyConfigInput = z.infer<typeof autoReplyConfigSchema>
