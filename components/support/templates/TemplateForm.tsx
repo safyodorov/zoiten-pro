@@ -38,15 +38,7 @@ const schema = z.object({
     .max(5000, "Максимум 5000 символов"),
   channel: z.enum(["FEEDBACK", "QUESTION", "CHAT"] as const),
   situationTag: z.string().trim().max(60).optional().or(z.literal("")),
-  nmId: z
-    .union([z.string(), z.number()])
-    .transform((v) => {
-      if (v === "" || v === null || v === undefined) return null
-      const n = typeof v === "number" ? v : parseInt(v, 10)
-      return Number.isFinite(n) && n > 0 ? n : null
-    })
-    .nullable()
-    .optional(),
+  nmId: z.number().int().positive().nullable(),
   isActive: z.boolean(),
 })
 
@@ -92,12 +84,7 @@ export function TemplateForm({
         values.situationTag && values.situationTag.length > 0
           ? (values.situationTag as string)
           : null,
-      nmId:
-        values.nmId === null || values.nmId === undefined || values.nmId === ""
-          ? null
-          : typeof values.nmId === "number"
-            ? values.nmId
-            : parseInt(values.nmId, 10),
+      nmId: values.nmId ?? null,
       isActive: values.isActive as boolean,
     }
 
