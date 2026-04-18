@@ -160,7 +160,7 @@ Plans:
 - [ ] **Phase 8: MVP — Отзывы + Вопросы** — модели БД, WB Feedbacks/Questions API, лента тикетов `/support`, диалог `/support/[ticketId]`, cron-синхронизация 15 мин, sidebar badge
 - [ ] **Phase 9: Возвраты** — WB Returns API, страница `/support/returns`, действия Одобрить/Отклонить/Пересмотреть, логика состояний PENDING → APPROVED | REJECTED → APPROVED
 - [ ] **Phase 10: Чат + Автоответы** — WB Chat API (curl fallback на 403), cron 5 мин, отправка сообщений с медиа, AutoReplyConfig + страница `/support/auto-reply`
-- [ ] **Phase 11: Шаблоны + Обжалование отзывов** — CRUD шаблонов `/support/templates`, sync с WB, модалка выбора при ответе, обжалование отзывов + cron поллинг статусов (1 час)
+- [ ] **Phase 11: Шаблоны + Обжалование отзывов** (reformulated — local-only library + hybrid manual appeals) — CRUD шаблонов `/support/templates`, Export/Import JSON (вместо WB sync), модалка выбора при ответе, обжалование через ЛК WB с локальным трекером статуса
 - [ ] **Phase 12: Профиль покупателя + Мессенджеры** — линковка тикетов к Customer, страница `/support/customers/[id]`, ручное создание тикета MESSENGER, merge дубликатов
 - [ ] **Phase 13: Статистика** — страница `/support/stats` с вкладками «По товарам» / «По менеджерам», ManagerSupportStats + cron агрегации (03:00 МСК)
 
@@ -220,17 +220,25 @@ Plans:
 - [ ] 10-04-PLAN.md — AutoReply Settings + Deploy + UAT: /support/auto-reply (singleton config) + saveAutoReplyConfig + sidebar 'Автоответ' + deploy.sh (WB_CHAT_TOKEN + crontab 5-min)
 **UI hint**: yes
 
-### Phase 11: Шаблоны + Обжалование отзывов
-**Goal**: Менеджер отвечает быстрее — выбирает готовый шаблон из локальной/товарной библиотеки. Спорные отзывы обжалует в WB прямо из ERP и видит статус обжалования.
-**Depends on**: Phase 8 (диалог FEEDBACK/QUESTION уже есть), Phase 10 (шаблоны канала CHAT требуют реализованного чата)
-**Requirements**: SUP-07 (дополнение — cron обжалований 1 час), SUP-14 (дополнение — кнопка «Обжаловать» в диалоге FEEDBACK), SUP-26, SUP-27, SUP-28, SUP-29, SUP-30, SUP-31
+### Phase 11: Шаблоны + Обжалование отзывов (reformulated — WB API отключён)
+**Goal**: Менеджер отвечает быстрее — выбирает готовый шаблон из локальной библиотеки с подстановкой переменных `{имя_покупателя}`/`{название_товара}`. Спорные отзывы обжалует через ЛК Wildberries с локальным трекером статуса в ERP.
+**Depends on**: Phase 8 (диалог FEEDBACK/QUESTION уже есть); Phase 10 (опционально — если Phase 10 execute ПОЗЖЕ, Plan 10-03 интегрирует TemplatePickerModal в ChatReplyPanel)
+**Requirements**: SUP-14 (дополнение — кнопка «Обжаловать» в диалоге FEEDBACK), SUP-26, SUP-27 (переформулирован — Export/Import JSON вместо WB sync), SUP-28, SUP-29 (переформулирован — hybrid manual через ЛК WB), SUP-31
+
+> **Scope change (2026-04-17):** SUP-07 дополнение (cron обжалований 1 час) и SUP-30 (cron поллинг статуса обжалования) УДАЛЕНЫ — WB Complaint API отключён 2025-12-08, GET поллинга статуса жалобы никогда не существовал (research/11-RESEARCH.md §WB Report/Complaint API — СТАТУС ОТКЛЮЧЕНО). SUP-27 переформулирован — WB Templates API отключён 2025-11-19, вместо sync реализуем Export/Import JSON. SUP-29 — hybrid manual workflow с jump-link на seller.wildberries.ru.
+
 **Success Criteria** (what must be TRUE):
-  1. Менеджер открывает `/support/templates` → CRUD шаблонов с полями Название, Канал (FEEDBACK/QUESTION/CHAT), Тег ситуации, Товар/Общий, Активен
-  2. Менеджер жмёт «Синхронизировать шаблоны» → локальные шаблоны подтягивают `wbTemplateId` из WB, новые можно публиковать, обновлять и удалять в WB
-  3. При ответе в диалоге кнопка «Выбрать шаблон» открывает модалку поиска по тексту/тегу с группировкой (сначала шаблоны для текущего nmId, потом общие) → выбор подставляет текст в textarea
-  4. Менеджер жмёт «Обжаловать отзыв» в диалоге FEEDBACK → выбирает причину + свободный текст → `ticket.status=APPEALED`, `appealStatus=PENDING`, запрос уходит в WB
-  5. Cron раз в час обновляет статусы обжалований PENDING → APPROVED | REJECTED, индикатор в ленте и карточке меняется: 🕐 ожидание / ✅ одобрено / ❌ отклонено
-**Plans**: TBD
+  1. Менеджер открывает `/support/templates` → CRUD шаблонов с полями Название, Канал (FEEDBACK/QUESTION/CHAT), Тег ситуации, Товар/Общий, Активен; кнопка «Новый шаблон» открывает форму с native `<select>` для канала и хинтом о доступных переменных
+  2. Менеджер жмёт «Экспорт» → скачивается JSON всех активных шаблонов; «Импорт» → загружает JSON → upsert по `@@unique([name, channel])` с отчётом `{added, updated, errors}`. WB sync не реализуется — WB Templates API отключён 2025-11-19
+  3. При ответе в диалоге кнопка «Выбрать шаблон» открывает модалку поиска по тексту/тегу с группировкой (сначала шаблоны для текущего nmId, потом общие) → выбор подставляет текст в textarea с заменой `{имя_покупателя}` на имя покупателя (fallback «покупатель») и `{название_товара}` на название товара
+  4. Менеджер жмёт «Обжаловать» в диалоге FEEDBACK → модалка с native `<select>` причины (8 значений из статичного APPEAL_REASONS) + textarea [10..1000 символов] → создаётся локальный `AppealRecord(PENDING)`, ticket.status=APPEALED, открывается новая вкладка `seller.wildberries.ru/feedbacks-and-questions/` для ручной подачи жалобы. WB API отключён 2025-12-08 — автоматизация невозможна
+  5. Менеджер вручную переключает статус обжалования (PENDING ↔ APPROVED ↔ REJECTED) в TicketSidePanel когда WB ответит в ЛК; индикатор в ленте показывает 🕐 ожидание / ✅ одобрено / ❌ отклонено (SupportTicketCard inline badge)
+**Plans**: 4 plans
+Plans:
+- [ ] 11-01-PLAN.md — Foundation: Prisma миграция templates_appeals (2 модели + 2 поля SupportTicket + 4 relations User) + lib/appeal-reasons.ts + lib/template-vars.ts (TDD) + Wave 0 stubs
+- [ ] 11-02-PLAN.md — app/actions/templates.ts — 6 server actions (CRUD + Export/Import JSON заменяет WB sync) + 10+ GREEN unit-тестов
+- [ ] 11-03-PLAN.md — UI: страница /support/templates + TemplateForm + TemplatePickerModal (группировка по nmId + substitution) + интеграция в ReplyPanel + Sidebar «Шаблоны ответов»
+- [ ] 11-04-PLAN.md — Appeals: app/actions/appeals.ts (createAppeal + updateAppealStatus) + AppealModal (jump-link WB) + AppealStatusPanel + индикатор в ленте + ROADMAP update + Deploy + UAT
 **UI hint**: yes
 
 ### Phase 12: Профиль покупателя + Мессенджеры
@@ -276,6 +284,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. MVP — Отзывы + Вопросы | 0/TBD | Planned | |
 | 9. Возвраты | 0/TBD | Planned | |
 | 10. Чат + Автоответы | 0/4 | Planned | |
-| 11. Шаблоны + Обжалование | 0/TBD | Planned | |
+| 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 0/4 | Planned | |
 | 12. Профиль покупателя + Мессенджеры | 0/TBD | Planned | |
 | 13. Статистика | 0/TBD | Planned | |
