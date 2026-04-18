@@ -116,8 +116,16 @@ async function callApi(
 
   if (res.status === 429 && attempt === 0) {
     const retry = Number(res.headers.get("X-Ratelimit-Retry")) || 0
-    const waitMs = retry > 0 ? retry * 1000 : RATE_LIMIT_FALLBACK_MS
-    await new Promise((r) => setTimeout(r, waitMs))
+    const requestedMs = retry > 0 ? retry * 1000 : RATE_LIMIT_FALLBACK_MS
+    // Кап retry wait на 60s: WB иногда возвращает retry=1366 (23 мин),
+    // при таком ожидании service timed out. Лучше throw — cron повторит через 15 мин.
+    const MAX_RETRY_WAIT_MS = 60_000
+    if (requestedMs > MAX_RETRY_WAIT_MS) {
+      throw new Error(
+        `WB API 429: rate-limit требует ожидания ${Math.round(requestedMs / 1000)}s — превышает cap 60s, повторим на следующий cron tick`
+      )
+    }
+    await new Promise((r) => setTimeout(r, requestedMs))
     return callApi(baseUrl, token, path, init, 1)
   }
 
