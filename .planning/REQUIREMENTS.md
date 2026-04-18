@@ -159,7 +159,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 ### Шаблоны ответов + Обжалование
 
 - [x] **SUP-26**: `ResponseTemplate` CRUD — страница `/support/templates` с таблицей (Название, Канал, Тег ситуации, Товар/Общий, Активен), форма создания/редактирования (name, text, channel=FEEDBACK|QUESTION|CHAT, situationTag, опциональная привязка к WbCard.id).
-- [ ] **SUP-27**: Синхронизация шаблонов с WB — кнопка «Синхронизировать шаблоны» (GET list → upsert по wbTemplateId), «Опубликовать в WB» на локальном шаблоне (POST → сохраняет wbTemplateId), обновление (PUT), удаление (DELETE + из БД).
+- [x] **SUP-27**: Синхронизация шаблонов с WB — кнопка «Синхронизировать шаблоны» (GET list → upsert по wbTemplateId), «Опубликовать в WB» на локальном шаблоне (POST → сохраняет wbTemplateId), обновление (PUT), удаление (DELETE + из БД).
 - [ ] **SUP-28**: Модалка «Выбрать шаблон» при ответе — поиск по тексту/тегу ситуации, группировка: сначала шаблоны с `nmId = currentTicket.nmId`, затем общие. Выбор → подставка текста в textarea ответа.
 - [x] **SUP-29**: Обжалование отзыва — кнопка «Обжаловать» в диалоге FEEDBACK → модалка с выпадающим списком причин (из WB API или справочника) + свободный текст → POST /api/v1/feedbacks/report → `appealId` + `appealStatus=PENDING`, `ticket.status=APPEALED`.
 - [ ] **SUP-30**: Cron поллинг статусов обжалований (раз в час) — для всех `SupportTicket` где `appealStatus=PENDING` → GET /api/v1/feedbacks/report/{appealId} → обновление `appealStatus` на APPROVED/REJECTED с датой.
@@ -339,7 +339,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-24 | Phase 10 | Pending |
 | SUP-25 | Phase 10 | Pending |
 | SUP-26 | Phase 11 | Complete |
-| SUP-27 | Phase 11 | Pending |
+| SUP-27 | Phase 11 | Complete |
 | SUP-28 | Phase 11 | Pending |
 | SUP-29 | Phase 11 | Complete |
 | SUP-30 | Phase 11 | Pending |

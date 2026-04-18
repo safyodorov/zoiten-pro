@@ -236,7 +236,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 11-01-PLAN.md — Foundation: Prisma миграция templates_appeals (2 модели + 2 поля SupportTicket + 4 relations User) + lib/appeal-reasons.ts + lib/template-vars.ts (TDD) + Wave 0 stubs
-- [ ] 11-02-PLAN.md — app/actions/templates.ts — 6 server actions (CRUD + Export/Import JSON заменяет WB sync) + 10+ GREEN unit-тестов
+- [x] 11-02-PLAN.md — app/actions/templates.ts — 6 server actions (CRUD + Export/Import JSON заменяет WB sync) + 10+ GREEN unit-тестов
 - [ ] 11-03-PLAN.md — UI: страница /support/templates + TemplateForm + TemplatePickerModal (группировка по nmId + substitution) + интеграция в ReplyPanel + Sidebar «Шаблоны ответов»
 - [ ] 11-04-PLAN.md — Appeals: app/actions/appeals.ts (createAppeal + updateAppealStatus) + AppealModal (jump-link WB) + AppealStatusPanel + индикатор в ленте + ROADMAP update + Deploy + UAT
 **UI hint**: yes
@@ -284,6 +284,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. MVP — Отзывы + Вопросы | 0/TBD | Planned | |
 | 9. Возвраты | 0/TBD | Planned | |
 | 10. Чат + Автоответы | 0/4 | Planned | |
-| 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 1/4 | In Progress|  |
+| 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 2/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры | 0/TBD | Planned | |
 | 13. Статистика | 0/TBD | Planned | |
