@@ -124,7 +124,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 ### Синхронизация WB → ERP
 
 - [ ] **SUP-06**: `POST /api/support-sync` — полная синхронизация отзывов, вопросов, чатов (counts/unread → детали), заявок на возврат. Upsert по `wbExternalId`. Идемпотентно.
-- [ ] **SUP-07**: Cron-синхронизация отзывов и вопросов — `GET /api/cron/support-sync-reviews` (каждые 15 мин), чатов — `GET /api/cron/support-sync-chat` (каждые 5 мин), статусов обжалований — `GET /api/cron/support-sync-appeals` (раз в час). Все с `CRON_SECRET`.
+- [x] **SUP-07**: Cron-синхронизация отзывов и вопросов — `GET /api/cron/support-sync-reviews` (каждые 15 мин), чатов — `GET /api/cron/support-sync-chat` (каждые 5 мин), статусов обжалований — `GET /api/cron/support-sync-appeals` (раз в час). Все с `CRON_SECRET`.
 - [ ] **SUP-08**: Скачивание медиа из отзывов и чатов локально — при синхронизации фото/видео из WB URL копируется в `/var/www/zoiten-uploads/support/...`, `SupportMedia.localPath` проставляется.
 - [ ] **SUP-09**: Кнопка «Синхронизировать» в шапке `/support` запускает `POST /api/support-sync` с toast loading/success/error состояниями.
 
@@ -154,7 +154,7 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 - [ ] **SUP-22**: Отправка сообщений в чат через UI диалога — текст + опциональный upload фото/видео (multipart), запись `SupportMessage` с direction=OUTBOUND и `SupportMedia` для каждого файла.
 - [ ] **SUP-23**: `AutoReplyConfig` — singleton-запись с полями: isEnabled, workdayStart/End (HH:MM), workDays (Int[]), messageText, timezone (default Europe/Moscow), updatedById.
 - [ ] **SUP-24**: Страница `/support/auto-reply` — форма настроек автоответа (переключатель, время, дни Пн-Вс чекбоксы, textarea с переменными `{имя_покупателя}`, `{название_товара}`), кнопка «Синхронизировать с WB» (POST /api/v1/seller/chats/auto-reply).
-- [ ] **SUP-25**: Автоответы в ленте и диалоге помечаются `isAutoReply=true` и визуальной иконкой «🤖» рядом с сообщением. Применяется только к каналу CHAT.
+- [x] **SUP-25**: Автоответы в ленте и диалоге помечаются `isAutoReply=true` и визуальной иконкой «🤖» рядом с сообщением. Применяется только к каналу CHAT.
 
 ### Шаблоны ответов + Обжалование
 
@@ -319,7 +319,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-04 | Phase 8 | Pending |
 | SUP-05 | Phase 8 | Pending |
 | SUP-06 | Phase 8 | Pending |
-| SUP-07 | Phase 8, Phase 10, Phase 11 | Pending |
+| SUP-07 | Phase 8, Phase 10, Phase 11 | Complete |
 | SUP-08 | Phase 8 | Pending |
 | SUP-09 | Phase 8 | Pending |
 | SUP-10 | Phase 8 | Pending |
@@ -337,7 +337,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-22 | Phase 10 | Pending |
 | SUP-23 | Phase 10 | Pending |
 | SUP-24 | Phase 10 | Pending |
-| SUP-25 | Phase 10 | Pending |
+| SUP-25 | Phase 10 | Complete |
 | SUP-26 | Phase 11 | Complete |
 | SUP-27 | Phase 11 | Complete |
 | SUP-28 | Phase 11 | Complete |
