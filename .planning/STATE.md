@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: "Completed 10-02-PLAN.md (3 tasks: syncChats + runAutoReplies + cron endpoint + POST расширение)"
-last_updated: "2026-04-18T09:37:58.060Z"
+stopped_at: Completed 10-chat-autoreply/10-03-PLAN.md
+last_updated: "2026-04-18T09:45:32.752Z"
 progress:
   total_phases: 13
   completed_phases: 10
   total_plans: 45
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-17)
 ## Current Position
 
 Phase: 10 (chat-autoreply) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Plan: 3 of 4
 | Phase 11-templates-appeals P03 | 5min | 2 tasks | 13 files |
 | Phase 10-chat-autoreply P01 | 15min | 3 tasks | 9 files |
 | Phase 10-chat-autoreply P02 | 20min | 3 tasks | 6 files |
+| Phase 10-chat-autoreply P03 | 4min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,9 @@ Recent decisions affecting current work:
 - [Phase 10-chat-autoreply]: Phase 10-02: isWithinWorkingHours через toLocaleString({timeZone}) + getDay/getHours в локальной дате — ISO 8601 weekdays (jsDay===0 ? 7 : jsDay) для совместимости с workDays default [1..5]
 - [Phase 10-chat-autoreply]: Phase 10-02: Партийное падение в POST /api/support-sync — try/catch per-phase чтобы WB 403 на Chat API (scope bit 9 pending) не ломал feedbacks/questions/returns 200
 - [Phase 10-chat-autoreply]: Phase 10-02: Dedup 24h через findMany recent + JS some() — простой паттерн для десятков CHAT тикетов, не нужен raw SQL с DISTINCT ON
+- [Phase 10-chat-autoreply]: WB-first transaction order в sendChatMessageAction — при падении WB БД остаётся консистентной (паттерн Phase 9)
+- [Phase 10-chat-autoreply]: FormData (не POJO) в server action для File[] multipart upload через Next.js 'use server'
+- [Phase 10-chat-autoreply]: Client + server validation дублируются: security требует серверную, UX — клиентскую
 
 ### Roadmap Evolution
 
@@ -213,6 +217,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T09:37:47.681Z
-Stopped at: Completed 10-02-PLAN.md (3 tasks: syncChats + runAutoReplies + cron endpoint + POST расширение)
+Last session: 2026-04-18T09:45:32.749Z
+Stopped at: Completed 10-chat-autoreply/10-03-PLAN.md
 Resume file: None
