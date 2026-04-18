@@ -520,6 +520,13 @@ enum MediaType {
   DOCUMENT // Phase 10 — PDF из chat attachments.files[]
 }
 
+// Phase 12 — подтип мессенджер-канала (Telegram/WhatsApp/OTHER)
+enum MessengerType {
+  TELEGRAM
+  WHATSAPP
+  OTHER
+}
+
 // Customer — карточка покупателя (Phase 12). В Phase 8 записи не создаются,
 // т.к. WB Feedbacks/Questions API не возвращает wbUserId.
 model Customer {
@@ -573,6 +580,10 @@ model SupportTicket {
   // ── Phase 10: CHAT канал ──
   chatReplySign        String? // replySign из WB Chat API для sendMessage (ротируется при каждом sync)
   customerNameSnapshot String? // clientName из WB (до линковки с Customer в Phase 12)
+
+  // ── Phase 12: MESSENGER канал (Telegram/WhatsApp/другое) ──
+  messengerType    MessengerType? // только для channel=MESSENGER
+  messengerContact String? // "@username" или "+79991234567"
 
   @@unique([channel, wbExternalId])
   @@index([status])
