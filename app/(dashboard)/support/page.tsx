@@ -1,5 +1,7 @@
 // app/(dashboard)/support/page.tsx
 // RSC — лента тикетов службы поддержки WB
+import Link from "next/link"
+import { Plus } from "lucide-react"
 import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { SupportFilters } from "@/components/support/SupportFilters"
@@ -165,7 +167,16 @@ export default async function SupportPage({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Служба поддержки</h1>
-        <SupportSyncButton />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/support/new"
+            className="inline-flex items-center h-9 rounded-md border px-3 text-sm hover:bg-muted"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Новый тикет
+          </Link>
+          <SupportSyncButton />
+        </div>
       </div>
       <SupportFilters
         channelOptions={CHANNEL_OPTIONS}
