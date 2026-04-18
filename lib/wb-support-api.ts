@@ -1,11 +1,13 @@
-// Клиент WB Feedbacks + Questions + Returns API.
+// Клиент WB Feedbacks + Questions + Returns + Buyer Chat API.
 // Phase 8: Feedbacks + Questions (scope bit 5 "Отзывы", WB_API_TOKEN).
 // Phase 9: Returns/Claims (scope bit 11 "Buyers Returns", WB_RETURNS_TOKEN).
+// Phase 10: Buyer Chat (scope bit 9 "Чат с покупателями", WB_CHAT_TOKEN).
 // В отличие от card.wb.ru v4 (см. lib/wb-api.ts), эти API не блокируются
 // по TLS fingerprint — используем нативный fetch.
 
 const FEEDBACKS_API = "https://feedbacks-api.wildberries.ru"
 const RETURNS_API = "https://returns-api.wildberries.ru" // Phase 9
+const CHAT_API = "https://buyer-chat-api.wildberries.ru" // Phase 10
 const RATE_LIMIT_FALLBACK_MS = 6000
 
 // Токен Phase 8 (Feedbacks/Questions) — scope bit 5
@@ -20,6 +22,14 @@ function getToken(): string {
 function getReturnsToken(): string {
   const token = process.env.WB_RETURNS_TOKEN ?? process.env.WB_API_TOKEN
   if (!token) throw new Error("WB_RETURNS_TOKEN или WB_API_TOKEN не настроен")
+  return token
+}
+
+// Токен Phase 10 (Buyers Chat) — scope bit 9 "Чат с покупателями".
+// Fallback на WB_API_TOKEN для dev/test окружений (паттерн Phase 9 getReturnsToken).
+function getChatToken(): string {
+  const token = process.env.WB_CHAT_TOKEN ?? process.env.WB_API_TOKEN
+  if (!token) throw new Error("WB_CHAT_TOKEN или WB_API_TOKEN не настроен")
   return token
 }
 
@@ -92,11 +102,14 @@ async function callApi(
   init: RequestInit,
   attempt = 0
 ): Promise<Response> {
+  // Phase 10: для multipart/form-data (FormData body) fetch сам выставляет
+  // Content-Type с boundary — НЕ перезаписываем на application/json.
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
       Authorization: token,
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(init.headers ?? {}),
     },
   })
@@ -110,10 +123,12 @@ async function callApi(
 
   if (res.status === 401) throw new Error("Неверный токен WB API")
   if (res.status === 403) {
-    // Разный scope-hint для разных API: Feedbacks bit 5, Returns bit 11.
+    // Разный scope-hint для разных API: Feedbacks bit 5, Returns bit 11, Chat bit 9.
     const scopeHint = baseUrl.includes("returns-api")
       ? "bit 11 Buyers Returns (WB_RETURNS_TOKEN)"
-      : "bit 5"
+      : baseUrl.includes("buyer-chat-api")
+        ? "bit 9 Buyers chat (WB_CHAT_TOKEN)"
+        : "bit 5"
     throw new Error(`Нет доступа — проверьте scope токена (${scopeHint})`)
   }
 
@@ -137,6 +152,15 @@ async function callReturnsApi(
   attempt = 0
 ): Promise<Response> {
   return callApi(RETURNS_API, getReturnsToken(), path, init, attempt)
+}
+
+// Chat API — использует WB_CHAT_TOKEN (scope bit 9 Buyers chat). Phase 10.
+async function callChatApi(
+  path: string,
+  init: RequestInit,
+  attempt = 0
+): Promise<Response> {
+  return callApi(CHAT_API, getChatToken(), path, init, attempt)
 }
 
 // ── Feedbacks ─────────────────────────────────────────────────
@@ -299,4 +323,174 @@ export async function reconsiderReturn(
     body: JSON.stringify({ id, action: wbAction }),
   })
   return { ok: true }
+}
+
+// ── WB Buyer Chat API (Phase 10) ─────────────────────────────
+// Base: https://buyer-chat-api.wildberries.ru
+// Auth: Authorization: ${WB_CHAT_TOKEN} (без Bearer, паттерн всех WB API)
+// Rate limit: 10 req / 10 sec → callApi ретраит 429 с X-Ratelimit-Retry.
+//
+// Endpoints:
+//   GET  /ping                           — health check
+//   GET  /api/v1/seller/chats            — список чатов (replySign + clientName + lastMessage)
+//   GET  /api/v1/seller/events?next={ms} — cursor-based поток событий
+//   POST /api/v1/seller/message          — multipart: replySign + message + file[]
+//   GET  /api/v1/seller/download/{id}    — бинарь вложения
+
+export interface ChatGoodCard {
+  nmID: number
+  price?: number
+  size?: string
+}
+
+export interface ChatLastMessage {
+  text: string
+  addTimestamp: number // Unix seconds
+}
+
+export interface Chat {
+  chatID: string // UUID — используем как SupportTicket.wbExternalId
+  replySign: string // обязательно для sendMessage; храним в SupportTicket.chatReplySign
+  clientName: string
+  goodCard?: ChatGoodCard
+  lastMessage?: ChatLastMessage
+}
+
+export interface ChatAttachmentImage {
+  downloadID: string
+  fileName: string
+  width?: number
+  height?: number
+}
+
+export interface ChatAttachmentFile {
+  downloadID: string
+  fileName: string
+  fileSize?: number
+}
+
+export interface ChatAttachments {
+  goodCard?: ChatGoodCard
+  images?: ChatAttachmentImage[]
+  files?: ChatAttachmentFile[]
+}
+
+export interface ChatMessage {
+  text?: string
+  attachments?: ChatAttachments
+}
+
+export interface ChatEvent {
+  chatID: string
+  eventID: string // уникален глобально — используем как SupportMessage.wbEventId
+  eventType: string // "message"
+  isNewChat: boolean
+  message?: ChatMessage
+  addTimestamp: number // Unix ms
+  sender: "client" | "seller"
+  clientName?: string
+}
+
+export interface ChatEventsResult {
+  events: ChatEvent[]
+  next: number
+  totalEvents: number
+  newestEventTime?: string
+  oldestEventTime?: string
+}
+
+export interface SendChatMessageInput {
+  replySign: string // ≤255 символов
+  message?: string // ≤1000 символов
+  files?: Array<{ name: string; data: Buffer | Blob; contentType: string }>
+}
+
+// ── Chat API methods ─────────────────────────────────────────
+
+export async function pingChat(): Promise<{ ok: true }> {
+  await callChatApi("/ping", { method: "GET" })
+  return { ok: true }
+}
+
+export async function listChats(): Promise<Chat[]> {
+  const res = await callChatApi("/api/v1/seller/chats", { method: "GET" })
+  const json = (await res.json()) as { result?: Chat[]; errors?: unknown }
+  return json.result ?? []
+}
+
+export async function getChatEvents(next?: number): Promise<ChatEventsResult> {
+  const path =
+    next !== undefined
+      ? `/api/v1/seller/events?next=${encodeURIComponent(String(next))}`
+      : "/api/v1/seller/events"
+  const res = await callChatApi(path, { method: "GET" })
+  const json = (await res.json()) as {
+    result?: {
+      events?: ChatEvent[]
+      next?: number
+      totalEvents?: number
+      newestEventTime?: string
+      oldestEventTime?: string
+    }
+    errors?: unknown
+  }
+  return {
+    events: json.result?.events ?? [],
+    next: json.result?.next ?? 0,
+    totalEvents: json.result?.totalEvents ?? 0,
+    newestEventTime: json.result?.newestEventTime,
+    oldestEventTime: json.result?.oldestEventTime,
+  }
+}
+
+// sendChatMessage — multipart upload. Ограничения WB:
+//   - replySign ≤ 255 символов (обязателен, получаем из Chat.replySign / ticket.chatReplySign)
+//   - message ≤ 1000 символов
+//   - каждый файл ≤ 5 МБ
+//   - сумма файлов ≤ 30 МБ
+//   - допустимые типы: image/jpeg, image/png, application/pdf (валидация на клиенте + серверная через mimeType)
+export async function sendChatMessage(
+  input: SendChatMessageInput
+): Promise<{ ok: true; addTime?: number; chatID?: string }> {
+  if (input.replySign.length > 255) {
+    throw new Error("replySign превышает 255 символов")
+  }
+  if (input.message && input.message.length > 1000) {
+    throw new Error("Сообщение превышает 1000 символов")
+  }
+  const form = new FormData()
+  form.append("replySign", input.replySign)
+  if (input.message) form.append("message", input.message)
+  let totalBytes = 0
+  for (const f of input.files ?? []) {
+    // Buffer → Blob для FormData (Node 20 FormData принимает Blob).
+    const blob =
+      f.data instanceof Blob ? f.data : new Blob([new Uint8Array(f.data)], { type: f.contentType })
+    if (blob.size > 5 * 1024 * 1024) {
+      throw new Error(`Файл ${f.name} больше 5 МБ`)
+    }
+    totalBytes += blob.size
+    form.append("file", blob, f.name)
+  }
+  if (totalBytes > 30 * 1024 * 1024) {
+    throw new Error("Суммарный размер файлов больше 30 МБ")
+  }
+  const res = await callChatApi("/api/v1/seller/message", {
+    method: "POST",
+    body: form,
+  })
+  const json = (await res.json()) as {
+    result?: { addTime?: number; chatID?: string }
+    errors?: unknown
+  }
+  return { ok: true, addTime: json.result?.addTime, chatID: json.result?.chatID }
+}
+
+export async function downloadChatAttachment(downloadId: string): Promise<Buffer> {
+  const res = await callChatApi(
+    `/api/v1/seller/download/${encodeURIComponent(downloadId)}`,
+    { method: "GET" }
+  )
+  const arr = await res.arrayBuffer()
+  return Buffer.from(arr)
 }

@@ -1,0 +1,57 @@
+{
+  "result": {
+    "next": 1713355200123,
+    "newestEventTime": "2026-04-17T12:00:00Z",
+    "oldestEventTime": "2026-04-14T08:30:00Z",
+    "totalEvents": 2,
+    "events": [
+      {
+        "chatID": "9e1b3f80-a8d6-4c7f-b9aa-8e11f2c4dd01",
+        "eventID": "evt-abc123",
+        "eventType": "message",
+        "isNewChat": false,
+        "message": {
+          "text": "Добрый день",
+          "attachments": {
+            "goodCard": {
+              "nmID": 123456789,
+              "price": 1990,
+              "size": "M"
+            },
+            "files": [
+              {
+                "downloadID": "file-xyz",
+                "fileName": "doc.pdf",
+                "fileSize": 12345
+              }
+            ],
+            "images": [
+              {
+                "downloadID": "img-abc",
+                "fileName": "photo.jpg",
+                "width": 800,
+                "height": 600
+              }
+            ]
+          }
+        },
+        "addTimestamp": 1713355123456,
+        "sender": "client",
+        "clientName": "Иван П."
+      },
+      {
+        "chatID": "9e1b3f80-a8d6-4c7f-b9aa-8e11f2c4dd01",
+        "eventID": "evt-def456",
+        "eventType": "message",
+        "isNewChat": true,
+        "message": {
+          "text": "Здравствуйте, где инструкция?"
+        },
+        "addTimestamp": 1713355180000,
+        "sender": "client",
+        "clientName": "Иван П."
+      }
+    ]
+  },
+  "errors": null
+}

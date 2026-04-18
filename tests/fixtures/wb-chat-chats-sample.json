@@ -1,0 +1,33 @@
+{
+  "result": [
+    {
+      "chatID": "9e1b3f80-a8d6-4c7f-b9aa-8e11f2c4dd01",
+      "replySign": "base64signature==",
+      "clientName": "Иван П.",
+      "goodCard": {
+        "nmID": 123456789,
+        "price": 1990,
+        "size": "M"
+      },
+      "lastMessage": {
+        "text": "Здравствуйте, где инструкция?",
+        "addTimestamp": 1713355200
+      }
+    },
+    {
+      "chatID": "1a2b3c4d-5e6f-7089-90ab-cdef12345678",
+      "replySign": "anothersignature==",
+      "clientName": "Мария С.",
+      "goodCard": {
+        "nmID": 987654321,
+        "price": 2490,
+        "size": "L"
+      },
+      "lastMessage": {
+        "text": "Спасибо!",
+        "addTimestamp": 1713441600
+      }
+    }
+  ],
+  "errors": null
+}
