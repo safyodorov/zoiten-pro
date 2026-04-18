@@ -106,11 +106,11 @@ SVC
 
 cat > /etc/systemd/system/zoiten-returns-sync.timer <<'TMR'
 [Unit]
-Description=Zoiten Returns Sync (every 15 minutes, offset 7 min)
+Description=Zoiten Returns Sync (раз в 65 минут — WB Basic tier лимит 1 req/hour)
 
 [Timer]
-OnBootSec=8min
-OnUnitActiveSec=15min
+OnBootSec=10min
+OnUnitActiveSec=65min
 Persistent=true
 Unit=zoiten-returns-sync.service
 
