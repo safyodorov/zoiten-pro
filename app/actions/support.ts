@@ -855,6 +855,46 @@ export async function mergeCustomers(
   }
 }
 
+// searchCustomers — поиск существующих Customer по name/phone для LinkCustomerButton picker.
+// RBAC: SUPPORT (read-only — VIEWER может искать). Trim + min 2 символа + max 20 результатов.
+export async function searchCustomers(
+  query: string
+): Promise<
+  | {
+      ok: true
+      customers: Array<{
+        id: string
+        name: string | null
+        phone: string | null
+        wbUserId: string | null
+      }>
+    }
+  | { ok: false; error: string }
+> {
+  try {
+    await requireSection("SUPPORT")
+    const q = query.trim()
+    if (q.length < 2) return { ok: true, customers: [] }
+    const customers = await prisma.customer.findMany({
+      where: {
+        OR: [
+          { name: { contains: q, mode: "insensitive" } },
+          { phone: { contains: q } },
+        ],
+      },
+      select: { id: true, name: true, phone: true, wbUserId: true },
+      take: 20,
+      orderBy: { updatedAt: "desc" },
+    })
+    return { ok: true, customers }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка поиска",
+    }
+  }
+}
+
 // 5. createManualMessengerTicket — ручное создание MESSENGER тикета (Telegram/WhatsApp/...)
 const messengerTicketSchema = z
   .object({

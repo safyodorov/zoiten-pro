@@ -1,9 +1,11 @@
 "use client"
 
 import { useTransition } from "react"
+import Link from "next/link"
 import { toast } from "sonner"
 import { assignTicket, updateTicketStatus } from "@/app/actions/support"
 import { AppealStatusPanel } from "@/components/support/AppealStatusPanel"
+import { LinkCustomerButton } from "@/components/support/customers/LinkCustomerButton"
 import type { TicketStatus, TicketChannel, AppealStatus } from "@prisma/client"
 
 interface User {
@@ -40,6 +42,9 @@ interface Props {
   createdAt: Date
   lastMessageAt: Date | null
   appealRecord?: AppealRecordForPanel | null
+  // Phase 12-02: линковка покупателя
+  customerId: string | null
+  customerName: string | null
 }
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -94,6 +99,8 @@ export function TicketSidePanel({
   createdAt,
   lastMessageAt,
   appealRecord,
+  customerId,
+  customerName,
 }: Props) {
   const [isPending, startTransition] = useTransition()
 
@@ -117,6 +124,27 @@ export function TicketSidePanel({
 
   return (
     <aside className="space-y-4 text-sm">
+      {/* Phase 12-02 — Покупатель */}
+      <div>
+        <label className="block text-xs text-muted-foreground mb-1">
+          Покупатель
+        </label>
+        {customerId ? (
+          <Link
+            href={`/support/customers/${customerId}`}
+            className="text-sm hover:underline"
+          >
+            {customerName ?? "Покупатель"} →
+          </Link>
+        ) : channel === "CHAT" ? (
+          <p className="text-xs text-muted-foreground italic">
+            Для канала «Чат» покупатель свяжется автоматически при следующей
+            синхронизации
+          </p>
+        ) : (
+          <LinkCustomerButton ticketId={ticketId} />
+        )}
+      </div>
       {status === "APPEALED" && appealRecord && (
         <AppealStatusPanel
           appealId={appealRecord.id}

@@ -1,5 +1,10 @@
-// Карточка тикета — server component. Индикатор-полоса слева по статусу.
+"use client"
+
+// Карточка тикета — client component (Phase 12-02: кликабельное имя покупателя через router.push).
+// Индикатор-полоса слева по статусу. Outer <Link> на /support/[id]; если customer есть —
+// inline <a> с onClick preventDefault+stopPropagation+router.push ведёт на /support/customers/[id].
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   MessageSquare,
   HelpCircle,
@@ -58,6 +63,9 @@ export interface SupportTicketCardProps {
       firstName: string | null
       lastName: string | null
     } | null
+    // Phase 12-02:
+    customer: { id: string; name: string | null } | null
+    customerNameSnapshot: string | null
   }
   wbCard: { nmId: number; photoUrl: string | null; title: string | null } | null
 }
@@ -82,7 +90,19 @@ function getAssigneeName(
 }
 
 export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
+  const router = useRouter()
   const Icon = channelIconMap[ticket.channel]
+
+  function onCustomerClick(e: React.MouseEvent) {
+    if (!ticket.customer) return
+    e.preventDefault()
+    e.stopPropagation()
+    router.push(`/support/customers/${ticket.customer.id}`)
+  }
+
+  const customerLabel =
+    ticket.customer?.name ?? ticket.customerNameSnapshot ?? "Покупатель"
+
   return (
     <Link
       href={`/support/${ticket.id}`}
@@ -108,7 +128,17 @@ export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
       )}
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-2 text-sm">
-          <span className="font-medium">Покупатель</span>
+          {ticket.customer ? (
+            <a
+              href={`/support/customers/${ticket.customer.id}`}
+              onClick={onCustomerClick}
+              className="font-medium hover:underline cursor-pointer"
+            >
+              {customerLabel}
+            </a>
+          ) : (
+            <span className="font-medium">{customerLabel}</span>
+          )}
           {ticket.channel === "FEEDBACK" && ticket.rating !== null && (
             <span className="flex items-center gap-0.5 text-amber-500">
               {Array.from({ length: ticket.rating }).map((_, i) => (

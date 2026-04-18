@@ -135,7 +135,20 @@ export default async function TicketPage({
             <h3 className="text-xs uppercase text-muted-foreground mb-2">
               Покупатель
             </h3>
-            <p className="text-sm">{ticket.customer?.name ?? "Покупатель"}</p>
+            {ticket.customerId ? (
+              <Link
+                href={`/support/customers/${ticket.customerId}`}
+                className="text-sm hover:underline"
+              >
+                {ticket.customer?.name ?? "Покупатель"} →
+              </Link>
+            ) : (
+              <p className="text-sm">
+                {ticket.customer?.name ??
+                  ticket.customerNameSnapshot ??
+                  "Покупатель"}
+              </p>
+            )}
             {ticket.customer?.wbUserId && (
               <p className="text-xs text-muted-foreground">
                 WB ID: {ticket.customer.wbUserId}
@@ -216,6 +229,8 @@ export default async function TicketPage({
             createdAt={ticket.createdAt}
             lastMessageAt={ticket.lastMessageAt}
             appealRecord={ticket.appealRecord}
+            customerId={ticket.customerId}
+            customerName={ticket.customer?.name ?? null}
           />
         </div>
       </div>
