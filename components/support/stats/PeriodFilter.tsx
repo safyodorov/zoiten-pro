@@ -27,19 +27,29 @@ export function PeriodFilter({ currentPeriod, currentFrom, currentTo }: PeriodFi
     setTo(currentTo ?? "")
   }, [currentPeriod, currentFrom, currentTo])
 
-  function apply() {
+  function applyPreset(next: PeriodFilterProps["currentPeriod"]) {
     const newSp = new URLSearchParams(sp.toString())
-    newSp.set("period", preset)
-    if (preset === "custom") {
-      if (from) newSp.set("dateFrom", from)
-      else newSp.delete("dateFrom")
-      if (to) newSp.set("dateTo", to)
-      else newSp.delete("dateTo")
-    } else {
+    newSp.set("period", next)
+    if (next !== "custom") {
       newSp.delete("dateFrom")
       newSp.delete("dateTo")
     }
     router.push(`${pathname}?${newSp.toString()}`)
+  }
+
+  function applyCustom() {
+    const newSp = new URLSearchParams(sp.toString())
+    newSp.set("period", "custom")
+    if (from) newSp.set("dateFrom", from)
+    else newSp.delete("dateFrom")
+    if (to) newSp.set("dateTo", to)
+    else newSp.delete("dateTo")
+    router.push(`${pathname}?${newSp.toString()}`)
+  }
+
+  function handlePresetChange(next: PeriodFilterProps["currentPeriod"]) {
+    setPreset(next)
+    if (next !== "custom") applyPreset(next)
   }
 
   return (
@@ -49,7 +59,7 @@ export function PeriodFilter({ currentPeriod, currentFrom, currentTo }: PeriodFi
         <select
           value={preset}
           onChange={(e) =>
-            setPreset(e.target.value as PeriodFilterProps["currentPeriod"])
+            handlePresetChange(e.target.value as PeriodFilterProps["currentPeriod"])
           }
           className="border rounded px-3 py-1.5 text-sm"
         >
@@ -80,17 +90,16 @@ export function PeriodFilter({ currentPeriod, currentFrom, currentTo }: PeriodFi
               className="border rounded px-3 py-1.5 text-sm"
             />
           </label>
+          <button
+            type="button"
+            onClick={applyCustom}
+            disabled={!from || !to}
+            className="rounded bg-primary px-4 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
+          >
+            Применить
+          </button>
         </>
       )}
-
-      <button
-        type="button"
-        onClick={apply}
-        disabled={preset === "custom" && (!from || !to)}
-        className="rounded bg-primary px-4 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
-      >
-        Применить
-      </button>
     </div>
   )
 }
