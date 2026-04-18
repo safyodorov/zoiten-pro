@@ -44,6 +44,17 @@ export default async function TicketPage({
           },
         },
       },
+      // Phase 11-04: AppealRecord для APPEALED тикетов (TicketSidePanel → AppealStatusPanel)
+      appealRecord: {
+        include: {
+          createdBy: {
+            select: { name: true, firstName: true, lastName: true },
+          },
+          resolvedBy: {
+            select: { name: true, firstName: true, lastName: true },
+          },
+        },
+      },
     },
   })
   if (!ticket) notFound()
@@ -165,6 +176,8 @@ export default async function TicketPage({
               ticketId={ticket.id}
               ticketNmId={ticket.nmId}
               ticketChannel={ticket.channel as "FEEDBACK" | "QUESTION" | "CHAT"}
+              ticketStatus={ticket.status}
+              wbExternalId={ticket.wbExternalId}
               customerName={ticket.customer?.name ?? null}
               productName={wbCard?.name ?? null}
               templates={templates}
@@ -194,6 +207,7 @@ export default async function TicketPage({
             users={supportUsers}
             createdAt={ticket.createdAt}
             lastMessageAt={ticket.lastMessageAt}
+            appealRecord={ticket.appealRecord}
           />
         </div>
       </div>

@@ -1,22 +1,26 @@
 "use client"
 
 // components/support/ReplyPanel.tsx
-// Ответ на тикет (FEEDBACK/QUESTION). Phase 11 Plan 03: добавлена кнопка
-// «Шаблон» → TemplatePickerModal. При выборе шаблона substituteTemplateVars
-// подставляет customerName/productName в текст, значение отдаётся в textarea.
+// Ответ на тикет (FEEDBACK/QUESTION). Phase 11 Plan 03: кнопка «Шаблон»
+// → TemplatePickerModal (substituteTemplateVars подставляет customerName/productName).
+// Phase 11 Plan 04: кнопка «Обжаловать» для FEEDBACK (status !== APPEALED)
+// → AppealModal → createAppeal + jump-link в ЛК WB.
 
 import { useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { Send, FileText } from "lucide-react"
+import { Send, FileText, Flag } from "lucide-react"
 import { toast } from "sonner"
 import { replyToTicket } from "@/app/actions/support"
 import { TemplatePickerModal } from "@/components/support/templates/TemplatePickerModal"
+import { AppealModal } from "@/components/support/AppealModal"
 import type { ResponseTemplate } from "@prisma/client"
 
 export function ReplyPanel({
   ticketId,
   ticketNmId,
   ticketChannel,
+  ticketStatus,
+  wbExternalId,
   customerName,
   productName,
   templates,
@@ -25,6 +29,8 @@ export function ReplyPanel({
   ticketId: string
   ticketNmId: number | null
   ticketChannel: "FEEDBACK" | "QUESTION" | "CHAT"
+  ticketStatus?: string
+  wbExternalId?: string | null
   customerName: string | null
   productName: string | null
   templates: ResponseTemplate[]
@@ -32,6 +38,7 @@ export function ReplyPanel({
 }) {
   const [text, setText] = useState("")
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [appealOpen, setAppealOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   function onSubmit() {
@@ -50,6 +57,9 @@ export function ReplyPanel({
       }
     })
   }
+
+  const canAppeal =
+    ticketChannel === "FEEDBACK" && ticketStatus !== "APPEALED"
 
   return (
     <div className="sticky bottom-0 bg-white dark:bg-neutral-900 border-t p-3 flex items-end gap-2">
@@ -72,6 +82,18 @@ export function ReplyPanel({
           <FileText className="h-4 w-4 mr-1" />
           Шаблон
         </Button>
+        {canAppeal && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAppealOpen(true)}
+            disabled={disabled || isPending}
+            title="Обжаловать отзыв"
+          >
+            <Flag className="h-4 w-4 mr-1" />
+            Обжаловать
+          </Button>
+        )}
         <Button
           onClick={onSubmit}
           disabled={disabled || isPending || !text.trim()}
@@ -91,6 +113,14 @@ export function ReplyPanel({
         productName={productName}
         onPick={(substituted) => setText(substituted)}
       />
+      {canAppeal && (
+        <AppealModal
+          open={appealOpen}
+          onOpenChange={setAppealOpen}
+          ticketId={ticketId}
+          wbExternalId={wbExternalId ?? null}
+        />
+      )}
     </div>
   )
 }

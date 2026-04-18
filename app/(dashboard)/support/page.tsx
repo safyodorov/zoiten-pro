@@ -122,6 +122,7 @@ export default async function SupportPage({
         rating: true,
         previewText: true,
         createdAt: true,
+        appealStatus: true,
         assignedTo: {
           select: {
             id: true,

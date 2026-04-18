@@ -3,13 +3,32 @@
 import { useTransition } from "react"
 import { toast } from "sonner"
 import { assignTicket, updateTicketStatus } from "@/app/actions/support"
-import type { TicketStatus, TicketChannel } from "@prisma/client"
+import { AppealStatusPanel } from "@/components/support/AppealStatusPanel"
+import type { TicketStatus, TicketChannel, AppealStatus } from "@prisma/client"
 
 interface User {
   id: string
   name: string
   firstName: string | null
   lastName: string | null
+}
+
+export interface AppealRecordForPanel {
+  id: string
+  reason: string
+  status: AppealStatus
+  createdAt: Date
+  appealResolvedAt: Date | null
+  createdBy?: {
+    name: string
+    firstName: string | null
+    lastName: string | null
+  } | null
+  resolvedBy?: {
+    name: string
+    firstName: string | null
+    lastName: string | null
+  } | null
 }
 
 interface Props {
@@ -20,6 +39,7 @@ interface Props {
   users: User[]
   createdAt: Date
   lastMessageAt: Date | null
+  appealRecord?: AppealRecordForPanel | null
 }
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -44,9 +64,13 @@ const CHANNEL_LABELS: Record<TicketChannel, string> = {
   MESSENGER: "Мессенджер",
 }
 
-function fullName(u: User): string {
+function fullName(u: {
+  name: string
+  firstName: string | null
+  lastName: string | null
+}): string {
   const full = [u.firstName, u.lastName].filter(Boolean).join(" ").trim()
-  return full || u.name || u.id.slice(-6)
+  return full || u.name
 }
 
 function formatDate(d: Date | null): string {
@@ -69,6 +93,7 @@ export function TicketSidePanel({
   users,
   createdAt,
   lastMessageAt,
+  appealRecord,
 }: Props) {
   const [isPending, startTransition] = useTransition()
 
@@ -92,6 +117,21 @@ export function TicketSidePanel({
 
   return (
     <aside className="space-y-4 text-sm">
+      {status === "APPEALED" && appealRecord && (
+        <AppealStatusPanel
+          appealId={appealRecord.id}
+          currentStatus={appealRecord.status}
+          reason={appealRecord.reason}
+          createdAt={appealRecord.createdAt}
+          appealResolvedAt={appealRecord.appealResolvedAt}
+          createdByName={
+            appealRecord.createdBy ? fullName(appealRecord.createdBy) : null
+          }
+          resolvedByName={
+            appealRecord.resolvedBy ? fullName(appealRecord.resolvedBy) : null
+          }
+        />
+      )}
       <div>
         <label className="block text-xs text-muted-foreground mb-1">
           Статус
@@ -132,7 +172,8 @@ export function TicketSidePanel({
       </div>
       <div className="pt-2 border-t space-y-2 text-xs text-muted-foreground">
         <div>
-          Канал: <span className="text-foreground">{CHANNEL_LABELS[channel]}</span>
+          Канал:{" "}
+          <span className="text-foreground">{CHANNEL_LABELS[channel]}</span>
         </div>
         <div>
           Создан: <span className="text-foreground">{formatDate(createdAt)}</span>

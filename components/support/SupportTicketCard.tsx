@@ -8,7 +8,7 @@ import {
   Inbox,
   Star,
 } from "lucide-react"
-import type { TicketChannel, TicketStatus } from "@prisma/client"
+import type { TicketChannel, TicketStatus, AppealStatus } from "@prisma/client"
 
 const channelIconMap: Record<TicketChannel, typeof MessageSquare> = {
   FEEDBACK: MessageSquare,
@@ -51,6 +51,7 @@ export interface SupportTicketCardProps {
     rating: number | null
     previewText: string | null
     createdAt: Date
+    appealStatus?: AppealStatus | null
     assignedTo: {
       id: string
       name: string
@@ -118,6 +119,15 @@ export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
           <span className="text-xs text-muted-foreground ml-auto">
             {statusLabelMap[ticket.status]}
           </span>
+          {ticket.appealStatus && ticket.appealStatus !== "NONE" && (
+            <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {ticket.appealStatus === "PENDING" && <>🕐 Обжалование</>}
+              {ticket.appealStatus === "APPROVED" && (
+                <>✅ Обжалование одобрено</>
+              )}
+              {ticket.appealStatus === "REJECTED" && <>❌ Отклонено WB</>}
+            </span>
+          )}
         </div>
         <p className="text-sm text-muted-foreground line-clamp-2">
           {ticket.previewText ?? <span className="italic">нет текста</span>}
