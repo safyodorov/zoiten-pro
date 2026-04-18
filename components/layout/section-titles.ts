@@ -26,6 +26,7 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/support\/templates\/[^/]+\/edit/, title: "Редактирование шаблона" },
   { match: /^\/support\/templates/, title: "Шаблоны ответов" },
   { match: /^\/support\/returns/, title: "Возвраты" },
+  { match: /^\/support\/customers\/[^/]+/, title: "Профиль покупателя" },
   { match: /^\/support/, title: "Служба поддержки" },
   { match: /^\/employees/, title: "Сотрудники" },
 
