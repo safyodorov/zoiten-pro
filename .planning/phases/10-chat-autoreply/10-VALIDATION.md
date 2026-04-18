@@ -1,10 +1,11 @@
 ---
 phase: 10
 slug: chat-autoreply
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-18
+approved: 2026-04-18
 ---
 
 # Phase 10 — Validation Strategy
@@ -87,4 +88,7 @@ created: 2026-04-18
 - [ ] Feedback latency < 18s
 - [ ] `nyquist_compliant: true` в frontmatter после planner approval
 
-**Approval:** pending
+**Approval:** approved 2026-04-18
+
+### Revision history
+- **2026-04-18** — planner approved by checker (iter 1): 0 blockers, 2 warnings (curl fallback deferred to Wave 0 live test; wbUrl placeholder convention undocumented — both INFO-level, addressable at execute-time).

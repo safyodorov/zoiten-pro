@@ -211,8 +211,13 @@ Plans:
   2. Менеджер отправляет сообщение в чат из диалога (текст + опциональное фото/видео multipart) → `SupportMessage` c direction=OUTBOUND и `SupportMedia` создаются, сообщение уходит в WB Chat API (curl-fallback при 403 от Node.js fetch)
   3. Менеджер открывает `/support/auto-reply` → настраивает переключатель, рабочие дни Пн-Вс, часы работы, текст с переменными `{имя_покупателя}` и `{название_товара}` → жмёт «Синхронизировать с WB» → настройки уходят в WB API
   4. Автоответы, отправленные WB вне рабочих часов, помечаются в ленте и диалоге иконкой «🤖» и флагом `isAutoReply=true`
-  5. AutoReplyConfig — singleton-запись в БД, видны `updatedById` и `updatedAt`, изменение сохраняется транзакционно с sync в WB
-**Plans**: TBD
+  5. AutoReplyConfig — singleton-запись в БД, видны `updatedById` и `updatedAt`, изменение сохраняется локально (WB API не имеет endpoint для auto-reply config — SUP-24 реализован как локальная ERP-feature)
+**Plans**: 4 plans
+Plans:
+- [ ] 10-01-PLAN.md — Foundation: Prisma миграция AutoReplyConfig + WB Buyer Chat API клиент (5 методов) + Wave 0 stubs (5 тестов + 2 fixtures)
+- [ ] 10-02-PLAN.md — Sync + AutoReply Cron: lib/support-sync.ts syncChats + lib/auto-reply.ts runAutoReplies + GET /api/cron/support-sync-chat (5 мин) + расширение POST /api/support-sync
+- [ ] 10-03-PLAN.md — UI Chat Messages: ChatReplyPanel (multipart upload JPEG/PNG/PDF) + sendChatMessageAction + Bot badge для isAutoReply в SupportDialog
+- [ ] 10-04-PLAN.md — AutoReply Settings + Deploy + UAT: /support/auto-reply (singleton config) + saveAutoReplyConfig + sidebar 'Автоответ' + deploy.sh (WB_CHAT_TOKEN + crontab 5-min)
 **UI hint**: yes
 
 ### Phase 11: Шаблоны + Обжалование отзывов
@@ -270,7 +275,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Управление ценами WB | 0/12 | Planned | |
 | 8. MVP — Отзывы + Вопросы | 0/TBD | Planned | |
 | 9. Возвраты | 0/TBD | Planned | |
-| 10. Чат + Автоответы | 0/TBD | Planned | |
+| 10. Чат + Автоответы | 0/4 | Planned | |
 | 11. Шаблоны + Обжалование | 0/TBD | Planned | |
 | 12. Профиль покупателя + Мессенджеры | 0/TBD | Planned | |
 | 13. Статистика | 0/TBD | Planned | |
