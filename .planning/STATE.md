@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase complete — ready for verification
-stopped_at: "Completed 09-04-PLAN.md Task 1+2 (server actions + UI + 17 GREEN тестов), deploy на VPS пройден (service active); Task 3 = checkpoint:human-verify ожидает UAT resume-signal"
-last_updated: "2026-04-17T19:34:29.009Z"
+status: Ready to execute
+stopped_at: Completed 11-01-PLAN.md (3 tasks, schema + lib + tests), миграция 20260418_templates_appeals ожидает применения на VPS в Plan 11-04
+last_updated: "2026-04-18T06:02:57.636Z"
 progress:
   total_phases: 13
   completed_phases: 9
-  total_plans: 37
-  completed_plans: 38
+  total_plans: 45
+  completed_plans: 39
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-17)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 09 — returns
+**Current focus:** Phase 11 — templates-appeals
 
 ## Current Position
 
-Phase: 09 (returns) — EXECUTING
-Plan: 4 of 4
+Phase: 11 (templates-appeals) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Plan: 4 of 4
 | Phase 09-returns P02 | 5min | 2 tasks | 5 files |
 | Phase 09-returns P03 | 6min | 3 tasks | 5 files |
 | Phase 09-returns P04 | 7min | 3 tasks | 5 files |
+| Phase 11-templates-appeals P01 | 10min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -163,6 +164,8 @@ Recent decisions affecting current work:
 - [Phase 09-returns]: Plan 09-04: WB-first transaction order (PATCH → Decision+update) — если WB throws, Decision НЕ создаётся, returnState не меняется
 - [Phase 09-returns]: Plan 09-04: action picker approve1 > autorefund1 > approvecc1 — автоматический выбор WB action, избегает хардкодов в UI
 - [Phase 09-returns]: Plan 09-04: vi.resetAllMocks (не clearAllMocks) в beforeEach — очищает mockResolvedValueOnce queue, иначе queue переливается между тестами и съедает rejection mocks
+- [Phase 11-templates-appeals]: Phase 11-01: WB Templates API отключён 2025-11-19 + WB Complaint API отключён 2025-12-08 — хранилище 100% локальное, hybrid manual workflow через jump-link в ЛК WB
+- [Phase 11-templates-appeals]: Phase 11-01: ResponseTemplate @@unique([name, channel]) (не [name]) — одно имя допустимо в разных каналах; AppealRecord.reason: String (денормализованный label, не id) — устойчивость к изменениям справочника
 
 ### Roadmap Evolution
 
@@ -193,6 +196,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-17T19:34:18.428Z
-Stopped at: Completed 09-04-PLAN.md Task 1+2 (server actions + UI + 17 GREEN тестов), deploy на VPS пройден (service active); Task 3 = checkpoint:human-verify ожидает UAT resume-signal
+Last session: 2026-04-18T06:02:57.632Z
+Stopped at: Completed 11-01-PLAN.md (3 tasks, schema + lib + tests), миграция 20260418_templates_appeals ожидает применения на VPS в Plan 11-04
 Resume file: None
