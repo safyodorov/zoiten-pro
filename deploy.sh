@@ -90,6 +90,38 @@ systemctl daemon-reload
 systemctl enable --now zoiten-support-sync.timer
 echo "✓ zoiten-support-sync.timer активирован (интервал 15 мин)"
 
+# ── Phase 9 fix: systemd timer для /api/cron/support-sync-returns (каждые 15 мин) ──
+echo "==> [Phase 9 fix] Настройка systemd timer zoiten-returns-sync (15 min)..."
+cat > /etc/systemd/system/zoiten-returns-sync.service <<'SVC'
+[Unit]
+Description=Zoiten Returns Sync (WB Buyers Claims)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/zoiten.pro.env
+ExecStart=/usr/bin/curl -fsS --max-time 300 -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3001/api/cron/support-sync-returns
+SVC
+
+cat > /etc/systemd/system/zoiten-returns-sync.timer <<'TMR'
+[Unit]
+Description=Zoiten Returns Sync (every 15 minutes, offset 7 min)
+
+[Timer]
+OnBootSec=8min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=zoiten-returns-sync.service
+
+[Install]
+WantedBy=timers.target
+TMR
+
+systemctl daemon-reload
+systemctl enable --now zoiten-returns-sync.timer
+echo "✓ zoiten-returns-sync.timer активирован (интервал 15 мин)"
+
 echo "==> Building application..."
 npm run build
 

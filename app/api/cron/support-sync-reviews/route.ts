@@ -1,9 +1,9 @@
-// GET /api/cron/support-sync-reviews — cron синхронизация отзывов/вопросов/возвратов (15 мин).
-// Защищён заголовком x-cron-secret (пример: см. app/api/cron/purge-deleted/route.ts).
-// Phase 9: расширен вызовом syncReturns() (Option A — единый CRON_SECRET, единые логи).
+// GET /api/cron/support-sync-reviews — cron синхронизация отзывов/вопросов (15 мин).
+// Защищён x-cron-secret. Возвраты отделены в /api/cron/support-sync-returns
+// чтобы не превышать maxDuration=300 при 2500+ feedbacks.
 
 import { NextRequest, NextResponse } from "next/server"
-import { syncSupport, syncReturns } from "@/lib/support-sync"
+import { syncSupport } from "@/lib/support-sync"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -15,8 +15,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   try {
     const support = await syncSupport({ isAnswered: false })
-    const returns = await syncReturns()
-    return NextResponse.json({ ok: true, support, returns })
+    return NextResponse.json({ ok: true, support })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Ошибка синхронизации"
     return NextResponse.json({ ok: false, error: msg }, { status: 500 })
