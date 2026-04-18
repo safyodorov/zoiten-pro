@@ -2,20 +2,32 @@
 // Переиспользуется из POST /api/support-sync (ручной) и GET /api/cron/support-sync-reviews.
 // customerId всегда null в Phase 8 — WB Feedbacks/Questions API не даёт wbUserId.
 
+import { promises as fs } from "node:fs"
+import path from "node:path"
 import { prisma } from "@/lib/prisma"
 import {
   listFeedbacks,
   listQuestions,
   listReturns,
+  listChats,
+  getChatEvents,
+  downloadChatAttachment,
   type Feedback,
   type Question,
   type Claim,
+  type Chat,
 } from "@/lib/wb-support-api"
 import { downloadMediaBatch, type DownloadItem } from "@/lib/support-media"
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000
 const RETURNS_PAGE_LIMIT = 200
 const RETURNS_PAGE_PAUSE_MS = 600
+
+// ── Phase 10: Chat sync constants ──
+const CHAT_PAUSE_MS = 1000
+const CHAT_MAX_PAGES = 20
+const CHAT_UPLOAD_DIR = process.env.UPLOAD_DIR || "/var/www/zoiten-uploads"
+const LAST_EVENT_NEXT_KEY = "support.chat.lastEventNext"
 
 export interface SyncResult {
   feedbacksSynced: number
@@ -477,6 +489,256 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
     } catch (err) {
       result.errors.push(
         `media batch: ${err instanceof Error ? err.message : "unknown"}`
+      )
+    }
+  }
+
+  return result
+}
+
+// ──────────────────────────────────────────────────────────────
+// Phase 10: syncChats — WB Buyer Chat API → SupportTicket/Message/Media
+// ──────────────────────────────────────────────────────────────
+
+export interface SyncChatsResult {
+  newChats: number
+  newMessages: number
+  mediaDownloaded: number
+  errors: string[]
+}
+
+interface PendingChatDownload {
+  downloadId: string
+  ticketId: string
+  messageId: string
+  fileName: string
+}
+
+function sanitizeChatFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9.\-_]/g, "_").slice(-128) || `file_${Date.now()}`
+}
+
+async function chatSleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function getLastEventNext(): Promise<number | undefined> {
+  const row = await prisma.appSetting.findUnique({
+    where: { key: LAST_EVENT_NEXT_KEY },
+  })
+  if (!row?.value) return undefined
+  const n = Number.parseInt(row.value, 10)
+  return Number.isFinite(n) ? n : undefined
+}
+
+async function setLastEventNext(next: number): Promise<void> {
+  await prisma.appSetting.upsert({
+    where: { key: LAST_EVENT_NEXT_KEY },
+    create: { key: LAST_EVENT_NEXT_KEY, value: String(next) },
+    update: { value: String(next) },
+  })
+}
+
+export async function syncChats(): Promise<SyncChatsResult> {
+  const result: SyncChatsResult = {
+    newChats: 0,
+    newMessages: 0,
+    mediaDownloaded: 0,
+    errors: [],
+  }
+  const pendingDownloads: PendingChatDownload[] = []
+
+  // ── Phase B: обновить replySign / customerNameSnapshot / previewText ──
+  let chats: Chat[] = []
+  try {
+    chats = await listChats()
+  } catch (err) {
+    result.errors.push(`listChats: ${err instanceof Error ? err.message : "unknown"}`)
+    return result
+  }
+
+  for (const chat of chats) {
+    try {
+      const existing = await prisma.supportTicket.findUnique({
+        where: { channel_wbExternalId: { channel: "CHAT", wbExternalId: chat.chatID } },
+      })
+      const lastMessageAt = chat.lastMessage
+        ? new Date(chat.lastMessage.addTimestamp * 1000)
+        : null
+      const previewText = chat.lastMessage?.text?.slice(0, 140) ?? null
+
+      if (existing) {
+        await prisma.supportTicket.update({
+          where: { id: existing.id },
+          data: {
+            chatReplySign: chat.replySign,
+            customerNameSnapshot: chat.clientName,
+            previewText: previewText ?? undefined,
+            lastMessageAt: lastMessageAt ?? undefined,
+            nmId: chat.goodCard?.nmID ?? existing.nmId,
+          },
+        })
+      } else {
+        await prisma.supportTicket.create({
+          data: {
+            channel: "CHAT",
+            wbExternalId: chat.chatID,
+            chatReplySign: chat.replySign,
+            customerNameSnapshot: chat.clientName,
+            nmId: chat.goodCard?.nmID ?? null,
+            previewText,
+            lastMessageAt,
+            status: "NEW",
+          },
+        })
+        result.newChats++
+      }
+    } catch (err) {
+      result.errors.push(
+        `chat ${chat.chatID}: ${err instanceof Error ? err.message : "unknown"}`
+      )
+    }
+  }
+
+  // ── Phase A: инкрементальный pull events ──
+  let cursor = await getLastEventNext()
+  let pagesProcessed = 0
+  let latestNext = cursor ?? 0
+
+  while (pagesProcessed < CHAT_MAX_PAGES) {
+    let page
+    try {
+      page = await getChatEvents(cursor)
+    } catch (err) {
+      result.errors.push(
+        `getChatEvents: ${err instanceof Error ? err.message : "unknown"}`
+      )
+      break
+    }
+    if (page.events.length === 0) break
+
+    for (const event of page.events) {
+      try {
+        const existingMsg = await prisma.supportMessage.findUnique({
+          where: { wbEventId: event.eventID },
+        })
+        if (existingMsg) continue
+
+        let ticket = await prisma.supportTicket.findUnique({
+          where: {
+            channel_wbExternalId: { channel: "CHAT", wbExternalId: event.chatID },
+          },
+        })
+        if (!ticket && event.isNewChat) {
+          ticket = await prisma.supportTicket.create({
+            data: {
+              channel: "CHAT",
+              wbExternalId: event.chatID,
+              customerNameSnapshot: event.clientName ?? null,
+              status: "NEW",
+              lastMessageAt: new Date(event.addTimestamp),
+              previewText: event.message?.text?.slice(0, 140) ?? null,
+            },
+          })
+          result.newChats++
+        }
+        if (!ticket) {
+          result.errors.push(
+            `event ${event.eventID}: chat ${event.chatID} не найден после Phase B`
+          )
+          continue
+        }
+
+        const direction = event.sender === "client" ? "INBOUND" : "OUTBOUND"
+        const msg = await prisma.supportMessage.create({
+          data: {
+            ticketId: ticket.id,
+            direction,
+            text: event.message?.text ?? null,
+            authorId: null,
+            wbEventId: event.eventID,
+            wbSentAt: new Date(event.addTimestamp),
+            isAutoReply: false,
+          },
+        })
+        result.newMessages++
+
+        const yearMs = YEAR_MS
+        for (const img of event.message?.attachments?.images ?? []) {
+          await prisma.supportMedia.create({
+            data: {
+              messageId: msg.id,
+              type: "IMAGE",
+              wbUrl: `DOWNLOAD_ID:${img.downloadID}`,
+              expiresAt: new Date(Date.now() + yearMs),
+            },
+          })
+          pendingDownloads.push({
+            downloadId: img.downloadID,
+            ticketId: ticket.id,
+            messageId: msg.id,
+            fileName: img.fileName,
+          })
+        }
+        for (const f of event.message?.attachments?.files ?? []) {
+          await prisma.supportMedia.create({
+            data: {
+              messageId: msg.id,
+              type: "DOCUMENT",
+              wbUrl: `DOWNLOAD_ID:${f.downloadID}`,
+              expiresAt: new Date(Date.now() + yearMs),
+            },
+          })
+          pendingDownloads.push({
+            downloadId: f.downloadID,
+            ticketId: ticket.id,
+            messageId: msg.id,
+            fileName: f.fileName,
+          })
+        }
+      } catch (err) {
+        result.errors.push(
+          `event ${event.eventID}: ${err instanceof Error ? err.message : "unknown"}`
+        )
+      }
+    }
+
+    latestNext = page.next || latestNext
+    if (page.events.length < 100) break // WB default batch, последняя страница
+    cursor = page.next
+    pagesProcessed++
+    await chatSleep(CHAT_PAUSE_MS)
+  }
+
+  // Обновить cursor
+  if (latestNext > 0) {
+    try {
+      await setLastEventNext(latestNext)
+    } catch (err) {
+      result.errors.push(
+        `lastEventNext: ${err instanceof Error ? err.message : "unknown"}`
+      )
+    }
+  }
+
+  // ── Download queue ──
+  for (const dl of pendingDownloads) {
+    try {
+      const buffer = await downloadChatAttachment(dl.downloadId)
+      const dir = path.join(CHAT_UPLOAD_DIR, "support", dl.ticketId, dl.messageId)
+      await fs.mkdir(dir, { recursive: true })
+      const filename = sanitizeChatFilename(dl.fileName)
+      const localPath = path.join(dir, filename)
+      await fs.writeFile(localPath, buffer)
+      await prisma.supportMedia.updateMany({
+        where: { messageId: dl.messageId, wbUrl: `DOWNLOAD_ID:${dl.downloadId}` },
+        data: { localPath, sizeBytes: buffer.length },
+      })
+      result.mediaDownloaded++
+      await chatSleep(CHAT_PAUSE_MS)
+    } catch (err) {
+      result.errors.push(
+        `download ${dl.downloadId}: ${err instanceof Error ? err.message : "unknown"}`
       )
     }
   }
