@@ -96,3 +96,97 @@ describe("averageFeedbackRating", () => {
     expect(result).toBe(5)
   })
 })
+
+// ── Phase 12 Plan 02 — дополнительные сценарии профиля покупателя ────────────
+
+describe("countTicketsByChannel — Plan 12-02 сценарии", () => {
+  it("Customer со всеми 5 каналами — корректная раскладка", () => {
+    const tickets = [
+      { channel: "FEEDBACK" as const, rating: 5 },
+      { channel: "FEEDBACK" as const, rating: 4 },
+      { channel: "QUESTION" as const, rating: null },
+      { channel: "QUESTION" as const, rating: null },
+      { channel: "QUESTION" as const, rating: null },
+      { channel: "CHAT" as const, rating: null },
+      { channel: "RETURN" as const, rating: null },
+      { channel: "RETURN" as const, rating: null },
+      { channel: "MESSENGER" as const, rating: null },
+    ]
+    const result = countTicketsByChannel(tickets)
+    expect(result).toEqual({
+      FEEDBACK: 2,
+      QUESTION: 3,
+      CHAT: 1,
+      RETURN: 2,
+      MESSENGER: 1,
+    })
+  })
+
+  it("Customer только с CHAT (типичный auto-linked случай)", () => {
+    const tickets = [
+      { channel: "CHAT" as const, rating: null },
+      { channel: "CHAT" as const, rating: null },
+      { channel: "CHAT" as const, rating: null },
+    ]
+    const result = countTicketsByChannel(tickets)
+    expect(result.CHAT).toBe(3)
+    expect(result.FEEDBACK).toBe(0)
+    expect(result.QUESTION).toBe(0)
+    expect(result.RETURN).toBe(0)
+    expect(result.MESSENGER).toBe(0)
+  })
+
+  it("Customer только с MESSENGER (ручные тикеты из Telegram/WhatsApp)", () => {
+    const tickets = [
+      { channel: "MESSENGER" as const, rating: null },
+      { channel: "MESSENGER" as const, rating: null },
+      { channel: "MESSENGER" as const, rating: null },
+      { channel: "MESSENGER" as const, rating: null },
+    ]
+    const result = countTicketsByChannel(tickets)
+    expect(result.MESSENGER).toBe(4)
+    expect(result.CHAT).toBe(0)
+  })
+})
+
+describe("averageFeedbackRating — Plan 12-02 сценарии", () => {
+  it("Customer с отличным рейтингом 5.0", () => {
+    const tickets = [
+      { channel: "FEEDBACK" as const, rating: 5 },
+      { channel: "FEEDBACK" as const, rating: 5 },
+      { channel: "FEEDBACK" as const, rating: 5 },
+    ]
+    expect(averageFeedbackRating(tickets)).toBe(5)
+  })
+
+  it("Customer с плохим рейтингом (mix каналов не влияет)", () => {
+    const tickets = [
+      { channel: "FEEDBACK" as const, rating: 1 },
+      { channel: "FEEDBACK" as const, rating: 2 },
+      { channel: "QUESTION" as const, rating: null }, // игнорируется
+      { channel: "RETURN" as const, rating: null }, // игнорируется
+    ]
+    expect(averageFeedbackRating(tickets)).toBe(1.5)
+  })
+
+  it("Customer без FEEDBACK (только CHAT/MESSENGER) — null", () => {
+    const tickets = [
+      { channel: "CHAT" as const, rating: null },
+      { channel: "MESSENGER" as const, rating: null },
+      { channel: "RETURN" as const, rating: null },
+    ]
+    expect(averageFeedbackRating(tickets)).toBeNull()
+  })
+
+  it("Customer со смешанными рейтингами — среднее до 2 знаков", () => {
+    const tickets = [
+      { channel: "FEEDBACK" as const, rating: 5 },
+      { channel: "FEEDBACK" as const, rating: 4 },
+      { channel: "FEEDBACK" as const, rating: 3 },
+      { channel: "FEEDBACK" as const, rating: 2 },
+      { channel: "FEEDBACK" as const, rating: 1 },
+    ]
+    // (5+4+3+2+1)/5 = 3
+    expect(averageFeedbackRating(tickets)).toBe(3)
+  })
+})
