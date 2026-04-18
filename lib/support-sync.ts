@@ -563,7 +563,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
         where: { channel_wbExternalId: { channel: "CHAT", wbExternalId: chat.chatID } },
       })
       const lastMessageAt = chat.lastMessage
-        ? new Date(chat.lastMessage.addTimestamp * 1000)
+        ? new Date(chat.lastMessage.addTimestamp)
         : null
       const previewText = chat.lastMessage?.text?.slice(0, 140) ?? null
 
