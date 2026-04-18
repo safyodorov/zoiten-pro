@@ -1,7 +1,9 @@
 // components/support/SupportDialog.tsx
 // Server Component: хронологическая лента сообщений.
 // Медиа-URL: если localPath задан — маппит через nginx alias /uploads/, иначе WB-URL.
+// Phase 10: isAutoReply=true → inline Bot badge «Автоответ» рядом с меткой направления.
 
+import { Bot } from "lucide-react"
 import type { Direction, MediaType } from "@prisma/client"
 
 interface Media {
@@ -19,6 +21,7 @@ interface Message {
   sentAt: Date
   wbSentAt: Date | null
   media: Media[]
+  isAutoReply?: boolean
 }
 
 function formatTime(d: Date): string {
@@ -63,9 +66,20 @@ export function SupportDialog({ messages }: { messages: Message[] }) {
                 isOut ? "bg-primary text-primary-foreground" : "bg-muted"
               }`}
             >
-              <div className="text-[10px] uppercase opacity-70 mb-1">
-                {isOut ? (m.authorName ?? "Менеджер") : "Покупатель"} ·{" "}
-                {formatTime(m.wbSentAt ?? m.sentAt)}
+              <div className="text-[10px] uppercase opacity-70 mb-1 flex items-center gap-1">
+                <span>
+                  {isOut ? (m.authorName ?? "Менеджер") : "Покупатель"} ·{" "}
+                  {formatTime(m.wbSentAt ?? m.sentAt)}
+                </span>
+                {m.isAutoReply && (
+                  <span
+                    className="inline-flex items-center gap-0.5"
+                    title="Автоответ"
+                  >
+                    <Bot className="h-3 w-3" />
+                    Автоответ
+                  </span>
+                )}
               </div>
               {m.text && (
                 <p className="text-sm whitespace-pre-wrap">{m.text}</p>

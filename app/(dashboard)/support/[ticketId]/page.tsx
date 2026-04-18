@@ -7,6 +7,7 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { SupportDialog } from "@/components/support/SupportDialog"
 import { ReplyPanel } from "@/components/support/ReplyPanel"
+import { ChatReplyPanel } from "@/components/support/ChatReplyPanel"
 import { ReturnActionsPanel } from "@/components/support/ReturnActionsPanel"
 import { ReturnInfoPanel } from "@/components/support/ReturnInfoPanel"
 import { TicketSidePanel } from "@/components/support/TicketSidePanel"
@@ -108,10 +109,12 @@ export default async function TicketPage({
     sentAt: m.sentAt,
     wbSentAt: m.wbSentAt,
     media: m.media,
+    isAutoReply: m.isAutoReply,
   }))
 
   const canReply =
     ticket.channel === "FEEDBACK" || ticket.channel === "QUESTION"
+  const isChat = ticket.channel === "CHAT"
   const isReturn = ticket.channel === "RETURN"
 
   return (
@@ -184,6 +187,12 @@ export default async function TicketPage({
               disabled={ticket.status === "CLOSED"}
             />
           )}
+          {isChat && (
+            <ChatReplyPanel
+              ticketId={ticket.id}
+              replySign={ticket.chatReplySign}
+            />
+          )}
           {isReturn && (
             <ReturnActionsPanel
               ticketId={ticket.id}
@@ -191,10 +200,9 @@ export default async function TicketPage({
               wbActions={ticket.wbActions}
             />
           )}
-          {!canReply && !isReturn && (
+          {!canReply && !isChat && !isReturn && (
             <div className="border-t p-3 text-xs text-muted-foreground text-center">
-              Ответ через интерфейс доступен для каналов «Отзыв» и «Вопрос».
-              Чат/мессенджер — в следующих фазах.
+              Канал «{ticket.channel}» не поддерживает ответ через интерфейс.
             </div>
           )}
         </div>
