@@ -69,6 +69,7 @@ model User {
   templatesUpdated ResponseTemplate[] @relation("TemplateUpdater") // Phase 11 — шаблоны, последний раз обновлённые пользователем
   appealsCreated   AppealRecord[]     @relation("AppealCreator") // Phase 11 — обжалования, созданные пользователем
   appealsResolved  AppealRecord[]     @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
+  autoReplyUpdates AutoReplyConfig[]  @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
   isActive         Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -516,6 +517,7 @@ enum Direction {
 enum MediaType {
   IMAGE
   VIDEO
+  DOCUMENT // Phase 10 — PDF из chat attachments.files[]
 }
 
 // Customer — карточка покупателя (Phase 12). В Phase 8 записи не создаются,
@@ -568,6 +570,10 @@ model SupportTicket {
   returnState     ReturnState? // локальное состояние (PENDING/APPROVED/REJECTED)
   returnDecisions ReturnDecision[] @relation("ReturnDecisions")
 
+  // ── Phase 10: CHAT канал ──
+  chatReplySign        String? // replySign из WB Chat API для sendMessage (ротируется при каждом sync)
+  customerNameSnapshot String? // clientName из WB (до линковки с Customer в Phase 12)
+
   @@unique([channel, wbExternalId])
   @@index([status])
   @@index([channel])
@@ -591,6 +597,9 @@ model SupportMessage {
   media       SupportMedia[]
   sentAt      DateTime       @default(now())
   wbSentAt    DateTime? // createdDate из WB API
+
+  // ── Phase 10: CHAT канал ──
+  wbEventId String? @unique // eventID из WB Chat events для идемпотентного upsert. Nullable — Phase 8/9 legacy messages не имеют.
 
   @@index([ticketId, sentAt])
 }
@@ -701,4 +710,24 @@ model AppealRecord {
 
   @@index([status])
   @@index([createdAt])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 10 — Чат + Автоответы (singleton)
+// ──────────────────────────────────────────────────────────────────
+// Singleton — id всегда = "default". Локальная feature ERP (у WB нет
+// endpoint'а для автоответов). Cron /api/cron/support-sync-chat (5 мин)
+// читает конфиг и отправляет OUTBOUND сообщения с isAutoReply=true
+// вне рабочих часов (workDays + workdayStart/End по timezone).
+model AutoReplyConfig {
+  id           String   @id // всегда "default"
+  isEnabled    Boolean  @default(false)
+  workdayStart String   @default("09:00") // "HH:MM" в timezone
+  workdayEnd   String   @default("18:00") // "HH:MM" в timezone
+  workDays     Int[]    @default([1, 2, 3, 4, 5]) // ISO 8601: 1=Mon, 7=Sun
+  messageText  String   @default("Здравствуйте, {имя_покупателя}! Спасибо за обращение по товару «{название_товара}». Мы ответим в рабочее время.") @db.Text
+  timezone     String   @default("Europe/Moscow")
+  updatedById  String?
+  updatedBy    User?    @relation("AutoReplyUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt    DateTime @updatedAt
 }
