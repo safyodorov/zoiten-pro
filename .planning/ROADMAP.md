@@ -241,17 +241,24 @@ Plans:
 - [ ] 11-04-PLAN.md — Appeals: app/actions/appeals.ts (createAppeal + updateAppealStatus) + AppealModal (jump-link WB) + AppealStatusPanel + индикатор в ленте + ROADMAP update + Deploy + UAT
 **UI hint**: yes
 
-### Phase 12: Профиль покупателя + Мессенджеры
+### Phase 12: Профиль покупателя + Мессенджеры (reformulated — WB не даёт wbUserId)
 **Goal**: Менеджер видит покупателя во всех каналах как единого Customer, ведёт внутреннюю заметку, создаёт тикеты вручную для Telegram/WhatsApp.
 **Depends on**: Phase 8 (Customer создаётся в Phase 8 при sync, здесь — линковка и UI)
-**Requirements**: SUP-32, SUP-33, SUP-34, SUP-35
+**Requirements**: SUP-32 (hybrid — auto Chat / manual остальные), SUP-33, SUP-34, SUP-35
+
+> **Scope change (2026-04-18):** SUP-32 reformulated — WB API не возвращает wbUserId ни в одном канале (Feedbacks/Questions/Returns/Chat), подтверждено Phase 8/9/10 research + WebSearch 2026. Hybrid стратегия (Вариант C): для CHAT — auto-create Customer 1:1 с chatID через prefix `chat:` в Customer.wbUserId; для FEEDBACK/QUESTION/RETURN — customerId остаётся null, линковка ручная через кнопку «Связать с покупателем» в TicketSidePanel. ReplyPanel для MESSENGER скрыт (канал внешний — отвечать в Telegram/WhatsApp).
+
 **Success Criteria** (what must be TRUE):
-  1. При синхронизации тикеты автоматически линкуются к `Customer` по `wbUserId`; если покупатель новый — создаётся запись
-  2. Менеджер открывает `/support/customers/[customerId]` → видит все тикеты покупателя по всем каналам в хронологии, итого (N отзывов/вопросов/чатов/возвратов), средний рейтинг отзывов, внутренняя заметка textarea
-  3. Менеджер создаёт ручной MESSENGER-тикет → форма (канал Telegram/WhatsApp/другое, телефон/имя, текст, опциональная привязка к WbCard) → `SupportTicket` с `channel=MESSENGER` и `wbExternalId=null`
-  4. Менеджер выполняет merge дубликатов Customer → выбирает целевого покупателя → все тикеты переносятся, исходный Customer удаляется
-  5. MESSENGER-тикеты появляются в общей ленте `/support` наравне с WB-каналами и открываются в том же диалоге
-**Plans**: TBD
+  1. Для CHAT канала при sync auto-create Customer 1:1 с chatID (Customer.wbUserId='chat:'+chatID); для FEEDBACK/QUESTION/RETURN customerId=null, линковка ручная через LinkCustomerButton в TicketSidePanel. Backfill существующих CHAT тикетов выполнен миграционным SQL.
+  2. Менеджер открывает `/support/customers/[customerId]` → видит все тикеты покупателя по всем каналам в хронологии DESC, итого (N отзывов/вопросов/чатов/возвратов/мессенджер), средний рейтинг отзывов (FEEDBACK only), внутренняя заметка textarea с debounced save (500ms)
+  3. Менеджер создаёт ручной MESSENGER-тикет через `/support/new` → форма (native select messengerType: Telegram/WhatsApp/другое, customerName, messengerContact, опциональный nmId, текст) → `SupportTicket` с `channel=MESSENGER`, `wbExternalId=null`, optional Customer создаётся атомарно в транзакции
+  4. Менеджер выполняет merge дубликатов Customer через кнопку «Связать с другим» в профиле → 2-шаговая модалка (search target → confirmation warning) → все тикеты переносятся к target, source Customer hard-deleted в транзакции
+  5. MESSENGER-тикеты появляются в общей ленте `/support` с иконкой Inbox + бейдж подтипа (Tg/Wa/Др) под каналом; открываются в /support/[ticketId] БЕЗ ReplyPanel (вместо — read-only hint с messengerContact)
+**Plans**: 3 plans
+Plans:
+- [ ] 12-01-PLAN.md — Foundation: Prisma миграция + enum MessengerType + SQL backfill + syncChats auto-upsert Customer + 5 server actions + 5 test файлов GREEN (Wave 0 stubs)
+- [ ] 12-02-PLAN.md — UI профиль /support/customers/[id] (5 компонент) + LinkCustomerButton в TicketSidePanel + кликабельное имя в SupportTicketCard (client)
+- [ ] 12-03-PLAN.md — /support/new + NewMessengerTicketForm + MergeCustomerDialog + MESSENGER hint в диалоге + messengerType бейдж в ленте + deploy + UAT
 **UI hint**: yes
 
 ### Phase 13: Статистика
@@ -285,5 +292,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Возвраты | 0/TBD | Planned | |
 | 10. Чат + Автоответы | 4/4 | Complete   | 2026-04-18 |
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
-| 12. Профиль покупателя + Мессенджеры | 0/TBD | Planned | |
+| 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 0/3 | Planned | |
 | 13. Статистика | 0/TBD | Planned | |
