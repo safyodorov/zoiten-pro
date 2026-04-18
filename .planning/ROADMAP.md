@@ -159,7 +159,7 @@ Plans:
 
 - [ ] **Phase 8: MVP — Отзывы + Вопросы** — модели БД, WB Feedbacks/Questions API, лента тикетов `/support`, диалог `/support/[ticketId]`, cron-синхронизация 15 мин, sidebar badge
 - [ ] **Phase 9: Возвраты** — WB Returns API, страница `/support/returns`, действия Одобрить/Отклонить/Пересмотреть, логика состояний PENDING → APPROVED | REJECTED → APPROVED
-- [ ] **Phase 10: Чат + Автоответы** — WB Chat API (curl fallback на 403), cron 5 мин, отправка сообщений с медиа, AutoReplyConfig + страница `/support/auto-reply`
+- [x] **Phase 10: Чат + Автоответы** — WB Chat API (curl fallback на 403), cron 5 мин, отправка сообщений с медиа, AutoReplyConfig + страница `/support/auto-reply` (completed 2026-04-18)
 - [ ] **Phase 11: Шаблоны + Обжалование отзывов** (reformulated — local-only library + hybrid manual appeals) — CRUD шаблонов `/support/templates`, Export/Import JSON (вместо WB sync), модалка выбора при ответе, обжалование через ЛК WB с локальным трекером статуса
 - [ ] **Phase 12: Профиль покупателя + Мессенджеры** — линковка тикетов к Customer, страница `/support/customers/[id]`, ручное создание тикета MESSENGER, merge дубликатов
 - [ ] **Phase 13: Статистика** — страница `/support/stats` с вкладками «По товарам» / «По менеджерам», ManagerSupportStats + cron агрегации (03:00 МСК)
@@ -217,7 +217,7 @@ Plans:
 - [x] 10-01-PLAN.md — Foundation: Prisma миграция AutoReplyConfig + WB Buyer Chat API клиент (5 методов) + Wave 0 stubs (5 тестов + 2 fixtures)
 - [x] 10-02-PLAN.md — Sync + AutoReply Cron: lib/support-sync.ts syncChats + lib/auto-reply.ts runAutoReplies + GET /api/cron/support-sync-chat (5 мин) + расширение POST /api/support-sync
 - [x] 10-03-PLAN.md — UI Chat Messages: ChatReplyPanel (multipart upload JPEG/PNG/PDF) + sendChatMessageAction + Bot badge для isAutoReply в SupportDialog
-- [ ] 10-04-PLAN.md — AutoReply Settings + Deploy + UAT: /support/auto-reply (singleton config) + saveAutoReplyConfig + sidebar 'Автоответ' + deploy.sh (WB_CHAT_TOKEN + crontab 5-min)
+- [x] 10-04-PLAN.md — AutoReply Settings + Deploy + UAT: /support/auto-reply (singleton config) + saveAutoReplyConfig + sidebar 'Автоответ' + deploy.sh (WB_CHAT_TOKEN + crontab 5-min)
 **UI hint**: yes
 
 ### Phase 11: Шаблоны + Обжалование отзывов (reformulated — WB API отключён)
@@ -283,7 +283,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Управление ценами WB | 0/12 | Planned | |
 | 8. MVP — Отзывы + Вопросы | 0/TBD | Planned | |
 | 9. Возвраты | 0/TBD | Planned | |
-| 10. Чат + Автоответы | 3/4 | In Progress|  |
+| 10. Чат + Автоответы | 4/4 | Complete   | 2026-04-18 |
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры | 0/TBD | Planned | |
 | 13. Статистика | 0/TBD | Planned | |
