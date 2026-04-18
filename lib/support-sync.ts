@@ -559,6 +559,14 @@ export async function syncChats(): Promise<SyncChatsResult> {
 
   for (const chat of chats) {
     try {
+      // ── Phase 12: auto-upsert Customer по chatID (hybrid strategy D-01) ──
+      const customerKey = `chat:${chat.chatID}`
+      const customer = await prisma.customer.upsert({
+        where: { wbUserId: customerKey },
+        create: { wbUserId: customerKey, name: chat.clientName ?? null },
+        update: chat.clientName ? { name: chat.clientName } : {},
+      })
+
       const existing = await prisma.supportTicket.findUnique({
         where: { channel_wbExternalId: { channel: "CHAT", wbExternalId: chat.chatID } },
       })
@@ -573,6 +581,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
           data: {
             chatReplySign: chat.replySign,
             customerNameSnapshot: chat.clientName,
+            customerId: customer.id, // ← Phase 12 auto-link
             previewText: previewText ?? undefined,
             lastMessageAt: lastMessageAt ?? undefined,
             nmId: chat.goodCard?.nmID ?? existing.nmId,
@@ -585,6 +594,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
             wbExternalId: chat.chatID,
             chatReplySign: chat.replySign,
             customerNameSnapshot: chat.clientName,
+            customerId: customer.id, // ← Phase 12 auto-link
             nmId: chat.goodCard?.nmID ?? null,
             previewText,
             lastMessageAt,
@@ -630,11 +640,19 @@ export async function syncChats(): Promise<SyncChatsResult> {
           },
         })
         if (!ticket && event.isNewChat) {
+          // ── Phase 12: auto-upsert Customer по chatID (Phase A fallback) ──
+          const customerKey = `chat:${event.chatID}`
+          const customer = await prisma.customer.upsert({
+            where: { wbUserId: customerKey },
+            create: { wbUserId: customerKey, name: event.clientName ?? null },
+            update: event.clientName ? { name: event.clientName } : {},
+          })
           ticket = await prisma.supportTicket.create({
             data: {
               channel: "CHAT",
               wbExternalId: event.chatID,
               customerNameSnapshot: event.clientName ?? null,
+              customerId: customer.id, // ← Phase 12 auto-link
               status: "NEW",
               lastMessageAt: new Date(event.addTimestamp),
               previewText: event.message?.text?.slice(0, 140) ?? null,
