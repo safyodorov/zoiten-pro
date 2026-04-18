@@ -13,6 +13,51 @@ npm ci --omit=dev
 echo "==> Running database migrations..."
 npx prisma migrate deploy
 
+# ── Phase 10: WB_CHAT_TOKEN проверка (warning only, не fail) ──
+echo "==> [Phase 10] Проверка WB_CHAT_TOKEN..."
+if ! grep -q "^WB_CHAT_TOKEN=" /etc/zoiten.pro.env 2>/dev/null; then
+  echo "⚠ WARNING: WB_CHAT_TOKEN не найден в /etc/zoiten.pro.env"
+  echo "  Синхронизация чата и автоответы не будут работать без этого токена."
+  echo "  Выпустите токен в seller.wildberries.ru → Настройки → Доступ к API"
+  echo "  → scope 'Чат с покупателями' (bit 9)"
+  echo "  Затем: echo 'WB_CHAT_TOKEN=<token>' >> /etc/zoiten.pro.env"
+  echo "         systemctl restart zoiten-erp.service"
+else
+  echo "✓ WB_CHAT_TOKEN присутствует в /etc/zoiten.pro.env"
+fi
+
+# ── Phase 10: systemd timer для /api/cron/support-sync-chat (каждые 5 минут) ──
+echo "==> [Phase 10] Настройка systemd timer zoiten-chat-sync (5 min)..."
+cat > /etc/systemd/system/zoiten-chat-sync.service <<'SVC'
+[Unit]
+Description=Zoiten Chat Sync (WB Buyer Chat + AutoReply)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/zoiten.pro.env
+ExecStart=/usr/bin/curl -fsS -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3001/api/cron/support-sync-chat
+SVC
+
+cat > /etc/systemd/system/zoiten-chat-sync.timer <<'TMR'
+[Unit]
+Description=Zoiten Chat Sync (every 5 minutes)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=zoiten-chat-sync.service
+
+[Install]
+WantedBy=timers.target
+TMR
+
+systemctl daemon-reload
+systemctl enable --now zoiten-chat-sync.timer
+echo "✓ zoiten-chat-sync.timer активирован (интервал 5 мин)"
+
 echo "==> Building application..."
 npm run build
 
