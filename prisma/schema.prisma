@@ -70,6 +70,7 @@ model User {
   appealsCreated   AppealRecord[]     @relation("AppealCreator") // Phase 11 — обжалования, созданные пользователем
   appealsResolved  AppealRecord[]     @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
   autoReplyUpdates AutoReplyConfig[]  @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
+  managerStats     ManagerSupportStats[] @relation("ManagerStats") // Phase 13 — денормализованная статистика менеджеров (SUP-39)
   isActive         Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -592,6 +593,7 @@ model SupportTicket {
   @@index([assignedToId])
   @@index([createdAt])
   @@index([returnState])
+  @@index([channel, nmId, createdAt]) // Phase 13 — per-product агрегации (SUP-37)
 }
 
 // SupportMessage — отдельное сообщение внутри тикета.
@@ -613,6 +615,7 @@ model SupportMessage {
   wbEventId String? @unique // eventID из WB Chat events для идемпотентного upsert. Nullable — Phase 8/9 legacy messages не имеют.
 
   @@index([ticketId, sentAt])
+  @@index([direction, isAutoReply, wbSentAt]) // Phase 13 — фильтр автоответов + avg response time
 }
 
 // SupportMedia — вложения к сообщениям. localPath заполняется Plan 08-02
@@ -741,4 +744,32 @@ model AutoReplyConfig {
   updatedById  String?
   updatedBy    User?    @relation("AutoReplyUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt    DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 13 — Статистика службы поддержки
+// ──────────────────────────────────────────────────────────────────
+// Денормализованная статистика менеджеров (SUP-39). Один row на
+// (userId, period), где period = 1-е число месяца 00:00 Europe/Moscow.
+// Обновляется cron'ом раз в сутки 03:00 МСК (текущий месяц) через upsert.
+// Past months — immutable после закрытия месяца (cron пишет только current month).
+// Глобальный счётчик автоответов хранится отдельно (не per-manager, D-02).
+model ManagerSupportStats {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation("ManagerStats", fields: [userId], references: [id], onDelete: Cascade)
+  period             DateTime // 1st of month 00:00 Europe/Moscow (+03:00)
+  totalProcessed     Int      @default(0) // D-04 outcome-actions only: OUTBOUND !isAutoReply by user + ReturnDecision by user + AppealRecord resolved by user
+  feedbacksAnswered  Int      @default(0) // COUNT OUTBOUND SupportMessage где ticket.channel=FEEDBACK AND authorId=userId AND isAutoReply=false
+  questionsAnswered  Int      @default(0) // same для QUESTION
+  chatsAnswered      Int      @default(0) // same для CHAT
+  returnsDecided     Int      @default(0) // COUNT ReturnDecision где decidedById=userId AND action IN (APPROVE, REJECT, RECONSIDER)
+  returnsApproved    Int      @default(0) // COUNT ReturnDecision где decidedById=userId AND action IN (APPROVE, RECONSIDER) — для расчёта % одобрения
+  returnsRejected    Int      @default(0) // COUNT ReturnDecision где decidedById=userId AND action=REJECT
+  appealsResolved    Int      @default(0) // COUNT AppealRecord где resolvedById=userId
+  avgResponseTimeSec Int? // nullable — null если за период у менеджера не было OUTBOUND ответов
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, period])
+  @@index([period])
 }
