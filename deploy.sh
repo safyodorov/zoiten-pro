@@ -58,6 +58,38 @@ systemctl daemon-reload
 systemctl enable --now zoiten-chat-sync.timer
 echo "✓ zoiten-chat-sync.timer активирован (интервал 5 мин)"
 
+# ── Phase 8/9 fix: systemd timer для /api/cron/support-sync-reviews (каждые 15 мин) ──
+echo "==> [Phase 8/9 fix] Настройка systemd timer zoiten-support-sync (15 min)..."
+cat > /etc/systemd/system/zoiten-support-sync.service <<'SVC'
+[Unit]
+Description=Zoiten Support Sync (WB Feedbacks + Questions + Returns)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/zoiten.pro.env
+ExecStart=/usr/bin/curl -fsS --max-time 500 -H "x-cron-secret: ${CRON_SECRET}" http://localhost:3001/api/cron/support-sync-reviews
+SVC
+
+cat > /etc/systemd/system/zoiten-support-sync.timer <<'TMR'
+[Unit]
+Description=Zoiten Support Sync (every 15 minutes)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=zoiten-support-sync.service
+
+[Install]
+WantedBy=timers.target
+TMR
+
+systemctl daemon-reload
+systemctl enable --now zoiten-support-sync.timer
+echo "✓ zoiten-support-sync.timer активирован (интервал 15 мин)"
+
 echo "==> Building application..."
 npm run build
 
