@@ -64,6 +64,19 @@ export default async function TicketPage({
       })
     : null
 
+  // Phase 11-03: активные шаблоны канала тикета — для TemplatePickerModal в ReplyPanel.
+  // Загружаем только для FEEDBACK/QUESTION/CHAT; RETURN/MESSENGER не используют picker.
+  const canLoadTemplates =
+    ticket.channel === "FEEDBACK" ||
+    ticket.channel === "QUESTION" ||
+    ticket.channel === "CHAT"
+  const templates = canLoadTemplates
+    ? await prisma.responseTemplate.findMany({
+        where: { channel: ticket.channel, isActive: true },
+        orderBy: [{ updatedAt: "desc" }],
+      })
+    : []
+
   function authorName(
     a: {
       name: string
@@ -150,6 +163,11 @@ export default async function TicketPage({
           {canReply && (
             <ReplyPanel
               ticketId={ticket.id}
+              ticketNmId={ticket.nmId}
+              ticketChannel={ticket.channel as "FEEDBACK" | "QUESTION" | "CHAT"}
+              customerName={ticket.customer?.name ?? null}
+              productName={wbCard?.name ?? null}
+              templates={templates}
               disabled={ticket.status === "CLOSED"}
             />
           )}
