@@ -13,7 +13,12 @@ import {
   Inbox,
   Star,
 } from "lucide-react"
-import type { TicketChannel, TicketStatus, AppealStatus } from "@prisma/client"
+import type {
+  TicketChannel,
+  TicketStatus,
+  AppealStatus,
+  MessengerType,
+} from "@prisma/client"
 
 const channelIconMap: Record<TicketChannel, typeof MessageSquare> = {
   FEEDBACK: MessageSquare,
@@ -66,6 +71,8 @@ export interface SupportTicketCardProps {
     // Phase 12-02:
     customer: { id: string; name: string | null } | null
     customerNameSnapshot: string | null
+    // Phase 12-03:
+    messengerType?: MessengerType | null
   }
   wbCard: { nmId: number; photoUrl: string | null; title: string | null } | null
 }
@@ -113,6 +120,15 @@ export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
         <span className="text-[10px] uppercase">
           {channelLabelMap[ticket.channel]}
         </span>
+        {ticket.channel === "MESSENGER" && ticket.messengerType && (
+          <span className="text-[9px] uppercase text-muted-foreground font-medium">
+            {ticket.messengerType === "TELEGRAM"
+              ? "Tg"
+              : ticket.messengerType === "WHATSAPP"
+              ? "Wa"
+              : "Др"}
+          </span>
+        )}
       </div>
       {wbCard?.photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element

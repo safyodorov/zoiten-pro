@@ -116,6 +116,7 @@ export default async function TicketPage({
     ticket.channel === "FEEDBACK" || ticket.channel === "QUESTION"
   const isChat = ticket.channel === "CHAT"
   const isReturn = ticket.channel === "RETURN"
+  const isMessenger = ticket.channel === "MESSENGER"
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px)] -m-6">
@@ -213,7 +214,25 @@ export default async function TicketPage({
               wbActions={ticket.wbActions}
             />
           )}
-          {!canReply && !isChat && !isReturn && (
+          {isMessenger && (
+            <div className="border-t p-3 text-xs text-muted-foreground text-center">
+              Канал внешний — ответьте покупателю в{" "}
+              {ticket.messengerType === "TELEGRAM"
+                ? "Telegram"
+                : ticket.messengerType === "WHATSAPP"
+                ? "WhatsApp"
+                : "мессенджере"}
+              {ticket.messengerContact && (
+                <>
+                  :{" "}
+                  <code className="bg-muted px-1 rounded">
+                    {ticket.messengerContact}
+                  </code>
+                </>
+              )}
+            </div>
+          )}
+          {!canReply && !isChat && !isReturn && !isMessenger && (
             <div className="border-t p-3 text-xs text-muted-foreground text-center">
               Канал «{ticket.channel}» не поддерживает ответ через интерфейс.
             </div>

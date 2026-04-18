@@ -15,6 +15,7 @@ import { CustomerInfoCard } from "@/components/support/customers/CustomerInfoCar
 import { ChannelStats } from "@/components/support/customers/ChannelStats"
 import { NoteEditor } from "@/components/support/customers/NoteEditor"
 import { TicketsTable } from "@/components/support/customers/TicketsTable"
+import { MergeCustomerDialog } from "@/components/support/customers/MergeCustomerDialog"
 
 export const dynamic = "force-dynamic"
 
@@ -85,6 +86,13 @@ export default async function CustomerProfilePage({
             customerId={customer.id}
             initialNote={customer.note ?? ""}
           />
+          <div className="rounded-lg border p-4">
+            <MergeCustomerDialog
+              currentCustomerId={customer.id}
+              currentCustomerName={customer.name}
+              ticketsCount={customer.tickets.length}
+            />
+          </div>
         </aside>
         <section>
           <h2 className="text-lg font-semibold mb-3">

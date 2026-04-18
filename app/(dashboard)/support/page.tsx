@@ -136,6 +136,8 @@ export default async function SupportPage({
         // Phase 12-02: кликабельное имя покупателя в карточке ленты
         customer: { select: { id: true, name: true } },
         customerNameSnapshot: true,
+        // Phase 12-03: бейдж messengerType (Tg/Wa/Др) в карточке ленты для MESSENGER
+        messengerType: true,
       },
     }),
     prisma.supportTicket.count({ where }),
