@@ -49,25 +49,29 @@ enum Availability {
 // ──────────────────────────────────────────────────────────────────
 
 model User {
-  id               String            @id @default(cuid())
-  email            String            @unique
+  id               String             @id @default(cuid())
+  email            String             @unique
   name             String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
   firstName        String?
   lastName         String?
-  employeeId       String?           @unique
-  employee         Employee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId       String?            @unique
+  employee         Employee?          @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   password         String // bcrypt hash — never return to client
   plainPassword    String? // plain text для просмотра суперадмином (только внутренняя ERP)
-  role             UserRole          @default(VIEWER)
+  role             UserRole           @default(VIEWER)
   allowedSections  ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
   sectionRoles     UserSectionRole[] // актуальный источник прав per раздел
   preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
-  assignedTickets  SupportTicket[]   @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
-  authoredMessages SupportMessage[]  @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
-  returnDecisions  ReturnDecision[]  @relation("ReturnDecider") // Phase 9 — audit log решений по возвратам
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  assignedTickets  SupportTicket[]    @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
+  authoredMessages SupportMessage[]   @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
+  returnDecisions  ReturnDecision[]   @relation("ReturnDecider") // Phase 9 — audit log решений по возвратам
+  templatesCreated ResponseTemplate[] @relation("TemplateCreator") // Phase 11 — шаблоны, созданные пользователем
+  templatesUpdated ResponseTemplate[] @relation("TemplateUpdater") // Phase 11 — шаблоны, последний раз обновлённые пользователем
+  appealsCreated   AppealRecord[]     @relation("AppealCreator") // Phase 11 — обжалования, созданные пользователем
+  appealsResolved  AppealRecord[]     @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 }
 
 enum SectionRole {
@@ -531,24 +535,27 @@ model Customer {
 // Связь с WbCard через nmId — БЕЗ FK (паттерн проекта, см. CLAUDE.md).
 // wbExternalId: String? — WB возвращает cuid-like 20-символьные строки.
 model SupportTicket {
-  id            String           @id @default(cuid())
-  channel       TicketChannel
-  wbExternalId  String? // ID из WB API (feedback.id / question.id)
-  customerId    String?
-  customer      Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  nmId          Int? // связь с WbCard.nmId без FK
-  status        TicketStatus     @default(NEW)
-  assignedToId  String?
-  assignedTo    User?            @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  rating        Int? // productValuation 1-5 (только FEEDBACK)
-  appealStatus  AppealStatus? // Phase 11
-  appealId      String? // Phase 11
-  lastMessageAt DateTime?
-  previewText   String?          @db.Text // первые 140 символов последнего INBOUND
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  resolvedAt    DateTime?
-  messages      SupportMessage[]
+  id               String           @id @default(cuid())
+  channel          TicketChannel
+  wbExternalId     String? // ID из WB API (feedback.id / question.id)
+  customerId       String?
+  customer         Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  nmId             Int? // связь с WbCard.nmId без FK
+  status           TicketStatus     @default(NEW)
+  assignedToId     String?
+  assignedTo       User?            @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  rating           Int? // productValuation 1-5 (только FEEDBACK)
+  appealStatus     AppealStatus? // Phase 11
+  appealId         String? // Phase 11
+  appealedAt       DateTime? // Phase 11 — auto-set при createAppeal
+  appealResolvedAt DateTime? // Phase 11 — auto-set при переводе PENDING → APPROVED|REJECTED
+  appealRecord     AppealRecord?    @relation("Appeal") // Phase 11 — back-relation 1:1
+  lastMessageAt    DateTime?
+  previewText      String?          @db.Text // первые 140 символов последнего INBOUND
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  resolvedAt       DateTime?
+  messages         SupportMessage[]
 
   // ── Phase 9: Возвраты ──
   wbClaimStatus   Int? // оригинальный status из WB (denormalized, для диагностики)
@@ -640,4 +647,58 @@ model ReturnDecision {
 
   @@index([ticketId, decidedAt])
   @@index([decidedById])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 11 — Шаблоны ответов (local-only, WB API отключён 2025-11-19)
+// ──────────────────────────────────────────────────────────────────
+// Хранилище 100% локальное — WB endpoints /api/v1/templates отключены.
+// Переменные {имя_покупателя}/{название_товара} подставляются при выборе
+// шаблона в picker (клиентская substituteTemplateVars из lib/template-vars.ts).
+// Канал ограничен Zod'ом в server action до FEEDBACK/QUESTION/CHAT (не RETURN/MESSENGER).
+model ResponseTemplate {
+  id           String        @id @default(cuid())
+  name         String // уникальное имя в рамках канала
+  text         String        @db.Text
+  channel      TicketChannel // FEEDBACK | QUESTION | CHAT (валидация в Zod)
+  situationTag String? // свободный тег «Положительный», «Негативный 1★», «Размер»
+  nmId         Int? // опциональная привязка к товару (без FK — паттерн проекта)
+  isActive     Boolean       @default(true)
+  createdById  String?
+  createdBy    User?         @relation("TemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById  String?
+  updatedBy    User?         @relation("TemplateUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([name, channel])
+  @@index([channel, isActive])
+  @@index([nmId])
+  @@index([situationTag])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 11 — Трекер обжалований (hybrid manual, WB API отключён 2025-12-08)
+// ──────────────────────────────────────────────────────────────────
+// WB endpoint POST /api/v1/feedbacks/actions отключён — менеджер создаёт
+// локальную запись + вручную подаёт жалобу в ЛК WB через jump-link.
+// Ручной переключатель статуса (PENDING → APPROVED|REJECTED) после ответа WB.
+// Один ticket → один AppealRecord (повтор через API невозможен, локальный повтор = update).
+model AppealRecord {
+  id               String        @id @default(cuid())
+  ticketId         String        @unique
+  ticket           SupportTicket @relation("Appeal", fields: [ticketId], references: [id], onDelete: Cascade)
+  reason           String // label причины из APPEAL_REASONS (денормализованно — чтобы изменение справочника не ломало историю)
+  text             String        @db.Text // свободный комментарий менеджера 10-1000 символов
+  status           AppealStatus  @default(PENDING)
+  createdById      String
+  createdBy        User          @relation("AppealCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  resolvedById     String?
+  resolvedBy       User?         @relation("AppealResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  appealResolvedAt DateTime?
+
+  @@index([status])
+  @@index([createdAt])
 }
