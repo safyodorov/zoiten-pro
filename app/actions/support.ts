@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache"
 import { promises as fs } from "node:fs"
 import path from "node:path"
+import { z } from "zod"
 import { prisma } from "@/lib/prisma"
 import { requireSection } from "@/lib/rbac"
 import { auth } from "@/lib/auth"
@@ -632,6 +633,309 @@ export async function saveAutoReplyConfig(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Ошибка сохранения",
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Phase 12 — Профиль покупателя + MESSENGER канал
+// ────────────────────────────────────────────────────────────────
+// Hybrid strategy (D-01): CHAT тикеты auto-linked через syncChats (namespace chat:<chatID>).
+// FEEDBACK/QUESTION/RETURN — manual linking через UI (Plan 12-02).
+// MESSENGER — полностью manual (Plan 12-03).
+
+// 1. linkTicketToCustomer — привязать существующий Customer к тикету
+export async function linkTicketToCustomer(
+  ticketId: string,
+  customerId: string
+): Promise<ActionResult> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+    if (!ticketId || !customerId) {
+      return { ok: false, error: "ticketId/customerId пустые" }
+    }
+
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, channel: true },
+    })
+    if (!ticket) return { ok: false, error: "Тикет не найден" }
+    if (ticket.channel === "CHAT") {
+      return {
+        ok: false,
+        error:
+          "CHAT тикеты линкуются автоматически — используйте merge для переноса",
+      }
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true },
+    })
+    if (!customer) return { ok: false, error: "Покупатель не найден" }
+
+    await prisma.supportTicket.update({
+      where: { id: ticketId },
+      data: { customerId },
+    })
+    revalidatePath("/support")
+    revalidatePath(`/support/${ticketId}`)
+    revalidatePath(`/support/customers/${customerId}`)
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка",
+    }
+  }
+}
+
+// 2. createCustomerForTicket — создать Customer и привязать к тикету
+const phoneRegex = /^[+\d\s()\-]{5,20}$/
+const createCustomerForTicketSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Имя пустое")
+    .max(200, "Имя длиннее 200 символов"),
+  phone: z
+    .string()
+    .trim()
+    .regex(phoneRegex, "Некорректный телефон")
+    .nullable()
+    .optional(),
+})
+
+export async function createCustomerForTicket(
+  ticketId: string,
+  input: z.input<typeof createCustomerForTicketSchema>
+): Promise<ActionResult & { customerId?: string }> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const parsed = createCustomerForTicketSchema.safeParse(input)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Невалидные данные",
+      }
+    }
+    const data = parsed.data
+
+    const ticket = await prisma.supportTicket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, channel: true },
+    })
+    if (!ticket) return { ok: false, error: "Тикет не найден" }
+    if (ticket.channel === "CHAT") {
+      return {
+        ok: false,
+        error: "CHAT тикеты линкуются автоматически",
+      }
+    }
+
+    const customerId = await prisma.$transaction(async (tx) => {
+      const c = await tx.customer.create({
+        data: { name: data.name, phone: data.phone ?? null },
+      })
+      await tx.supportTicket.update({
+        where: { id: ticketId },
+        data: { customerId: c.id },
+      })
+      return c.id
+    })
+
+    revalidatePath("/support")
+    revalidatePath(`/support/${ticketId}`)
+    revalidatePath(`/support/customers/${customerId}`)
+    return { ok: true, customerId }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка",
+    }
+  }
+}
+
+// 3. updateCustomerNote — обновить заметку покупателя
+const updateNoteSchema = z.string().max(5000, "Заметка длиннее 5000 символов")
+
+export async function updateCustomerNote(
+  customerId: string,
+  note: string
+): Promise<ActionResult> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const parsed = updateNoteSchema.safeParse(note)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Заметка невалидна",
+      }
+    }
+
+    try {
+      await prisma.customer.update({
+        where: { id: customerId },
+        data: { note: parsed.data },
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ""
+      if (msg.includes("Record") || msg.includes("P2025")) {
+        return { ok: false, error: "Покупатель не найден" }
+      }
+      throw err
+    }
+    revalidatePath(`/support/customers/${customerId}`)
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка",
+    }
+  }
+}
+
+// 4. mergeCustomers — объединить двух покупателей (tickets переносятся, source удаляется)
+const mergeSchema = z
+  .object({
+    sourceId: z.string().min(1, "sourceId пустой"),
+    targetId: z.string().min(1, "targetId пустой"),
+  })
+  .refine((d) => d.sourceId !== d.targetId, {
+    message: "Нельзя объединить покупателя с самим собой",
+  })
+
+export async function mergeCustomers(
+  input: z.input<typeof mergeSchema>
+): Promise<ActionResult & { ticketsMoved?: number }> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const parsed = mergeSchema.safeParse(input)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Невалидные ID",
+      }
+    }
+    const { sourceId, targetId } = parsed.data
+
+    const ticketsMoved = await prisma.$transaction(async (tx) => {
+      const source = await tx.customer.findUnique({ where: { id: sourceId } })
+      if (!source) throw new Error("Исходный покупатель не найден")
+      const target = await tx.customer.findUnique({ where: { id: targetId } })
+      if (!target) throw new Error("Целевой покупатель не найден")
+
+      const upd = await tx.supportTicket.updateMany({
+        where: { customerId: sourceId },
+        data: { customerId: targetId },
+      })
+      await tx.customer.delete({ where: { id: sourceId } })
+      return upd.count
+    })
+
+    revalidatePath(`/support/customers/${targetId}`)
+    revalidatePath("/support")
+    return { ok: true, ticketsMoved }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка",
+    }
+  }
+}
+
+// 5. createManualMessengerTicket — ручное создание MESSENGER тикета (Telegram/WhatsApp/...)
+const messengerTicketSchema = z
+  .object({
+    messengerType: z.enum(["TELEGRAM", "WHATSAPP", "OTHER"]),
+    customerId: z.string().nullable(),
+    customerName: z.string().trim().min(1).max(200).nullable(),
+    messengerContact: z
+      .string()
+      .trim()
+      .min(3, "Контакт короче 3 символов")
+      .max(100),
+    text: z.string().trim().min(1, "Текст пустой").max(10000),
+    nmId: z.number().int().positive().nullable(),
+  })
+  .refine(
+    (d) =>
+      d.customerId !== null ||
+      (d.customerName !== null && d.customerName.length > 0),
+    {
+      message: "Укажите существующего покупателя или имя нового",
+    }
+  )
+
+export async function createManualMessengerTicket(
+  input: z.input<typeof messengerTicketSchema>
+): Promise<ActionResult & { ticketId?: string }> {
+  try {
+    await requireSection("SUPPORT", "MANAGE")
+    const userId = await getSessionUserId()
+    if (!userId) return { ok: false, error: "Сессия без user.id" }
+
+    const parsed = messengerTicketSchema.safeParse(input)
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Невалидные данные",
+      }
+    }
+    const data = parsed.data
+
+    const ticketId = await prisma.$transaction(async (tx) => {
+      let customerId = data.customerId
+      if (!customerId) {
+        const c = await tx.customer.create({
+          data: { name: data.customerName, phone: data.messengerContact },
+        })
+        customerId = c.id
+      }
+      const now = new Date()
+      const ticket = await tx.supportTicket.create({
+        data: {
+          channel: "MESSENGER",
+          messengerType: data.messengerType,
+          messengerContact: data.messengerContact,
+          customerId,
+          nmId: data.nmId,
+          status: "NEW",
+          previewText: data.text.slice(0, 140),
+          lastMessageAt: now,
+        },
+      })
+      await tx.supportMessage.create({
+        data: {
+          ticketId: ticket.id,
+          direction: "INBOUND",
+          text: data.text,
+          authorId: null,
+          wbSentAt: now,
+          sentAt: now,
+        },
+      })
+      return ticket.id
+    })
+
+    revalidatePath("/support")
+    revalidatePath(`/support/${ticketId}`)
+    return { ok: true, ticketId }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Ошибка",
     }
   }
 }
