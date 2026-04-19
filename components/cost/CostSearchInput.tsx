@@ -1,41 +1,38 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useState, useEffect, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 
 export function CostSearchInput({ defaultValue }: { defaultValue: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [inputValue, setInputValue] = useState(defaultValue)
-  const isFirstRun = useRef(true)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const pushUrl = useCallback(
-    (value: string) => {
+  useEffect(() => {
+    setInputValue(defaultValue)
+  }, [defaultValue])
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value
+    setInputValue(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete("page")
       if (value.trim()) params.set("q", value.trim())
       else params.delete("q")
       const qs = params.toString()
       router.push(`/batches${qs ? `?${qs}` : ""}`)
-    },
-    [router, searchParams]
-  )
-
-  useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false
-      return
-    }
-    const timer = setTimeout(() => pushUrl(inputValue), 300)
-    return () => clearTimeout(timer)
-  }, [inputValue, pushUrl])
+    }, 300)
+  }
 
   return (
     <Input
       placeholder="Поиск по названию..."
       value={inputValue}
-      onChange={(e) => setInputValue(e.target.value)}
+      onChange={handleChange}
       className="max-w-sm"
     />
   )
