@@ -1,13 +1,14 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useState, useEffect } from "react"
+import { useCallback, useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 
 export function CostSearchInput({ defaultValue }: { defaultValue: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [inputValue, setInputValue] = useState(defaultValue)
+  const isFirstRun = useRef(true)
 
   const pushUrl = useCallback(
     (value: string) => {
@@ -22,6 +23,10 @@ export function CostSearchInput({ defaultValue }: { defaultValue: string }) {
   )
 
   useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false
+      return
+    }
     const timer = setTimeout(() => pushUrl(inputValue), 300)
     return () => clearTimeout(timer)
   }, [inputValue, pushUrl])

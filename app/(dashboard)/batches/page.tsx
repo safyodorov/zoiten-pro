@@ -7,7 +7,8 @@ import { CostTable } from "@/components/cost/CostTable"
 import { CostFilters } from "@/components/cost/CostFilters"
 import { CostSearchInput } from "@/components/cost/CostSearchInput"
 
-const PAGE_SIZE = 20
+const PAGE_SIZES = [20, 50, 100] as const
+const DEFAULT_PAGE_SIZE = 20
 
 export default async function BatchesPage({
   searchParams,
@@ -15,13 +16,14 @@ export default async function BatchesPage({
   searchParams: Promise<{
     q?: string
     page?: string
+    size?: string
     brands?: string
     categories?: string
     subcategories?: string
   }>
 }) {
   await requireSection("COST")
-  const { q, page: pageParam, brands: brandsParam, categories: categoriesParam, subcategories: subcategoriesParam } =
+  const { q, page: pageParam, size: sizeParam, brands: brandsParam, categories: categoriesParam, subcategories: subcategoriesParam } =
     await searchParams
 
   // Parse filters
@@ -46,8 +48,11 @@ export default async function BatchesPage({
     where.subcategoryId = { in: selectedSubcategoryIds }
   }
 
+  const pageSize = (PAGE_SIZES as readonly number[]).includes(Number(sizeParam))
+    ? Number(sizeParam)
+    : DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
-  const skip = (currentPage - 1) * PAGE_SIZE
+  const skip = (currentPage - 1) * pageSize
 
   const [products, total, allBrands, allCategories, allSubcategories] = await Promise.all([
     prisma.product.findMany({
@@ -55,7 +60,7 @@ export default async function BatchesPage({
       include: { brand: true, category: true, subcategory: true, cost: true },
       orderBy: { createdAt: "desc" },
       skip,
-      take: PAGE_SIZE,
+      take: pageSize,
     }),
     prisma.product.count({ where }),
     prisma.brand.findMany({ orderBy: { name: "asc" } }),
@@ -63,7 +68,7 @@ export default async function BatchesPage({
     prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
   ])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
 
   return (
     <div className="space-y-4">
@@ -85,6 +90,8 @@ export default async function BatchesPage({
         }))}
         currentPage={currentPage}
         totalPages={totalPages}
+        totalItems={total}
+        pageSize={pageSize}
       />
     </div>
   )

@@ -26,7 +26,11 @@ interface CostTableProps {
   products: CostProduct[]
   currentPage: number
   totalPages: number
+  totalItems: number
+  pageSize: number
 }
+
+const PAGE_SIZES = [20, 50, 100]
 
 // ── Moscow time formatter ─────────────────────────────────────────
 
@@ -145,14 +149,22 @@ function CostCell({
 
 // ── Main table ────────────────────────────────────────────────────
 
-export function CostTable({ products, currentPage, totalPages }: CostTableProps) {
+export function CostTable({ products, currentPage, totalPages, totalItems, pageSize }: CostTableProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  function buildPageUrl(page: number) {
+  function buildUrl(overrides: Record<string, string | number>) {
     const params = new URLSearchParams(searchParams.toString())
-    params.set("page", String(page))
+    for (const [key, value] of Object.entries(overrides)) {
+      const str = String(value)
+      if (str) params.set(key, str)
+      else params.delete(key)
+    }
     return `/batches?${params.toString()}`
+  }
+
+  function handlePageSizeChange(size: number) {
+    router.push(buildUrl({ size, page: 1 }))
   }
 
   return (
@@ -212,19 +224,34 @@ export function CostTable({ products, currentPage, totalPages }: CostTableProps)
         </Table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Страница {currentPage} из {totalPages}</span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => router.push(buildPageUrl(currentPage - 1))}>
-              Назад
-            </Button>
-            <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => router.push(buildPageUrl(currentPage + 1))}>
-              Вперёд
-            </Button>
-          </div>
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex items-center gap-3">
+          <span>Всего: {totalItems}</span>
+          <span>·</span>
+          <span>Страница {currentPage} из {totalPages || 1}</span>
+          <span>·</span>
+          <label className="flex items-center gap-1.5">
+            На странице:
+            <select
+              value={pageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              className="h-7 rounded border border-input bg-transparent px-2 text-xs"
+            >
+              {PAGE_SIZES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
         </div>
-      )}
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => router.push(buildUrl({ page: currentPage - 1 }))}>
+            Назад
+          </Button>
+          <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => router.push(buildUrl({ page: currentPage + 1 }))}>
+            Вперёд
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

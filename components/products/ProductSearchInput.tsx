@@ -4,7 +4,7 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useState, useEffect } from "react"
+import { useCallback, useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 
 interface ProductSearchInputProps {
@@ -15,6 +15,7 @@ export function ProductSearchInput({ defaultValue }: ProductSearchInputProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [inputValue, setInputValue] = useState(defaultValue)
+  const isFirstRun = useRef(true)
 
   const pushUrl = useCallback(
     (value: string) => {
@@ -32,6 +33,12 @@ export function ProductSearchInput({ defaultValue }: ProductSearchInputProps) {
   )
 
   useEffect(() => {
+    // Skip initial mount — иначе при переходе на page 2 компонент re-mounts
+    // и pushUrl("") сбрасывает ?page= обратно к page 1
+    if (isFirstRun.current) {
+      isFirstRun.current = false
+      return
+    }
     const timer = setTimeout(() => {
       pushUrl(inputValue)
     }, 300)

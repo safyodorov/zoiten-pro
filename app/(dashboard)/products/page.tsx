@@ -10,7 +10,8 @@ import { ProductSearchInput } from "@/components/products/ProductSearchInput"
 import { ProductFilters } from "@/components/products/ProductFilters"
 import { Availability } from "@prisma/client"
 
-const PAGE_SIZE = 20
+const PAGE_SIZES = [20, 50, 100] as const
+const DEFAULT_PAGE_SIZE = 20
 
 export default async function ProductsPage({
   searchParams,
@@ -18,6 +19,7 @@ export default async function ProductsPage({
   searchParams: Promise<{
     q?: string
     page?: string
+    size?: string
     status?: string
     brands?: string
     categories?: string
@@ -28,6 +30,7 @@ export default async function ProductsPage({
   const {
     q,
     page: pageParam,
+    size: sizeParam,
     status,
     brands: brandsParam,
     categories: categoriesParam,
@@ -84,8 +87,11 @@ export default async function ProductsPage({
     where.subcategoryId = { in: selectedSubcategoryIds }
   }
 
+  const pageSize = (PAGE_SIZES as readonly number[]).includes(Number(sizeParam))
+    ? Number(sizeParam)
+    : DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
-  const skip = (currentPage - 1) * PAGE_SIZE
+  const skip = (currentPage - 1) * pageSize
 
   // Fetch products + all brands/categories/subcategories for filter dropdowns
   const [products, total, allBrands, allCategories, allSubcategories] = await Promise.all([
@@ -94,7 +100,7 @@ export default async function ProductsPage({
       include: { brand: true, category: true, subcategory: true },
       orderBy: { createdAt: "desc" },
       skip,
-      take: PAGE_SIZE,
+      take: pageSize,
     }),
     prisma.product.count({ where }),
     prisma.brand.findMany({ orderBy: { name: "asc" } }),
@@ -102,7 +108,7 @@ export default async function ProductsPage({
     prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
   ])
 
-  const totalPages = Math.ceil(total / PAGE_SIZE)
+  const totalPages = Math.ceil(total / pageSize)
   const currentStatus = status ?? "IN_STOCK"
 
   return (
@@ -131,6 +137,8 @@ export default async function ProductsPage({
         products={products}
         currentPage={currentPage}
         totalPages={totalPages}
+        totalItems={total}
+        pageSize={pageSize}
         currentStatus={currentStatus}
         searchQuery={q ?? ""}
       />
