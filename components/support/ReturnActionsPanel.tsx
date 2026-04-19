@@ -126,13 +126,13 @@ export function ReturnActionsPanel({
           </span>
         )}
         <a
-          href="https://seller.wildberries.ru/sales/buyer-chats"
+          href="https://seller.wildberries.ru/suppliers-product-verification/customer-claims/under-consideration"
           target="_blank"
           rel="noopener noreferrer"
           className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent transition-colors"
-          title="Открыть чат с покупателем в кабинете WB — после первого сообщения он автоматически появится в нашей системе (через 5 минут)"
+          title="Открыть раздел «Возвраты покупателей» в кабинете WB — начните чат кнопкой на заявке; новый чат автоматически появится у нас через 5 минут"
         >
-          Написать в WB →
+          Открыть в WB →
         </a>
       </div>
 
