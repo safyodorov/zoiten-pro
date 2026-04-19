@@ -575,6 +575,7 @@ model SupportTicket {
   wbComment       String?          @db.Text // wb_comment — длинная инструкция покупателю
   srid            String? // Shipment ID из WB (для связки с заказом)
   price           Float? // price из заявки (рубли)
+  wbOrderDt       DateTime? // order_dt из WB claim — дата заказа покупателя
   returnState     ReturnState? // локальное состояние (PENDING/APPROVED/REJECTED)
   returnDecisions ReturnDecision[] @relation("ReturnDecisions")
 

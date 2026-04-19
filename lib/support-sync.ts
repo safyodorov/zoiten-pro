@@ -308,6 +308,24 @@ function normalizeWbUrl(url: string): string {
   return url
 }
 
+// Маппинг WB claim (status, status_ex) → локальный ReturnState.
+// Значения подтверждены на реальных заявках (2026-04-19):
+//   status=0            → PENDING  (ждёт решения продавца, WB показывает счётчик)
+//   status=1            → REJECTED (seller или покупатель отказались)
+//   status=2 + sex=10   → APPROVED (автовозврат, финал)
+//   status=2 + sex=5    → REJECTED (финальный отказ)
+//   прочее              → PENDING  (safe default — UI покажет «Ожидает»)
+function mapWbClaimToReturnState(
+  status: number | undefined | null,
+  statusEx: number | undefined | null,
+): "PENDING" | "APPROVED" | "REJECTED" {
+  if (status === 0) return "PENDING"
+  if (status === 1) return "REJECTED"
+  if (status === 2 && statusEx === 10) return "APPROVED"
+  if (status === 2 && statusEx === 5) return "REJECTED"
+  return "PENDING"
+}
+
 async function fetchAllClaims(isArchive: boolean): Promise<Claim[]> {
   const out: Claim[] = []
   for (let offset = 0; ; offset += RETURNS_PAGE_LIMIT) {
@@ -359,9 +377,11 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
               wbExternalId: claim.id,
             },
           },
-          select: { id: true },
+          select: { id: true, _count: { select: { returnDecisions: true } } },
         })
         const isCreate = !existing
+        const existingTicketHasDecision =
+          !!existing && existing._count.returnDecisions > 0
 
         const previewText = (claim.user_comment ?? "").slice(0, 140)
         const wbCreatedAt = claim.dt ? new Date(claim.dt) : null
@@ -379,7 +399,7 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
             customerId: null,
             nmId: claim.nm_id,
             status: "NEW",
-            returnState: "PENDING",
+            returnState: mapWbClaimToReturnState(claim.status, claim.status_ex),
             wbClaimStatus: claim.status,
             wbClaimStatusEx: claim.status_ex,
             wbClaimType: claim.claim_type,
@@ -387,15 +407,21 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
             wbComment: claim.wb_comment ?? null,
             srid: claim.srid ?? null,
             price: claim.price ?? null,
+            wbOrderDt: claim.order_dt ? new Date(claim.order_dt) : null,
             previewText,
             lastMessageAt: wbCreatedAt,
           },
           update: {
-            // ⚠ НЕ трогаем returnState/status — локальные решения защищены
+            // Обновляем returnState только если локального решения ещё не принято
+            // (existing returnDecisions.count === 0). Иначе — защищаем локальное решение.
+            returnState: existingTicketHasDecision
+              ? undefined
+              : mapWbClaimToReturnState(claim.status, claim.status_ex),
             wbClaimStatus: claim.status,
             wbClaimStatusEx: claim.status_ex,
             wbActions: claim.actions ?? [],
             wbComment: claim.wb_comment ?? null,
+            wbOrderDt: claim.order_dt ? new Date(claim.order_dt) : null,
             previewText,
           },
         })

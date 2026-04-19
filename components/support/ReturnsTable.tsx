@@ -76,7 +76,8 @@ export function ReturnsTable({
             <th className="px-3 py-2 text-left font-medium">Покупатель</th>
             <th className="px-3 py-2 text-left font-medium">Причина</th>
             <th className="px-3 py-2 text-left font-medium">Фото брака</th>
-            <th className="px-3 py-2 text-left font-medium">Дата</th>
+            <th className="px-3 py-2 text-left font-medium">Дата заказа</th>
+            <th className="px-3 py-2 text-left font-medium">Дата заявки</th>
             <th className="px-3 py-2 text-left font-medium">Решение</th>
             <th className="px-3 py-2 text-left font-medium">Кто принял</th>
             <th className="px-3 py-2 text-left font-medium">Пересмотрено</th>
@@ -158,8 +159,15 @@ export function ReturnsTable({
                   </div>
                 </td>
                 <td className="px-3 py-2 text-xs whitespace-nowrap">
+                  {t.wbOrderDt
+                    ? new Intl.DateTimeFormat("ru-RU", MOSCOW_TZ).format(
+                        t.wbOrderDt
+                      )
+                    : "—"}
+                </td>
+                <td className="px-3 py-2 text-xs whitespace-nowrap">
                   {new Intl.DateTimeFormat("ru-RU", MOSCOW_TZ).format(
-                    t.createdAt
+                    t.lastMessageAt ?? t.createdAt
                   )}
                 </td>
                 <td className="px-3 py-2">
