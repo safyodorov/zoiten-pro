@@ -73,6 +73,7 @@ export function ReturnsTable({
         <thead className="bg-muted">
           <tr>
             <th className="px-3 py-2 text-left font-medium">Товар</th>
+            <th className="px-3 py-2 text-left font-medium">Номер заказа</th>
             <th className="px-3 py-2 text-left font-medium">Покупатель</th>
             <th className="px-3 py-2 text-left font-medium">Причина</th>
             <th className="px-3 py-2 text-left font-medium">Фото брака</th>
@@ -126,6 +127,21 @@ export function ReturnsTable({
                       </div>
                     </div>
                   </div>
+                </td>
+                <td className="px-3 py-2 text-xs font-mono whitespace-nowrap">
+                  {t.srid ? (
+                    <span
+                      className="cursor-pointer hover:text-primary"
+                      title={`Номер заказа (srid): ${t.srid}. Клик — копировать.`}
+                      onClick={() => {
+                        navigator.clipboard.writeText(t.srid ?? "")
+                      }}
+                    >
+                      {t.srid.length > 14 ? `${t.srid.slice(0, 14)}…` : t.srid}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-2">{buyerLabel}</td>
                 <td className="px-3 py-2 max-w-[280px]">

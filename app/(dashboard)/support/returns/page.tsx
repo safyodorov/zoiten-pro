@@ -71,7 +71,11 @@ export default async function ReturnsPage({
     prisma.supportTicket.count({ where }),
     prisma.supportTicket.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      // Сортировка: свежие заявки сверху по дате подачи на WB
+      orderBy: [
+        { lastMessageAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       skip: (filters.page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: {
