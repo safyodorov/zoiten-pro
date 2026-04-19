@@ -9,6 +9,7 @@ import { SupportTicketCard } from "@/components/support/SupportTicketCard"
 import { SupportPagination } from "@/components/support/SupportPagination"
 import { SupportSyncButton } from "@/components/support/SupportSyncButton"
 import type { TicketStatus } from "@prisma/client"
+import { getUserPreference, setUserPreference } from "@/app/actions/user-preferences"
 
 const CHANNEL_OPTIONS = [
   { value: "FEEDBACK", label: "Отзывы" },
@@ -76,7 +77,18 @@ export default async function SupportPage({
     1,
     Number(Array.isArray(sp.page) ? sp.page[0] : sp.page ?? 1)
   )
-  const pageSize = 20
+  const sizeRaw = Array.isArray(sp.size) ? sp.size[0] : sp.size
+  const ALLOWED_SIZES = [20, 50, 100] as const
+  let pageSize: number
+  if (sizeRaw && ALLOWED_SIZES.includes(Number(sizeRaw) as 20 | 50 | 100)) {
+    pageSize = Number(sizeRaw)
+    // URL override — сохраним предпочтение пользователя
+    void setUserPreference("support.pageSize", pageSize)
+  } else {
+    const saved = await getUserPreference<number>("support.pageSize")
+    pageSize =
+      saved && ALLOWED_SIZES.includes(saved as 20 | 50 | 100) ? saved : 20
+  }
 
   const supportUsers = await prisma.user.findMany({
     where: {
