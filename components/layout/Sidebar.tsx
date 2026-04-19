@@ -9,10 +9,10 @@ import type { NavItem } from "@/components/layout/nav-items"
 
 interface SidebarProps {
   items: NavItem[]
-  supportBadgeCount?: number
+  badgeCounts?: Record<string, number>
 }
 
-export function Sidebar({ items, supportBadgeCount }: SidebarProps) {
+export function Sidebar({ items, badgeCounts }: SidebarProps) {
   const { collapsed } = useSidebar()
 
   return (
@@ -40,7 +40,7 @@ export function Sidebar({ items, supportBadgeCount }: SidebarProps) {
         )}
       </a>
       <nav className="flex-1 py-2 overflow-y-auto">
-        <NavLinks items={items} collapsed={collapsed} supportBadgeCount={supportBadgeCount} />
+        <NavLinks items={items} collapsed={collapsed} badgeCounts={badgeCounts} />
       </nav>
     </aside>
   )

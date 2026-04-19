@@ -10,13 +10,13 @@ import { ICON_MAP, type NavItem } from "@/components/layout/nav-items"
 interface NavLinksProps {
   items: NavItem[]
   collapsed?: boolean
-  supportBadgeCount?: number
+  badgeCounts?: Record<string, number>
 }
 
 export function NavLinks({
   items,
   collapsed = false,
-  supportBadgeCount,
+  badgeCounts,
 }: NavLinksProps) {
   const pathname = usePathname()
 
@@ -26,11 +26,8 @@ export function NavLinks({
         const isActive =
           pathname === item.href || pathname.startsWith(item.href + "/")
         const Icon = item.icon ? ICON_MAP[item.icon] : null
-        const showBadge =
-          item.href === "/support" &&
-          supportBadgeCount !== undefined &&
-          supportBadgeCount > 0
-        const count = supportBadgeCount ?? 0
+        const count = badgeCounts?.[item.href] ?? 0
+        const showBadge = count > 0
         const badgeLabelExpanded = count > 99 ? "99+" : String(count)
         const badgeLabelCollapsed = count > 9 ? "9+" : String(count)
         return (

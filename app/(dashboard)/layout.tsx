@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth"
 import { DashboardShell } from "@/components/layout/DashboardShell"
 import { LogoutForm } from "@/components/layout/LogoutForm"
 import { NAV_ITEMS } from "@/components/layout/nav-items"
-import { getSupportBadgeCount } from "@/lib/support-badge"
+import { getSidebarBadgeCounts } from "@/lib/support-badge"
 
 export default async function DashboardLayout({
   children,
@@ -28,14 +28,14 @@ export default async function DashboardLayout({
 
   const hasSupportAccess =
     isSuperadmin || allowedSections.includes("SUPPORT")
-  const supportBadgeCount = hasSupportAccess ? await getSupportBadgeCount() : 0
+  const badgeCounts = await getSidebarBadgeCounts(hasSupportAccess)
 
   return (
     <DashboardShell
       user={session.user}
       navItems={visibleItems}
       logoutForm={<LogoutForm />}
-      supportBadgeCount={supportBadgeCount}
+      badgeCounts={badgeCounts}
     >
       {children}
     </DashboardShell>
