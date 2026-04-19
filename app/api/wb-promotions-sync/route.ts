@@ -86,19 +86,22 @@ export async function POST() {
       await prisma.wbPromotionNomenclature.deleteMany({
         where: { promotionId: p.id },
       })
-      if (noms.length > 0) {
+      const validNoms = noms
+        .map((n) => ({
+          promotionId: p.id,
+          nmId: n.nmID ?? n.nmId ?? n.id,
+          inAction: n.inAction ?? false,
+          planPrice: n.planPrice ?? null,
+          planDiscount: n.planDiscount ?? null,
+        }))
+        .filter((n): n is typeof n & { nmId: number } => typeof n.nmId === "number")
+      if (validNoms.length > 0) {
         await prisma.wbPromotionNomenclature.createMany({
-          data: noms.map((n) => ({
-            promotionId: p.id,
-            nmId: n.nmID,
-            inAction: n.inAction ?? false,
-            planPrice: n.planPrice ?? null,
-            planDiscount: n.planDiscount ?? null,
-          })),
+          data: validNoms,
           skipDuplicates: true,
         })
       }
-      nomTotal += noms.length
+      nomTotal += validNoms.length
     }
 
     // 5. Cleanup — удалить акции закончившиеся > 7 дней назад

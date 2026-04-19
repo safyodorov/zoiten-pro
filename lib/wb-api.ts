@@ -545,7 +545,9 @@ export interface WbPromotionDetailsRaw {
 
 /** Raw номенклатура в акции (только для regular-акций). */
 export interface WbPromotionNomenclatureRaw {
-  nmID: number
+  nmID?: number
+  nmId?: number
+  id?: number
   price?: number
   planPrice?: number
   discount?: number
