@@ -225,6 +225,7 @@ None yet.
 | 260410-leh | Починить ширину колонок в /prices/wb и собрать GlobalRatesBar слева | 2026-04-10 | 142c62d | [260410-leh-wb-globalratesbar](./quick/260410-leh-wb-globalratesbar/) |
 | 260410-mya | Резайз/wrap/персистентность столбцов /prices/wb + округление денег + фикс sticky прозрачности | 2026-04-10 | fc270d0 | [260410-mya-wrap-prices-wb-sticky](./quick/260410-mya-wrap-prices-wb-sticky/) |
 | fast-260417 | Фикс support-sync: NEW→ANSWERED на повторной синхронизации (feedback/question) | 2026-04-17 | 13826b1 | inline |
+| fast-260419 | View Transitions fade при переключении dark/light темы | 2026-04-19 | 081299d | inline |
 
 ### Blockers/Concerns
 
