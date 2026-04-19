@@ -226,6 +226,8 @@ None yet.
 | 260410-mya | Резайз/wrap/персистентность столбцов /prices/wb + округление денег + фикс sticky прозрачности | 2026-04-10 | fc270d0 | [260410-mya-wrap-prices-wb-sticky](./quick/260410-mya-wrap-prices-wb-sticky/) |
 | fast-260417 | Фикс support-sync: NEW→ANSWERED на повторной синхронизации (feedback/question) | 2026-04-17 | 13826b1 | inline |
 | fast-260419 | View Transitions fade при переключении dark/light темы | 2026-04-19 | 081299d | inline |
+| fix-260419-promo | WB promotions: fallback nmID/nmId/id при createMany | 2026-04-19 | d85298c | inline |
+| fix-260419-pagi | Пагинация /products и /batches: сброс на page 1 + pageSize селектор | 2026-04-19 | 544ccdb | inline |
 
 ### Blockers/Concerns
 
