@@ -18,7 +18,18 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       className="h-9 w-9"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={() => {
+        const next = theme === "dark" ? "light" : "dark"
+        // View Transitions API — плавный fade между темами (Chrome/Edge/Safari 18+)
+        const doc = document as Document & {
+          startViewTransition?: (cb: () => void) => void
+        }
+        if (typeof doc.startViewTransition === "function") {
+          doc.startViewTransition(() => setTheme(next))
+        } else {
+          setTheme(next)
+        }
+      }}
       title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
     >
       {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
