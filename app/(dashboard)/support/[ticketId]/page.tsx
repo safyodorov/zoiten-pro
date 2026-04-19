@@ -56,6 +56,14 @@ export default async function TicketPage({
           },
         },
       },
+      // 2026-04-19: auto-link CHAT ↔ RETURN
+      linkedReturn: {
+        select: { id: true, nmId: true, returnState: true, previewText: true },
+      },
+      linkedChats: {
+        select: { id: true, previewText: true, lastMessageAt: true, status: true },
+        orderBy: { lastMessageAt: "desc" },
+      },
     },
   })
   if (!ticket) notFound()
@@ -184,6 +192,51 @@ export default async function TicketPage({
               wbComment={ticket.wbComment}
               srid={ticket.srid}
             />
+          )}
+          {isReturn && ticket.linkedChats.length > 0 && (
+            <section className="space-y-2 border rounded-lg p-3">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase">
+                Связанные чаты
+              </h3>
+              <div className="space-y-1.5">
+                {ticket.linkedChats.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/support/${c.id}`}
+                    className="block text-sm hover:bg-accent rounded p-2 transition-colors"
+                  >
+                    <div className="font-medium">
+                      Чат · {c.status === "NEW" ? "Новый" : c.status === "ANSWERED" ? "Отвечен" : c.status}
+                    </div>
+                    {c.previewText && (
+                      <div className="text-xs text-muted-foreground line-clamp-1">
+                        {c.previewText}
+                      </div>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+          {isChat && ticket.linkedReturn && (
+            <section className="space-y-2 border rounded-lg p-3">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase">
+                По заявке на возврат
+              </h3>
+              <Link
+                href={`/support/${ticket.linkedReturn.id}`}
+                className="block text-sm hover:bg-accent rounded p-2 transition-colors"
+              >
+                <div className="font-medium">
+                  Возврат · nmID {ticket.linkedReturn.nmId ?? "—"}
+                </div>
+                {ticket.linkedReturn.previewText && (
+                  <div className="text-xs text-muted-foreground line-clamp-2">
+                    {ticket.linkedReturn.previewText}
+                  </div>
+                )}
+              </Link>
+            </section>
           )}
         </aside>
         <div className="flex flex-col min-h-0">

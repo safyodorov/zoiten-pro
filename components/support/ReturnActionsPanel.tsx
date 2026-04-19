@@ -125,6 +125,15 @@ export function ReturnActionsPanel({
             WB не предоставляет доступных действий для этой заявки
           </span>
         )}
+        <a
+          href="https://seller.wildberries.ru/sales/buyer-chats"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent transition-colors"
+          title="Открыть чат с покупателем в кабинете WB — после первого сообщения он автоматически появится в нашей системе (через 5 минут)"
+        >
+          Написать в WB →
+        </a>
       </div>
 
       {rejectOpen && (

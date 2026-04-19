@@ -583,6 +583,13 @@ model SupportTicket {
   chatReplySign        String? // replySign из WB Chat API для sendMessage (ротируется при каждом sync)
   customerNameSnapshot String? // clientName из WB (до линковки с Customer в Phase 12)
 
+  // ── Auto-link CHAT ↔ RETURN (2026-04-19) ──
+  // Если новый CHAT event пришёл с nmId совпадающим с недавним RETURN тикетом,
+  // auto-linking в syncChats записывает сюда return ticket.id.
+  linkedReturnId String?
+  linkedReturn   SupportTicket?  @relation("ReturnChatLink", fields: [linkedReturnId], references: [id], onDelete: SetNull)
+  linkedChats    SupportTicket[] @relation("ReturnChatLink")
+
   // ── Phase 12: MESSENGER канал (Telegram/WhatsApp/другое) ──
   messengerType    MessengerType? // только для channel=MESSENGER
   messengerContact String? // "@username" или "+79991234567"

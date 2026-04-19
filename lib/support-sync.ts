@@ -595,11 +595,34 @@ export async function syncChats(): Promise<SyncChatsResult> {
 
       const existing = await prisma.supportTicket.findUnique({
         where: { channel_wbExternalId: { channel: "CHAT", wbExternalId: chat.chatID } },
+        select: { id: true, nmId: true, linkedReturnId: true },
       })
       const lastMessageAt = chat.lastMessage
         ? new Date(chat.lastMessage.addTimestamp)
         : null
       const previewText = chat.lastMessage?.text?.slice(0, 140) ?? null
+      const effectiveNmId = chat.goodCard?.nmID ?? existing?.nmId ?? null
+
+      // ── 2026-04-19: auto-link CHAT ↔ RETURN ──
+      // Если у чата nmId совпадает с RETURN тикетом поданным за последние 7 дней
+      // и чат ещё не привязан — ставим linkedReturnId.
+      let linkedReturnId: string | null | undefined = undefined
+      if (
+        effectiveNmId !== null &&
+        (!existing || existing.linkedReturnId === null)
+      ) {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        const recentReturn = await prisma.supportTicket.findFirst({
+          where: {
+            channel: "RETURN",
+            nmId: effectiveNmId,
+            lastMessageAt: { gte: sevenDaysAgo },
+          },
+          orderBy: { lastMessageAt: "desc" },
+          select: { id: true },
+        })
+        linkedReturnId = recentReturn?.id ?? null
+      }
 
       if (existing) {
         await prisma.supportTicket.update({
@@ -611,6 +634,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
             previewText: previewText ?? undefined,
             lastMessageAt: lastMessageAt ?? undefined,
             nmId: chat.goodCard?.nmID ?? existing.nmId,
+            ...(linkedReturnId !== undefined ? { linkedReturnId } : {}),
           },
         })
       } else {
@@ -622,6 +646,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
             customerNameSnapshot: chat.clientName,
             customerId: customer.id, // ← Phase 12 auto-link
             nmId: chat.goodCard?.nmID ?? null,
+            linkedReturnId: linkedReturnId ?? null,
             previewText,
             lastMessageAt,
             status: "NEW",
@@ -673,6 +698,9 @@ export async function syncChats(): Promise<SyncChatsResult> {
             create: { wbUserId: customerKey, name: event.clientName ?? null },
             update: event.clientName ? { name: event.clientName } : {},
           })
+
+          // Phase A не знает nmId (нет в event payload) — auto-link произойдёт
+          // в Phase B когда listChats вернёт chat.goodCard.nmID.
           ticket = await prisma.supportTicket.create({
             data: {
               channel: "CHAT",
