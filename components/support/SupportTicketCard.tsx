@@ -61,6 +61,7 @@ export interface SupportTicketCardProps {
     rating: number | null
     previewText: string | null
     createdAt: Date
+    lastMessageAt: Date | null
     appealStatus?: AppealStatus | null
     assignedTo: {
       id: string
@@ -182,7 +183,7 @@ export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
           <span>
             {ticket.nmId ? `Артикул ${ticket.nmId}` : "Без артикула"}
           </span>
-          <span>{formatDate(ticket.createdAt)}</span>
+          <span title="Время появления на WB">{formatDate(ticket.lastMessageAt ?? ticket.createdAt)}</span>
           <span>{getAssigneeName(ticket.assignedTo)}</span>
         </div>
       </div>

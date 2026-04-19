@@ -104,7 +104,8 @@ export default async function SupportPage({
   if (assignees.length) where.assignedToId = { in: assignees }
   if (nmId !== null) where.nmId = nmId
   if (dateFrom || dateTo) {
-    where.createdAt = {
+    // Фильтр по времени появления на WB (lastMessageAt), не по времени синхронизации
+    where.lastMessageAt = {
       ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
       ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59`) } : {}),
     }
@@ -113,7 +114,9 @@ export default async function SupportPage({
   const [tickets, total] = await Promise.all([
     prisma.supportTicket.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      // Сортировка по времени появления на WB (lastMessageAt); fallback на createdAt
+      // для редких случаев, когда WB не отдал дату.
+      orderBy: [{ lastMessageAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: {
@@ -124,6 +127,7 @@ export default async function SupportPage({
         rating: true,
         previewText: true,
         createdAt: true,
+        lastMessageAt: true,
         appealStatus: true,
         assignedTo: {
           select: {
