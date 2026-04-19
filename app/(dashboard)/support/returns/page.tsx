@@ -8,12 +8,15 @@ import { ReturnsTable } from "@/components/support/ReturnsTable"
 import { ReturnsFilters } from "@/components/support/ReturnsFilters"
 import { SupportPagination } from "@/components/support/SupportPagination"
 import { SupportSyncButton } from "@/components/support/SupportSyncButton"
+import { getUserPreference, setUserPreference } from "@/app/actions/user-preferences"
 import type { ReturnState, Prisma } from "@prisma/client"
 
-const PAGE_SIZE = 20
+const ALLOWED_SIZES = [20, 50, 100] as const
+const DEFAULT_SIZE = 20
 
 interface PageSearchParams {
   page?: string
+  size?: string
   returnStates?: string // CSV "PENDING,REJECTED"
   nmId?: string
   assignees?: string // CSV user ids
@@ -67,6 +70,18 @@ export default async function ReturnsPage({
   const filters = parseSearchParams(sp)
   const where = buildWhere(filters)
 
+  // PageSize: URL ?size имеет приоритет (и сохраняется per-user),
+  // иначе читаем UserPreference, иначе DEFAULT_SIZE.
+  let pageSize: number
+  if (sp.size && ALLOWED_SIZES.includes(Number(sp.size) as 20 | 50 | 100)) {
+    pageSize = Number(sp.size)
+    void setUserPreference("support.returns.pageSize", pageSize)
+  } else {
+    const saved = await getUserPreference<number>("support.returns.pageSize")
+    pageSize =
+      saved && ALLOWED_SIZES.includes(saved as 20 | 50 | 100) ? saved : DEFAULT_SIZE
+  }
+
   const [total, tickets, supportUsers] = await Promise.all([
     prisma.supportTicket.count({ where }),
     prisma.supportTicket.findMany({
@@ -76,8 +91,8 @@ export default async function ReturnsPage({
         { lastMessageAt: { sort: "desc", nulls: "last" } },
         { createdAt: "desc" },
       ],
-      skip: (filters.page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (filters.page - 1) * pageSize,
+      take: pageSize,
       include: {
         messages: {
           where: { direction: "INBOUND" },
@@ -153,7 +168,7 @@ export default async function ReturnsPage({
           />
           <SupportPagination
             page={filters.page}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
             total={total}
           />
         </>
