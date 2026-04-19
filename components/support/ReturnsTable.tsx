@@ -13,6 +13,19 @@ import type {
   SupportTicket,
   User,
 } from "@prisma/client"
+import { MediaGallery } from "./MediaGallery"
+
+function copyToClipboard(text: string, label: string) {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      import("sonner").then(({ toast }) => toast.success(`${label} скопирован`))
+    })
+    .catch(() => {
+      /* ignore */
+    })
+}
 
 type TicketWithMessages = SupportTicket & {
   messages: (SupportMessage & { media: SupportMedia[] })[]
@@ -73,7 +86,7 @@ export function ReturnsTable({
         <thead className="bg-muted">
           <tr>
             <th className="px-3 py-2 text-left font-medium">Товар</th>
-            <th className="px-3 py-2 text-left font-medium">Номер заказа</th>
+            <th className="px-3 py-2 text-left font-medium">Артикул</th>
             <th className="px-3 py-2 text-left font-medium">Покупатель</th>
             <th className="px-3 py-2 text-left font-medium">Причина</th>
             <th className="px-3 py-2 text-left font-medium">Фото брака</th>
@@ -113,32 +126,33 @@ export function ReturnsTable({
                       <div className="text-sm font-medium truncate max-w-[220px]">
                         {card?.name ?? "—"}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {typeof t.nmId === "number" ? (
-                          <Link
-                            href={`/cards/wb?nmId=${t.nmId}`}
-                            className="text-primary hover:underline"
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {t.srid ? (
+                          <button
+                            type="button"
+                            className="hover:text-primary cursor-pointer"
+                            title={`Номер заказа: ${t.srid}. Клик — копировать.`}
+                            onClick={() => copyToClipboard(t.srid ?? "", "Номер заказа")}
                           >
-                            nmID {t.nmId}
-                          </Link>
+                            {t.srid.length > 18 ? `${t.srid.slice(0, 18)}…` : t.srid}
+                          </button>
                         ) : (
-                          "nmID —"
+                          "—"
                         )}
                       </div>
                     </div>
                   </div>
                 </td>
                 <td className="px-3 py-2 text-xs font-mono whitespace-nowrap">
-                  {t.srid ? (
-                    <span
-                      className="cursor-pointer hover:text-primary"
-                      title={`Номер заказа (srid): ${t.srid}. Клик — копировать.`}
-                      onClick={() => {
-                        navigator.clipboard.writeText(t.srid ?? "")
-                      }}
+                  {typeof t.nmId === "number" ? (
+                    <button
+                      type="button"
+                      className="hover:text-primary cursor-pointer"
+                      title={`Артикул ${t.nmId}. Клик — копировать.`}
+                      onClick={() => copyToClipboard(String(t.nmId), "Артикул")}
                     >
-                      {t.srid.length > 14 ? `${t.srid.slice(0, 14)}…` : t.srid}
-                    </span>
+                      {t.nmId}
+                    </button>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -153,26 +167,15 @@ export function ReturnsTable({
                   </p>
                 </td>
                 <td className="px-3 py-2">
-                  <div className="flex items-center gap-1">
-                    {media.slice(0, 3).map((m) => (
-                      <Link
-                        key={m.id}
-                        href={`/support/${t.id}`}
-                        className="block w-10 h-10 rounded border overflow-hidden bg-muted"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={mediaSrc(m)}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                      </Link>
-                    ))}
-                    {media.length === 0 && (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </div>
+                  <MediaGallery
+                    items={media.map((m) => ({
+                      id: m.id,
+                      src: mediaSrc(m),
+                      type: m.type,
+                    }))}
+                    thumbClassName="w-10 h-10"
+                    limit={3}
+                  />
                 </td>
                 <td className="px-3 py-2 text-xs whitespace-nowrap">
                   {t.wbOrderDt

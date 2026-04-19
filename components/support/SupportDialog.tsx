@@ -5,6 +5,7 @@
 
 import { Bot } from "lucide-react"
 import type { Direction, MediaType } from "@prisma/client"
+import { MediaGallery } from "./MediaGallery"
 
 interface Media {
   id: string
@@ -85,34 +86,15 @@ export function SupportDialog({ messages }: { messages: Message[] }) {
                 <p className="text-sm whitespace-pre-wrap">{m.text}</p>
               )}
               {m.media.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {m.media.map((md) =>
-                    md.type === "IMAGE" ? (
-                      <a
-                        key={md.id}
-                        href={mediaSrc(md)}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={mediaSrc(md)}
-                          alt=""
-                          className="max-w-[160px] max-h-[120px] rounded object-cover"
-                        />
-                      </a>
-                    ) : (
-                      <a
-                        key={md.id}
-                        href={mediaSrc(md)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs underline"
-                      >
-                        Видео (откроется в новой вкладке)
-                      </a>
-                    )
-                  )}
+                <div className="mt-2">
+                  <MediaGallery
+                    items={m.media.map((md) => ({
+                      id: md.id,
+                      src: mediaSrc(md),
+                      type: md.type,
+                    }))}
+                    thumbClassName="w-32 h-32"
+                  />
                 </div>
               )}
             </div>
