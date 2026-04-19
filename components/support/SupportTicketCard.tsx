@@ -33,7 +33,7 @@ const channelLabelMap: Record<TicketChannel, string> = {
   QUESTION: "Вопрос",
   CHAT: "Чат",
   RETURN: "Возврат",
-  MESSENGER: "Мессенджер",
+  MESSENGER: "Мсндж",
 }
 
 const statusBorderMap: Record<TicketStatus, string> = {
@@ -116,9 +116,9 @@ export function SupportTicketCard({ ticket, wbCard }: SupportTicketCardProps) {
       href={`/support/${ticket.id}`}
       className={`flex gap-4 p-4 bg-white dark:bg-neutral-900 rounded-lg border border-l-4 hover:shadow-md transition-shadow ${statusBorderMap[ticket.status]}`}
     >
-      <div className="flex-shrink-0 flex flex-col items-center gap-1 text-muted-foreground">
+      <div className="flex-shrink-0 w-16 flex flex-col items-center gap-1 text-muted-foreground text-center">
         <Icon className="w-5 h-5" />
-        <span className="text-[10px] uppercase">
+        <span className="text-[10px] uppercase whitespace-nowrap">
           {channelLabelMap[ticket.channel]}
         </span>
         {ticket.channel === "MESSENGER" && ticket.messengerType && (
