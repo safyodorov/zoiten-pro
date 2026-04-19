@@ -67,6 +67,18 @@
 - Бренды, категории, подкатегории — CRUD с drag-and-drop сортировкой
 - Маркетплейсы — WB, Ozon, ДМ, ЯМ + кастомные
 
+### Служба поддержки (milestone v1.1)
+Единая лента работы с обращениями покупателей WB — отзывы, вопросы, возвраты, чаты, мессенджеры. Замена перехода в кабинет WB.
+
+- **Лента `/support`**: FEEDBACK / QUESTION / RETURN / CHAT / MESSENGER тикеты в одном потоке, фильтры (канал, статус, товар, менеджер, период, unanswered), пагинация 20, sidebar-бейдж «количество новых»
+- **Диалог `/support/[ticketId]`**: 3-колоночный layout — покупатель/товар слева, хронология сообщений центр, управление (статус / назначение / метаданные) справа
+- **Отзывы + Вопросы** (Phase 8): cron 15 мин, reply через WB Feedbacks API (bit 5 scope), авто-повышение NEW → ANSWERED при ответе в кабинете WB
+- **Возвраты `/support/returns`** (Phase 9): таблица заявок (9 колонок — Товар, Покупатель, Причина, Фото брака, Дата, Решение, Кто принял, Пересмотрено), **кнопки «Одобрить / Отклонить / Пересмотреть»** в диалоге канала RETURN, state machine `PENDING → APPROVED | REJECTED`, REJECTED → APPROVED через `reconsidered=true`. ⚠ **Требует отдельный токен `WB_RETURNS_TOKEN`** (bit 11 scope «Возвраты покупателей»), Basic tier лимит 1 req/hour → cron 65 мин
+- **Чат + Автоответы** (Phase 10): cron 5 мин через `WB_CHAT_TOKEN` (bit 9 scope «Чат с покупателями»). `ChatReplyPanel` — multipart upload (JPEG/PNG/PDF, ≤5MB/файл, ≤30MB total). Страница `/support/auto-reply` — настройки локального cron-автоответа (Moscow TZ + workDays + workdayStart/End + dedup 24h), вне рабочих часов покупатель получает autoreply с `{имя_покупателя}` / `{название_товара}`, помечен 🤖 бейджем. WB sync autoreply НЕ существует — фича локальная
+- **Шаблоны + Обжалование** (Phase 11): `/support/templates` CRUD + Export/Import JSON (вместо WB sync, т.к. WB отключил templates API 2025-11). `TemplatePickerModal` в ReplyPanel — поиск + группировка по nmId + substitution переменных. **Обжалование отзывов** — hybrid manual (WB отключил appeals API 2025-12): создаёт `AppealRecord` + открывает seller.wildberries.ru в новой вкладке + manual toggle статуса (PENDING/APPROVED/REJECTED), индикаторы в ленте и диалоге
+- **Профиль покупателя + Мессенджеры** (Phase 12): `/support/customers/[id]` — карточка (имя/телефон/заметка) + агрегаты по каналам + AVG rating для FEEDBACK + хронология всех тикетов. **Hybrid linking** (WB не даёт `wbUserId`): CHAT — auto-create Customer через namespace `chat:<chatID>`, остальные каналы — manual через `LinkCustomerButton`. **Merge дубликатов** через AlertDialog. `/support/new` — ручное создание MESSENGER тикета (Telegram/WhatsApp/OTHER)
+- **Статистика** (Phase 13): `/support/stats` — вкладки «По товарам» и «По менеджерам», PeriodFilter (7д/30д/квартал_календарный/custom, Moscow TZ), без графиков — таблицы + summary cards. ProductStatsTab (отзывы, рейтинг, % ответов, возвраты по статусам, топ причин REJECT, вопросы, avg response), ManagerStatsTab (обработано, каналы, approval %, avg response, **Live badge** для текущего месяца, **AutoRepliesSummary** глобально). Cron 03:00 МСК upsert `ManagerSupportStats` (unique `userId,period` где period = начало месяца)
+
 ### Сотрудники
 - Полный CRUD с модалкой создания/редактирования
 - Привязка к компаниям (M:N): должность, ставка, оклад, документы по каждой компании
@@ -100,13 +112,34 @@
 
 ## Синхронизация с Wildberries
 
-### Три кнопки
+### Три кнопки (товары/цены)
 
 | Кнопка | Endpoint | Что делает | Время |
 |--------|----------|------------|-------|
 | Синхронизировать с WB | `POST /api/wb-sync` | Полная синхронизация всех данных | ~2 мин |
 | Скидка WB | `POST /api/wb-sync-spp` | Только актуальная СПП | ~45 сек |
 | Загрузить ИУ | `POST /api/wb-commission-iu` | Excel с индивидуальными комиссиями | мгновенно |
+
+### Службa поддержки — systemd timers (milestone v1.1)
+
+| Timer | Interval | Endpoint | Что делает |
+|-------|----------|----------|-----------|
+| `zoiten-chat-sync.timer` | 5 мин | `/api/cron/support-sync-chat` | syncChats + runAutoReplies |
+| `zoiten-support-sync.timer` | 15 мин | `/api/cron/support-sync-reviews` | syncSupport (Feedbacks + Questions) |
+| `zoiten-returns-sync.timer` | **65 мин** (отключён — нет токена) | `/api/cron/support-sync-returns` | syncReturns (WB Basic tier 1/hour limit) |
+| `zoiten-stats-refresh.timer` | daily 03:00 МСК | `/api/cron/support-stats-refresh` | upsert ManagerSupportStats за текущий месяц |
+
+### Архитектура трёх WB-токенов
+
+WB API не имеет единого scope — для каждой секции отдельный токен:
+
+| ENV | Scope | Назначение |
+|-----|-------|-----------|
+| `WB_API_TOKEN` | Контент + Аналитика + Цены + Отзывы (bit 5) + Статистика + Тарифы + Продвижение | Товары, карточки, цены, отзывы, вопросы |
+| `WB_CHAT_TOKEN` | **bit 9** «Чат с покупателями» | Buyer Chat API (listChats, events, sendMessage multipart, download) |
+| `WB_RETURNS_TOKEN` | **bit 11** «Возвраты покупателей» (отдельный scope — не «Общение с покупателями»!) | Returns API (listReturns, approve/reject/reconsider) |
+
+Helper-функции в `lib/wb-support-api.ts`: `getToken()` / `getChatToken()` / `getReturnsToken()` + параметризованный `callApi(baseUrl, token, path, init)` с 429 retry (cap 60s чтобы не висеть на WB 1366s hint).
 
 ### API WB — используемые endpoint'ы
 
@@ -148,5 +181,7 @@ AUTH_SECRET=<openssl rand -hex 32>
 AUTH_URL=https://zoiten.pro
 CRON_SECRET=<openssl rand -hex 32>
 UPLOAD_DIR=/var/www/zoiten-uploads
-WB_API_TOKEN=<токен из кабинета WB>
+WB_API_TOKEN=<токен — Контент/Цены/Отзывы/Статистика/Тарифы/Аналитика/Продвижение>
+WB_CHAT_TOKEN=<токен — scope bit 9 «Чат с покупателями»>
+WB_RETURNS_TOKEN=<токен — scope bit 11 «Возвраты покупателей», ОТДЕЛЬНЫЙ от чата>
 ```
