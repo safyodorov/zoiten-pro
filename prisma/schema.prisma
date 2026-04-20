@@ -630,15 +630,16 @@ model SupportMessage {
 // после скачивания в /var/www/zoiten-uploads/support/{ticketId}/{messageId}/.
 // expiresAt = createdAt + 1 год — cron удаляет по истечении.
 model SupportMedia {
-  id        String         @id @default(cuid())
-  messageId String
-  message   SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  type      MediaType
-  wbUrl     String         @db.Text
-  localPath String?        @db.Text
-  sizeBytes Int?
-  createdAt DateTime       @default(now())
-  expiresAt DateTime
+  id            String         @id @default(cuid())
+  messageId     String
+  message       SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  type          MediaType
+  wbUrl         String         @db.Text
+  localPath     String?        @db.Text
+  thumbnailPath String?        @db.Text
+  sizeBytes     Int?
+  createdAt     DateTime       @default(now())
+  expiresAt     DateTime
 
   @@index([expiresAt])
 }
