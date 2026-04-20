@@ -17,7 +17,11 @@ import {
   type Claim,
   type Chat,
 } from "@/lib/wb-support-api"
-import { downloadMediaBatch, type DownloadItem } from "@/lib/support-media"
+import {
+  downloadMediaBatch,
+  generateImageThumbnail,
+  type DownloadItem,
+} from "@/lib/support-media"
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000
 const RETURNS_PAGE_LIMIT = 200
@@ -139,6 +143,7 @@ export async function syncSupport(
               wbUrl: photo.fullSize,
               ticketId: ticket.id,
               messageId: msg.id,
+              mediaType: "IMAGE",
             })
           }
           if (fb.video?.link) {
@@ -155,6 +160,7 @@ export async function syncSupport(
               wbUrl: fb.video.link,
               ticketId: ticket.id,
               messageId: msg.id,
+              mediaType: "VIDEO",
             })
           }
         }
@@ -252,7 +258,7 @@ export async function syncSupport(
     }
   }
 
-  // 5. Скачать медиа параллельно + обновить localPath
+  // 5. Скачать медиа параллельно + обновить localPath + thumbnailPath
   let mediaSaved = 0
   if (mediaToDownload.length > 0) {
     const downloadResults = await downloadMediaBatch(mediaToDownload, 5)
@@ -261,7 +267,11 @@ export async function syncSupport(
         try {
           await prisma.supportMedia.updateMany({
             where: { wbUrl: r.wbUrl, messageId: r.messageId },
-            data: { localPath: r.localPath, sizeBytes: r.sizeBytes },
+            data: {
+              localPath: r.localPath,
+              thumbnailPath: r.thumbnailPath,
+              sizeBytes: r.sizeBytes,
+            },
           })
           mediaSaved++
         } catch (err) {
@@ -271,6 +281,10 @@ export async function syncSupport(
         }
       } else if (r.error) {
         errors.push(`Media download ${r.wbUrl}: ${r.error}`)
+      }
+      // Thumbnail ошибка — non-fatal, в errors не попадает (sync зелёный)
+      if (r.thumbError) {
+        console.warn(`[support-media] thumb ${r.wbUrl}: ${r.thumbError}`)
       }
     }
   }
@@ -460,6 +474,7 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
               wbUrl: url,
               ticketId: ticket.id,
               messageId: msg.id,
+              mediaType: "IMAGE",
             })
           }
 
@@ -478,6 +493,7 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
               wbUrl: url,
               ticketId: ticket.id,
               messageId: msg.id,
+              mediaType: "VIDEO",
             })
           }
         }
@@ -500,7 +516,11 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
           try {
             await prisma.supportMedia.updateMany({
               where: { wbUrl: r.wbUrl, messageId: r.messageId },
-              data: { localPath: r.localPath, sizeBytes: r.sizeBytes },
+              data: {
+                localPath: r.localPath,
+                thumbnailPath: r.thumbnailPath,
+                sizeBytes: r.sizeBytes,
+              },
             })
             result.mediaDownloaded++
           } catch (err) {
@@ -510,6 +530,9 @@ export async function syncReturns(): Promise<SyncReturnsResult> {
           }
         } else if (r.error) {
           result.errors.push(`Media download ${r.wbUrl}: ${r.error}`)
+        }
+        if (r.thumbError) {
+          console.warn(`[support-media] thumb ${r.wbUrl}: ${r.thumbError}`)
         }
       }
     } catch (err) {
@@ -538,6 +561,7 @@ interface PendingChatDownload {
   ticketId: string
   messageId: string
   fileName: string
+  mediaType: "IMAGE" | "DOCUMENT"
 }
 
 function sanitizeChatFilename(name: string): string {
@@ -750,6 +774,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
             ticketId: ticket.id,
             messageId: msg.id,
             fileName: img.fileName,
+            mediaType: "IMAGE",
           })
         }
         for (const f of event.message?.attachments?.files ?? []) {
@@ -766,6 +791,7 @@ export async function syncChats(): Promise<SyncChatsResult> {
             ticketId: ticket.id,
             messageId: msg.id,
             fileName: f.fileName,
+            mediaType: "DOCUMENT",
           })
         }
       } catch (err) {
@@ -802,9 +828,24 @@ export async function syncChats(): Promise<SyncChatsResult> {
       const filename = sanitizeChatFilename(dl.fileName)
       const localPath = path.join(dir, filename)
       await fs.writeFile(localPath, buffer)
+
+      // ── Thumbnail (non-fatal) для IMAGE ──
+      let thumbnailPath: string | undefined
+      if (dl.mediaType === "IMAGE") {
+        try {
+          thumbnailPath = await generateImageThumbnail(localPath)
+        } catch (err) {
+          console.warn(
+            `[support-media] thumb chat ${dl.downloadId}: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          )
+        }
+      }
+
       await prisma.supportMedia.updateMany({
         where: { messageId: dl.messageId, wbUrl: `DOWNLOAD_ID:${dl.downloadId}` },
-        data: { localPath, sizeBytes: buffer.length },
+        data: { localPath, thumbnailPath, sizeBytes: buffer.length },
       })
       result.mediaDownloaded++
       await chatSleep(CHAT_PAUSE_MS)
