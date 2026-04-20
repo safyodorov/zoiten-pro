@@ -42,19 +42,28 @@ export async function generateImageThumbnail(sourcePath: string): Promise<string
 }
 
 // Генерирует .thumb.jpg 96×96 из первой секунды видео через ffmpeg (spawn).
+// `input` — путь к локальному файлу ИЛИ URL (WB отдаёт видео как HLS m3u8
+// плейлисты; локально лежит только текстовый плейлист без сегментов, поэтому
+// для HLS передавайте wbUrl — ffmpeg сам скачает первый сегмент из CDN).
+// `thumbPath` — куда сохранить результат.
 // Требует ffmpeg в PATH (VPS: apt install -y ffmpeg). На Windows dev без ffmpeg
 // — proc.on('error') ловит ENOENT и reject — вызывающий код обязан обернуть
 // в try/catch и трактовать как non-fatal.
-export async function generateVideoThumbnail(sourcePath: string): Promise<string> {
-  const thumbPath = sourcePath.replace(/\.[^./\\]+$/, "") + ".thumb.jpg"
+export async function generateVideoThumbnail(
+  input: string,
+  thumbPath: string,
+  timeoutMs = 30000
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", [
       "-y",
       "-ss",
-      "00:00:01",
+      "1",
       "-i",
-      sourcePath,
-      "-vframes",
+      input,
+      "-frames:v",
+      "1",
+      "-update",
       "1",
       "-vf",
       "scale=96:96:force_original_aspect_ratio=increase,crop=96:96",
@@ -66,8 +75,16 @@ export async function generateVideoThumbnail(sourcePath: string): Promise<string
     proc.stderr.on("data", (d) => {
       stderr += String(d)
     })
-    proc.on("error", (err) => reject(err)) // ENOENT на Windows без ffmpeg
+    const timer = setTimeout(() => {
+      proc.kill("SIGKILL")
+      reject(new Error(`ffmpeg timeout ${timeoutMs}ms`))
+    }, timeoutMs)
+    proc.on("error", (err) => {
+      clearTimeout(timer)
+      reject(err) // ENOENT на Windows без ffmpeg
+    })
     proc.on("close", (code) => {
+      clearTimeout(timer)
       if (code === 0) resolve(thumbPath)
       else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(0, 500)}`))
     })
@@ -98,7 +115,9 @@ export async function downloadMedia(
       if (item.mediaType === "IMAGE") {
         thumbnailPath = await generateImageThumbnail(localPath)
       } else if (item.mediaType === "VIDEO") {
-        thumbnailPath = await generateVideoThumbnail(localPath)
+        const thumbPath =
+          localPath.replace(/\.[^./\\]+$/, "") + ".thumb.jpg"
+        thumbnailPath = await generateVideoThumbnail(item.wbUrl, thumbPath)
       }
       // DOCUMENT — skip, рендерим иконкой
     } catch (err) {

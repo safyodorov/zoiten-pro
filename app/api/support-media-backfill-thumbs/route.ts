@@ -33,19 +33,25 @@ export async function POST() {
   await requireSuperadmin()
 
   const errors: string[] = []
+  const erroredIds = new Set<string>()
   let processed = 0
   let generated = 0
   let skipped = 0
 
   // Обрабатываем батчами — чтобы не держать открытый query на тысячи rows
   // (Prisma findMany без take читает всё в память).
-  for (let offset = 0; ; offset += BATCH_SIZE) {
+  // Без skip — после update записи уходят из фильтра; errored IDs исключаются
+  // через notIn чтобы не зацикливаться на проблемных rows.
+  while (true) {
     const rows = await prisma.supportMedia.findMany({
-      where: { thumbnailPath: null, localPath: { not: null } },
-      select: { id: true, type: true, localPath: true },
+      where: {
+        thumbnailPath: null,
+        localPath: { not: null },
+        ...(erroredIds.size > 0 && { id: { notIn: Array.from(erroredIds) } }),
+      },
+      select: { id: true, type: true, localPath: true, wbUrl: true },
       orderBy: { createdAt: "desc" },
       take: BATCH_SIZE,
-      skip: offset,
     })
     if (rows.length === 0) break
 
@@ -65,15 +71,22 @@ export async function POST() {
         await fs.access(row.localPath)
       } catch {
         errors.push(`${row.id}: file missing at ${row.localPath}`)
+        erroredIds.add(row.id)
         skipped++
         continue
       }
 
       try {
-        const thumbnailPath =
-          row.type === "IMAGE"
-            ? await generateImageThumbnail(row.localPath)
-            : await generateVideoThumbnail(row.localPath)
+        let thumbnailPath: string
+        if (row.type === "IMAGE") {
+          thumbnailPath = await generateImageThumbnail(row.localPath)
+        } else {
+          // VIDEO: WB отдаёт HLS m3u8 — локально только плейлист без сегментов,
+          // поэтому ffmpeg тянет кадр из wbUrl (CDN сам отдаст первый сегмент).
+          const thumbPath =
+            row.localPath.replace(/\.[^./\\]+$/, "") + ".thumb.jpg"
+          thumbnailPath = await generateVideoThumbnail(row.wbUrl, thumbPath)
+        }
         await prisma.supportMedia.update({
           where: { id: row.id },
           data: { thumbnailPath },
@@ -83,10 +96,9 @@ export async function POST() {
         errors.push(
           `${row.id}: ${err instanceof Error ? err.message : String(err)}`
         )
+        erroredIds.add(row.id)
       }
     }
-
-    if (rows.length < BATCH_SIZE) break
   }
 
   return NextResponse.json({ processed, generated, skipped, errors })
