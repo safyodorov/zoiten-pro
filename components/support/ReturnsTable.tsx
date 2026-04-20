@@ -13,6 +13,7 @@ import type {
   SupportTicket,
   User,
 } from "@prisma/client"
+import { toWbCdnThumb } from "@/lib/wb-cdn"
 import { MediaGallery } from "./MediaGallery"
 
 function copyToClipboard(text: string, label: string) {
@@ -73,6 +74,19 @@ function mediaSrc(m: SupportMedia): string {
   return m.wbUrl
 }
 
+// Quick Task 260420-oxd: thumbnailPath → /uploads/...thumb.(jpg|webp)
+// Fallback на оригинал для IMAGE (если backfill не прогнали), null для VIDEO
+// (в MediaGallery VIDEO без thumbnailSrc рендерится серой заглушкой + Play).
+function mediaThumbSrc(m: SupportMedia): string | null {
+  if (m.thumbnailPath) {
+    return m.thumbnailPath.replace("/var/www/zoiten-uploads", "/uploads")
+  }
+  if (m.type === "IMAGE" && m.localPath) {
+    return m.localPath.replace("/var/www/zoiten-uploads", "/uploads")
+  }
+  return null
+}
+
 export function ReturnsTable({
   tickets,
   decisionByTicket,
@@ -116,10 +130,13 @@ export function ReturnsTable({
                     {card?.photoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={card.photoUrl}
+                        src={toWbCdnThumb(card.photoUrl) ?? card.photoUrl}
                         alt=""
-                        className="h-12 w-9 rounded object-cover flex-shrink-0"
+                        width={36}
+                        height={48}
+                        decoding="async"
                         loading="lazy"
+                        className="h-12 w-9 rounded object-cover flex-shrink-0"
                       />
                     )}
                     <div className="min-w-0">
@@ -171,6 +188,7 @@ export function ReturnsTable({
                     items={media.map((m) => ({
                       id: m.id,
                       src: mediaSrc(m),
+                      thumbnailSrc: mediaThumbSrc(m),
                       type: m.type,
                     }))}
                     thumbClassName="w-10 h-10"

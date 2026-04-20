@@ -1,5 +1,7 @@
 // components/support/MediaGallery.tsx
 // Превью медиа (image/video thumbnails). Клик → открывает MediaLightbox.
+// Quick Task 260420-oxd: VIDEO рендерится как <img> (thumbnail из ffmpeg),
+// не <video> — быстрый первый paint, без декодирования MP4 браузером.
 "use client"
 
 import { useState } from "react"
@@ -8,7 +10,8 @@ import { MediaLightbox, type LightboxItem } from "./MediaLightbox"
 
 export interface MediaGalleryItem {
   id: string
-  src: string
+  src: string // полноразмерный для Lightbox
+  thumbnailSrc?: string | null // для превью (fallback на src для IMAGE)
   type: "IMAGE" | "VIDEO" | "DOCUMENT"
   fileName?: string | null
 }
@@ -47,19 +50,43 @@ export function MediaGallery({
             type="button"
             onClick={() => setOpenIndex(i)}
             className={`${thumbClassName} rounded border overflow-hidden bg-muted relative flex items-center justify-center hover:ring-2 hover:ring-primary transition-all`}
-            title={m.type === "VIDEO" ? "Видео" : m.type === "DOCUMENT" ? (m.fileName ?? "Документ") : "Фото"}
+            title={
+              m.type === "VIDEO"
+                ? "Видео"
+                : m.type === "DOCUMENT"
+                  ? (m.fileName ?? "Документ")
+                  : "Фото"
+            }
           >
             {m.type === "IMAGE" ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={m.src}
+                src={m.thumbnailSrc ?? m.src}
                 alt=""
-                className="w-full h-full object-cover"
+                width={96}
+                height={96}
+                decoding="async"
                 loading="lazy"
+                className="w-full h-full object-cover"
               />
             ) : m.type === "VIDEO" ? (
               <>
-                <video src={m.src} className="w-full h-full object-cover" muted preload="metadata" />
+                {m.thumbnailSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.thumbnailSrc}
+                    alt=""
+                    width={96}
+                    height={96}
+                    decoding="async"
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  // Fallback: серый прямоугольник — НЕ <video>,
+                  // чтобы не грузить оригинал видео ради превью.
+                  <div className="w-full h-full bg-muted" />
+                )}
                 <Play className="absolute w-6 h-6 text-white drop-shadow-md fill-white/90" />
               </>
             ) : (
