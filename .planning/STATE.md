@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 13-02-PLAN.md (UI /support/stats RSC + 6 компонентов + 10 GREEN tests)
-last_updated: "2026-04-18T16:30:22.816Z"
+stopped_at: Completed quick task 260420-oxd (ffmpeg thumbnail + WB CDN tm/ + width/height на /support/returns)
+last_updated: "2026-04-20T15:20:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 12
@@ -228,6 +228,7 @@ None yet.
 | fast-260419 | View Transitions fade при переключении dark/light темы | 2026-04-19 | 081299d | inline |
 | fix-260419-promo | WB promotions: fallback nmID/nmId/id при createMany | 2026-04-19 | d85298c | inline |
 | fix-260419-pagi | Пагинация /products и /batches: сброс на page 1 + pageSize селектор | 2026-04-19 | 544ccdb | inline |
+| 260420-oxd | /support/returns: ffmpeg thumbnail для VIDEO + sharp для IMAGE + WB CDN tm/ + width/height/decoding | 2026-04-20 | eceae9e | [260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-](./quick/260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-/) |
 
 ### Blockers/Concerns
 
@@ -240,6 +241,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-18T16:30:13.568Z
-Stopped at: Completed 13-02-PLAN.md (UI /support/stats RSC + 6 компонентов + 10 GREEN tests)
+Last session: 2026-04-20T15:20:00.000Z
+Stopped at: Completed quick task 260420-oxd (ffmpeg thumbnail + WB CDN tm/ + width/height на /support/returns)
 Resume file: None
