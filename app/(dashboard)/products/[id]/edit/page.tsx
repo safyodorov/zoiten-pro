@@ -14,8 +14,15 @@ export default async function EditProductPage({
     prisma.product.findUnique({
       where: { id },
       include: {
-        barcodes: true,
-        articles: { include: { marketplace: true } },
+        // 260421-iq7: articles упорядочены по sortOrder, barcodes nested внутри
+        // каждого article (больше нет Product.barcodes back-relation).
+        articles: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            marketplace: true,
+            barcodes: { orderBy: { createdAt: "asc" } },
+          },
+        },
       },
     }),
     prisma.brand.findMany({

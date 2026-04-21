@@ -10,6 +10,8 @@ type ActionResult = { ok: true } | { ok: false; error: string }
 type CreateResult = { ok: true; id: string } | { ok: false; error: string }
 
 // ── Создать новый товар из выбранных карточек WB ─────────────────
+// 260421-iq7: штрих-коды создаются nested в articles с marketplaceArticleId/marketplaceId/
+// productDeletedAt. Дедуп barcode per-marketplace (partial unique index), не глобально.
 
 export async function createProductFromCards(
   cardIds: string[]
@@ -30,7 +32,13 @@ export async function createProductFromCards(
       return { ok: false, error: "Карточки не найдены" }
     }
 
-    const firstCard = cards[0]
+    // Упорядочиваем cards детерминированно по исходному массиву cardIds
+    const cardOrderMap = new Map(cardIds.map((id, idx) => [id, idx]))
+    const cardsOrdered = [...cards].sort(
+      (a, b) => (cardOrderMap.get(a.id) ?? 0) - (cardOrderMap.get(b.id) ?? 0)
+    )
+
+    const firstCard = cardsOrdered[0]
 
     // Попытка найти бренд по названию
     let brandId: string | null = null
@@ -53,23 +61,6 @@ export async function createProductFromCards(
       return { ok: false, error: "Нет доступных брендов. Создайте бренд в настройках." }
     }
 
-    // Собираем уникальные штрихкоды
-    const allBarcodes = new Set<string>()
-    for (const card of cards) {
-      if (card.barcode) allBarcodes.add(card.barcode)
-      for (const bc of card.barcodes) {
-        allBarcodes.add(bc)
-      }
-    }
-
-    // Исключаем штрихкоды, уже существующие в БД
-    const existingBarcodes = await prisma.barcode.findMany({
-      where: { value: { in: Array.from(allBarcodes) } },
-      select: { value: true },
-    })
-    const existingSet = new Set(existingBarcodes.map((b) => b.value))
-    const newBarcodes = Array.from(allBarcodes).filter((bc) => !existingSet.has(bc))
-
     // Находим маркетплейс WB
     const wbMarketplace = await prisma.marketplace.findFirst({
       where: { slug: "wb" },
@@ -79,8 +70,9 @@ export async function createProductFromCards(
       return { ok: false, error: "Маркетплейс WB не найден в настройках" }
     }
 
-    // Удаляем осиротевшие артикулы от soft-deleted товаров
-    const articleValues = cards.map((c) => String(c.nmId))
+    // Удаляем осиротевшие артикулы от soft-deleted товаров (их barcodes
+    // каскадно удалятся через FK onDelete: Cascade).
+    const articleValues = cardsOrdered.map((c) => String(c.nmId))
     await prisma.marketplaceArticle.deleteMany({
       where: {
         marketplaceId: wbMarketplace.id,
@@ -98,7 +90,30 @@ export async function createProductFromCards(
       select: { article: true },
     })
     const existingArticleSet = new Set(existingArticles.map((a) => a.article))
-    const newArticles = articleValues.filter((a) => !existingArticleSet.has(a))
+
+    // Собираем все новые штрих-коды с карточек (для дедупа per-marketplace)
+    const allCardBarcodes = new Set<string>()
+    for (const card of cardsOrdered) {
+      if (card.barcode) allCardBarcodes.add(card.barcode)
+      for (const bc of card.barcodes) allCardBarcodes.add(bc)
+    }
+
+    // Дедуп barcode только внутри WB marketplaceId среди активных товаров.
+    // productDeletedAt: null в WHERE = только активные конфликты блокируют создание
+    // (тот же штрих-код на soft-deleted товаре разрешён по partial unique).
+    const wbExisting = await prisma.barcode.findMany({
+      where: {
+        marketplaceId: wbMarketplace.id,
+        value: { in: Array.from(allCardBarcodes) },
+        productDeletedAt: null,
+      },
+      select: { value: true },
+    })
+    const wbExistingSet = new Set(wbExisting.map((b) => b.value))
+
+    // Набор уже использованных штрих-кодов внутри текущего запроса (чтобы
+    // одна и та же карточка не создала дубль между артикулами)
+    const usedInThisRequest = new Set<string>()
 
     // Создаём товар с уникальным SKU
     const product = await prisma.$transaction(async (tx) => {
@@ -106,6 +121,43 @@ export async function createProductFromCards(
         SELECT nextval('product_sku_seq')
       `
       const sku = `УКТ-${String(nextval).padStart(6, "0")}`
+
+      // Nested articles: пропускаем карточки с уже занятыми артикулами.
+      const articlesCreate: Array<{
+        marketplaceId: string
+        article: string
+        sortOrder: number
+        barcodes: { create: Array<{ marketplaceId: string; value: string; productDeletedAt: null }> }
+      }> = []
+
+      let sortOrder = 0
+      for (const card of cardsOrdered) {
+        const articleValue = String(card.nmId)
+        if (existingArticleSet.has(articleValue)) continue
+
+        // Штрих-коды для этой карточки — уникальные (не в wbExisting, не ранее добавленные)
+        const cardBarcodes = new Set<string>()
+        if (card.barcode) cardBarcodes.add(card.barcode)
+        for (const bc of card.barcodes) cardBarcodes.add(bc)
+        const barcodesForThisCard = Array.from(cardBarcodes).filter(
+          (v) => !wbExistingSet.has(v) && !usedInThisRequest.has(v)
+        )
+        for (const v of barcodesForThisCard) usedInThisRequest.add(v)
+
+        articlesCreate.push({
+          marketplaceId: wbMarketplace.id,
+          article: articleValue,
+          sortOrder,
+          barcodes: {
+            create: barcodesForThisCard.map((value) => ({
+              marketplaceId: wbMarketplace.id,
+              value,
+              productDeletedAt: null,
+            })),
+          },
+        })
+        sortOrder++
+      }
 
       return tx.product.create({
         data: {
@@ -118,13 +170,7 @@ export async function createProductFromCards(
           widthCm: firstCard.widthCm,
           depthCm: firstCard.depthCm,
           articles: {
-            create: newArticles.map((article) => ({
-              marketplaceId: wbMarketplace.id,
-              article,
-            })),
-          },
-          barcodes: {
-            create: newBarcodes.map((value) => ({ value })),
+            create: articlesCreate,
           },
         },
       })
@@ -140,6 +186,9 @@ export async function createProductFromCards(
 }
 
 // ── Добавить карточки WB в существующий товар ────────────────────
+// 260421-iq7: полная переработка — каждый barcode создаётся с marketplaceArticleId
+// нового WB артикула, marketplaceId=WB, productDeletedAt=product.deletedAt.
+// Создание per-article последовательное (createMany не поддерживает nested writes).
 
 export async function addCardsToProduct(
   cardIds: string[],
@@ -152,38 +201,54 @@ export async function addCardsToProduct(
       return { ok: false, error: "Не выбрано ни одной карточки" }
     }
 
-    const [cards, product, wbMarketplace] = await Promise.all([
-      prisma.wbCard.findMany({ where: { id: { in: cardIds } } }),
-      prisma.product.findUnique({
-        where: { id: productId },
-        include: { articles: true, barcodes: true },
+    const [cards, wbMarketplace] = await Promise.all([
+      prisma.wbCard.findMany({
+        where: { id: { in: cardIds } },
+        orderBy: { createdAt: "asc" },
       }),
       prisma.marketplace.findFirst({ where: { slug: "wb" } }),
     ])
 
-    if (!product) return { ok: false, error: "Товар не найден" }
     if (!wbMarketplace) return { ok: false, error: "Маркетплейс WB не найден" }
 
+    // 260421-iq7: читаем articles (WB) с nested barcodes — больше нет Product.barcodes.
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        articles: {
+          where: { marketplaceId: wbMarketplace.id },
+          include: { barcodes: true },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    })
+
+    if (!product) return { ok: false, error: "Товар не найден" }
+
     // Существующие артикулы WB этого товара
-    const existingArticles = new Set(
-      product.articles
-        .filter((a) => a.marketplaceId === wbMarketplace.id)
-        .map((a) => a.article)
+    const existingArticleSet = new Set(product.articles.map((a) => a.article))
+
+    // Макс. sortOrder среди WB-артикулов товара — новые пишутся в конец
+    const maxSortOrder = product.articles.reduce(
+      (max, a) => Math.max(max, a.sortOrder),
+      -1
     )
 
-    // Новые артикулы (не дублируем)
-    const newArticles = cards
-      .filter((card) => !existingArticles.has(String(card.nmId)))
-      .map((card) => ({
-        productId,
-        marketplaceId: wbMarketplace.id,
-        article: String(card.nmId),
-      }))
+    // Существующие штрих-коды этого товара (по всем WB артикулам)
+    const existingBarcodeValues = new Set<string>(
+      product.articles.flatMap((a) => a.barcodes.map((b) => b.value))
+    )
 
-    // Собираем уникальные штрихкоды
-    const existingBarcodeValues = new Set(product.barcodes.map((b) => b.value))
+    // Упорядочиваем cards детерминированно по исходному массиву cardIds
+    // (пользователь выбрал в конкретном порядке — sortOrder должен это отражать).
+    const cardOrderMap = new Map(cardIds.map((id, idx) => [id, idx]))
+    const cardsOrdered = [...cards].sort(
+      (a, b) => (cardOrderMap.get(a.id) ?? 0) - (cardOrderMap.get(b.id) ?? 0)
+    )
+
+    // Дедуп barcode per-marketplace среди активных товаров (partial unique).
     const allNewBarcodes = new Set<string>()
-    for (const card of cards) {
+    for (const card of cardsOrdered) {
       if (card.barcode && !existingBarcodeValues.has(card.barcode)) {
         allNewBarcodes.add(card.barcode)
       }
@@ -192,28 +257,53 @@ export async function addCardsToProduct(
       }
     }
 
-    // Исключаем штрихкоды, существующие глобально
-    const globalExisting = await prisma.barcode.findMany({
-      where: { value: { in: Array.from(allNewBarcodes) } },
+    const wbExisting = await prisma.barcode.findMany({
+      where: {
+        marketplaceId: wbMarketplace.id,
+        value: { in: Array.from(allNewBarcodes) },
+        productDeletedAt: null,
+      },
       select: { value: true },
     })
-    const globalSet = new Set(globalExisting.map((b) => b.value))
-    const barcodesToCreate = Array.from(allNewBarcodes).filter(
-      (bc) => !globalSet.has(bc)
-    )
+    const wbExistingSet = new Set(wbExisting.map((b) => b.value))
 
-    await prisma.$transaction([
-      ...(newArticles.length > 0
-        ? [prisma.marketplaceArticle.createMany({ data: newArticles })]
-        : []),
-      ...(barcodesToCreate.length > 0
-        ? [
-            prisma.barcode.createMany({
-              data: barcodesToCreate.map((value) => ({ productId, value })),
-            }),
-          ]
-        : []),
-    ])
+    await prisma.$transaction(async (tx) => {
+      let offset = 0
+      for (const card of cardsOrdered) {
+        const articleValue = String(card.nmId)
+        if (existingArticleSet.has(articleValue)) continue // этот nmId уже привязан
+
+        // Штрих-коды для этой карточки
+        const cardBarcodes = new Set<string>()
+        if (card.barcode) cardBarcodes.add(card.barcode)
+        for (const bc of card.barcodes) cardBarcodes.add(bc)
+        const barcodesForThisCard = Array.from(cardBarcodes).filter(
+          (v) => !existingBarcodeValues.has(v) && !wbExistingSet.has(v)
+        )
+
+        await tx.marketplaceArticle.create({
+          data: {
+            productId,
+            marketplaceId: wbMarketplace.id,
+            article: articleValue,
+            sortOrder: maxSortOrder + 1 + offset,
+            barcodes: {
+              create: barcodesForThisCard.map((value) => ({
+                marketplaceId: wbMarketplace.id,
+                value,
+                productDeletedAt: product.deletedAt, // null для активного товара
+              })),
+            },
+          },
+        })
+
+        offset++
+        for (const v of barcodesForThisCard) {
+          existingBarcodeValues.add(v)
+          wbExistingSet.add(v)
+        }
+      }
+    })
 
     revalidatePath("/products")
     revalidatePath("/cards/wb")

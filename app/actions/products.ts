@@ -1,5 +1,5 @@
 // app/actions/products.ts
-// Server Actions for Products CRUD — create, update, softDelete, duplicate
+// Server Actions for Products CRUD — create, update, softDelete, restore, duplicate
 "use server"
 
 import { requireSection } from "@/lib/rbac"
@@ -13,10 +13,19 @@ type ActionResult = { ok: true } | { ok: false; error: string }
 type CreateResult = { ok: true; id: string } | { ok: false; error: string }
 
 // ── Schemas ────────────────────────────────────────────────────────
+// 260421-iq7: barcodes теперь nested внутри articles, верхнеуровневый
+// `barcodes` удалён. sortOrder генерируется сервером по индексу массива.
+
+const BarcodeSchema = z.object({ value: z.string().min(1) })
 
 const ArticleSchema = z.object({
+  value: z.string().min(1),
+  barcodes: z.array(BarcodeSchema).max(20),
+})
+
+const MarketplaceSchema = z.object({
   marketplaceId: z.string().min(1),
-  articles: z.array(z.object({ value: z.string().min(1) })).max(10),
+  articles: z.array(ArticleSchema).max(10),
 })
 
 const ProductSchema = z.object({
@@ -34,8 +43,7 @@ const ProductSchema = z.object({
   heightCm: z.number().positive().optional(),
   widthCm: z.number().positive().optional(),
   depthCm: z.number().positive().optional(),
-  barcodes: z.array(z.object({ value: z.string().min(1) })).min(0).max(20),
-  marketplaces: z.array(ArticleSchema),
+  marketplaces: z.array(MarketplaceSchema),
 })
 
 const UpdateProductSchema = ProductSchema.extend({
@@ -53,19 +61,28 @@ function handleAuthError(e: unknown): { ok: false; error: string } | null {
 }
 
 // ── P2002 target helper ───────────────────────────────────────────
+// 260421-iq7: новый partial unique index — (marketplaceId, value) WHERE productDeletedAt IS NULL.
+// Target обычно содержит "marketplaceId,value" или имя индекса Barcode_marketplace_value_active_key.
 
 function handleP2002(e: unknown): { ok: false; error: string } | null {
   const err = e as { code?: string; meta?: { target?: string | string[] } }
   if (err?.code !== "P2002") return null
   const target = err?.meta?.target
   const targetStr = Array.isArray(target) ? target.join(",") : String(target ?? "")
-  if (targetStr.toLowerCase().includes("barcode")) {
+  const lower = targetStr.toLowerCase()
+  if (
+    lower.includes("barcode_marketplace_value_active") ||
+    (lower.includes("marketplaceid") && lower.includes("value"))
+  ) {
+    return {
+      ok: false,
+      error: "Штрих-код уже используется в этом маркетплейсе",
+    }
+  }
+  if (lower.includes("barcode")) {
     return { ok: false, error: "Штрих-код уже используется" }
   }
-  if (
-    targetStr.toLowerCase().includes("article") ||
-    targetStr.toLowerCase().includes("marketplace")
-  ) {
+  if (lower.includes("article") || lower.includes("marketplace")) {
     return { ok: false, error: "Артикул уже используется для этого маркетплейса" }
   }
   return { ok: false, error: "Уже существует" }
@@ -102,14 +119,21 @@ export async function createProduct(
           heightCm: parsed.heightCm ?? null,
           widthCm: parsed.widthCm ?? null,
           depthCm: parsed.depthCm ?? null,
-          barcodes: {
-            create: parsed.barcodes.map((b) => ({ value: b.value })),
-          },
           articles: {
+            // 260421-iq7: nested create articles + barcodes. sortOrder = index массива.
+            // Новый товар всегда создаётся активным → productDeletedAt = null.
             create: parsed.marketplaces.flatMap((mp) =>
-              mp.articles.map((a) => ({
+              mp.articles.map((a, i) => ({
                 marketplaceId: mp.marketplaceId,
                 article: a.value,
+                sortOrder: i,
+                barcodes: {
+                  create: a.barcodes.map((b) => ({
+                    marketplaceId: mp.marketplaceId,
+                    value: b.value,
+                    productDeletedAt: null,
+                  })),
+                },
               }))
             ),
           },
@@ -139,6 +163,17 @@ export async function updateProduct(
     const parsed = UpdateProductSchema.parse(data)
 
     await prisma.$transaction(async (tx) => {
+      // 260421-iq7: читаем deletedAt товара для корректной денормализации
+      // в Barcode.productDeletedAt при создании новых штрих-кодов.
+      const existing = await tx.product.findUnique({
+        where: { id: parsed.id },
+        select: { deletedAt: true },
+      })
+      if (!existing) {
+        throw Object.assign(new Error("Product not found"), { code: "P2025" })
+      }
+      const productDeletedAt = existing.deletedAt
+
       await tx.product.update({
         where: { id: parsed.id },
         data: {
@@ -157,28 +192,31 @@ export async function updateProduct(
         },
       })
 
-      // Replace barcodes
-      await tx.barcode.deleteMany({ where: { productId: parsed.id } })
-      if (parsed.barcodes.length > 0) {
-        await tx.barcode.createMany({
-          data: parsed.barcodes.map((b) => ({
-            productId: parsed.id,
-            value: b.value,
-          })),
-        })
-      }
-
-      // Replace marketplace articles
+      // 260421-iq7: replace-all стратегия. Удаляем все MarketplaceArticle товара —
+      // Barcode каскадно удалятся через onDelete: Cascade на FK marketplaceArticleId.
+      // Отдельно barcode.deleteMany не нужен.
       await tx.marketplaceArticle.deleteMany({ where: { productId: parsed.id } })
-      const articlesData = parsed.marketplaces.flatMap((mp) =>
-        mp.articles.map((a) => ({
-          productId: parsed.id,
-          marketplaceId: mp.marketplaceId,
-          article: a.value,
-        }))
-      )
-      if (articlesData.length > 0) {
-        await tx.marketplaceArticle.createMany({ data: articlesData })
+
+      // Создаём articles + nested barcodes последовательно (createMany не поддерживает nested writes).
+      for (const mp of parsed.marketplaces) {
+        for (let i = 0; i < mp.articles.length; i++) {
+          const a = mp.articles[i]
+          await tx.marketplaceArticle.create({
+            data: {
+              productId: parsed.id,
+              marketplaceId: mp.marketplaceId,
+              article: a.value,
+              sortOrder: i,
+              barcodes: {
+                create: a.barcodes.map((b) => ({
+                  marketplaceId: mp.marketplaceId,
+                  value: b.value,
+                  productDeletedAt,
+                })),
+              },
+            },
+          })
+        }
       }
     })
 
@@ -198,16 +236,27 @@ export async function updateProduct(
 }
 
 // ── softDeleteProduct ─────────────────────────────────────────────
+// 260421-iq7: в одной транзакции синхронизируем Product.deletedAt и
+// Barcode.productDeletedAt (денормализация для partial unique index).
 
 export async function softDeleteProduct(id: string): Promise<ActionResult> {
   try {
     await requireSection("PRODUCTS")
-    await prisma.product.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        availability: "DISCONTINUED",
-      },
+    await prisma.$transaction(async (tx) => {
+      const now = new Date()
+      await tx.product.update({
+        where: { id },
+        data: {
+          deletedAt: now,
+          availability: "DISCONTINUED",
+        },
+      })
+      // Денормализация: обновляем productDeletedAt во всех Barcode этого product
+      // через цепочку marketplaceArticle (у Barcode нет productId напрямую).
+      await tx.barcode.updateMany({
+        where: { marketplaceArticle: { productId: id } },
+        data: { productDeletedAt: now },
+      })
     })
     revalidatePath("/products")
     return { ok: true }
@@ -218,6 +267,41 @@ export async function softDeleteProduct(id: string): Promise<ActionResult> {
       return { ok: false, error: "Товар не найден" }
     }
     console.error("softDeleteProduct error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// ── restoreProduct ────────────────────────────────────────────────
+// 260421-iq7: симметричная операция softDeleteProduct. Восстанавливает товар
+// из корзины + обнуляет Barcode.productDeletedAt всех штрих-кодов этого товара.
+
+export async function restoreProduct(id: string): Promise<ActionResult> {
+  try {
+    await requireSection("PRODUCTS")
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+          availability: "IN_STOCK",
+        },
+      })
+      await tx.barcode.updateMany({
+        where: { marketplaceArticle: { productId: id } },
+        data: { productDeletedAt: null },
+      })
+    })
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    const p2002 = handleP2002(e)
+    if (p2002) return p2002
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Товар не найден" }
+    }
+    console.error("restoreProduct error:", e)
     return { ok: false, error: "Ошибка сервера" }
   }
 }
@@ -243,15 +327,21 @@ export async function hardDeleteProduct(id: string): Promise<ActionResult> {
 }
 
 // ── duplicateProduct ──────────────────────────────────────────────
+// 260421-iq7: сохраняем sortOrder оригинала + barcodes НЕ копируются
+// (partial unique per marketplace приведёт к P2002).
 
 export async function duplicateProduct(id: string): Promise<CreateResult> {
   try {
     await requireSection("PRODUCTS")
 
-    // Fetch original with articles only (barcodes NOT copied — globally unique constraint)
+    // Читаем articles упорядоченно по sortOrder (порядок будет сохранён при копировании)
     const original = await prisma.product.findUnique({
       where: { id },
-      include: { articles: true },
+      include: {
+        articles: {
+          orderBy: { sortOrder: "asc" },
+        },
+      },
     })
 
     if (!original) {
@@ -280,9 +370,12 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
           widthCm: original.widthCm ?? null,
           depthCm: original.depthCm ?? null,
           articles: {
-            create: original.articles.map((a) => ({
+            // 260421-iq7: sortOrder = индекс в уже отсортированном массиве
+            // → воспроизводит порядок оригинала. Barcodes не копируются.
+            create: original.articles.map((a, i) => ({
               marketplaceId: a.marketplaceId,
               article: a.article,
+              sortOrder: i,
             })),
           },
         },
