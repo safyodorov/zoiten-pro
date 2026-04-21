@@ -159,12 +159,15 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       where: { endDateTime: { gte: new Date() } },
       include: { nomenclatures: true },
     }),
-    // Привязанные статьи WB с учётом фильтров бренд/категория/подкатегория
+    // Привязанные статьи WB с учётом фильтров бренд/категория/подкатегория.
+    // orderBy: sortOrder — чтобы порядок карточек в /prices/wb совпадал
+    // с drag-and-drop-ом из /products/[id]/edit (первый = основной).
     prisma.marketplaceArticle.findMany({
       where: {
         marketplaceId: wbMarketplace.id,
         product: productWhere,
       },
+      orderBy: { sortOrder: "asc" },
       include: {
         product: {
           include: {
@@ -222,20 +225,28 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       : []
 
   // ── 6. Группировать WbCards по Product ──────────────────────────
+  // Итерируем по linkedArticles (уже отсортирован по sortOrder),
+  // а не по wbCards — чтобы порядок карточек в группе соответствовал
+  // порядку артикулов из /products/[id]/edit.
   type CardRef = {
     card: (typeof wbCards)[number]
     product: LinkedProduct
   }
+  const cardByNmId = new Map<number, (typeof wbCards)[number]>()
+  for (const c of wbCards) cardByNmId.set(c.nmId, c)
+
   const productToCards = new Map<string, CardRef[]>()
-  for (const card of wbCards) {
-    const product = articleToProduct.get(card.nmId)
-    if (!product) continue
+  for (const a of linkedArticles) {
+    const nmId = parseInt(a.article, 10)
+    if (Number.isNaN(nmId)) continue
+    const card = cardByNmId.get(nmId)
+    if (!card) continue
     // Фильтр «Карточки с остатком» — отсеиваем карточки с нулевым остатком
     if (cardsInStockOnly && (card.stockQty ?? 0) <= 0) continue
-    if (!productToCards.has(product.id)) {
-      productToCards.set(product.id, [])
+    if (!productToCards.has(a.product.id)) {
+      productToCards.set(a.product.id, [])
     }
-    productToCards.get(product.id)!.push({ card, product })
+    productToCards.get(a.product.id)!.push({ card, product: a.product })
   }
 
   // ── 7. Построить ProductGroup[] ─────────────────────────────────
