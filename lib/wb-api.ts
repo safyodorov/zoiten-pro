@@ -721,15 +721,22 @@ export async function fetchPromotionNomenclatures(
   }
 }
 
-/** Получить среднюю скорость продаж за последние 7 дней.
+/** Получить среднюю скорость ЗАКАЗОВ (минус отмены) за последние 7 дней.
  *
- *  Возвращает `Map<nmId, avgPerDay>`, где `avgPerDay = count(sales) / 7`.
+ *  Возвращает `Map<nmId, avgPerDay>`, где
+ *    avgPerDay = count(orders WHERE !isCancel) / 7.
  *
- *  Источник: WB Statistics Sales API `/api/v1/supplier/sales?dateFrom={7d_ago}`.
+ *  Источник: WB Statistics Orders API `/api/v1/supplier/orders?dateFrom={7d_ago}`.
+ *  Раньше использовался Sales API (только выкупленные) — цифры получались
+ *  в 2-3× ниже того, что видит пользователь в кабинете WB «Заказы».
+ *  Для оценки спроса / скорости ухода товара — это заказы минус отменённые
+ *  (те, что дошли до покупателя, включая ещё не выкупленные).
+ *
  *  При 429 ждём 60 секунд (Statistics API даёт ~1 req/min) и делаем рекурсивный retry.
  *  При любой другой ошибке — degraded mode: возвращаем пустой Map, поле в БД останется null.
  *
- *  D-09: записывается в `WbCard.avgSalesSpeed7d` при полной синхронизации.
+ *  Имя `fetchAvgSalesSpeed7d` сохранено для обратной совместимости с wb-sync —
+ *  поле `WbCard.avgSalesSpeed7d` теперь семантически хранит «заказы минус отмены/день».
  */
 export async function fetchAvgSalesSpeed7d(
   nmIds: number[],
@@ -743,7 +750,7 @@ export async function fetchAvgSalesSpeed7d(
   const dateFromIso = dateFrom.toISOString()
 
   const url =
-    `https://statistics-api.wildberries.ru/api/v1/supplier/sales` +
+    `https://statistics-api.wildberries.ru/api/v1/supplier/orders` +
     `?dateFrom=${encodeURIComponent(dateFromIso)}&flag=0`
 
   const res = await fetch(url, { headers: { Authorization: token } })
@@ -755,17 +762,22 @@ export async function fetchAvgSalesSpeed7d(
   }
 
   if (!res.ok) {
-    console.error(`WB Sales API (avgSalesSpeed7d) ${res.status}`)
+    console.error(`WB Orders API (avgSalesSpeed7d) ${res.status}`)
     return result
   }
 
-  const sales = (await res.json()) as Array<{ nmId?: number; nm_id?: number }>
-  if (!Array.isArray(sales)) return result
+  const orders = (await res.json()) as Array<{
+    nmId?: number
+    nm_id?: number
+    isCancel?: boolean
+  }>
+  if (!Array.isArray(orders)) return result
 
-  // Подсчитать количество продаж per nmId
+  // Подсчитать количество заказов per nmId, исключая отменённые
   const counts = new Map<number, number>()
-  for (const s of sales) {
-    const nm = s.nmId ?? s.nm_id
+  for (const o of orders) {
+    if (o.isCancel) continue
+    const nm = o.nmId ?? o.nm_id
     if (nm == null) continue
     counts.set(nm, (counts.get(nm) ?? 0) + 1)
   }

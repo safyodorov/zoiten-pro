@@ -880,8 +880,11 @@ export function PriceCalculatorTable({
                               </span>{" "}
                               шт
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              Скорость 7д:{" "}
+                            <div
+                              className="text-xs text-muted-foreground"
+                              title="Заказы минус отмены за последние 7 дней / 7 (по данным WB Orders API)"
+                            >
+                              Скорость заказов 7д:{" "}
                               <span className="text-foreground tabular-nums">
                                 {group.product.totalAvgSalesSpeed.toFixed(1)}
                               </span>{" "}
