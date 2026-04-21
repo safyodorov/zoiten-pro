@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed quick task 260420-oxd (ffmpeg thumbnail + WB CDN tm/ + width/height на /support/returns)
+stopped_at: Completed quick task 260421-iq7 — DnD артикулов + barcode FK MarketplaceArticle
 last_updated: "2026-04-20T15:20:00.000Z"
 progress:
   total_phases: 13
@@ -219,16 +219,17 @@ None yet.
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260408-syb | Создать модуль Сотрудники — БД, CRUD, таблица, фильтры, модалка | 2026-04-08 | efb9ca8 | [260408-syb-crud](./quick/260408-syb-crud/) |
-| 260410-leh | Починить ширину колонок в /prices/wb и собрать GlobalRatesBar слева | 2026-04-10 | 142c62d | [260410-leh-wb-globalratesbar](./quick/260410-leh-wb-globalratesbar/) |
-| 260410-mya | Резайз/wrap/персистентность столбцов /prices/wb + округление денег + фикс sticky прозрачности | 2026-04-10 | fc270d0 | [260410-mya-wrap-prices-wb-sticky](./quick/260410-mya-wrap-prices-wb-sticky/) |
-| fast-260417 | Фикс support-sync: NEW→ANSWERED на повторной синхронизации (feedback/question) | 2026-04-17 | 13826b1 | inline |
-| fast-260419 | View Transitions fade при переключении dark/light темы | 2026-04-19 | 081299d | inline |
-| fix-260419-promo | WB promotions: fallback nmID/nmId/id при createMany | 2026-04-19 | d85298c | inline |
-| fix-260419-pagi | Пагинация /products и /batches: сброс на page 1 + pageSize селектор | 2026-04-19 | 544ccdb | inline |
-| 260420-oxd | /support/returns: ffmpeg thumbnail для VIDEO + sharp для IMAGE + WB CDN tm/ + width/height/decoding | 2026-04-20 | eceae9e | [260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-](./quick/260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260408-syb | Создать модуль Сотрудники — БД, CRUD, таблица, фильтры, модалка | 2026-04-08 | efb9ca8 |  | [260408-syb-crud](./quick/260408-syb-crud/) |
+| 260410-leh | Починить ширину колонок в /prices/wb и собрать GlobalRatesBar слева | 2026-04-10 | 142c62d |  | [260410-leh-wb-globalratesbar](./quick/260410-leh-wb-globalratesbar/) |
+| 260410-mya | Резайз/wrap/персистентность столбцов /prices/wb + округление денег + фикс sticky прозрачности | 2026-04-10 | fc270d0 |  | [260410-mya-wrap-prices-wb-sticky](./quick/260410-mya-wrap-prices-wb-sticky/) |
+| fast-260417 | Фикс support-sync: NEW→ANSWERED на повторной синхронизации (feedback/question) | 2026-04-17 | 13826b1 |  | inline |
+| fast-260419 | View Transitions fade при переключении dark/light темы | 2026-04-19 | 081299d |  | inline |
+| fix-260419-promo | WB promotions: fallback nmID/nmId/id при createMany | 2026-04-19 | d85298c |  | inline |
+| fix-260419-pagi | Пагинация /products и /batches: сброс на page 1 + pageSize селектор | 2026-04-19 | 544ccdb |  | inline |
+| 260420-oxd | /support/returns: ffmpeg thumbnail для VIDEO + sharp для IMAGE + WB CDN tm/ + width/height/decoding | 2026-04-20 | eceae9e |  | [260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-](./quick/260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-/) |
+| 260421-iq7 | Товары: drag-and-drop порядок артикулов + barcodes → MarketplaceArticle + unique per marketplace | 2026-04-21 | 96fb4c7 | Verified | [260421-iq7-drag-and-drop-per](./quick/260421-iq7-drag-and-drop-per/) |
 
 ### Blockers/Concerns
 
@@ -241,6 +242,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-20T15:20:00.000Z
-Stopped at: Completed quick task 260420-oxd (ffmpeg thumbnail + WB CDN tm/ + width/height на /support/returns)
+Last session: 2026-04-21T10:45:00.000Z
+Stopped at: Completed quick task 260421-iq7 — DnD артикулов + barcode→MarketplaceArticle FK + unique per marketplace
 Resume file: None
