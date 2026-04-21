@@ -721,28 +721,31 @@ export async function fetchPromotionNomenclatures(
   }
 }
 
-/** Получить среднюю скорость ЗАКАЗОВ (минус отмены) за последние 7 дней.
+export interface OrdersStats {
+  /** Средняя скорость заказов (минус отмены) за 7 дней, шт/день. */
+  avg7d: number
+  /** Заказы минус отмены за вчерашний день (Moscow TZ), шт. */
+  yesterday: number
+}
+
+/** Получить статистику заказов за 7 дней + отдельно вчерашний день.
  *
- *  Возвращает `Map<nmId, avgPerDay>`, где
- *    avgPerDay = count(orders WHERE !isCancel) / 7.
+ *  Возвращает `Map<nmId, OrdersStats>`. Один запрос к Orders API покрывает
+ *  оба показателя: для avg7d считаем все записи !isCancel / 7,
+ *  для yesterday фильтруем по полю `date` в окне [вчера 00:00, сегодня 00:00) Moscow.
  *
  *  Источник: WB Statistics Orders API `/api/v1/supplier/orders?dateFrom={7d_ago}`.
- *  Раньше использовался Sales API (только выкупленные) — цифры получались
- *  в 2-3× ниже того, что видит пользователь в кабинете WB «Заказы».
- *  Для оценки спроса / скорости ухода товара — это заказы минус отменённые
- *  (те, что дошли до покупателя, включая ещё не выкупленные).
+ *  При 429 ждём 60 секунд (Statistics API ~1 req/min) и делаем рекурсивный retry.
+ *  При любой другой ошибке — degraded mode: возвращаем пустой Map.
  *
- *  При 429 ждём 60 секунд (Statistics API даёт ~1 req/min) и делаем рекурсивный retry.
- *  При любой другой ошибке — degraded mode: возвращаем пустой Map, поле в БД останется null.
- *
- *  Имя `fetchAvgSalesSpeed7d` сохранено для обратной совместимости с wb-sync —
- *  поле `WbCard.avgSalesSpeed7d` теперь семантически хранит «заказы минус отмены/день».
+ *  Имя `fetchAvgSalesSpeed7d` сохранено для обратной совместимости — поля
+ *  `WbCard.avgSalesSpeed7d` и `WbCard.ordersYesterday` пишутся в wb-sync route.
  */
 export async function fetchAvgSalesSpeed7d(
   nmIds: number[],
-): Promise<Map<number, number>> {
+): Promise<Map<number, OrdersStats>> {
   const token = getToken()
-  const result = new Map<number, number>()
+  const result = new Map<number, OrdersStats>()
   if (nmIds.length === 0) return result
 
   const dateFrom = new Date()
@@ -770,24 +773,37 @@ export async function fetchAvgSalesSpeed7d(
     nmId?: number
     nm_id?: number
     isCancel?: boolean
+    date?: string // ISO без TZ, WB даёт в Moscow локальном времени
   }>
   if (!Array.isArray(orders)) return result
 
-  // Подсчитать количество заказов per nmId, исключая отменённые
-  const counts = new Map<number, number>()
+  // Окно «вчера» в Moscow TZ (UTC+3).
+  // WB API возвращает `date` как ISO без TZ — это уже Moscow локальное время,
+  // поэтому сравниваем как «YYYY-MM-DD»-префиксы для простоты и надёжности.
+  const mskNow = new Date(Date.now() + 3 * 3600_000) // сдвиг UTC → MSK
+  const yy = mskNow.getUTCFullYear()
+  const mm = String(mskNow.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(mskNow.getUTCDate() - 1).padStart(2, "0") // вчера
+  const yesterdayPrefix = `${yy}-${mm}-${dd}` // "2026-04-20"
+
+  const totals = new Map<number, number>()
+  const yesterdayCounts = new Map<number, number>()
   for (const o of orders) {
     if (o.isCancel) continue
     const nm = o.nmId ?? o.nm_id
     if (nm == null) continue
-    counts.set(nm, (counts.get(nm) ?? 0) + 1)
+    totals.set(nm, (totals.get(nm) ?? 0) + 1)
+    if (o.date && o.date.startsWith(yesterdayPrefix)) {
+      yesterdayCounts.set(nm, (yesterdayCounts.get(nm) ?? 0) + 1)
+    }
   }
 
-  // Вернуть только запрошенные nmId
   const requested = new Set(nmIds)
-  for (const [nmId, count] of counts) {
-    if (requested.has(nmId)) {
-      result.set(nmId, count / 7)
-    }
+  for (const nmId of requested) {
+    const t = totals.get(nmId) ?? 0
+    const y = yesterdayCounts.get(nmId) ?? 0
+    if (t === 0 && y === 0) continue
+    result.set(nmId, { avg7d: t / 7, yesterday: y })
   }
 
   return result

@@ -51,12 +51,15 @@ export async function POST(): Promise<NextResponse> {
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
     const discountMap = await fetchWbDiscounts(nmIds)
 
-    // 8. Phase 7 (D-09): средняя скорость продаж за 7 дней
-    //    Degraded mode — если Sales API недоступен, поле останется null,
+    // 8. Phase 7 (D-09): скорость заказов за 7 дней + заказы вчера
+    //    Degraded mode — если Orders API недоступен, поля останутся null,
     //    основной sync не ломается.
-    let salesSpeedMap = new Map<number, number>()
+    let ordersStatsMap = new Map<
+      number,
+      { avg7d: number; yesterday: number }
+    >()
     try {
-      salesSpeedMap = await fetchAvgSalesSpeed7d(nmIds)
+      ordersStatsMap = await fetchAvgSalesSpeed7d(nmIds)
     } catch (e) {
       console.error("fetchAvgSalesSpeed7d failed:", e)
     }
@@ -76,7 +79,9 @@ export async function POST(): Promise<NextResponse> {
         const clubDiscount = priceData?.clubDiscount ?? null
         const stockQty = stockMap.get(card.nmId) ?? null
         const buyoutPct = buyoutMap.get(card.nmId) ?? null
-        const avgSalesSpeed7d = salesSpeedMap.get(card.nmId) ?? null
+        const ordersStats = ordersStatsMap.get(card.nmId)
+        const avgSalesSpeed7d = ordersStats?.avg7d ?? null
+        const ordersYesterday = ordersStats?.yesterday ?? null
 
         const stdComm = commMap.get(raw.subjectID)
         const iuComm = card.category ? iuMap.get(card.category) : undefined
@@ -105,6 +110,7 @@ export async function POST(): Promise<NextResponse> {
             stockQty,
             buyoutPercent: buyoutPct,
             avgSalesSpeed7d,
+            ordersYesterday,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,
@@ -136,6 +142,7 @@ export async function POST(): Promise<NextResponse> {
             stockQty,
             buyoutPercent: buyoutPct,
             avgSalesSpeed7d,
+            ordersYesterday,
             commFbwStd: stdComm?.fbw ?? null,
             commFbsStd: stdComm?.fbs ?? null,
             commFbwIu: iuComm?.fbw ?? null,

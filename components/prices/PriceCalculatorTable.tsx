@@ -156,6 +156,8 @@ export interface ProductGroup {
     totalStock: number
     /** Сумма WbCard.avgSalesSpeed7d по всем карточкам Product. */
     totalAvgSalesSpeed: number
+    /** Сумма WbCard.ordersYesterday по всем карточкам Product (шт. за вчера). */
+    totalOrdersYesterday: number
   }
   cards: WbCardRowGroup[]
   /** Сумма priceRows.length по всем cards — нужно для rowSpan Фото+Сводка. */
@@ -882,17 +884,30 @@ export function PriceCalculatorTable({
                             </div>
                             {(() => {
                               const perDay = group.product.totalAvgSalesSpeed
+                              const yesterday =
+                                group.product.totalOrdersYesterday
                               // <10 → одна десятая; ≥10 → целое (floor)
-                              const perDayLabel =
-                                perDay < 10
-                                  ? perDay.toFixed(1)
-                                  : String(Math.floor(perDay))
+                              const fmt = (v: number) =>
+                                v < 10
+                                  ? v.toFixed(1)
+                                  : String(Math.floor(v))
+                              const perDayLabel = fmt(perDay)
+                              const yesterdayLabel = fmt(yesterday)
                               const daysLeft =
                                 perDay > 0
                                   ? Math.floor(
                                       group.product.totalStock / perDay,
                                     )
                                   : null
+                              // Цвет вчерашних: > 7д-средней → зелёный, < → красный,
+                              // равенство (±0.1) → дефолт.
+                              const diff = yesterday - perDay
+                              const yesterdayColor =
+                                Math.abs(diff) < 0.1
+                                  ? "text-foreground"
+                                  : diff > 0
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-red-600 dark:text-red-400"
                               return (
                                 <>
                                   <div
@@ -902,6 +917,18 @@ export function PriceCalculatorTable({
                                     Заказы за 7 дн.:{" "}
                                     <span className="text-foreground tabular-nums">
                                       {perDayLabel}
+                                    </span>{" "}
+                                    шт./д.
+                                  </div>
+                                  <div
+                                    className="text-xs text-muted-foreground"
+                                    title="Заказы минус отмены за вчерашний день (Moscow TZ). Цвет: сравнение со средней за 7 дней."
+                                  >
+                                    Заказы за вчера:{" "}
+                                    <span
+                                      className={`tabular-nums ${yesterdayColor}`}
+                                    >
+                                      {yesterdayLabel}
                                     </span>{" "}
                                     шт./д.
                                   </div>

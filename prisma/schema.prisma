@@ -202,6 +202,8 @@ model WbCard {
   rawJson             Json? // полный ответ API
   // Phase 7: Средняя скорость продаж за 7 дней (D-09)
   avgSalesSpeed7d     Float?
+  // Заказы минус отмены за вчерашний день (Moscow TZ) — для сравнения с 7д-средней
+  ordersYesterday     Int?
   // Phase 7: Relation to calculated prices (D-03)
   calculatedPrices    CalculatedPrice[]
   createdAt           DateTime          @default(now())

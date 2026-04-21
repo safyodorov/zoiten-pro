@@ -576,6 +576,10 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       (s, { card }) => s + (card.avgSalesSpeed7d ?? 0),
       0,
     )
+    const totalOrdersYesterday = cardRefs.reduce(
+      (s, { card }) => s + (card.ordersYesterday ?? 0),
+      0,
+    )
     const totalRowsInProduct = cardGroups.reduce(
       (s, cg) => s + cg.priceRows.length,
       0,
@@ -588,6 +592,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         photoUrl: firstProduct.photoUrl ?? null,
         totalStock,
         totalAvgSalesSpeed,
+        totalOrdersYesterday,
       },
       cards: cardGroups,
       totalRowsInProduct,
