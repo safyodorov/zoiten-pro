@@ -183,6 +183,57 @@ Requirements добавленные в milestone v1.1 (2026-04-17). PRD: `C:\Use
 
 - [ ] **SUP-40**: Пункт «Служба поддержки» в левом sidebar с иконкой `HeadphonesIcon` + бейдж количества новых тикетов. Подпункты: «Все обращения», «Возвраты», «Шаблоны», «Автоответы», «Статистика».
 
+## v1.2 Requirements — Управление остатками
+
+Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.planning/research/SUMMARY.md`.
+
+### Schema & Foundation
+
+- [ ] **STOCK-01**: Prisma миграция — модели `WbWarehouse(id Int PK, name, cluster, shortCluster, isActive, needsClusterReview)`, `WbCardWarehouseStock(wbCardId, warehouseId, quantity, updatedAt)` с `@@unique([wbCardId, warehouseId])` + каскад от WbCard; новые поля `Product.ivanovoStock Int?`, `Product.productionStock Int?`, `Product.ivanovoStockUpdatedAt DateTime?`, `Product.productionStockUpdatedAt DateTime?`; AppSetting seed `stock.turnoverNormDays = 37`. Одна большая миграция в Wave 0.
+- [ ] **STOCK-02**: Pure function `lib/stock-math.ts` — `calculateStockMetrics({stock, ordersPerDay, turnoverNormDays}) → {turnoverDays, deficit}` с guards: О=null → null, З=0 → turnoverDays=null, normDays≤0 → deficit=null, Infinity/NaN защита.
+- [ ] **STOCK-03**: Утилита `lib/normalize-sku.ts` — trim + upper + em-dash U+2014→hyphen + regex `^(?:УКТ-?)?(\d+)$` → `УКТ-${padStart(digits, 6, '0')}`. Используется Excel-парсером Иваново.
+- [ ] **STOCK-04**: Route rename `/inventory` → `/stock` — переименовать папку `app/(dashboard)/inventory/` → `/stock/`, обновить `lib/sections.ts:11`, `components/layout/nav-items.ts:34`, `lib/section-titles.ts`; nginx rewrite `/inventory(.*)` → `/stock$1` на 1 релиз.
+- [ ] **STOCK-05**: RBAC — все страницы `/stock/*` требуют `requireSection("STOCK")`, все write server actions (upsertIvanovoStock, updateProductionStock, updateTurnoverNorm, ручной refresh) — `requireSection("STOCK", "MANAGE")`.
+
+### WB Integration (per-warehouse + API migration)
+
+- [ ] **STOCK-06**: Wave 0 smoke-test (ручной) — curl на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses` с текущим `WB_API_TOKEN`: проверить scope Аналитика + Personal/Service token type. Если 401/403 → блокер, регенерация токена до coding.
+- [ ] **STOCK-07**: `fetchStocksPerWarehouse(nmIds: number[])` в `lib/wb-api.ts` — POST на новый endpoint; body `{nmIds, limit, offset}`; rate limit 3 req/min + 20s burst (sleep 20000ms между батчами); batch до 1000 nmIds; retry 60s на 429; возвращает `Map<nmId, Array<{warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient}>>`. Старая `fetchStocks()` помечена `@deprecated — sunset 2026-06-23`.
+- [ ] **STOCK-08**: Расширение `POST /api/wb-sync` — после `fetchStocksPerWarehouse` clean-replace per wbCardId в транзакции: `tx.wbCardWarehouseStock.deleteMany({wbCardId, NOT: {warehouseId: {in: incomingIds}}})` + `upsert` для входящих + `WbCard.stockQty = SUM(quantity)` той же транзакцией (denormalized для backward compat с `/prices/wb`).
+- [ ] **STOCK-09**: Seed справочника `WbWarehouse` — скрипт `prisma/seed-wb-warehouses.ts` с hardcoded array (собранный через DevTools Network tab на seller.wildberries.ru); validation кластеров с пользователем в Zero Wave Plan 14-02. Маппинг: ЦФО=Центральный, ЮГ=Южный+Северо-Кавказский, Урал=Уральский, ПФО=Приволжский, СЗО=Северо-Западный, СФО=Дальневосточный+Сибирский, Прочие=остальные. Запускается однократно через `npx prisma db seed -- --wb-warehouses`.
+- [ ] **STOCK-10**: Auto-insert неизвестных складов — если `warehouseId` в ответе API нет в `WbWarehouse`, создать запись с `name=warehouseName`, `cluster="Прочие"`, `shortCluster="Прочие"`, `needsClusterReview=true`. Console warn в логи, sync не падает. В UI /stock/wb такие склады попадают в кластер «Прочие» с значком ⚠️.
+
+### Data Input — Иваново, Производство, Норма
+
+- [ ] **STOCK-11**: Excel-импорт Иваново — `POST /api/stock/ivanovo-upload` multipart; парсер `lib/parse-ivanovo-excel.ts` (паттерн из `parse-auto-promo-excel.ts`, колонки: A=SKU, B=quantity); preview Dialog с diff old→new qty + секции `unmatched/duplicates/invalid` (не блокируют confirm).
+- [ ] **STOCK-12**: Server action `upsertIvanovoStock(rows: Array<{sku, quantity}>)` — normalizeSku → lookup Product по sku → `tx.product.update({where: {sku}, data: {ivanovoStock: qty, ivanovoStockUpdatedAt: now}})`; возвращает `{imported, notFound, duplicates, invalid}` + downloadable CSV с ошибками; `revalidatePath("/stock")`.
+- [ ] **STOCK-13**: Inline-редактирование `Product.productionStock` в `/stock` — input на каждой строке Product (Сводная), debounced save 500ms через server action `updateProductionStock(productId, value)`; Zod `int().min(0).max(99999)` или null (пустое поле → null); `revalidatePath("/stock")`.
+- [ ] **STOCK-14**: Inline-редактирование «Нормы оборачиваемости» в шапке `/stock` — компонент `TurnoverNormInput` (паттерн `GlobalRatesBar` из Phase 7); debounced save 500ms через `updateTurnoverNorm(days)`; AppSetting key `stock.turnoverNormDays`; Zod `int().min(1).max(100)`; `revalidatePath("/stock")` + `/stock/wb`.
+- [ ] **STOCK-15**: Кнопка «Обновить из WB» в шапке `/stock` — вызывает `POST /api/wb-sync` (существующий, расширенный STOCK-08); toast states loading/success/error; `revalidatePath("/stock")` + `/stock/wb` на сервере.
+
+### `/stock` — главная страница (Product-level)
+
+- [ ] **STOCK-16**: RSC страница `/stock` — таблица с rowSpan: первая строка «Сводная» (Product-level, агрегация всех артикулов) + одна строка per-артикул (MarketplaceArticle) ниже; разделитель между Product (жирный), между артикулами (тонкий).
+- [ ] **STOCK-17**: Sticky колонки при горизонтальном скролле — Фото (80px) + Сводка (240px: название + УКТ + бренд) + Ярлык (80px) + Артикул (120px); z-index слои по аналогии с `PriceCalculatorTable`; `position: sticky; left: {accumulated}`.
+- [ ] **STOCK-18**: Колонки данных после sticky — 6 групп: **РФ** (О) / **Иваново** (О) / **Производство** (О) / **МП** (О/З/Об/Д, сумма по всем маркетплейсам) / **WB** (О/З/Об/Д) / **Ozon** (О/З/Об/Д, все «—» placeholder). Colgroup headers 2 уровня (группа + под-колонка) с `position: sticky top-0 / top-[40px]` + `bg-background`.
+- [ ] **STOCK-19**: Формат чисел и цвета — `<10 → toFixed(1)`, `≥10 → Math.floor`; null → «—». Цветовая кодировка Д (3-уровневая): Д≤0 → зелёный (всё ок), 0<Д<норма×0.3×З → жёлтый (думать о закупке), Д≥норма×0.3×З → красный (срочно).
+- [ ] **STOCK-20**: Фильтры `/stock` — MultiSelect бренд/категория/подкатегория (паттерн `PricesFilters`) + toggle «только с дефицитом» (Д>0 хотя бы в одной группе); все через URL searchParams.
+
+### `/stock/wb` — подраздел (per-nmId + кластеры)
+
+- [ ] **STOCK-21**: Табы `/stock` / `/stock/wb` / `/stock/ozon` — компонент `StockTabs` (паттерн `PricesTabs`); `/stock/ozon` = `<ComingSoon sectionName="Управление остатками Ozon" />`.
+- [ ] **STOCK-22**: RSC `/stock/wb` — таблица с rowSpan per Product → per WbCard (nmId); sticky колонки те же 4 + первые 4 data-колонки (РФ/Иваново/Производство/МП-сумма) как сводка; далее 7 кластерных колонок (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) каждая с О/З/Об/Д.
+- [ ] **STOCK-23**: Маппинг кластеров денормализован в `WbWarehouse.shortCluster` (при seed и auto-insert) — значения из набора `{ЦФО, ЮГ, Урал, ПФО, СЗО, СФО, Прочие}`. Full names в статическом `lib/wb-clusters.ts` (`CLUSTER_FULL_NAMES` map).
+- [ ] **STOCK-24**: Tooltip при hover на сокращённом названии кластера — shadcn `<Tooltip>` (уже в проекте) показывает full name из `CLUSTER_FULL_NAMES` + список склада-источников, если нужно.
+- [ ] **STOCK-25**: Expand кластера → replace кластерных О/З/Об/Д на набор per-warehouse columns внутри этого кластера; state в URL (`?expandedClusters=ЦФО,ПФО` comma-separated, human-readable); toggle-кнопки «Развернуть все / Свернуть все» в toolbar; shareable ссылки.
+
+### Testing & Deploy
+
+- [ ] **STOCK-26**: Vitest `tests/stock-math.test.ts` — 5+ test cases: happy path, О=null, З=0, normDays=0, normDays=100, О=0 (дефицит максимальный).
+- [ ] **STOCK-27**: Vitest `tests/normalize-sku.test.ts` — canonical cases: `УКТ-000001` / `УКТ-1` / `1` / ` укт-000001 ` / `УКТ—000001` (em-dash) → все в `УКТ-000001`; invalid cases: `abc`, `УКТ-`, пустая строка → throw.
+- [ ] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
+- [ ] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
@@ -207,6 +258,19 @@ Deferred to future milestone. Tracked but not in current roadmap.
 - **SUP-FUT-03**: AI-ассистент для автосаггесчена ответа на отзыв/вопрос
 - **SUP-FUT-04**: Алёрт при превышении 80% диска в `/var/www/zoiten-uploads/support/`
 - **SUP-FUT-05**: Rate-limiting dashboard для мониторинга WB API 429 ответов
+
+### Stock — Future Enhancements (v1.3+)
+
+- **STOCK-FUT-01**: Модуль «План закупок» — черновик заказов на производство на основе дефицита Phase 14
+- **STOCK-FUT-02**: Модуль «План продаж» — прогноз продаж на 1-3 месяца на основе avgSalesSpeed + сезонности
+- **STOCK-FUT-03**: StockMovement log — история in/out движений остатков (аудит)
+- **STOCK-FUT-04**: Резервирование товара под заказы (soft-reserve)
+- **STOCK-FUT-05**: Safety stock / Reorder Point / EOQ — supply chain формулы с σ-расчётом
+- **STOCK-FUT-06**: Ozon Stocks API — заменить placeholder колонки Ozon реальными данными
+- **STOCK-FUT-07**: Alerts при достижении reorder point (email / Telegram bot)
+- **STOCK-FUT-08**: Refactor `WbCard.stockQty` — убрать денормализованное поле, вычислять через `SUM(WbCardWarehouseStock)` (после validation Phase 14 в проде 1-2 sync-цикла)
+- **STOCK-FUT-09**: Удалить deprecated `fetchStocks()` из lib/wb-api.ts после 2026-06-23
+- **STOCK-FUT-10**: Sparkline-график движения остатков за 30 дней в строке товара
 
 ## Out of Scope
 
@@ -236,6 +300,16 @@ Explicitly excluded. Documented to prevent scope creep.
 | S3/облачное хранение медиа | VPS достаточно при объёме 50-200 SKU и TTL 1 год |
 | Push-уведомления о новых тикетах | Веб-приложение, достаточно sidebar бейджа и частой синхронизации |
 | Отчёты статистики в Excel/PDF | Deferred — live-дашборд покрывает основные сценарии |
+| Планирование закупок / продаж | Отдельный milestone v1.3+ после validation v1.2 |
+| StockMovement log (аудит движения) | v1.3+ — при 50-200 SKU не нужен сейчас |
+| Резервирование товара под заказы | v1.3+ — hard-reserve pattern избыточен для текущего flow |
+| Safety stock / EOQ / Reorder Point | Deferred — работает при 1000+ SKU, у нас 50-200 |
+| Ozon Stocks API в Phase 14 | Удвоит scope — placeholder колонки достаточны для v1.2 |
+| Автосписание Иваново по WB заказам | Физически разные склады, логика невалидна |
+| Остатки per-размер (techSize) | WB даёт агрегат по nmId, techSize-разрез = отдельная таблица позже |
+| ML-прогноз продаж / сезонности | Линейной экстраполяции avgSalesSpeed достаточно для v1.2 |
+| Real-time polling per-warehouse WB | Rate limit 3/min → невозможно; sync раз в день/час достаточно |
+| Inline-редактирование остатков Иваново/WB в UI | Ломает audit trail; только через Excel upload / WB sync |
 
 ## Traceability
 
@@ -357,3 +431,4 @@ Explicitly excluded. Documented to prevent scope creep.
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
 *Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned (Phase 8..13)*
+*Milestone v1.2 added: 2026-04-21 | +29 requirements (STOCK-01..STOCK-29) | 1 new phase planned (Phase 14)*
