@@ -1,23 +1,29 @@
 # Zoiten ERP
 
-## Current Milestone: v1.1 Служба поддержки WB
+## Current Milestone: v1.2 Управление остатками
 
-**Goal:** Единое рабочее место в ERP для всех каналов коммуникации с покупателями Wildberries — отзывы, вопросы, чат, возвраты, мессенджеры — без переключения в личный кабинет WB.
+**Goal:** Менеджер видит актуальные остатки по всем каналам (склад Иваново + Производство + маркетплейсы в разрезе кластеров/складов WB), считает оборачиваемость и дефицит, чтобы принимать решения о закупках.
 
 **Target features:**
-- MVP Отзывы + Вопросы (лента тикетов, диалог, ответы через WB API, фильтры, sidebar badge)
-- Заявки на возврат/брак с одобрением/отклонением/пересмотром
-- Чат с покупателем + автоответы в нерабочее время
-- Шаблоны ответов (синхронизация с WB + товарные расширения) и обжалование отзывов
-- Кросс-канальный профиль покупателя + ручные обращения через корп. мессенджеры
-- Статистика по товарам и менеджерам
+- Раздел `/stock` с агрегацией РФ = Иваново + МП по каждому товару и артикулу
+- Excel-импорт остатков склада Иваново (по УКТ/Product.sku)
+- Ручной глобальный ввод остатков Производства (0-N per Product)
+- Подраздел `/stock/wb` с per-nmId × per-кластер × per-склад разрезом (7 кластеров ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие с expand до конкретных складов WB)
+- Формулы О/З/Об/Д (Остаток / Заказы в день за 7 дн / Оборачиваемость в днях / Дефицит в шт) для каждого уровня агрегации
+- Глобальная «Норма оборачиваемости» (default 37 дней) в AppSetting, редактируется в шапке
+- Справочник WB складов → кластеров (одноразовый парсинг со seller.wildberries.ru)
+- Расширение `/api/wb-sync` до per-warehouse granularity (новая таблица WbCardWarehouseStock)
 
 **Ключевой контекст:**
-- PRD: `C:\Users\User\Downloads\PRD Служба поддержки WB — Zoiten ERP.md`
-- Хранение медиа (фото/видео) 1 год в `/var/www/zoiten-uploads/support/` с TTL-очисткой
-- `SUPPORT` уже зарегистрирован в `ERP_SECTION` enum и `lib/sections.ts`
-- Синхронизация через polling: чаты 5 мин, отзывы/вопросы 15 мин, обжалования 1 час
-- Чат-API при блокировке Node.js `fetch()` → fallback через `curl` (реактивно)
+- Milestone сосредоточен на одной большой фазе (Phase 14); планирование закупок/продаж — отдельный милстоун v1.3+
+- Стабы `/stock`, `/stock/wb`, `/stock/ozon` из Phase 5 заменяются реальным функционалом
+- `STOCK` уже есть в `ERP_SECTION` enum, `/stock` зарегистрирован в lib/sections.ts
+- WB `avgSalesSpeed7d` (Orders API, filter `isCancel=true` → minus 10-20% vs кабинет — это ожидаемо, см. project_zoiten_pro.md) уже в БД — не дёргаем повторно, переиспользуем как «З» для WB-уровня
+- Новый AppSetting ключ `stock.turnoverNormDays` (int, 1-100, default 37) — переиспользуем существующий KV из Phase 7
+- Excel-импорт по УКТ (Product.sku формат «УКТ-000001»); `Product.ivanovoStock Int?` + `Product.productionStock Int?` новые поля
+- Per-warehouse остатки WB: `WbCardWarehouseStock(wbCardId, warehouseId, quantity)` с unique `(wbCardId, warehouseId)` — пишется при полном `/api/wb-sync`, не при fast СПП
+- Справочник `WbWarehouse(id, name, cluster, shortCluster)` — seed через одноразовый скрипт браузером со страницы seller.wildberries.ru
+- Ozon-раздел `/stock/ozon` — заглушка ComingSoon (Ozon-интеграция отдельный милстоун)
 
 ## What This Is
 
@@ -109,4 +115,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 — milestone v1.1 Служба поддержки WB стартовал*
+*Last updated: 2026-04-21 — milestone v1.2 Управление остатками стартовал*

@@ -1,12 +1,12 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Служба поддержки WB
-status: Ready to execute
-stopped_at: Completed quick task 260421-iq7 — DnD артикулов + barcode FK MarketplaceArticle
-last_updated: "2026-04-20T15:20:00.000Z"
+milestone: v1.2
+milestone_name: Управление остатками
+status: Defining requirements
+stopped_at: Milestone v1.2 started — requirements phase
+last_updated: "2026-04-21T12:00:00.000Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 12
   total_plans: 51
   completed_plans: 51
@@ -16,15 +16,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-17)
+See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 13 — statistics
+**Current focus:** Phase 14 — Управление остатками (foundation нового милстоуна v1.2)
 
 ## Current Position
 
-Phase: 13 (statistics) — EXECUTING
-Plan: 3 of 3
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-21 — Milestone v1.2 started
 
 ## Performance Metrics
 
@@ -242,6 +244,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-21T10:45:00.000Z
-Stopped at: Completed quick task 260421-iq7 — DnD артикулов + barcode→MarketplaceArticle FK + unique per marketplace
+Last session: 2026-04-21T12:00:00.000Z
+Stopped at: Milestone v1.2 Управление остатками started — defining requirements
 Resume file: None
