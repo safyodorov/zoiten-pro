@@ -49,7 +49,7 @@ export function MediaGallery({
             key={m.id}
             type="button"
             onClick={() => setOpenIndex(i)}
-            className={`${thumbClassName} rounded border overflow-hidden bg-muted relative flex items-center justify-center hover:ring-2 hover:ring-primary transition-all`}
+            className={`${thumbClassName} rounded border overflow-hidden bg-muted relative flex items-center justify-center hover:border-primary transition-colors`}
             title={
               m.type === "VIDEO"
                 ? "Видео"
