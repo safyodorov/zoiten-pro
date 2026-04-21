@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Управление остатками
-status: Defining requirements
-stopped_at: Milestone v1.2 started — requirements phase
-last_updated: "2026-04-21T12:00:00.000Z"
+status: Phase 14 planned — ready to plan-phase
+stopped_at: Milestone v1.2 roadmap created — Phase 14 ready for /gsd:plan-phase 14
+last_updated: "2026-04-21T13:00:00.000Z"
 progress:
   total_phases: 14
   completed_phases: 12
-  total_plans: 51
+  total_plans: 58
   completed_plans: 51
 ---
 
@@ -19,14 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 14 — Управление остатками (foundation нового милстоуна v1.2)
+**Current focus:** Phase 14 — Управление остатками (milestone v1.2, 1 фаза = 7 планов, ready to plan)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 14 (planned, not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-21 — Milestone v1.2 started
+Status: Phase 14 planned — ready to plan-phase
+Last activity: 2026-04-21 — ROADMAP.md обновлён с Phase 14, 29 STOCK-* requirements смаплены
 
 ## Performance Metrics
 
@@ -214,6 +214,7 @@ Recent decisions affecting current work:
 
 - Phase 7 added: Управление ценами WB — калькулятор юнит-экономики с акциями и расчётными ценами (directory renamed to `07-prices-wb` for clarity)
 - Milestone v1.1 added (2026-04-17): +40 requirements (SUP-01..SUP-40), +6 phases (Phase 8..13) — Служба поддержки WB (отзывы/вопросы → возвраты → чат → шаблоны/обжалование → профиль/мессенджеры → статистика)
+- Milestone v1.2 added (2026-04-21): +29 requirements (STOCK-01..STOCK-29), +1 phase (Phase 14 = 7 plans) — Управление остатками (schema + WB per-warehouse + Excel Иваново + Производство + /stock + /stock/wb с кластерами)
 
 ### Pending Todos
 
@@ -241,9 +242,12 @@ None yet.
 - Phase 7: UAT pending (10 HUMAN-UAT пунктов) — отложен по решению пользователя, вернуться после v1.1
 - Phase 8: Нужен доступ к WB Feedbacks/Questions API — scope токена проверить (bit 5 Отзывы уже есть в WB_API_TOKEN)
 - Phase 10: WB Chat API может блокироваться Node.js fetch() по TLS fingerprint — заготовить curl-fallback реактивно как в wb-api.ts v4
+- Phase 14: WB Stocks API sunset 2026-06-23 — Wave 0 (Plan 14-01) curl smoke test нового endpoint `/api/analytics/v1/stocks-report/wb-warehouses` с текущим WB_API_TOKEN (scope Аналитика + Personal/Service token); при 401/403 — регенерация токена до coding
+- Phase 14: WbWarehouse seed — нет официального API, список складов собирается вручную через DevTools Network tab на seller.wildberries.ru (Plan 14-02 Zero Wave с user-validation cluster names)
+- Phase 14: Excel Иваново fixture — Plan 14-04 Zero Wave требует real sample файл от пользователя для golden test
 
 ## Session Continuity
 
-Last session: 2026-04-21T12:00:00.000Z
-Stopped at: Milestone v1.2 Управление остатками started — defining requirements
+Last session: 2026-04-21T13:00:00.000Z
+Stopped at: Milestone v1.2 Phase 14 roadmap готов — 29 STOCK-requirements смаплены, 7 планов определены, готов `/gsd:plan-phase 14`
 Resume file: None

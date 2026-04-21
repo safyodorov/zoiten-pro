@@ -19,6 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: UI & Module Stubs** - Animated landing page, stub tabs for future modules, support integration (completed 2026-04-06)
 - [x] **Phase 6: Deployment** - VPS setup, nginx, systemd, SSL, and production go-live (completed 2026-04-06)
 - [ ] **Phase 7: Управление ценами WB** - калькулятор юнит-экономики, синхронизация акций WB, загрузка Excel auto-акций, realtime модалка расчёта
+- [ ] **Phase 14: Управление остатками** - per-warehouse остатки WB + склад Иваново + производство + /stock Product-level + /stock/wb с кластерами (milestone v1.2)
 
 ## Phase Details
 
@@ -276,12 +277,57 @@ Plans:
 - [x] 13-01-PLAN.md — Foundation: Prisma миграция ManagerSupportStats + 2 индекса + lib/date-periods.ts + lib/support-stats.ts (6 helpers) + Wave 0 stubs (4 test файла, 25+ GREEN)
 - [x] 13-02-PLAN.md — UI: RSC /support/stats (SUP-36/37/38) + 7 компонентов (StatsTabs, PeriodFilter, ProductStatsTab, ManagerStatsTab, TopReturnReasonsList, AutoRepliesSummary) + nav+title integration
 - [ ] 13-03-PLAN.md — Cron + Deploy + UAT: /api/cron/support-stats-refresh (SUP-39) + systemd timer 03:00 МСК + human UAT + milestone v1.1 complete
+
+## Milestone v1.2: Управление остатками
+
+**Goal:** Менеджер видит актуальные остатки по всем каналам (склад Иваново + Производство + маркетплейсы в разрезе кластеров/складов WB), считает оборачиваемость и дефицит, принимает решения о закупках — без похода в кабинет WB / Excel / МойСклад.
+
+**Research:** `.planning/research/SUMMARY.md` (+ STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md)
+
+**Стратегия:** Одна большая фаза (Phase 14) поверх зрелого стека Next.js 15 + Prisma 6 + уже работающего WB-sync + AppSetting KV + sticky-table pattern из Phase 7. Новых зависимостей нет. Milestone сосредоточен на одном разделе `/stock` с подразделом `/stock/wb` (кластеры+склады); `/stock/ozon` = ComingSoon (Ozon отдельный милстоун v1.3+). Планирование закупок и продаж — отдельный милстоун v1.3+ (STOCK-FUT-*).
+
+**Два confirmed decisions** (уже в SUMMARY.md, не переобсуждаем):
+1. **Route rename `/inventory` → `/stock`** — унификация с PROJECT.md, одна PR + nginx rewrite на 1 релиз.
+2. **WB API migration в рамках Phase 14** — новый endpoint `POST /api/analytics/v1/stocks-report/wb-warehouses` (Аналитика scope, Personal/Service token), старый `fetchStocks()` помечен `@deprecated — sunset 2026-06-23`.
+
+### Phases (v1.2)
+
+- [ ] **Phase 14: Управление остатками** — schema + WbWarehouse seed + wb-sync per-warehouse + Excel Иваново + Производство + Норма + /stock Product-level + /stock/wb с кластерами и expand до складов
+
+### Phase Details (v1.2)
+
+### Phase 14: Управление остатками
+**Goal**: Менеджер открывает `/stock` и видит Product-level остатки (РФ = Иваново + Производство + МП), формулы О/З/Об/Д с цветовой кодировкой дефицита и глобальной нормой оборачиваемости; загружает Excel склада Иваново и вручную вводит Производство; жмёт «Обновить из WB» и получает per-warehouse остатки; открывает `/stock/wb` и видит 7 кластеров per nmId с expand до конкретных складов WB. Раздел `/stock/ozon` — заглушка ComingSoon.
+**Depends on**: Phase 1 (БД + Auth), Phase 4 (Products + MarketplaceArticle → WbCard chain через nmId), Phase 7 (AppSetting KV + xlsx pattern + sticky-table pattern `PriceCalculatorTable` + `WbCard.avgSalesSpeed7d`). НЕ зависит от Phase 8-13 (Support).
+**Requirements**: STOCK-01, STOCK-02, STOCK-03, STOCK-04, STOCK-05, STOCK-06, STOCK-07, STOCK-08, STOCK-09, STOCK-10, STOCK-11, STOCK-12, STOCK-13, STOCK-14, STOCK-15, STOCK-16, STOCK-17, STOCK-18, STOCK-19, STOCK-20, STOCK-21, STOCK-22, STOCK-23, STOCK-24, STOCK-25, STOCK-26, STOCK-27, STOCK-28, STOCK-29
+**Success Criteria** (what must be TRUE):
+  1. Менеджер открывает `/stock` и видит остатки Product-level в одной таблице: колонки РФ / Иваново / Производство / МП / WB / Ozon с формулами О/З/Об/Д; sticky первые 4 колонки (Фото + Сводка + Ярлык + Артикул) при горизонтальном скролле; разделение строк rowSpan — одна строка «Сводная» на Product + по строке на каждый MarketplaceArticle
+  2. Менеджер загружает Excel склада Иваново через кнопку в шапке → видит preview diff (old→new quantity) + секции unmatched/duplicates/invalid → жмёт «Применить» → остатки обновлены в БД, `Product.ivanovoStockUpdatedAt` проставлен; `/stock` показывает новые значения
+  3. Менеджер редактирует inline `Product.productionStock` в каждой строке Сводная (debounced save 500ms) и «Норму оборачиваемости» в шапке (AppSetting `stock.turnoverNormDays`, 1..100, default 37) — обе правки мгновенно пересчитывают Об/Д по всей таблице
+  4. Менеджер жмёт «Обновить из WB» → через ~1-2 минуты видит актуальные per-warehouse остатки (новый endpoint Analytics API, clean-replace per wbCardId в транзакции, auto-insert неизвестных складов в `WbWarehouse` с `cluster="Прочие"` и флагом `needsClusterReview`)
+  5. Менеджер открывает `/stock/wb` → видит таблицу nmId-level с 7 кластерными колонками (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) каждая с О/З/Об/Д; разворачивает кластер → видит конкретные склады WB внутри; expand-state в URL `?expandedClusters=ЦФО,ПФО` (shareable links); tooltip full name кластера при hover
+  6. Цветовая кодировка дефицита Д работает на всех уровнях агрегации: зелёный (Д≤0, остатка достаточно), жёлтый (0<Д<норма×0.3×З, пора думать о закупке), красный (Д≥норма×0.3×З, срочная закупка); null-значения отображаются как «—», не как «0»
+  7. `/inventory` URL редиректит на `/stock` через nginx rewrite на 1 релиз (поддержка старых закладок); `/stock/ozon` — заглушка `<ComingSoon sectionName="Управление остатками Ozon" />`
+**Plans**: 7 plans
+Plans:
+- [ ] 14-01-PLAN.md — Schema + routing rename `/inventory` → `/stock` + Wave 0 smoke tests (WB endpoint curl + golden test stubs для stock-math / normalize-sku) — STOCK-01, STOCK-02, STOCK-03, STOCK-04, STOCK-05, STOCK-06, STOCK-26, STOCK-27
+- [ ] 14-02-PLAN.md — WbWarehouse seed script (Zero Wave: сбор списка через DevTools Network tab на seller.wildberries.ru + валидация cluster names с пользователем) — STOCK-09, STOCK-23
+- [ ] 14-03-PLAN.md — wb-sync extension: `fetchStocksPerWarehouse()` + WB API migration + transaction clean-replace в `/api/wb-sync` + auto-insert неизвестных складов — STOCK-07, STOCK-08, STOCK-10
+- [ ] 14-04-PLAN.md — Excel upload Иваново: `parseIvanovoExcel` (Zero Wave: real fixture от пользователя) + `POST /api/stock/ivanovo-upload` + preview Dialog + `upsertIvanovoStock` server action — STOCK-11, STOCK-12, STOCK-28
+- [ ] 14-05-PLAN.md — Production manual input + turnover norm + refresh button: inline input `productionStock` (debounced) + `TurnoverNormInput` в шапке (pattern GlobalRatesBar) + кнопка «Обновить из WB» — STOCK-13, STOCK-14, STOCK-15
+- [ ] 14-06-PLAN.md — RSC page `/stock` (Product-level flat): data assembly + JS-агрегация + sticky 4 columns + 6 колоночных групп (РФ/Иваново/Производство/МП/WB/Ozon) + цветовая кодировка Д + фильтры MultiSelect + toggle «только с дефицитом» — STOCK-16, STOCK-17, STOCK-18, STOCK-19, STOCK-20
+- [ ] 14-07-PLAN.md — RSC page `/stock/wb` (nmId-level с кластерами): `StockTabs` + 7 кластерных колонок + expand до per-warehouse columns (state в URL searchParams) + ClusterTooltip + `/stock/ozon` ComingSoon + deploy + UAT — STOCK-21, STOCK-22, STOCK-24, STOCK-25, STOCK-29
+
+**Параллелизация:** 14-01 блокирует всё. После 14-01 пары (14-02, 14-03) и (14-04, 14-05) можно параллелить. 14-06 ждёт 14-01, 14-03, 14-04, 14-05. 14-07 финальный (UX polish + deploy).
+
+**Zero Wave внутри фазы:** Plan 14-01 включает smoke test нового WB endpoint (curl с текущим `WB_API_TOKEN` → проверить scope Аналитика + Personal/Service token type); Plan 14-02 включает валидацию cluster names с пользователем до seed; Plan 14-04 требует real Excel sample от пользователя для golden fixture. Паттерн зеркалит Phase 7 Wave 0 (vitest + WB API smoke + canonical Excel).
+
 **UI hint**: yes
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -298,3 +344,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
+| 14. Управление остатками | 0/7 | Planned |  |

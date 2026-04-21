@@ -427,6 +427,35 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-38 | Phase 13 | Complete |
 | SUP-39 | Phase 13 | Complete |
 | SUP-40 | Phase 8 | Pending |
+| STOCK-01 | Phase 14 | Pending |
+| STOCK-02 | Phase 14 | Pending |
+| STOCK-03 | Phase 14 | Pending |
+| STOCK-04 | Phase 14 | Pending |
+| STOCK-05 | Phase 14 | Pending |
+| STOCK-06 | Phase 14 | Pending |
+| STOCK-07 | Phase 14 | Pending |
+| STOCK-08 | Phase 14 | Pending |
+| STOCK-09 | Phase 14 | Pending |
+| STOCK-10 | Phase 14 | Pending |
+| STOCK-11 | Phase 14 | Pending |
+| STOCK-12 | Phase 14 | Pending |
+| STOCK-13 | Phase 14 | Pending |
+| STOCK-14 | Phase 14 | Pending |
+| STOCK-15 | Phase 14 | Pending |
+| STOCK-16 | Phase 14 | Pending |
+| STOCK-17 | Phase 14 | Pending |
+| STOCK-18 | Phase 14 | Pending |
+| STOCK-19 | Phase 14 | Pending |
+| STOCK-20 | Phase 14 | Pending |
+| STOCK-21 | Phase 14 | Pending |
+| STOCK-22 | Phase 14 | Pending |
+| STOCK-23 | Phase 14 | Pending |
+| STOCK-24 | Phase 14 | Pending |
+| STOCK-25 | Phase 14 | Pending |
+| STOCK-26 | Phase 14 | Pending |
+| STOCK-27 | Phase 14 | Pending |
+| STOCK-28 | Phase 14 | Pending |
+| STOCK-29 | Phase 14 | Pending |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
