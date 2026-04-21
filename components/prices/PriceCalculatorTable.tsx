@@ -934,10 +934,16 @@ export function PriceCalculatorTable({
                                   </div>
                                   <div
                                     className="text-xs text-muted-foreground"
-                                    title="Остаток / (Заказы за 7 дн. в среднем / день), округление вниз"
+                                    title="Остаток / (Заказы за 7 дн. в среднем / день), округление вниз. Красный если ≤ 14 дн."
                                   >
                                     Остаток в днях:{" "}
-                                    <span className="text-foreground tabular-nums">
+                                    <span
+                                      className={`tabular-nums ${
+                                        daysLeft !== null && daysLeft <= 14
+                                          ? "text-red-600 dark:text-red-400"
+                                          : "text-foreground"
+                                      }`}
+                                    >
                                       {daysLeft ?? "—"}
                                     </span>{" "}
                                     {daysLeft !== null ? "дн." : ""}
