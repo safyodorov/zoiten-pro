@@ -1,0 +1,12 @@
+-- Фикс к миграции 20260421_article_sortorder_barcode_fk:
+-- там дропался "barcode_value_not_deleted_idx" в нижнем регистре, но реальное
+-- имя индекса в БД — "Barcode_value_active_unique" (с заглавной B, PascalCase).
+-- В результате после миграции остался глобальный UNIQUE на (value) без partial
+-- predicate, который блокирует случаи где один GTIN должен существовать и на
+-- WB и на другом маркетплейсе (а также reconcile-операции).
+--
+-- Этот миграционный файл просто дропает зависший индекс на проде.
+-- Новая уникальность реализована через "Barcode_marketplace_value_active_key"
+-- (partial unique WHERE productDeletedAt IS NULL), который уже создан миграцией
+-- 20260421_article_sortorder_barcode_fk.
+DROP INDEX IF EXISTS "Barcode_value_active_unique";
