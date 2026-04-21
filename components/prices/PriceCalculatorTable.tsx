@@ -878,7 +878,7 @@ export function PriceCalculatorTable({
                               <span className="text-foreground tabular-nums">
                                 {group.product.totalStock}
                               </span>{" "}
-                              шт
+                              шт.
                             </div>
                             <div
                               className="text-xs text-muted-foreground"
@@ -892,6 +892,31 @@ export function PriceCalculatorTable({
                               </span>{" "}
                               шт.
                             </div>
+                            {(() => {
+                              const orders7d = Math.round(
+                                group.product.totalAvgSalesSpeed * 7,
+                              )
+                              // Остаток / скорость_в_день = Остаток * 7 / Заказы_за_7_дн
+                              const daysLeft =
+                                orders7d > 0
+                                  ? Math.floor(
+                                      (group.product.totalStock * 7) /
+                                        orders7d,
+                                    )
+                                  : null
+                              return (
+                                <div
+                                  className="text-xs text-muted-foreground"
+                                  title="Остаток × 7 / Заказы за 7 дн. (округление вниз)"
+                                >
+                                  Остаток в днях:{" "}
+                                  <span className="text-foreground tabular-nums">
+                                    {daysLeft ?? "—"}
+                                  </span>{" "}
+                                  {daysLeft !== null ? "дн." : ""}
+                                </div>
+                              )
+                            })()}
                           </div>
                         </td>
                       )}
