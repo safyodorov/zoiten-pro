@@ -38,7 +38,7 @@ const SECTION_PATHS: Record<string, string> = {
   PRODUCTS: "/products",
   PRICES: "/prices",
   WEEKLY_CARDS: "/weekly",
-  STOCK: "/inventory",
+  STOCK: "/stock",
   COST: "/batches",
   PROCUREMENT: "/purchase-plan",
   SALES: "/sales-plan",

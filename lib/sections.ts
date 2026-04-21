@@ -8,7 +8,7 @@ export const SECTION_PATHS = {
   "/cards": "PRODUCTS",
   "/prices": "PRICES",
   "/weekly": "WEEKLY_CARDS",
-  "/inventory": "STOCK",
+  "/stock": "STOCK",
   "/batches": "COST",
   "/purchase-plan": "PROCUREMENT",
   "/sales-plan": "SALES",

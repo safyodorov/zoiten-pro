@@ -31,7 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "PRODUCTS", href: "/cards", label: "Карточки товаров", icon: "CreditCard" },
   { section: "PRICES", href: "/prices", label: "Управление ценами", icon: "Tag" },
   { section: "WEEKLY_CARDS", href: "/weekly", label: "Недельные карточки", icon: "LayoutGrid" },
-  { section: "STOCK", href: "/inventory", label: "Управление остатками", icon: "Boxes" },
+  { section: "STOCK", href: "/stock", label: "Управление остатками", icon: "Boxes" },
   { section: "COST", href: "/batches", label: "Себестоимость партий", icon: "Calculator" },
   { section: "PROCUREMENT", href: "/purchase-plan", label: "План закупок", icon: "ShoppingCart" },
   { section: "SALES", href: "/sales-plan", label: "План продаж", icon: "TrendingUp" },

@@ -56,7 +56,6 @@ async function main() {
     })
     console.log(`Marketplace seeded: ${marketplace.name} / ${marketplace.slug} (id: ${marketplace.id})`)
   }
-}
 
   // ── Phase 14: AppSetting stock.turnoverNormDays ──────────────────
   await prisma.appSetting.upsert({

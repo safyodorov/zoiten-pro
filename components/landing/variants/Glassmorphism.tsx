@@ -13,7 +13,7 @@ const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string }>>
   COST: Calculator, PROCUREMENT: ShoppingCart, SALES: TrendingUp, SUPPORT: Headphones, EMPLOYEES: UserCheck,
 }
 const SECTION_PATHS: Record<string, string> = {
-  PRODUCTS: "/products", PRICES: "/prices", WEEKLY_CARDS: "/weekly", STOCK: "/inventory",
+  PRODUCTS: "/products", PRICES: "/prices", WEEKLY_CARDS: "/weekly", STOCK: "/stock",
   COST: "/batches", PROCUREMENT: "/purchase-plan", SALES: "/sales-plan", SUPPORT: "/support", EMPLOYEES: "/employees",
 }
 

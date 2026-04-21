@@ -10,7 +10,7 @@ const ALL_SECTIONS = [
   { section: "PRODUCTS", href: "/products", title: "Товары", description: "Управление каталогом товаров", icon: Package },
   { section: "PRICES", href: "/prices", title: "Управление ценами", description: "Ценообразование по маркетплейсам", icon: Tag },
   { section: "WEEKLY_CARDS", href: "/weekly", title: "Недельные карточки", description: "Еженедельная аналитика", icon: LayoutGrid },
-  { section: "STOCK", href: "/inventory", title: "Управление остатками", description: "Остатки на складах", icon: Boxes },
+  { section: "STOCK", href: "/stock", title: "Управление остатками", description: "Остатки на складах", icon: Boxes },
   { section: "COST", href: "/batches", title: "Себестоимость партий", description: "Расчёт себестоимости", icon: Calculator },
   { section: "PROCUREMENT", href: "/purchase-plan", title: "План закупок", description: "Планирование закупок", icon: ShoppingCart },
   { section: "SALES", href: "/sales-plan", title: "План продаж", description: "Планирование продаж", icon: TrendingUp },
