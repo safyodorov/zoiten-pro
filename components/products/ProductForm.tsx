@@ -6,7 +6,23 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { Plus, X, Trash2 } from "lucide-react"
+import { Plus, X, Trash2, GripVertical } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 import { cn } from "@/lib/utils"
 import { createProduct, updateProduct } from "@/app/actions/products"
@@ -74,15 +90,18 @@ interface BrandWithCategories {
   categories: CategoryOption[]
 }
 
+// 260421-iq7: barcodes теперь вложены в article, верхнеуровневый Product.barcodes удалён
+interface BarcodeDB {
+  id?: string
+  value: string
+}
+
 interface ProductArticleDB {
   id?: string
   marketplaceId: string
   article: string
-}
-
-interface BarcodeDB {
-  id?: string
-  value: string
+  sortOrder: number
+  barcodes: BarcodeDB[]
 }
 
 interface ProductData {
@@ -100,7 +119,6 @@ interface ProductData {
   heightCm?: number | null
   widthCm?: number | null
   depthCm?: number | null
-  barcodes?: BarcodeDB[]
   articles?: ProductArticleDB[]
 }
 
@@ -111,8 +129,8 @@ interface ProductFormProps {
 }
 
 // ── Zod schema ─────────────────────────────────────────────────────
-// Note: no .default() here — defaults are in useForm defaultValues to avoid
-// zodResolver input/output type mismatch.
+// 260421-iq7: barcodes вложены в articles. sortOrder не в schema — генерируется
+// сервером по индексу массива.
 
 const formSchema = z.object({
   name: z.string().min(1, "Введите название").max(100, "Максимум 100 символов"),
@@ -127,33 +145,46 @@ const formSchema = z.object({
   widthCm: z.number().positive().nullable().optional(),
   depthCm: z.number().positive().nullable().optional(),
   photoUrl: z.string().nullable().optional(),
-  barcodes: z
-    .array(z.object({ value: z.string().min(1, "Введите штрих-код") }))
-    .max(20),
   marketplaces: z.array(
     z.object({
       marketplaceId: z.string().min(1),
-      articles: z.array(z.object({ value: z.string().min(1) })).max(10),
+      articles: z
+        .array(
+          z.object({
+            value: z.string().min(1, "Введите артикул"),
+            barcodes: z
+              .array(z.object({ value: z.string().min(1, "Введите штрих-код") }))
+              .max(20),
+          })
+        )
+        .max(10),
     })
   ),
 })
 
 type FormValues = z.infer<typeof formSchema>
 
-// ── Helper: group articles by marketplaceId ────────────────────────
+// ── Helper: group articles by marketplaceId preserving sortOrder ───
 
-function groupArticles(
+function groupArticlesWithBarcodes(
   articles: ProductArticleDB[]
-): Array<{ marketplaceId: string; articles: Array<{ value: string }> }> {
-  const map = new Map<string, string[]>()
-  for (const a of articles) {
+): Array<{
+  marketplaceId: string
+  articles: Array<{ value: string; barcodes: Array<{ value: string }> }>
+}> {
+  const map = new Map<string, ProductArticleDB[]>()
+  // sort globally by sortOrder — внутри каждого маркетплейса порядок сохранится
+  for (const a of [...articles].sort((x, y) => x.sortOrder - y.sortOrder)) {
     const list = map.get(a.marketplaceId) ?? []
-    list.push(a.article)
+    list.push(a)
     map.set(a.marketplaceId, list)
   }
-  return Array.from(map.entries()).map(([marketplaceId, vals]) => ({
+  return Array.from(map.entries()).map(([marketplaceId, arts]) => ({
     marketplaceId,
-    articles: vals.map((v) => ({ value: v })),
+    articles: arts.map((a) => ({
+      value: a.article,
+      barcodes: a.barcodes.map((b) => ({ value: b.value })),
+    })),
   }))
 }
 
@@ -182,8 +213,9 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       widthCm: product?.widthCm ?? null,
       depthCm: product?.depthCm ?? null,
       photoUrl: product?.photoUrl ?? null,
-      barcodes: product?.barcodes?.map((b) => ({ value: b.value })) ?? [],
-      marketplaces: product?.articles ? groupArticles(product.articles) : [],
+      marketplaces: product?.articles
+        ? groupArticlesWithBarcodes(product.articles)
+        : [],
     },
   })
 
@@ -194,12 +226,6 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
     append: appendMarketplace,
     remove: removeMarketplace,
   } = useFieldArray({ control: form.control, name: "marketplaces" })
-
-  const {
-    fields: barcodeFields,
-    append: appendBarcode,
-    remove: removeBarcode,
-  } = useFieldArray({ control: form.control, name: "barcodes" })
 
   // ── Watched values ─────────────────────────────────────────────────
 
@@ -335,10 +361,24 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   // ── Submit handler ─────────────────────────────────────────────────
 
   async function onSubmit(values: FormValues) {
+    // 260421-iq7: marketplaces[].articles[].{value, barcodes[]} — sortOrder генерируется сервером
     const marketplacesData = values.marketplaces.map((mp) => ({
       marketplaceId: mp.marketplaceId,
-      articles: mp.articles,
+      articles: mp.articles.map((a) => ({
+        value: a.value,
+        barcodes: a.barcodes,
+      })),
     }))
+
+    // UX warning: товар в наличии без штрих-кодов — не блокирует submit
+    const totalBarcodes = values.marketplaces.reduce(
+      (sum, mp) =>
+        sum + mp.articles.reduce((s, a) => s + a.barcodes.length, 0),
+      0
+    )
+    if (values.availability === "IN_STOCK" && totalBarcodes === 0) {
+      toast.warning("Товар без штрих-кодов")
+    }
 
     startTransition(async () => {
       if (product?.id) {
@@ -567,7 +607,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           />
         </section>
 
-        {/* Section 3: Артикулы маркетплейсов */}
+        {/* Section 3: Артикулы маркетплейсов (со штрих-кодами справа) */}
         <section className="space-y-4">
           <h2 className="text-lg font-medium border-b pb-2">
             Артикулы маркетплейсов
@@ -636,51 +676,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           )}
         </section>
 
-        {/* Section 4: Штрих-коды */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-medium border-b pb-2">Штрих-коды</h2>
-
-          <div className="space-y-2">
-            {barcodeFields.map((field, index) => (
-              <FormField
-                key={field.id}
-                control={form.control}
-                name={`barcodes.${index}.value`}
-                render={({ field: f }) => (
-                  <FormItem>
-                    <div className="flex gap-2">
-                      <FormControl>
-                        <Input placeholder="Штрих-код" {...f} />
-                      </FormControl>
-                      <button
-                        type="button"
-                        onClick={() => removeBarcode(index)}
-                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                        aria-label="Удалить штрих-код"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))}
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => appendBarcode({ value: "" })}
-            disabled={barcodeFields.length >= 20}
-            className="gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            Добавить штрих-код
-          </Button>
-        </section>
-
-        {/* Section 5: Характеристики */}
+        {/* Section 4: Характеристики */}
         <section className="space-y-4">
           <h2 className="text-lg font-medium border-b pb-2">Характеристики</h2>
 
@@ -799,7 +795,8 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 }
 
 // ── MarketplaceGroupInline ──────────────────────────────────────────
-// Receives the whole form instance to avoid Control generic mismatch
+// 260421-iq7: DnD артикулов внутри маркетплейса + каждый артикул двухколоночный
+// (артикул слева, штрих-коды справа).
 
 interface MarketplaceGroupInlineProps {
   groupIndex: number
@@ -815,10 +812,24 @@ function MarketplaceGroupInline({
   form,
   onRemoveGroup,
 }: MarketplaceGroupInlineProps) {
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, move } = useFieldArray({
     control: form.control,
     name: `marketplaces.${groupIndex}.articles`,
   })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = fields.findIndex((f) => f.id === active.id)
+    const newIndex = fields.findIndex((f) => f.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+    move(oldIndex, newIndex)
+  }
 
   return (
     <div className="rounded-md border p-3 space-y-2">
@@ -834,46 +845,185 @@ function MarketplaceGroupInline({
         </button>
       </div>
 
-      <div className="space-y-2">
-        {fields.map((field, articleIndex) => (
-          <FormField
-            key={field.id}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            control={form.control as any}
-            name={`marketplaces.${groupIndex}.articles.${articleIndex}.value`}
-            render={({ field: f }) => (
-              <FormItem>
-                <div className="flex gap-2">
-                  <FormControl>
-                    <Input placeholder="Артикул" {...f} />
-                  </FormControl>
-                  <button
-                    type="button"
-                    onClick={() => remove(articleIndex)}
-                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                    aria-label="Удалить артикул"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={fields.map((f) => f.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-3">
+            {fields.map((field, articleIndex) => (
+              <SortableArticleRow
+                key={field.id}
+                id={field.id}
+                groupIndex={groupIndex}
+                articleIndex={articleIndex}
+                form={form}
+                onRemove={() => remove(articleIndex)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <Button
         type="button"
         variant="outline"
         size="sm"
         disabled={fields.length >= 10}
-        onClick={() => append({ value: "" })}
+        onClick={() => append({ value: "", barcodes: [] })}
         className="gap-1.5"
       >
         <Plus className="h-3.5 w-3.5" />
         Добавить артикул
       </Button>
+    </div>
+  )
+}
+
+// ── SortableArticleRow ─────────────────────────────────────────────
+// 260421-iq7: двухколоночный блок — артикул с drag-handle слева, штрих-коды справа.
+
+interface SortableArticleRowProps {
+  id: string
+  groupIndex: number
+  articleIndex: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: ReturnType<typeof useForm<FormValues, any, any>>
+  onRemove: () => void
+}
+
+function SortableArticleRow({
+  id,
+  groupIndex,
+  articleIndex,
+  form,
+  onRemove,
+}: SortableArticleRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging ? 0.8 : undefined,
+  }
+
+  const {
+    fields: barcodeFields,
+    append: appendBarcode,
+    remove: removeBarcode,
+  } = useFieldArray({
+    control: form.control,
+    name: `marketplaces.${groupIndex}.articles.${articleIndex}.barcodes`,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="rounded-md border bg-background p-3"
+    >
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* Левая колонка — drag handle + артикул + удалить */}
+        <div className="space-y-2">
+          <div className="flex items-start gap-2">
+            <button
+              type="button"
+              className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-0.5 shrink-0 touch-none mt-1.5"
+              {...attributes}
+              {...listeners}
+              aria-label="Перетащить для изменения порядка"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+
+            <div className="flex-1 min-w-0">
+              <FormField
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                control={form.control as any}
+                name={`marketplaces.${groupIndex}.articles.${articleIndex}.value`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs text-muted-foreground">
+                      Артикул
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="Артикул" {...f} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={onRemove}
+              className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-6"
+              aria-label="Удалить артикул"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Правая колонка — штрих-коды */}
+        <div className="space-y-2">
+          <FormLabel className="text-xs text-muted-foreground">
+            Штрих-коды
+          </FormLabel>
+          <div className="space-y-2">
+            {barcodeFields.map((bField, barcodeIndex) => (
+              <FormField
+                key={bField.id}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                control={form.control as any}
+                name={`marketplaces.${groupIndex}.articles.${articleIndex}.barcodes.${barcodeIndex}.value`}
+                render={({ field: f }) => (
+                  <FormItem>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input placeholder="Штрих-код" {...f} />
+                      </FormControl>
+                      <button
+                        type="button"
+                        onClick={() => removeBarcode(barcodeIndex)}
+                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                        aria-label="Удалить штрих-код"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={barcodeFields.length >= 20}
+            onClick={() => appendBarcode({ value: "" })}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Добавить штрих-код
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
