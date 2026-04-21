@@ -924,7 +924,7 @@ export function PriceCalculatorTable({
                                     className="text-xs text-muted-foreground"
                                     title="Заказы минус отмены за вчерашний день (Moscow TZ). Цвет: сравнение со средней за 7 дней."
                                   >
-                                    Заказы за вчера:{" "}
+                                    Заказы вчера:{" "}
                                     <span
                                       className={`tabular-nums ${yesterdayColor}`}
                                     >
