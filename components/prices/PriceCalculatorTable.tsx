@@ -880,41 +880,42 @@ export function PriceCalculatorTable({
                               </span>{" "}
                               шт.
                             </div>
-                            <div
-                              className="text-xs text-muted-foreground"
-                              title="Заказы минус отмены за последние 7 дней (по данным WB Orders API)"
-                            >
-                              Заказы за 7 дн.:{" "}
-                              <span className="text-foreground tabular-nums">
-                                {Math.round(
-                                  group.product.totalAvgSalesSpeed * 7,
-                                )}
-                              </span>{" "}
-                              шт.
-                            </div>
                             {(() => {
-                              const orders7d = Math.round(
-                                group.product.totalAvgSalesSpeed * 7,
-                              )
-                              // Остаток / скорость_в_день = Остаток * 7 / Заказы_за_7_дн
+                              const perDay = group.product.totalAvgSalesSpeed
+                              // <10 → одна десятая; ≥10 → целое (floor)
+                              const perDayLabel =
+                                perDay < 10
+                                  ? perDay.toFixed(1)
+                                  : String(Math.floor(perDay))
                               const daysLeft =
-                                orders7d > 0
+                                perDay > 0
                                   ? Math.floor(
-                                      (group.product.totalStock * 7) /
-                                        orders7d,
+                                      group.product.totalStock / perDay,
                                     )
                                   : null
                               return (
-                                <div
-                                  className="text-xs text-muted-foreground"
-                                  title="Остаток × 7 / Заказы за 7 дн. (округление вниз)"
-                                >
-                                  Остаток в днях:{" "}
-                                  <span className="text-foreground tabular-nums">
-                                    {daysLeft ?? "—"}
-                                  </span>{" "}
-                                  {daysLeft !== null ? "дн." : ""}
-                                </div>
+                                <>
+                                  <div
+                                    className="text-xs text-muted-foreground"
+                                    title="Заказы минус отмены за 7 дней / 7 (по данным WB Orders API)"
+                                  >
+                                    Заказы за 7 дн.:{" "}
+                                    <span className="text-foreground tabular-nums">
+                                      {perDayLabel}
+                                    </span>{" "}
+                                    шт./д.
+                                  </div>
+                                  <div
+                                    className="text-xs text-muted-foreground"
+                                    title="Остаток / (Заказы за 7 дн. в среднем / день), округление вниз"
+                                  >
+                                    Остаток в днях:{" "}
+                                    <span className="text-foreground tabular-nums">
+                                      {daysLeft ?? "—"}
+                                    </span>{" "}
+                                    {daysLeft !== null ? "дн." : ""}
+                                  </div>
+                                </>
                               )
                             })()}
                           </div>
