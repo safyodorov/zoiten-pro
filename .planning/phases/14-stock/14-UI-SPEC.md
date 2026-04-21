@@ -1,10 +1,11 @@
 ---
 phase: 14
 slug: stock
-status: draft
+status: approved
 shadcn_initialized: true
 preset: base-nova
 created: 2026-04-21
+reviewed_at: 2026-04-21
 ---
 
 # Phase 14 — UI Design Contract: Управление остатками
@@ -632,14 +633,14 @@ Product B: ...
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: FLAG (non-blocking — «Отмена» single-word в DialogFooter, устоявшийся паттерн)
+- [x] Dimension 2 Visuals: FLAG (non-blocking — icon-only expand кнопки кластеров, aria-label + tooltip покрывают)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: FLAG (non-blocking — scale 12→14px tight, обоснованно плотностью таблицы, inherit Phase 7)
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** APPROVED (2026-04-21) — 6/6 dimensions, 3 FLAG non-blocking
 
 ---
 
