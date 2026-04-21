@@ -1,17 +1,62 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 2026-04-21 (260421-iq7): миграция article-sortOrder + Barcode FK → MarketplaceArticle.
+# Pre-check защищает от потери orphan barcode; post-check подтверждает целостность.
+# После deploy проверить визуально 1 товар в /products/[id]/edit: drag работает, штрих-коды справа.
+
 APP_DIR="/opt/zoiten-pro"
 
 echo "==> Pulling latest code..."
 cd "$APP_DIR"
 git pull
 
+# Загружаем env (DATABASE_URL нужен для pre/post migration checks)
+set -a
+source /etc/zoiten.pro.env
+set +a
+
 echo "==> Installing dependencies..."
 npm ci --omit=dev
 
+# ── Pre-migration orphan barcode check (260421-iq7) ──
+# Миграция 20260421_article_sortorder_barcode_fk на шаге 8 удалит Barcode у которых
+# нет ни одного MarketplaceArticle в том же Product. На проде должно быть 0.
+# Обход через: touch /var/deploy/skip_migrate_precheck
+echo "==> [260421-iq7] Pre-check orphan barcodes..."
+if [ -f /var/deploy/skip_migrate_precheck ]; then
+  echo "⚠ Pre-check пропущен (флаг /var/deploy/skip_migrate_precheck найден)"
+else
+  ORPHAN=$(psql "$DATABASE_URL" -tAc 'SELECT COUNT(*) FROM "Barcode" b WHERE NOT EXISTS (SELECT 1 FROM "MarketplaceArticle" ma WHERE ma."productId" = b."productId");' 2>/dev/null || echo "?")
+  if [ "$ORPHAN" = "?" ]; then
+    echo "⚠ WARNING: не удалось выполнить pre-check (psql вернул ошибку). Возможно, миграция уже применена — продолжаем."
+  elif [ "$ORPHAN" != "0" ]; then
+    echo "==> ERROR: найдено $ORPHAN штрих-кодов без MarketplaceArticle в том же товаре."
+    echo "==>   Эти записи будут УДАЛЕНЫ миграцией 20260421_article_sortorder_barcode_fk."
+    echo "==>   Проверь вручную: SELECT b.* FROM \"Barcode\" b WHERE NOT EXISTS"
+    echo "==>     (SELECT 1 FROM \"MarketplaceArticle\" ma WHERE ma.\"productId\" = b.\"productId\");"
+    echo "==>   Для принудительного применения: touch /var/deploy/skip_migrate_precheck"
+    exit 1
+  else
+    echo "✓ Orphan barcodes: 0 — миграция безопасна"
+  fi
+fi
+
 echo "==> Running database migrations..."
 npx prisma migrate deploy
+
+# ── Post-migration sanity check (260421-iq7) ──
+# После миграции все Barcode должны иметь marketplaceArticleId NOT NULL.
+echo "==> [260421-iq7] Post-migration sanity check..."
+ORPHAN_COUNT=$(psql "$DATABASE_URL" -tAc 'SELECT COUNT(*) FROM "Barcode" WHERE "marketplaceArticleId" IS NULL;' 2>/dev/null || echo "?")
+if [ "$ORPHAN_COUNT" = "?" ]; then
+  echo "⚠ WARNING: post-check не выполнился. Проверь вручную."
+elif [ "$ORPHAN_COUNT" != "0" ]; then
+  echo "==> ERROR: найдено $ORPHAN_COUNT Barcode без marketplaceArticleId — manual fix required"
+  exit 1
+else
+  echo "✓ Все штрих-коды привязаны к артикулам (Barcode.marketplaceArticleId NOT NULL OK)"
+fi
 
 # ── Phase 10: WB_CHAT_TOKEN проверка (warning only, не fail) ──
 echo "==> [Phase 10] Проверка WB_CHAT_TOKEN..."
