@@ -189,15 +189,15 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### Schema & Foundation
 
-- [ ] **STOCK-01**: Prisma миграция — модели `WbWarehouse(id Int PK, name, cluster, shortCluster, isActive, needsClusterReview)`, `WbCardWarehouseStock(wbCardId, warehouseId, quantity, updatedAt)` с `@@unique([wbCardId, warehouseId])` + каскад от WbCard; новые поля `Product.ivanovoStock Int?`, `Product.productionStock Int?`, `Product.ivanovoStockUpdatedAt DateTime?`, `Product.productionStockUpdatedAt DateTime?`; AppSetting seed `stock.turnoverNormDays = 37`. Одна большая миграция в Wave 0.
-- [ ] **STOCK-02**: Pure function `lib/stock-math.ts` — `calculateStockMetrics({stock, ordersPerDay, turnoverNormDays}) → {turnoverDays, deficit}` с guards: О=null → null, З=0 → turnoverDays=null, normDays≤0 → deficit=null, Infinity/NaN защита.
-- [ ] **STOCK-03**: Утилита `lib/normalize-sku.ts` — trim + upper + em-dash U+2014→hyphen + regex `^(?:УКТ-?)?(\d+)$` → `УКТ-${padStart(digits, 6, '0')}`. Используется Excel-парсером Иваново.
-- [ ] **STOCK-04**: Route rename `/inventory` → `/stock` — переименовать папку `app/(dashboard)/inventory/` → `/stock/`, обновить `lib/sections.ts:11`, `components/layout/nav-items.ts:34`, `lib/section-titles.ts`; nginx rewrite `/inventory(.*)` → `/stock$1` на 1 релиз.
-- [ ] **STOCK-05**: RBAC — все страницы `/stock/*` требуют `requireSection("STOCK")`, все write server actions (upsertIvanovoStock, updateProductionStock, updateTurnoverNorm, ручной refresh) — `requireSection("STOCK", "MANAGE")`.
+- [x] **STOCK-01**: Prisma миграция — модели `WbWarehouse(id Int PK, name, cluster, shortCluster, isActive, needsClusterReview)`, `WbCardWarehouseStock(wbCardId, warehouseId, quantity, updatedAt)` с `@@unique([wbCardId, warehouseId])` + каскад от WbCard; новые поля `Product.ivanovoStock Int?`, `Product.productionStock Int?`, `Product.ivanovoStockUpdatedAt DateTime?`, `Product.productionStockUpdatedAt DateTime?`; AppSetting seed `stock.turnoverNormDays = 37`. Одна большая миграция в Wave 0.
+- [x] **STOCK-02**: Pure function `lib/stock-math.ts` — `calculateStockMetrics({stock, ordersPerDay, turnoverNormDays}) → {turnoverDays, deficit}` с guards: О=null → null, З=0 → turnoverDays=null, normDays≤0 → deficit=null, Infinity/NaN защита.
+- [x] **STOCK-03**: Утилита `lib/normalize-sku.ts` — trim + upper + em-dash U+2014→hyphen + regex `^(?:УКТ-?)?(\d+)$` → `УКТ-${padStart(digits, 6, '0')}`. Используется Excel-парсером Иваново.
+- [x] **STOCK-04**: Route rename `/inventory` → `/stock` — переименовать папку `app/(dashboard)/inventory/` → `/stock/`, обновить `lib/sections.ts:11`, `components/layout/nav-items.ts:34`, `lib/section-titles.ts`; nginx rewrite `/inventory(.*)` → `/stock$1` на 1 релиз.
+- [x] **STOCK-05**: RBAC — все страницы `/stock/*` требуют `requireSection("STOCK")`, все write server actions (upsertIvanovoStock, updateProductionStock, updateTurnoverNorm, ручной refresh) — `requireSection("STOCK", "MANAGE")`.
 
 ### WB Integration (per-warehouse + API migration)
 
-- [ ] **STOCK-06**: Wave 0 smoke-test (ручной) — curl на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses` с текущим `WB_API_TOKEN`: проверить scope Аналитика + Personal/Service token type. Если 401/403 → блокер, регенерация токена до coding.
+- [x] **STOCK-06**: Wave 0 smoke-test (ручной) — curl на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses` с текущим `WB_API_TOKEN`: проверить scope Аналитика + Personal/Service token type. Если 401/403 → блокер, регенерация токена до coding.
 - [ ] **STOCK-07**: `fetchStocksPerWarehouse(nmIds: number[])` в `lib/wb-api.ts` — POST на новый endpoint; body `{nmIds, limit, offset}`; rate limit 3 req/min + 20s burst (sleep 20000ms между батчами); batch до 1000 nmIds; retry 60s на 429; возвращает `Map<nmId, Array<{warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient}>>`. Старая `fetchStocks()` помечена `@deprecated — sunset 2026-06-23`.
 - [ ] **STOCK-08**: Расширение `POST /api/wb-sync` — после `fetchStocksPerWarehouse` clean-replace per wbCardId в транзакции: `tx.wbCardWarehouseStock.deleteMany({wbCardId, NOT: {warehouseId: {in: incomingIds}}})` + `upsert` для входящих + `WbCard.stockQty = SUM(quantity)` той же транзакцией (denormalized для backward compat с `/prices/wb`).
 - [ ] **STOCK-09**: Seed справочника `WbWarehouse` — скрипт `prisma/seed-wb-warehouses.ts` с hardcoded array (собранный через DevTools Network tab на seller.wildberries.ru); validation кластеров с пользователем в Zero Wave Plan 14-02. Маппинг: ЦФО=Центральный, ЮГ=Южный+Северо-Кавказский, Урал=Уральский, ПФО=Приволжский, СЗО=Северо-Западный, СФО=Дальневосточный+Сибирский, Прочие=остальные. Запускается однократно через `npx prisma db seed -- --wb-warehouses`.
@@ -229,8 +229,8 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### Testing & Deploy
 
-- [ ] **STOCK-26**: Vitest `tests/stock-math.test.ts` — 5+ test cases: happy path, О=null, З=0, normDays=0, normDays=100, О=0 (дефицит максимальный).
-- [ ] **STOCK-27**: Vitest `tests/normalize-sku.test.ts` — canonical cases: `УКТ-000001` / `УКТ-1` / `1` / ` укт-000001 ` / `УКТ—000001` (em-dash) → все в `УКТ-000001`; invalid cases: `abc`, `УКТ-`, пустая строка → throw.
+- [x] **STOCK-26**: Vitest `tests/stock-math.test.ts` — 5+ test cases: happy path, О=null, З=0, normDays=0, normDays=100, О=0 (дефицит максимальный).
+- [x] **STOCK-27**: Vitest `tests/normalize-sku.test.ts` — canonical cases: `УКТ-000001` / `УКТ-1` / `1` / ` укт-000001 ` / `УКТ—000001` (em-dash) → все в `УКТ-000001`; invalid cases: `abc`, `УКТ-`, пустая строка → throw.
 - [ ] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
 - [ ] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
 
@@ -427,12 +427,12 @@ Explicitly excluded. Documented to prevent scope creep.
 | SUP-38 | Phase 13 | Complete |
 | SUP-39 | Phase 13 | Complete |
 | SUP-40 | Phase 8 | Pending |
-| STOCK-01 | Phase 14 | Pending |
-| STOCK-02 | Phase 14 | Pending |
-| STOCK-03 | Phase 14 | Pending |
-| STOCK-04 | Phase 14 | Pending |
-| STOCK-05 | Phase 14 | Pending |
-| STOCK-06 | Phase 14 | Pending |
+| STOCK-01 | Phase 14 | Complete |
+| STOCK-02 | Phase 14 | Complete |
+| STOCK-03 | Phase 14 | Complete |
+| STOCK-04 | Phase 14 | Complete |
+| STOCK-05 | Phase 14 | Complete |
+| STOCK-06 | Phase 14 | Complete |
 | STOCK-07 | Phase 14 | Pending |
 | STOCK-08 | Phase 14 | Pending |
 | STOCK-09 | Phase 14 | Pending |
@@ -452,8 +452,8 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-23 | Phase 14 | Pending |
 | STOCK-24 | Phase 14 | Pending |
 | STOCK-25 | Phase 14 | Pending |
-| STOCK-26 | Phase 14 | Pending |
-| STOCK-27 | Phase 14 | Pending |
+| STOCK-26 | Phase 14 | Complete |
+| STOCK-27 | Phase 14 | Complete |
 | STOCK-28 | Phase 14 | Pending |
 | STOCK-29 | Phase 14 | Pending |
 

@@ -310,7 +310,7 @@ Plans:
   7. `/inventory` URL редиректит на `/stock` через nginx rewrite на 1 релиз (поддержка старых закладок); `/stock/ozon` — заглушка `<ComingSoon sectionName="Управление остатками Ozon" />`
 **Plans**: 7 plans
 Plans:
-- [ ] 14-01-PLAN.md — Schema + routing rename `/inventory` → `/stock` + Wave 0 smoke tests (WB endpoint curl + golden test stubs для stock-math / normalize-sku) — STOCK-01, STOCK-02, STOCK-03, STOCK-04, STOCK-05, STOCK-06, STOCK-26, STOCK-27
+- [x] 14-01-PLAN.md — Schema + routing rename `/inventory` → `/stock` + Wave 0 smoke tests (WB endpoint curl + golden test stubs для stock-math / normalize-sku) — STOCK-01, STOCK-02, STOCK-03, STOCK-04, STOCK-05, STOCK-06, STOCK-26, STOCK-27
 - [ ] 14-02-PLAN.md — WbWarehouse seed script (Zero Wave: сбор списка через DevTools Network tab на seller.wildberries.ru + валидация cluster names с пользователем) — STOCK-09, STOCK-23
 - [ ] 14-03-PLAN.md — wb-sync extension: `fetchStocksPerWarehouse()` + WB API migration + transaction clean-replace в `/api/wb-sync` + auto-insert неизвестных складов — STOCK-07, STOCK-08, STOCK-10
 - [ ] 14-04-PLAN.md — Excel upload Иваново: `parseIvanovoExcel` (Zero Wave: real fixture от пользователя) + `POST /api/stock/ivanovo-upload` + preview Dialog + `upsertIvanovoStock` server action — STOCK-11, STOCK-12, STOCK-28
@@ -344,4 +344,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
-| 14. Управление остатками | 0/7 | Planned |  |
+| 14. Управление остатками | 1/7 | In Progress|  |

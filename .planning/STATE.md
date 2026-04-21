@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Управление остатками
-status: Phase 14 planned — ready to plan-phase
-stopped_at: Milestone v1.2 roadmap created — Phase 14 ready for /gsd:plan-phase 14
-last_updated: "2026-04-21T13:00:00.000Z"
+milestone: v1.1
+milestone_name: Служба поддержки WB
+status: Ready to execute
+stopped_at: Phase 14-stock Plan 01 complete — Wave 0 checkpoint awaiting user
+last_updated: "2026-04-21T15:46:15.776Z"
 progress:
-  total_phases: 14
-  completed_phases: 12
-  total_plans: 58
-  completed_plans: 51
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -19,14 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 14 — Управление остатками (milestone v1.2, 1 фаза = 7 планов, ready to plan)
+**Current focus:** Phase 14 — stock
 
 ## Current Position
 
-Phase: Phase 14 (planned, not started)
-Plan: —
-Status: Phase 14 planned — ready to plan-phase
-Last activity: 2026-04-21 — ROADMAP.md обновлён с Phase 14, 29 STOCK-* requirements смаплены
+Phase: 14 (stock) — EXECUTING
+Plan: 2 of 7
 
 ## Performance Metrics
 
@@ -92,6 +90,7 @@ Last activity: 2026-04-21 — ROADMAP.md обновлён с Phase 14, 29 STOCK-
 | Phase 12 P03 | 15min | 3 tasks | 8 files |
 | Phase 13-statistics P01 | 4min | 3 tasks | 7 files |
 | Phase 13-statistics P02 | 5min | 3 tasks | 11 files |
+| Phase 14-stock P01 | 391 | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -209,6 +208,9 @@ Recent decisions affecting current work:
 - [Phase 13-statistics]: Phase 13-02: Next.js 15 запрещает произвольные экспорты из Page (parseStatsSearchParams не валидный export field) → helpers в app/(dashboard)/support/stats/search-params.ts
 - [Phase 13-statistics]: Phase 13-02: parseStatsSearchParams per-field salvage (drop только невалидные поля из issues.path[0]) вместо full-fallback — tab=invalid+period=7d → period сохраняется
 - [Phase 13-statistics]: Phase 13-02: StatsTabs + PeriodFilter URL-driven (useSearchParams + router.push), без локального client state — back/forward нативно, shareable URLs
+- [Phase 14-stock]: Prisma миграция Phase 14 создана вручную (нет локальной PG) — pending для VPS deploy в Plan 14-07
+- [Phase 14-stock]: Route rename /inventory→/stock: next.config.ts redirects() (308 permanent) + исправлены landing/dashboard компоненты (Rule 2)
+- [Phase 14-stock]: Wave 0 curl smoke test НЕ выполнен в плане — Plans 14-01/02/04/05 независимы, Plan 14-03 заблокирован до подтверждения token scope
 
 ### Roadmap Evolution
 
@@ -248,6 +250,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-21T13:00:00.000Z
-Stopped at: Milestone v1.2 Phase 14 roadmap готов — 29 STOCK-requirements смаплены, 7 планов определены, готов `/gsd:plan-phase 14`
+Last session: 2026-04-21T15:46:15.771Z
+Stopped at: Phase 14-stock Plan 01 complete — Wave 0 checkpoint awaiting user
 Resume file: None
