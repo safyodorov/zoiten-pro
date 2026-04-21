@@ -207,6 +207,8 @@ model WbCard {
   ordersYesterday     Int?
   // Phase 7: Relation to calculated prices (D-03)
   calculatedPrices    CalculatedPrice[]
+  // Phase 14: Per-warehouse stock breakdown
+  warehouses          WbCardWarehouseStock[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 }
@@ -252,6 +254,11 @@ model Product {
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
   articles                MarketplaceArticle[]
   cost                    ProductCost? // One-to-one: product → cost record
+  // Phase 14: Stock management fields
+  ivanovoStock              Int?
+  productionStock           Int?
+  ivanovoStockUpdatedAt     DateTime?
+  productionStockUpdatedAt  DateTime?
   // Phase 7: Pricing overrides (D-01)
   // ── Pricing overrides (Phase 7 + 2026-04-16 extension) ──
   drrOverridePct          Float?
@@ -772,6 +779,34 @@ model AutoReplyConfig {
   updatedById  String?
   updatedBy    User?    @relation("AutoReplyUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt    DateTime @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 14: Stock Management
+// ──────────────────────────────────────────────────────────────────
+
+model WbWarehouse {
+  id                 Int                    @id // warehouseId из WB Analytics API
+  name               String                 // "Коледино", "Казань"
+  cluster            String                 // Полное название, напр. "Центральный федеральный округ"
+  shortCluster       String                 // "ЦФО" | "ЮГ" | "Урал" | "ПФО" | "СЗО" | "СФО" | "Прочие"
+  isActive           Boolean                @default(true)
+  needsClusterReview Boolean                @default(false)
+  stocks             WbCardWarehouseStock[]
+}
+
+model WbCardWarehouseStock {
+  id          String      @id @default(cuid())
+  wbCardId    String
+  wbCard      WbCard      @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
+  warehouseId Int
+  warehouse   WbWarehouse @relation(fields: [warehouseId], references: [id])
+  quantity    Int         @default(0)
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([wbCardId, warehouseId])
+  @@index([wbCardId])
+  @@index([warehouseId])
 }
 
 // ──────────────────────────────────────────────────────────────────

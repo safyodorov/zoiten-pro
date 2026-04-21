@@ -58,6 +58,15 @@ async function main() {
   }
 }
 
+  // ── Phase 14: AppSetting stock.turnoverNormDays ──────────────────
+  await prisma.appSetting.upsert({
+    where: { key: "stock.turnoverNormDays" },
+    create: { key: "stock.turnoverNormDays", value: "37" },
+    update: {},
+  })
+  console.log("AppSetting seeded: stock.turnoverNormDays = 37")
+}
+
 main()
   .catch((e) => {
     console.error(e)
