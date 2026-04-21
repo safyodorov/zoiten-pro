@@ -1,167 +1,194 @@
-# Project Research Summary
+# Research Summary — Milestone v1.2 «Управление остатками»
 
-**Project:** Zoiten ERP
-**Domain:** Marketplace Seller ERP — Product Catalog Management (WB, Ozon, DM, YM)
-**Researched:** 2026-04-05
-**Confidence:** HIGH
-
-## Executive Summary
-
-Zoiten ERP is an internal product information management (PIM) system for a marketplace seller managing 50-200 SKUs across Wildberries, Ozon, Detsky Mir, and Yandex Market. At this scale, the right architecture is a monolithic Next.js fullstack app with a service layer, PostgreSQL, and VPS deployment — no microservices, no cloud storage, no API integrations in the MVP. The stack originally specified (Next.js 14) requires one correction: use Next.js 15.2.4 with Prisma 6 and Auth.js v5, as these versions are stable and specifically designed to work together with the App Router and middleware-based RBAC.
-
-The recommended approach is to build in five sequential phases driven by hard dependencies: auth/DB foundation first, then admin user management, then reference data (brands, categories, marketplaces), then the core Products module, then polish (landing page, module stubs). The Products module is where almost all complexity lives — particularly around photo storage, soft delete, marketplace articles normalization, and RBAC enforcement. All five critical pitfalls are concentrated in Phase 3 (Products) and the two deployment decisions that must be made before Phase 3 begins.
-
-The primary risk is making schema decisions that are expensive to change once data exists in production — specifically: storing uploads inside the Next.js project directory (causes file loss on redeploy), using JSONB for marketplace articles (blocks future API sync features), and missing partial unique indexes for soft-deleted barcodes (forces hard deletes). All three are schema/infrastructure decisions that must be locked before writing the first product query. Get these right in Phase 1-3 and Phase 4 is straightforward implementation.
+**Milestone:** v1.2 Управление остатками (Phase 14)
+**Synthesized:** 2026-04-21
+**Source files:** STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md
+**Overall confidence:** HIGH (существующий стек, known codebase) / MEDIUM (WB warehouses dictionary — нет официального API, manual seed)
 
 ---
 
-## Key Findings
+## Executive Summary
 
-### Stack Recommendations
+Phase 14 — первый milestone, вводящий полноценный раздел поверх зрелого стека Next.js 15 + Prisma 6 + PostgreSQL с уже работающей WB-синхронизацией, AppSetting KV, паттерном sticky-таблиц и Excel-парсерами. **Новых зависимостей не нужно** — весь функционал строится на pattern-reuse из Phase 7 (`PriceCalculatorTable`, `parse-auto-promo-excel.ts`, `GlobalRatesBar`, shadcn Tooltip, AppSetting KV). Единственный действительно новый слой — **per-warehouse остатки WB** с собственным справочником складов и кластеров.
 
-The pre-selected stack is sound with two version corrections. Use **Next.js 15.2.4** (not 14) — v15 has been stable since October 2024 and all community resources target it. Use **Prisma 6** (not 7) — Prisma 7 introduces a mandatory driver adapter that has documented compatibility issues with Next.js 15 and Turbopack. Use **Auth.js v5** (renamed from NextAuth v4) — v5 has native App Router middleware support that v4 lacks.
+Домен — управление остатками marketplace-продавца (50-200 SKU, команда 10+): агрегация РФ (Иваново + Производство + МП), per-кластер разрез WB (7 кластеров), метрики О/З/Об/Д, глобальная норма оборачиваемости, Excel-импорт склада Иваново, ручной ввод производства. Исследование МойСклад/MPStats/1С показывает, что must-have — это не формулы (стандартные), а **простота загрузки данных + наглядность дефицита**. Сложные supply-chain фичи (EOQ, safety stock с σ-расчётом) избыточны на 200 SKU и деферятся в v1.3+ «Планирование закупок».
 
-**Core technologies:**
-- **Next.js 15.2.4 + React 19**: Fullstack framework — current stable, App Router mature, Turbopack stable
-- **PostgreSQL 16**: Primary database — JSONB support, partial indexes required for soft delete
-- **Prisma 6**: ORM + migrations — stable direct connection model, full Next.js 15 compatibility
-- **Auth.js v5 beta**: Auth + RBAC — App Router native, JWT sessions, middleware enforcement
-- **bcryptjs ^2.4.3**: Password hashing — pure JS, no native binding risk on VPS
-- **shadcn/ui (CLI v4) + Tailwind v4**: UI components — CSS-first config, React 19 ready
-- **motion 12.x** (formerly framer-motion): Animations — must be wrapped in `"use client"` boundaries
-- **react-hook-form + zod**: Forms + validation — one schema for client and server action validation
-- **Node.js 22 LTS + systemd + nginx**: Deployment — use `output: 'standalone'` in next.config.js
+Главный риск — **WB Statistics API deprecation** (`/api/v1/supplier/stocks` sunset 2026-06-23) + **отсутствие официального API для cluster mapping**. Обе проблемы решаются в рамках Phase 14: миграция на новый endpoint `POST /api/analytics/v1/stocks-report/wb-warehouses` (уже decided) и manual seed `WbWarehouse` через DevTools → hardcoded array с auto-insert `cluster="Прочие"` + `needsClusterReview` fallback для новых неизвестных складов. Второстепенные риски — null vs 0 семантика, Infinity/NaN в формулах, 28+ колонок в UI — адресуются pure-function модулем `lib/stock-math.ts` + expand-on-demand UX.
 
-**Critical version notes:**
-- Next.js 15: `cookies()` and `headers()` are now async; GET Route Handlers no longer cached by default
-- Auth.js v5: env vars prefixed `AUTH_` (not `NEXTAUTH_`); `AUTH_SECRET` replaces `NEXTAUTH_SECRET`
-- Tailwind v4: no `tailwind.config.js`; configuration lives in `globals.css` using `@theme`
+---
 
-### Expected Features
+## Stack Additions — резюме из STACK.md
 
-The MVP is the Products module. Every other module is a stub or future milestone.
+**Новые зависимости: НЕТ.** Весь milestone на существующем стеке.
 
-**Must have (table stakes):**
-- Auth + login/logout with session management
-- RBAC: superadmin creates users, assigns section access per user
-- Product CRUD: name, photo, articles (multi-value per marketplace), barcodes, dimensions, brand, category/subcategory, ABC status, availability
-- Product list with text search and filter by availability status
-- Copy product (deep copy, exclude photo)
-- Soft delete with 30-day auto-purge cron job
-- Brand CRUD + Category/Subcategory CRUD (per-brand, inline creation in product form)
-- Marketplace list management (WB, Ozon, DM, YM + custom)
-- Volume auto-calculation from dimensions (computed, not stored)
+Переиспользуется:
+- `xlsx@0.18.5` — парсер Иваново, pattern из `parse-auto-promo-excel.ts`
+- `zod@4.3.6`, `react-hook-form@7.72.1`, `@hookform/resolvers@5.2.2`
+- shadcn `<Tooltip>`, `<Dialog>`, `sonner@2.0.7`, `motion@12.38.0`
+- `vitest@4.1.4` — golden tests
+- `AppSetting` KV (Phase 7) — новый ключ `stock.turnoverNormDays`
 
-**Should have (differentiators):**
-- ABC status field (manual A/B/C assignment — differentiates from basic catalog tools)
-- Inline category creation inside product form (avoids context-switching)
-- Per-brand category taxonomy (prevents cross-brand contamination)
-- Animated landing page with Framer Motion (signals product quality)
-- Placeholder tabs for future modules (reduces "when is pricing coming?" questions)
+Осознанно **НЕ добавляется**: TanStack Table/Virtual (overkill), Playwright/cheerio (одноразовая задача), react-spreadsheet-import (Chakra конфликт), TreeView (2-уровневая иерархия = row-level toggle).
 
-**Defer explicitly (v2+):**
-- WB/Ozon API sync (OAuth, rate limiting, schema mapping — too complex for MVP)
-- Bulk CSV import/export
-- Multiple photos per product
-- Audit log / change history
-- Automated ABC classification (needs sales data that doesn't exist yet)
-- Barcode scanner / camera capture
+Новые Prisma модели:
+- `WbWarehouse(id Int PK, name, cluster, shortCluster, isActive, needsClusterReview)`
+- `WbCardWarehouseStock(wbCardId, warehouseId, quantity)` с `@@unique([wbCardId, warehouseId])`
+- `Product.ivanovoStock Int?`, `productionStock Int?` + `*UpdatedAt DateTime?`
 
-### Architecture Approach
+---
 
-A single-process Next.js monolith with strict internal layer separation: RSC pages fetch data via a service layer, Server Actions handle mutations through the same service layer, and middleware enforces RBAC before requests reach pages. All Prisma calls are confined to `lib/services/` — nothing else touches the database directly. Business logic lives in services; pages and Server Actions only orchestrate.
+## Feature Landscape — резюме из FEATURES.md
 
-**Major components:**
-1. **Middleware (`middleware.ts`)** — RBAC route guard before every request; redirects unauthenticated users to `/login`, unauthorized users to `/unauthorized`
-2. **RSC Pages (`app/**/page.tsx`)** — server-rendered data fetching via loaders; no interactivity, no client bundle
-3. **Server Actions (`*/_lib/*.actions.ts`)** — mutations with Zod validation, service calls, and `revalidatePath`; also enforce RBAC (middleware bypass prevention)
-4. **Route Handlers (`app/api/`)** — file upload endpoint (multipart/form-data); future external API consumers
-5. **Service Layer (`lib/services/`)** — all business logic and Prisma queries; the only layer that talks to the DB
-6. **Prisma ORM + PostgreSQL** — type-safe DB access; `deletedAt` soft delete pattern with Prisma Client Extension
+### Table Stakes (obligatory v1.2)
 
-**Key Prisma schema decisions:**
-- `MarketplaceArticle` as a normalized junction table (not JSONB) — enables indexed lookup, uniqueness enforcement, future API sync
-- `deletedAt` nullable DateTime on Product — use Prisma Client Extension (not deprecated middleware) to inject `deletedAt: null` globally
-- Partial unique indexes for Barcode and MarketplaceArticle — manual SQL in migration file since Prisma doesn't generate these
-- Enums for `AbcStatus` (A/B/C) and `Availability` (IN_STOCK/OUT_OF_STOCK/DISCONTINUED) — TypeScript compile-time enforcement
-- Volume is not stored — computed from dimensions at read time
+1. Агрегация РФ = Иваново + Производство + SUM(МП) на Product-level
+2. Per-артикул разрез (MarketplaceArticle, не только nmId)
+3. Разрез по маркетплейсам (WB; Ozon/ДМ/ЯМ — колонки `—`)
+4. Per-кластер разрез WB (7 кластеров)
+5. Expand кластер → конкретные склады WB
+6. Метрики О/З/Об/Д на всех уровнях
+7. Глобальная «Норма оборачиваемости» (default 37, AppSetting, 1..100)
+8. Excel-импорт Иваново по УКТ с preview+confirm UI
+9. Ручной ввод Производства
+10. Цветовая кодировка дефицита (green/yellow/red)
+11. RBAC `requireSection("STOCK")` VIEW/MANAGE
 
-### Critical Pitfalls
+### Differentiators
 
-1. **Photos stored in `/public/uploads/`** — Files written to the Next.js project directory are wiped on redeploy and not included in standalone builds. Store photos at `/var/www/zoiten-uploads/` and serve via nginx `alias` directive. Decision must be made before writing the first upload route.
+- Единый экран Иваново + Производство + ВСЕ МП (у конкурентов разрозненно)
+- Per-артикул вместо per-nmId
+- ↻ «Применить глобальную норму» per-строка
+- Кнопка «Обновить из WB» на /stock
+- Sticky колонки «Товар + УКТ»
+- Expand-state в searchParams (shareable links)
+- Toggle «Показать только дефицитные» (Д > 0)
 
-2. **Soft delete filter omission in nested queries** — Prisma has no built-in global soft delete. The deprecated middleware approach fails on nested `include` queries. Use a Prisma Client Extension to inject `deletedAt: null` globally, plus a shared `activeProduct()` helper. Must be in place before writing any product queries.
+### Anti-Features (явно НЕ делаем)
 
-3. **Unique constraint clash with soft delete** — PostgreSQL enforces `@unique` on all rows including soft-deleted ones. Barcodes and marketplace articles from deleted products block reassignment. Fix: partial unique indexes (`WHERE deletedAt IS NULL`) added manually to the migration SQL. Must be done before first production migration.
+- ❌ Автосписание Иваново по WB заказам (разные физические склады)
+- ❌ Real-time polling (rate limit → бан)
+- ❌ Остатки per-размер (techSize)
+- ❌ Inline-редактирование остатков Иваново/WB (ломает audit trail)
+- ❌ Ozon API сейчас (удвоит scope)
+- ❌ Fuzzy-matching УКТ (silent errors)
+- ❌ Multi-warehouse Иваново (YAGNI, один физический склад)
+- ❌ ML-прогноз продаж (линейной экстраполяции достаточно)
 
-4. **NextAuth role not propagated to session** — Custom fields like `role` and `sections` are not automatically included in the JWT. Must explicitly forward through `jwt()` then `session()` callbacks and extend TypeScript types in `next-auth.d.ts`. Without this, all RBAC checks return undefined. Fix on Day 1 before writing any permission check.
+### Deferrable → v1.3+
 
-5. **Middleware-only RBAC** — `middleware.ts` only protects page navigation; direct API calls to Route Handlers bypass it entirely. RBAC must be enforced in three places: middleware (page nav), Server Actions (mutation protection), and Route Handlers (API protection). Treat middleware as a UX optimization, not the security layer.
+StockMovement log, резервирование, алерты, safety stock/Reorder Point/EOQ, sparkline-графики, Ozon/ДМ/ЯМ API.
+
+---
+
+## Architecture Key Decisions — резюме из ARCHITECTURE.md
+
+1. **`WbCard.stockQty` остаётся как denormalized sum** — 4 read-точки сохраняют backward compat через write-one-transaction.
+2. **`Product.ivanovoStock`/`productionStock` — поля** (не отдельные таблицы). YAGNI на multi-warehouse, оба nullable (null ≠ 0).
+3. **Per-warehouse write strategy = clean-replace per sync** — `deleteMany + upsert` в транзакции per card. Зомби-записи элиминируются.
+4. **Cluster storage: денормализованно в `WbWarehouse.shortCluster`**. Lookup строго по `warehouseId` (int), не по name.
+5. **Auto-insert неизвестных складов** с `cluster="Прочие"` + `needsClusterReview`. Sync не падает.
+6. **JS-агрегация в RSC** (не SQL GROUP BY) — 2500 rows fit in memory. Паттерн `/prices/wb`.
+7. **Expand-state в searchParams** (`?expandedClusters=cfo,yug`). `UserPreference` — только widths/hidden cols.
+8. **Отдельный `/stock/wb`**: главная = Product-level, `/stock/wb` = nmId-level + per-warehouse expand. `/stock/ozon` = ComingSoon.
+9. **Pure function `lib/stock-math.ts`** (mirror `pricing-math.ts`), guards на З=0, О=null, normDays=0.
+
+### Suggested Build Order — 7 планов
+
+| # | Plan | Зависимости |
+|---|------|-------------|
+| 14-01 | Schema + routing rename `/inventory → /stock` + Wave 0 smoke tests | — |
+| 14-02 | WbWarehouse seed script | 14-01 |
+| 14-03 | wb-sync extension (per-warehouse + WB API migration) | 14-01, 14-02 |
+| 14-04 | Excel upload Иваново + parser | 14-01 |
+| 14-05 | Production manual input + turnover norm | 14-01 |
+| 14-06 | /stock RSC page + flat table | 14-01, 14-03, 14-04, 14-05 |
+| 14-07 | /stock/wb + cluster expand | 14-06 |
+
+Параллелизация: 14-04 и 14-05 независимы после 14-01. 14-02 и 14-03 можно совмещать если 14-03 использует auto-insert fallback.
+
+---
+
+## Watch Out For — Топ-5 critical pitfalls
+
+### #1. WB Stocks API deprecation (2026-06-23)
+Текущий `fetchStocks()` deprecated. **Mitigation:** Wave 0 smoke test, новый endpoint `POST /api/analytics/v1/stocks-report/wb-warehouses`, chunked helper, retry 60s на 429, batch до 1000 nmIds, rate limit 3/min + 20s burst, Personal/Service token.
+
+### #2. Missing row ≠ 0 (zombie data)
+WB не возвращает строки с 0 остатком. Upsert без clean-replace → вчерашний quantity остаётся. **Mitigation:** `deleteMany({wbCardId, warehouseId notIn}) + upsert` в транзакции per-card.
+
+### #3. Null vs 0 семантика в Product.ivanovoStock/productionStock
+`null` = «ни разу не импортировали», `0` = «точно пусто». `?? 0` → ложный дефицит → ошибочная закупка. **Mitigation:** `Int?` без default, миграция не бэкфиллит, UI рендерит `—` для null, агрегация РФ возвращает null если любой источник null.
+
+### #4. Формула Д при edge cases (З=0, О=0, Norma=0, Infinity/NaN)
+`Об = О/З` при З=0 → Infinity → "Infinity" в UI. **Mitigation:** pure `lib/stock-math.ts` с guards (return null), Zod `int().min(1).max(100)` на norm, golden test.
+
+### #5. SKU normalization в Excel Иваново
+Excel `{t:"n", v:1}` для `000001`, em-dash U+2014, whitespace. **Mitigation:** `lib/normalize-sku.ts` — trim + upper + em-dash→hyphen + regex `^(?:УКТ-?)?(\d+)$` + padStart(6, "0"). Parser возвращает `{imported, notFound, duplicates, invalid}` + downloadable CSV.
+
+### Дополнительно (moderate):
+- **#7 Миграции 2 компа + VPS** — всегда `migrate dev --name <semver>`, одна большая миграция в Wave 0
+- **#10 UI 28+ колонок** — expand-on-demand обязателен, default view «только Д > 0», desktop-only
+- **#14 Cascade delete** — `WbCardWarehouseStock.wbCard onDelete: Cascade`
+
+---
+
+## Confirmed Decisions
+
+### Decision 1: Route rename `/inventory` → `/stock`
+
+**Rationale:** PROJECT.md говорит `/stock`, код использует `/inventory` (Phase 5 stub). Унификация в Plan 14-01.
+
+**Scope:**
+- Переименовать `app/(dashboard)/inventory/` → `app/(dashboard)/stock/`
+- Обновить `lib/sections.ts` (строка 11), `components/layout/nav-items.ts` (строка 34), `lib/section-titles.ts`
+- **Nginx rewrite** `/inventory(.*)` → `/stock$1` на 1 релиз для закладок
+- Release note о переезде
+
+**Confidence:** HIGH. Одна PR, совмещается с schema migration.
+
+### Decision 2: WB API migration в рамках Phase 14
+
+**Scope:**
+- **Добавить** `fetchStocksPerWarehouse()` на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses`
+  - Scope: **Аналитика** (не Статистика)
+  - Method: **POST**, body `{nmIds, limit, offset}`
+  - Rate limit: **3 req/min + 1 req/20s burst**
+  - Batch: **до 1000 nmIds** per request
+  - Token type: **Personal или Service**
+  - Response: `warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient`
+- **Старую `fetchStocks()` не трогаем** — пишет agg `stockQty` как fallback (backward compat)
+- **Fallback снять** отдельным quick task **после validation новой функции в production** (1-2 sync-цикла)
+- Пометить старую `@deprecated — sunset 2026-06-23`
+
+**Wave 0:** smoke test curl с реальным `WB_API_TOKEN` **до кода** — проверить scope Аналитика + Personal token.
+
+**Confidence:** HIGH.
 
 ---
 
 ## Implications for Roadmap
 
-Based on research, the dependency chain is clear: auth/DB must exist before users, reference data before products, products before UI polish. The suggested build order follows hard data dependencies, not feature priority.
-
-### Phase 1: Foundation
-**Rationale:** Everything depends on auth working and the DB schema being stable. Schema migrations are expensive once data exists. Prisma singleton, NextAuth v5 config split (auth.config.ts + auth.ts), and RBAC middleware must be correct from the start.
-**Delivers:** Working login, empty dashboard, routing, RBAC middleware skeleton
-**Addresses:** Auth + session management, RBAC route protection
-**Avoids:** Pitfall 4 (role not in session — set up jwt/session callbacks here), Pitfall 5 (middleware-only RBAC — establish three-layer enforcement pattern here), Pitfall 14 (missing env vars — use `EnvironmentFile` in systemd)
-**Research flag:** Standard patterns (Auth.js v5 official docs are clear)
-
-### Phase 2: Admin — User Management
-**Rationale:** Superadmin must exist and be able to create team accounts before the system is used by anyone other than the developer. Depends on Phase 1 auth being complete.
-**Delivers:** `sergey.fyodorov@gmail.com` can create user accounts, assign section access, set passwords
-**Addresses:** Superadmin CRUD, bcrypt password hashing, role-based sidebar filtering
-**Avoids:** Pitfall 5 (double-check Server Actions enforce role, not just middleware)
-**Research flag:** Standard patterns (bcryptjs, shadcn/ui form components)
-
-### Phase 3: Reference Data
-**Rationale:** Products depend on brands, categories, and marketplace definitions. These are lookup tables that must be seeded before the product form can function. Soft delete and partial index decisions for these entities must be finalized here.
-**Delivers:** Brand CRUD, Category/Subcategory CRUD (per-brand), Marketplace management (WB/Ozon/DM/YM + custom)
-**Addresses:** Per-brand category taxonomy, inline category creation
-**Avoids:** Pitfall 10 (brand cascade delete — set `onDelete: Restrict`, add UI guard)
-**Research flag:** Standard patterns
-
-### Phase 4: Products Module (Core MVP)
-**Rationale:** The core ERP value. Depends on all prior phases. This phase has the highest concentration of pitfalls — photo storage, soft delete, marketplace articles normalization, barcode uniqueness, and cron cleanup must all be handled correctly the first time.
-**Delivers:** Full product CRUD (list, create, edit, delete, copy), photo upload, marketplace articles, barcodes, soft delete with 30-day cleanup cron, filters
-**Addresses:** All table-stakes features from FEATURES.md
-**Avoids:**
-- Pitfall 1 (photos outside project tree — nginx alias to `/var/www/zoiten-uploads/`)
-- Pitfall 2 (soft delete filter — Prisma Client Extension before first query)
-- Pitfall 3 (partial unique indexes — edit migration SQL before pushing to production)
-- Pitfall 8 (Server Action 1MB limit — `bodySizeLimit: '3mb'` + nginx `client_max_body_size 5m`)
-- Pitfall 9 (JSONB for articles — normalized `MarketplaceArticle` table confirmed in schema)
-- Pitfall 12 (missing cron — ship cleanup in same PR as soft delete)
-**Research flag:** Needs careful implementation. Photo upload architecture (Route Handler, not Server Action) and soft delete extension are the two highest-risk implementation details.
-
-### Phase 5: Landing Page + Module Stubs
-**Rationale:** Pure UI work with no new data dependencies. Framer Motion animations, branded landing page, and stub pages for future modules complete the product feel. Support integration (ai-cs-zoiten repo) is treated as last-mile integration risk.
-**Delivers:** Animated landing page, placeholder tabs for Prices/Weekly/Inventory/Batches/Purchase Plan/Sales Plan, Support section integration
-**Addresses:** Differentiator features from FEATURES.md (animations, placeholder navigation)
-**Avoids:** Framer Motion "use client" boundary — every `motion.*` component must be in a client component
-**Research flag:** Standard patterns for animations. Support integration from external repo may need its own research spike.
-
-### Phase Ordering Rationale
-
-- Auth before everything: middleware guards, Server Action checks, and session propagation must be wired correctly before any feature is built on top of them.
-- Reference data before products: the product form is unusable without brands, categories, and marketplace definitions populated.
-- Schema decisions in Phase 1 and 4 are load-bearing: partial unique indexes, soft delete extension, and photo storage path must be correct before production data is written.
-- UI polish last: Framer Motion and landing page have zero dependencies and zero risk — they should not block core functionality.
+**Overall phase structure:** 1 phase (Phase 14) с 7 планами — soft subdivided inside. Последовательность с параллелизацией 14-04/14-05 и 14-02/14-03.
 
 ### Research Flags
 
-Phases needing deeper research during planning:
-- **Phase 4 (Products):** Photo upload Route Handler vs. Server Action distinction, Sharp integration for image processing, Prisma Client Extension syntax for soft delete global filter — these are specific enough to warrant reviewing official docs and examples at implementation time.
-- **Phase 5 (Support integration):** The ai-cs-zoiten repository is external code with unknown API surface. Needs a discovery spike before committing to architecture.
+**Нужен `/gsd:research-phase` перед:**
+- **Plan 14-02** — real сбор справочника складов WB через DevTools + валидация cluster names с пользователем
+- **Plan 14-04** — real sample Excel Иваново от клиента для golden fixture
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Foundation):** Auth.js v5 App Router setup is fully documented in official docs.
-- **Phase 2 (User management):** bcryptjs + shadcn/ui form is a standard pattern.
-- **Phase 3 (Reference data):** Simple CRUD with relational constraints — no novel patterns.
+**Стандартные паттерны (skip research, pattern-reuse):**
+- 14-01 migration + rename
+- 14-03 WB API pattern ≈ `fetchBuyoutPercent`
+- 14-05 server actions ≈ GlobalRatesBar
+- 14-06 таблица ≈ PriceCalculatorTable
+- 14-07 expand `useState<Set>`
+
+### Gaps to Address
+
+1. Real Excel sample Иваново — Plan 14-04 Zero Wave
+2. Точные cluster names — Plan 14-02 Zero Wave (valid с пользователем)
+3. SSR smoke test WB endpoint — Wave 0 Plan 14-01
+4. UI mockup review — до Plan 14-06 (28+ колонок)
 
 ---
 
@@ -169,44 +196,9 @@ Phases with standard patterns (skip research-phase):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All recommendations drawn from official docs and changelogs. Version numbers verified as of March 2026. |
-| Features | HIGH | Table stakes drawn from explicit spec + PIM domain standards. Anti-features are clear scope decisions. |
-| Architecture | HIGH | Official Next.js, Auth.js, and Prisma docs are primary sources. Service layer pattern is well-established. |
-| Pitfalls | HIGH | Each pitfall references the specific GitHub issue or official doc confirming the behavior. All are reproducible. |
+| Stack | HIGH | Zero new deps, pattern-reuse Phase 7. MEDIUM на WbWarehouse seed workflow (manual) |
+| Features | HIGH | Формулы индустриальные, MPSTATS/МойСклад подтверждение. MEDIUM на UX 28 колонок |
+| Architecture | HIGH | Integration points verified (wb-api.ts, wb-sync route, schema.prisma). MEDIUM на stockQty backward compat — mitigation sum-on-write |
+| Pitfalls | HIGH | 14 pitfalls verified против официальной документации + schema. Critical #1 решается Decision 2 |
 
-**Overall confidence:** HIGH
-
-### Gaps to Address
-
-- **Sharp integration for image processing:** ARCHITECTURE.md recommends Sharp for resize/crop on upload but STACK.md doesn't include it in the install list. Confirm Sharp works correctly on Node.js 22 LTS on VPS (native bindings — may need `--ignore-scripts` workaround or `sharp@latest` which includes pre-built binaries).
-- **Photo storage outside project tree during development:** Using `/var/www/zoiten-uploads/` works on VPS but on local dev the path won't exist. Need a dev/prod configuration strategy — either environment variable for upload path or a local fallback directory.
-- **Auth.js v5 TypeScript session augmentation:** The `next-auth.d.ts` module augmentation syntax changed between v4 and v5. Confirm the exact interface extension pattern for `role` and `sections` fields before writing RBAC checks.
-- **CantonFairBot nginx configuration:** PITFALLS.md correctly flags this risk but the existing nginx config on the VPS is unknown. Run `nginx -T` on the VPS before touching any config to understand the current state.
-
----
-
-## Sources
-
-### Primary (HIGH confidence)
-- [Next.js 15 Release Blog](https://nextjs.org/blog/next-15) — version upgrade rationale
-- [Next.js Self-Hosting Guide](https://nextjs.org/docs/app/guides/self-hosting) — standalone output, VPS deployment
-- [Auth.js Role-Based Access Control (Official)](https://authjs.dev/guides/role-based-access-control) — RBAC callbacks, middleware
-- [Prisma ORM 7 Release Announcement](https://www.prisma.io/blog/announcing-prisma-orm-7-0-0) — why to stay on v6
-- [Prisma Migrate Workflows (Official)](https://www.prisma.io/docs/orm/prisma-migrate/workflows/development-and-production) — `migrate deploy` vs `migrate dev`
-- [Building APIs with Next.js (Official, Feb 2025)](https://nextjs.org/blog/building-apis-with-nextjs) — Route Handler architecture
-
-### Secondary (MEDIUM confidence)
-- [Soft Delete: Implementation Issues in Prisma — ZenStack](https://zenstack.dev/blog/soft-delete) — Prisma Client Extension approach
-- [How to Implement Soft Delete with Prisma using Partial Indexes — ThisDot](https://www.thisdot.co/blog/how-to-implement-soft-delete-with-prisma-using-partial-indexes) — partial index migration pattern
-- [shadcn/ui Tailwind v4 Docs](https://ui.shadcn.com/docs/tailwind-v4) — CLI v4, Tailwind v4 config
-- [Next.js Current Version March 2026 — abhs.in](https://www.abhs.in/blog/nextjs-current-version-march-2026-stable-release-whats-new) — version confirmation
-- [Next.js File Upload Server Actions — akoskm](https://akoskm.com/file-upload-with-nextjs-14-and-server-actions/) — upload pattern
-
-### Tertiary (LOW confidence)
-- [Enterprise Patterns with Next.js App Router — Medium](https://medium.com/@vasanthancomrads/enterprise-patterns-with-the-next-js-app-router-ff4ca0ef04c4) — folder structure patterns (validate against official docs)
-- [RBAC in ERP Systems — Procuzy](https://procuzy.com/blog/role-based-access-control-in-erp-systems/) — section-based permission model rationale
-
----
-
-*Research completed: 2026-04-05*
-*Ready for roadmap: yes*
+**Overall milestone confidence:** HIGH.

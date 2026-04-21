@@ -1,474 +1,465 @@
-# Architecture Patterns
+# Архитектура Phase 14 — Управление остатками
 
-**Domain:** Marketplace ERP / Product Management System
-**Project:** Zoiten ERP
-**Researched:** 2026-04-05
-**Confidence:** HIGH (Next.js official docs, Auth.js official docs, Prisma official docs)
+**Milestone:** v1.2 Управление остатками (subsequent milestone)
+**Исследовано:** 2026-04-21
+**Overall confidence:** HIGH (стек существует, все вопросы касаются интеграции в known codebase)
 
----
+## Краткое резюме
 
-## Recommended Architecture
+Phase 14 — первый milestone, который **вводит полноценную новую секцию** поверх зрелого стека Next.js 15 + Prisma 6 + PostgreSQL, с уже работающей WB-синхронизацией (wb-sync), AppSetting KV, паттерном sticky-таблиц и готовыми `Product.sku`/`WbCard` данными. Фаза опирается на четыре существующие системы (wb-sync route, AppSetting KV из Phase 7, sticky-таблица из Phase 7, Excel-loader из Phase 7 auto-акций) и добавляет один действительно новый слой — **per-warehouse остатки** с собственным справочником складов и кластеров.
 
-A monolithic Next.js 14 fullstack app with clear internal layer separation. No microservices — the scale (50-200 products, ~10 users) does not warrant it. One process, one database, one deploy unit.
+**Ключевой вывод по breaking changes:** `WbCard.stockQty` используется в четырёх местах (wb-sync writer, `/prices/wb` page filter + aggregation, WbCardsTable read) — **оставляем как denormalized sum** по `WbCardWarehouseStock.quantity` в рамках той же транзакции синхронизации. Это нулевая миграция Phase 7 + обратно-совместимый write в новую таблицу.
 
-```
-Browser (React Client Components)
-       │
-       ▼
-Next.js App (port 3000)
-  ├─ Pages & Layouts       (React Server Components — read-only views)
-  ├─ Server Actions         (mutations: create, update, delete)
-  ├─ Route Handlers         (file upload endpoint, future API consumers)
-  └─ Middleware             (auth guard, RBAC enforcement)
-       │
-       ▼
-Service Layer (lib/services/)
-  ├─ product.service.ts
-  ├─ brand.service.ts
-  ├─ category.service.ts
-  ├─ user.service.ts
-  └─ upload.service.ts
-       │
-       ▼
-Prisma ORM
-       │
-       ▼
-PostgreSQL (localhost:5432 on VPS)
+**Ключевой вывод по маршруту:** routing и sections.ts сейчас используют **`/inventory`**, не `/stock`. PROJECT.md говорит `/stock`. Это расхождение — первый риск. Рекомендация: **переименовать `/inventory` → `/stock`** в Plan 14-01 (schema + routes + nav-items + section-titles + sections.ts), одновременно со stubs.
 
-Static Files (uploads/)
-  └─ public/uploads/products/{id}/photo.jpg
-```
+**Ключевой вывод по ordering:** 7 планов в строгой последовательности. Schema → WbWarehouse seed → wb-sync расширение → Excel import Иваново → Production manual input → UI table (flat, без кластеров) → Cluster expand + turnover norm. UI (последние два шага) можно параллелить после того, как данные пишутся в БД.
 
----
+## Рекомендованная архитектура
 
-## Project Folder Structure
+### Data flow (end-to-end для одной карточки)
 
 ```
-zoiten-pro/
-├── app/
-│   ├── (auth)/
-│   │   ├── login/
-│   │   │   └── page.tsx
-│   │   └── layout.tsx
-│   ├── (dashboard)/
-│   │   ├── layout.tsx              ← shared sidebar/nav, auth guard
-│   │   ├── page.tsx                ← home/landing
-│   │   ├── products/
-│   │   │   ├── page.tsx            ← product list with filters
-│   │   │   ├── new/page.tsx        ← create product form
-│   │   │   ├── [id]/
-│   │   │   │   ├── page.tsx        ← product detail / edit
-│   │   │   │   └── _components/    ← product-specific components
-│   │   │   └── _lib/
-│   │   │       ├── products.actions.ts   ← Server Actions
-│   │   │       ├── products.loader.ts    ← data fetch for RSC
-│   │   │       └── products.schema.ts    ← Zod validation schemas
-│   │   ├── prices/page.tsx         ← stub
-│   │   ├── weekly/page.tsx         ← stub
-│   │   ├── inventory/page.tsx      ← stub
-│   │   ├── batches/page.tsx        ← stub
-│   │   ├── purchase-plan/page.tsx  ← stub
-│   │   ├── sales-plan/page.tsx     ← stub
-│   │   └── support/page.tsx        ← ai-cs-zoiten integration
-│   ├── api/
-│   │   ├── auth/[...nextauth]/
-│   │   │   └── route.ts            ← NextAuth.js handler
-│   │   └── uploads/
-│   │       └── route.ts            ← multipart/form-data file handler
-│   └── layout.tsx                  ← root layout, providers
-│
-├── lib/
-│   ├── prisma.ts                   ← PrismaClient singleton
-│   ├── auth.ts                     ← NextAuth config (callbacks, providers)
-│   ├── services/
-│   │   ├── product.service.ts
-│   │   ├── brand.service.ts
-│   │   ├── category.service.ts
-│   │   ├── marketplace.service.ts
-│   │   ├── user.service.ts
-│   │   └── upload.service.ts
-│   └── utils/
-│       ├── volume.ts               ← auto-calculate volume from dimensions
-│       └── soft-delete.ts          ← 30-day purge logic
-│
-├── components/
-│   ├── ui/                         ← shadcn/ui primitives (auto-generated)
-│   ├── layout/
-│   │   ├── Sidebar.tsx
-│   │   ├── Header.tsx
-│   │   └── NavItem.tsx
-│   └── shared/
-│       ├── ProductCard.tsx
-│       ├── StatusBadge.tsx
-│       └── ConfirmDialog.tsx
-│
-├── middleware.ts                   ← RBAC route guard
-├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-└── public/
-    └── uploads/
-        └── products/               ← photo storage
+WB Statistics API /api/v1/supplier/stocks
+  → fetchStocksPerWarehouse()  [новая функция lib/wb-api.ts]
+  → Map<nmId, WarehouseBreakdown[]>
+
+/api/wb-sync route (расширение)
+  ├─→ prisma.wbCardWarehouseStock.deleteMany({wbCardId, warehouseId notIn})
+  ├─→ prisma.wbCardWarehouseStock.upsert per (wbCardId, warehouseId)
+  └─→ prisma.wbCard.update({stockQty: sum(breakdown.quantity)})  ← backward-compat
+
+/stock RSC page
+  ├─→ prisma.product.findMany({include: articles(wb), cost, category, subcategory})
+  ├─→ prisma.wbCard.findMany({where: nmId in linkedNmIds, include: warehouseStocks→warehouse})
+  ├─→ prisma.wbWarehouse.findMany() — справочник + агрегация по cluster
+  └─→ Server-side assembly: Product → WbCard[] → WbCardWarehouseStock[] grouped by WbWarehouse.cluster
+      → StockTable (client) с cluster expand state в searchParams
+
+Excel upload /api/stock-ivanovo-upload   [новый route, паттерн wb-promotions-upload-excel]
+  → parseIvanovoStockExcel(buffer)  [новый lib/parse-ivanovo-stock-excel.ts]
+  → validate sku format (УКТ-XXXXXX)
+  → prisma.product.updateMany({sku in sheet}, {ivanovoStock})
+
+Production manual input     [server action, без route]
+  → updateProductionStock(productId, quantity)
+  → prisma.product.update({productionStock})
 ```
 
----
+### Component boundaries
 
-## Component Boundaries
+| Component | Type | Responsibility | Communicates With |
+|-----------|------|---------------|-------------------|
+| `app/(dashboard)/stock/page.tsx` | RSC | Data assembly + initial render | Prisma + StockTable |
+| `app/(dashboard)/stock/wb/page.tsx` | RSC | Подраздел per-warehouse detail (если понадобится отдельно — см. Q3 ниже) | Prisma + StockWbTable |
+| `components/stock/StockTable.tsx` | Client | Sticky columns + cluster expand + row numbers (rowSpan Product→WbCard) | Server actions + searchParams |
+| `components/stock/StockTurnoverNormInput.tsx` | Client | Input for `stock.turnoverNormDays` | updateStockSettings server action |
+| `components/stock/IvanovoStockUploadButton.tsx` | Client | Excel upload | /api/stock-ivanovo-upload POST |
+| `components/stock/ProductionStockInput.tsx` | Client | Ручной ввод по строке Product | updateProductionStock server action |
+| `app/actions/stock.ts` | Server actions | updateProductionStock / updateStockTurnoverNormDays | Prisma + revalidatePath |
+| `app/api/stock-ivanovo-upload/route.ts` | API | POST multipart + parse XLSX | Prisma (updateMany) |
+| `lib/parse-ivanovo-stock-excel.ts` | Pure TS | XLSX parser (тестируется vitest) | xlsx lib |
+| `lib/wb-api.ts` (extend) | Pure TS | `fetchStocksPerWarehouse()` + reuse `fetchStocks()` | WB Statistics API |
+| `app/api/wb-sync/route.ts` (extend) | API | Запись per-warehouse + denormalized sum | Prisma transaction |
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| RSC Pages (app/\*\*/page.tsx) | Data fetching at render time, no interactivity | Service layer (direct import), Client Components via props |
-| Client Components (use client) | Interactive UI: forms, modals, optimistic updates | Server Actions, Route Handlers via fetch |
-| Server Actions (\_lib/\*.actions.ts) | Mutations: validate input, call service, revalidate cache | Service layer only — never Prisma directly |
-| Route Handlers (app/api/\*\*/route.ts) | File upload, future external API consumers | Service layer, filesystem |
-| Service Layer (lib/services/) | Business logic, DB queries via Prisma | Prisma, upload.service, other services |
-| Middleware (middleware.ts) | Auth guard, RBAC enforcement before request | NextAuth session, no business logic |
-| Prisma ORM | Type-safe DB access, migrations | PostgreSQL only |
+## Модели данных — новые сущности
 
-**Key rule:** Business logic lives only in `lib/services/`. Pages and Server Actions call services. Services call Prisma. Nothing else touches the DB directly.
-
----
-
-## Data Flow
-
-### Read Path (Product List)
-
-```
-Browser → GET /products
-  → page.tsx (RSC, server-rendered)
-    → products.loader.ts
-      → product.service.ts
-        → prisma.product.findMany(...)
-          ← PostgreSQL rows
-        ← typed Product[]
-      ← data
-    ← page renders with data
-  → HTML streamed to browser
-```
-
-### Write Path (Create Product)
-
-```
-Browser fills form (Client Component)
-  → submits FormData to Server Action (products.actions.ts)
-    → Zod schema validation
-    → product.service.ts.create(data)
-      → prisma.product.create(...)
-        ← new Product row
-      ← Product
-    → revalidatePath('/products')
-  ← redirect or success state to client
-```
-
-### File Upload Path
-
-```
-Browser selects photo (Client Component)
-  → POST /api/uploads (FormData, multipart)
-    → route.ts: request.formData()
-    → upload.service.ts
-      → validate: JPEG/PNG, max 2MB, aspect ratio 3:4
-      → write to /public/uploads/products/{productId}/{filename}
-      ← { url: '/uploads/products/...' }
-    ← { url } JSON response
-  ← Client Component stores url, passes to product form
-```
-
-### Auth / RBAC Flow
-
-```
-Browser → any /dashboard route
-  → middleware.ts runs first
-    → auth() from NextAuth
-    → if no session → redirect /login
-    → if session but wrong role → redirect /unauthorized
-    → else → request continues
-  → layout.tsx wraps in session provider
-  → RSC page checks session.user.role for fine-grained UI decisions
-```
-
----
-
-## Prisma Schema Design
-
-### Core models
+### 1. `WbWarehouse` (справочник складов WB → кластеры)
 
 ```prisma
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String   // bcrypt hash
-  role      String   @default("viewer") // superadmin | manager | viewer
-  sections  String[] // allowed ERP sections e.g. ["products", "prices"]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Marketplace {
-  id       String              @id @default(cuid())
-  name     String              @unique  // "WB", "Ozon", "ДМ", "ЯМ"
-  articles MarketplaceArticle[]
-}
-
-model Brand {
-  id         String      @id @default(cuid())
-  name       String      @unique
-  categories Category[]
-  products   Product[]
-}
-
-model Category {
-  id          String    @id @default(cuid())
-  name        String
-  brandId     String
-  brand       Brand     @relation(fields: [brandId], references: [id])
-  subcategories Subcategory[]
-  products    Product[]
-  @@unique([name, brandId])
-}
-
-model Subcategory {
-  id         String    @id @default(cuid())
-  name       String
-  categoryId String
-  category   Category  @relation(fields: [categoryId], references: [id])
-  products   Product[]
-  @@unique([name, categoryId])
-}
-
-model Product {
-  id             String   @id @default(cuid())
-  name           String   @db.VarChar(100)
-  photoUrl       String?
-  brandId        String
-  brand          Brand    @relation(fields: [brandId], references: [id])
-  categoryId     String?
-  category       Category? @relation(fields: [categoryId], references: [id])
-  subcategoryId  String?
-  subcategory    Subcategory? @relation(fields: [subcategoryId], references: [id])
-  abcStatus      String?  // "A" | "B" | "C"
-  availability   String   @default("in_stock") // "in_stock" | "out_of_stock" | "discontinued"
-  weightKg       Float?
-  heightCm       Float?
-  widthCm        Float?
-  depthCm        Float?
-  // volume is computed: heightCm * widthCm * depthCm / 1000 (liters)
-  articles       MarketplaceArticle[]
-  barcodes       Barcode[]
-  deletedAt      DateTime?  // soft delete — null = active
+model WbWarehouse {
+  id             Int      @id                     // Warehouse ID из WB (официальный)
+  name           String                            // «Коледино», «Электросталь»...
+  cluster        String                            // «Центральный», «Юг»...
+  shortCluster   String                            // «ЦФО», «ЮГ», «Урал»... — для заголовков
+  isActive       Boolean  @default(true)          // deactivate вместо delete
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-}
 
-model MarketplaceArticle {
-  id            String      @id @default(cuid())
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id])
-  marketplaceId String
-  marketplace   Marketplace @relation(fields: [marketplaceId], references: [id])
-  article       String
-  @@unique([productId, marketplaceId, article])
-  // Up to 10 articles per marketplace per product enforced in service layer
-}
+  warehouseStocks WbCardWarehouseStock[]
 
-model Barcode {
-  id        String  @id @default(cuid())
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  value     String  @unique
-  // 1-20 barcodes per product enforced in service layer
+  @@index([cluster])
+  @@index([shortCluster])
 }
 ```
 
-### Schema design decisions
+**Обоснование:**
+- `id: Int` без `@default` — seed даёт официальные WB warehouse IDs, которые stable между synchronisations (подтверждено в Statistics API).
+- `cluster`/`shortCluster` хранятся денормализованно (не отдельной таблицей Cluster). Кластеров 7, они не управляются пользователем, и изменения крайне редки — нормализация даёт негативный ROI в этом контексте. **Если в v1.3 понадобится UI редактирования кластеров** — делаем отдельный `WbWarehouseCluster` с FK; сейчас — избыточно.
+- `isActive` вместо physical delete — WB может переименовать/закрыть склад; историю `WbCardWarehouseStock` сохраняем.
 
-- Volume is a computed property, not stored — calculated on-the-fly from dimensions to prevent drift.
-- Marketplace articles use a junction table, not a JSON column — enables indexed lookup by WB article, add/remove without full row update, and supports future marketplace integrations.
-- Soft delete uses `deletedAt` nullable DateTime. All queries add `WHERE deletedAt IS NULL`. A cron/background job (or Prisma middleware) purges rows older than 30 days.
-- RBAC sections stored as String[] on User model — simple, no separate permission table needed at this scale. Expand to a Permission model if roles grow complex.
+### 2. `WbCardWarehouseStock` (per-warehouse остатки)
 
----
+```prisma
+model WbCardWarehouseStock {
+  id          String      @id @default(cuid())
+  wbCardId    String
+  wbCard      WbCard      @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
+  warehouseId Int
+  warehouse   WbWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  quantity    Int         @default(0)
+  updatedAt   DateTime    @updatedAt
 
-## Authentication / RBAC Architecture
-
-### NextAuth.js configuration
-
-```typescript
-// lib/auth.ts
-export const authOptions = {
-  providers: [CredentialsProvider({ ... })],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.role = user.role;
-        token.sections = user.sections;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      session.user.role = token.role;
-      session.user.sections = token.sections;
-      return session;
-    },
-  },
-  session: { strategy: "jwt" },
-};
+  @@unique([wbCardId, warehouseId])
+  @@index([warehouseId])         // для per-warehouse агрегаций
+  @@index([wbCardId])             // быстрый join из WbCard side
+}
 ```
 
-### Middleware enforcement (route-level)
+И back-relation в существующий `WbCard`:
+
+```prisma
+model WbCard {
+  // ... existing fields ...
+  warehouseStocks WbCardWarehouseStock[]
+}
+```
+
+**Обоснование:**
+- `@@unique([wbCardId, warehouseId])` — ключевой invariant. Даёт `upsert` вместо `deleteMany+createMany`.
+- `onDelete: Cascade` на WbCard — корректно, per-warehouse записи не имеют смысла без карточки.
+- `onDelete: Restrict` на WbWarehouse — защита: нельзя удалить склад с активными остатками. WB API не даст такого ивента, но защищаемся от ручных багов seed-скрипта.
+
+### 3. Расширения `Product`
+
+```prisma
+model Product {
+  // ... existing fields ...
+  ivanovoStock    Int?      // Остаток на складе Иваново (Excel upload)
+  productionStock Int?      // Остаток на производстве (manual input)
+}
+```
+
+**Trade-off: Поля Product.ivanovoStock + Product.productionStock vs отдельные таблицы IvanovoStock/ProductionStock**
+
+| Критерий | Denormalized поля (РЕКОМЕНДУЕТСЯ) | Отдельные таблицы |
+|----------|-----------------------------------|-------------------|
+| Бизнес-гранулярность | **Один глобальный остаток per Product** (из PROJECT.md «ручной глобальный ввод») | Избыточно — нет второго измерения |
+| Чтение в RSC | Поле уже в `Product` — zero joins | Дополнительный `include` + `.quantity ?? 0` |
+| История изменений | Нет (но требования не просят) | Можно логировать через `updatedAt` |
+| Миграция | 2 `ALTER TABLE ADD COLUMN` | 2 `CREATE TABLE` + FK |
+| Будущий multi-warehouse для Иваново | Потребует миграцию → отдельная таблица | Готово |
+
+**Решение:** два поля в `Product`. PROJECT.md явно пишет «ручной глобальный ввод остатков Производства (0-N per Product)». Склад Иваново тоже **один** (собственный warehouse компании, не маркетплейс). Если через год появится второй собственный склад — делаем миграцию на тот момент, когда появится реальное бизнес-требование (YAGNI).
+
+**Confidence:** HIGH — однозначное бизнес-требование, паттерн совпадает с уже существующими денормализациями в проекте (`WbCard.stockQty`, `Category.defaultDefectRatePct`).
+
+### 4. `AppSetting['stock.turnoverNormDays']` — re-use Phase 7 KV
 
 ```typescript
-// middleware.ts
-export async function middleware(req: NextRequest) {
-  const token = await getToken({ req });
-  const { pathname } = req.nextUrl;
+// Lazy init в action или в RSC:
+const raw = await prisma.appSetting.findUnique({ where: { key: "stock.turnoverNormDays" } })
+const turnoverNormDays = raw ? parseInt(raw.value, 10) : 37  // fallback default
+```
 
-  if (!token) return NextResponse.redirect('/login');
+**Никаких новых таблиц.** Паттерн 1:1 с `wbWalletPct`/`wbDefectRatePct` из Phase 7. RSC читает в `Promise.all`, редактирование через `updateStockSettings` server action с Zod-валидацией (1-100).
 
-  // Map URL segments to section names
-  const sectionMap: Record<string, string> = {
-    '/products': 'products',
-    '/prices': 'prices',
-    // ...
-  };
-  const section = Object.keys(sectionMap).find(k => pathname.startsWith(k));
-  if (section && !token.sections?.includes(sectionMap[section])) {
-    return NextResponse.redirect('/unauthorized');
+## Интеграционные точки с существующим кодом
+
+Абсолютная путь / файл | Что меняется | Риск | Mitigation
+----------------------|--------------|------|-----------
+`prisma/schema.prisma` | +3 модели (WbWarehouse, WbCardWarehouseStock), +2 поля Product, +1 back-relation WbCard | LOW | Migrations аддитивные, нет ALTER NULLABLE → NOT NULL |
+`lib/wb-api.ts` | +`fetchStocksPerWarehouse()` (новая), keep `fetchStocks()` intact | LOW | Старая функция остаётся на случай fallback; новая возвращает Map<nmId, WarehouseBreakdown[]> |
+`app/api/wb-sync/route.ts` | Замена шага 5: вместо `fetchStocks()` → `fetchStocksPerWarehouse()`, плюс write в 2 таблицы в транзакции | **MEDIUM** | См. раздел «Breaking changes» ниже — нужна транзакция + расчёт stockQty = sum |
+`lib/sections.ts` | `/inventory` → `/stock` | **MEDIUM** | Меняется URL — middleware RBAC check переключается, сохранённые закладки пользователей ломаются. Mitigation: nginx rewrite `/inventory` → `/stock` на 1 релиз + release note |
+`components/layout/nav-items.ts` | `href: "/inventory"` → `href: "/stock"` | LOW | Sidebar link меняется |
+`components/layout/section-titles.ts` | regex `/^\/inventory/` → `/^\/stock/` | LOW | Header title соответствует новому URL |
+`app/(dashboard)/inventory/page.tsx` | Переносим в `app/(dashboard)/stock/page.tsx`, заменяем ComingSoon на реальный RSC | LOW | Удаление старого каталога + создание нового |
+`/prices/wb/page.tsx` line 245, 583 | `card.stockQty` остаётся — денормализованная сумма | LOW | Backward compat гарантируем через sum-on-write |
+`components/cards/WbCardsTable.tsx` line 361-362 | `card.stockQty` остаётся | LOW | Тот же бэккомпат |
+`app/api/wb-sync-spp/route.ts` | **НЕ ТРОГАЕМ** — быстрая СПП синхронизация не касается остатков | ZERO | Подтверждено: PROJECT.md явно пишет «per-warehouse не при fast СПП» |
+
+### Breaking changes analysis — `WbCard.stockQty`
+
+**Вопрос из брифа:** «Используется ли где-то как source of truth, или можно безопасно оставить как denormalized sum?»
+
+**Ответ: используется в 4 точках чтения.** Все 4 — read-only, никто не пишет в `stockQty` кроме `wb-sync`. Безопасно оставить как denormalized sum **при условии, что это пишется в той же транзакции, что и per-warehouse breakdown** (иначе consistency race между читателями на полпути синхронизации).
+
+**Рекомендуемый pattern в расширенном wb-sync:**
+
+```typescript
+// В цикле per-card (route.ts line 71):
+const warehouseBreakdown = warehouseStockMap.get(card.nmId) ?? []
+const totalStockQty = warehouseBreakdown.reduce((s, w) => s + w.quantity, 0)
+
+await prisma.$transaction(async (tx) => {
+  // 1. Upsert WbCard (с stockQty = sum — денормализованно)
+  const wbCard = await tx.wbCard.upsert({
+    where: { nmId: card.nmId },
+    update: { /* ...existing fields..., */ stockQty: totalStockQty },
+    create: { /* ...existing fields..., */ stockQty: totalStockQty },
+  })
+
+  // 2. Удаляем старые warehouse breakdown записи, которых больше нет
+  const currentWhIds = warehouseBreakdown.map(w => w.warehouseId)
+  await tx.wbCardWarehouseStock.deleteMany({
+    where: { wbCardId: wbCard.id, warehouseId: { notIn: currentWhIds } },
+  })
+
+  // 3. Upsert актуальные
+  for (const w of warehouseBreakdown) {
+    await tx.wbCardWarehouseStock.upsert({
+      where: { wbCardId_warehouseId: { wbCardId: wbCard.id, warehouseId: w.warehouseId } },
+      update: { quantity: w.quantity },
+      create: { wbCardId: wbCard.id, warehouseId: w.warehouseId, quantity: w.quantity },
+    })
   }
-  return NextResponse.next();
-}
-export const config = { matcher: ['/((?!api|_next|login|public).*)'] };
+})
 ```
 
-### Permission layers
-
-| Layer | Enforcement | Purpose |
-|-------|------------|---------|
-| middleware.ts | Before request — full redirect | Route-level section access |
-| Server Action | Inside mutation | Prevent API-level bypass |
-| UI Components | Client-side only | Hide buttons/links (UX, not security) |
-
-Superadmin (role = "superadmin") bypasses section checks and can create/edit users via a dedicated `/admin/users` route protected by role check, not section check.
-
----
-
-## File Upload Architecture
-
-Storage: `/public/uploads/products/{productId}/photo.jpg` on VPS filesystem.
-
-The `/public` directory is served directly by Next.js (Node.js server) as static files, with nginx proxying `/uploads` as a static location for performance.
-
-```
-# nginx config snippet
-location /uploads/ {
-    root /opt/zoiten-pro/public;
-    expires 7d;
-    add_header Cache-Control "public, immutable";
-}
+**Миграция «stockQty = SUM(WbCardWarehouseStock.quantity)» НЕ НУЖНА отдельно** — первая же полная синхронизация после деплоя Phase 14 перезапишет `stockQty` корректно (уже была sum по складам, будет та же sum с новым источником). Если хочется sanity-check — одноразовый SQL сверки в deploy hook:
+```sql
+-- Должно быть 0 расхождений после первой полной sync
+SELECT wc.id, wc."stockQty", COALESCE(SUM(ws.quantity), 0) AS breakdown_sum
+FROM "WbCard" wc
+LEFT JOIN "WbCardWarehouseStock" ws ON ws."wbCardId" = wc.id
+GROUP BY wc.id
+HAVING wc."stockQty" IS DISTINCT FROM COALESCE(SUM(ws.quantity), 0);
 ```
 
-Upload flow in `app/api/uploads/route.ts`:
-1. Receive `multipart/form-data` via `request.formData()`.
-2. Validate MIME type (JPEG/PNG only), size (max 2MB), presence of productId.
-3. Sharp library: resize to max 2000px tall, enforce 3:4 crop if needed, convert to JPEG.
-4. Write to `public/uploads/products/{productId}/photo.jpg` (overwrite existing).
-5. Return `{ url: '/uploads/products/{productId}/photo.jpg' }`.
-6. Client stores URL in product form state, saves to DB on product submit.
+## Per-warehouse sync pattern — выбор стратегии
 
-**Why Route Handler (not Server Action) for uploads:** Server Actions use JSON serialization by default — binary file data requires a Route Handler that accepts `multipart/form-data` natively via the Web Request API.
+| Стратегия | Плюсы | Минусы | Подходит? |
+|-----------|-------|--------|-----------|
+| **A: deleteMany + createMany** | Проще кода, 2 запроса | Foreign key cascade/trigger issues в будущем; теряет `updatedAt` history (все updatedAt одинаковые) | ✗ |
+| **B: upsert по @@unique + deleteMany(notIn)** | Stable `updatedAt` per row, cleanly removes gone warehouses | 2-3 запроса per card × 50 cards × 50 warehouses = ~5000 queries | ✓ (РЕКОМЕНДУЕТСЯ) |
+| **C: temp table + swap** | Atomic batch | Overkill для 2500 строк; сложная Prisma реализация (нужен $executeRaw) | ✗ |
 
----
+**Решение:** Стратегия B. При ~50 товарах × ~50 складов = 2500 строк сумма query достижимо за 5-10 секунд в PostgreSQL 16 и рамках текущего `maxDuration = 300` для `/api/wb-sync`. Если окажется медленно — миграция на `createMany({ skipDuplicates })` + отдельный `updateMany` для изменившихся quantity; но profile-first, optimize-second.
 
-## Anti-Patterns to Avoid
+**Оптимизация (если медленно):** Батчить upserts через `Promise.all` по 10 карточек. НО осторожно с `$transaction` scope — либо одна транзакция на всю синхронизацию (долгая транзакция = lock risk), либо per-card (race window на `stockQty`/breakdown). **Рекомендация: per-card транзакция** (как выше в code snippet) — это уже atomic guarantee для single product.
 
-### Anti-Pattern 1: Prisma calls in page.tsx / Server Actions directly
-**What:** Importing `prisma` directly into page files or Server Actions.
-**Why bad:** Bypasses service layer, scatters business logic, untestable, leads to duplicated query logic.
-**Instead:** All Prisma calls go through `lib/services/*.service.ts`.
+## RSC data assembly — `/stock/page.tsx`
 
-### Anti-Pattern 2: Client Components for all pages
-**What:** Adding `"use client"` to product list pages to use hooks.
-**Why bad:** Sends all product data-fetching JS to the browser, loses RSC streaming benefits, larger JS bundle.
-**Instead:** Keep pages as RSC, use Client Components only for interactive islands (forms, modals, search input).
+### Какая агрегация в SQL, какая в JS?
 
-### Anti-Pattern 3: JSON column for marketplace articles
-**What:** Storing `{ "WB": ["123", "456"], "Ozon": ["789"] }` in a JSON column on Product.
-**Why bad:** Cannot index individual articles, cannot enforce uniqueness, cannot add per-article metadata later.
-**Instead:** Separate `MarketplaceArticle` table (already in schema above).
+| Уровень агрегации | Где считать | Почему |
+|-------------------|-------------|--------|
+| **Per-warehouse quantity** | SQL (no sum — это raw record) | Просто `findMany` |
+| **Per-cluster sum (ЦФО total per nmId)** | JS | Cluster stored denormalized в `WbWarehouse.shortCluster` — group в JS после fetch |
+| **WB-total per nmId** (sum всех warehouses) | JS (re-use `WbCard.stockQty` если доступно, иначе sum) | Быстрее из единого поля |
+| **MP-sum per Product** (sum по всем WbCard одного Product) | JS | Нужен `Map<productId, nmId[]>` контекст |
+| **RF-total per Product** (MP-sum + ivanovoStock + productionStock) | JS | Single formula |
+| **Oz-stub** | JS (константа 0) | Phase 14 не делает Ozon |
+| **Z (avg orders/day 7d)** | JS (re-use `WbCard.avgSalesSpeed7d`) | Уже в БД |
+| **Об (turnover days)** | JS | `quantity / salesSpeed` |
+| **Д (deficit shortage)** | JS | `max(0, salesSpeed × turnoverNormDays - quantity)` |
 
-### Anti-Pattern 4: Client-only RBAC
-**What:** Hiding UI elements based on session role, but not enforcing in Server Actions.
-**Why bad:** Any user who knows the Server Action endpoint can call it directly from DevTools.
-**Instead:** Check role/sections at the start of every Server Action that mutates data.
+**Обоснование JS-агрегации:** Данных мало (50 товаров × 50 складов = 2500 rows), одна страница — всё помещается в память. Попытка делать агрегации в SQL потребовала бы несколько `$queryRaw` с GROUP BY cluster — сложнее тестировать, хуже DX с Prisma. JS-агрегация тривиальна и читаема. **Точно как в `/prices/wb/page.tsx`** — там 267 карточек тоже агрегируются в JS.
 
-### Anti-Pattern 5: Storing photos in database (BLOB/bytea)
-**What:** Saving image binary data as a bytea field in PostgreSQL.
-**Why bad:** Bloats DB, slows backups, no CDN caching, PostgreSQL not optimized for binary streaming.
-**Instead:** Filesystem path (already decided in PROJECT.md).
+### Нужен ли отдельный подраздел `/stock/wb`?
 
----
+**Рекомендация: Да, отдельный `/stock/wb`.**
 
-## Suggested Build Order
+Обоснование:
+- PROJECT.md явно пишет: «Подраздел `/stock/wb` с per-nmId × per-кластер × per-склад разрезом».
+- Главная `/stock` — Product-level агрегация (РФ/Иваново/Производство/МП-sum/WB-sum/Ozon) — **row per Product**.
+- `/stock/wb` — nmId-level детализация с expand до конкретных складов — **row per WbCard**, колонки per cluster, expand per warehouse.
 
-Dependencies determine order. Later phases rely on foundations from earlier ones.
+Это разные UI с разной информационной плотностью и пользовательскими сценариями. Объединять — перегружать главный экран. Из паттерна `/prices/wb` очевидно, что проект уже использует suffix-routes (`/cards/wb`, `/prices/wb`, `/cards/ozon`) — согласованно продолжить.
 
-### Phase 1: Foundation
-**Build:** Prisma schema + migrations, PrismaClient singleton, NextAuth credentials + JWT session, RBAC middleware skeleton, root layout, sidebar navigation shell.
+**Структура навигации:**
+```
+/stock             ← Product-level дашборд (главная)
+/stock/wb          ← WB per-warehouse детализация
+/stock/ozon        ← ComingSoon stub (Ozon в v1.3+)
+```
 
-**Why first:** Everything else depends on auth working and the DB schema being in place. Schema migrations are expensive to change once data exists.
+## Cluster expand/collapse state management
 
-**Delivers:** Can log in, see empty dashboard, routing works.
+**Вопрос из брифа:** URL searchParams vs localStorage?
 
-### Phase 2: Admin — User Management
-**Build:** Superadmin user CRUD (`/admin/users`), bcrypt password hashing, section assignment UI, role-based sidebar filtering.
+**Рекомендация: URL searchParams** — `?expandedClusters=cfo,yug`.
 
-**Why second:** Needed before adding real team members. Superadmin must exist before other users.
+| Критерий | searchParams (рекомендуется) | localStorage |
+|----------|------------------------------|--------------|
+| Shareable link | ✓ «Посмотри дефицит ЦФО+Урал» | ✗ |
+| Server-side rendering | ✓ RSC знает состояние | ✗ постфлеш |
+| Cross-device | ✓ | ✗ |
+| Consistency с существующим кодом | ✓ `/prices/wb` использует searchParams (brands, stock, promos, calc) | ✗ |
+| Persistence после logout/logout | neutral | ✓ но не критично |
 
-**Delivers:** sergey.fyodorov@gmail.com can create team accounts.
+**Исключение:** `UserPreference` (JSON key-value per user) используется **только для ширин столбцов и hidden columns** (см. `getUserPreference<Record<string, number>>("prices.wb.columnWidths")`) — это правильный scope для per-user UI persisted state. Для expand — searchParams.
 
-### Phase 3: Reference Data
-**Build:** Brand CRUD, Category/Subcategory CRUD (per-brand), Marketplace management (seed WB/Ozon/ДМ/ЯМ + add custom).
+**Количество одновременно раскрытых кластеров:** все 7 expandable независимо (как folders в file explorer). НЕ «один за раз» — при 7 кластерах пользователь может хотеть видеть 2-3 одновременно для сравнения. Дефолт — все collapsed.
 
-**Why third:** Products depend on brands and categories. These are lookup tables — create them before the main entity.
+## Integration points — extended API design
 
-**Delivers:** Data dictionaries populated.
+### `POST /api/wb-sync` — расширение
 
-### Phase 4: Products Module (Core)
-**Build:** Product CRUD (list, create, edit, delete), photo upload (Route Handler + Sharp), marketplace articles (up to 10 per MP), barcodes (1-20), soft delete, auto-volume calculation, copy product action, filters by availability/category/ABC.
+**Изменения в `route.ts`:**
+- Line 15: add `fetchStocksPerWarehouse` import (keep `fetchStocks` для fallback)
+- Line 45: replace `fetchStocks()` call. New return: `Map<nmId, Array<{warehouseId, warehouseName, quantity}>>`
+- Line 89-153: wrap in `prisma.$transaction` per card, add breakdown write after WbCard upsert
 
-**Why fourth:** The core ERP value. Depends on all prior phases.
+**Новое: seed/auto-register WbWarehouse на лету.**
 
-**Delivers:** MVP — the primary stated value of the system.
+WB Statistics API возвращает `warehouseName` + `warehouseId` в каждой записи. Предварительный seed skрипт — отдельная задача (см. Build order ниже), но **wb-sync должен корректно обрабатывать unknown warehouseId**: либо upsert в WbWarehouse с `cluster = "UNKNOWN"` (flag для админа «разметь кластер»), либо skip с warning. **Рекомендация: upsert с `cluster = "UNKNOWN"`** — не ломает sync если администратор добавил новый склад в кабинет WB, а мы не успели обновить справочник.
 
-### Phase 5: Module Stubs + Home Page
-**Build:** Animated landing page (Framer Motion), stub pages for Prices/Weekly/Inventory/Batches/Purchase Plan/Sales Plan, Support section integration from ai-cs-zoiten.
+### `POST /api/stock-ivanovo-upload` — новый endpoint
 
-**Why last:** Pure UI with no new data dependencies. Support integration is external code — treat as last-mile integration risk.
+**Паттерн — полная копия `POST /api/wb-promotions-upload-excel`:**
+1. `requireSection("STOCK", "MANAGE")`
+2. `formData()` → `file` field
+3. `Buffer.from(await file.arrayBuffer())`
+4. Новая pure-функция `lib/parse-ivanovo-stock-excel.ts` (testable via vitest fixture)
+5. Validation: формат колонок (УКТ, остаток), формат SKU `УКТ-\d{6}`
+6. Transaction: `updateMany` per sku → `Product.ivanovoStock`
+7. Return: `{ imported: N, unknownSkus: [...] }`
 
-**Delivers:** Product feels complete even before future modules are built.
+**Edge case: SKU не найден в БД** — вернуть в response, UI покажет пользователю список «эти УКТ не распознаны».
 
----
+### Server actions — `app/actions/stock.ts`
 
-## Scalability Considerations
+```typescript
+// updateProductionStock(productId, quantity)
+"use server"
+await requireSection("STOCK", "MANAGE")
+const parsed = z.number().int().min(0).max(999999).parse(quantity)
+await prisma.product.update({ where: { id: productId }, data: { productionStock: parsed } })
+revalidatePath("/stock")
 
-This system is purposefully scoped for 10 users and 50-200 products. These decisions hold at that scale. Notes for growth:
+// updateStockTurnoverNormDays(days)
+"use server"
+await requireSection("STOCK", "MANAGE")
+const parsed = z.number().int().min(1).max(100).parse(days)
+await prisma.appSetting.upsert({
+  where: { key: "stock.turnoverNormDays" },
+  update: { value: String(parsed), updatedBy: session.user.id },
+  create: { key: "stock.turnoverNormDays", value: String(parsed), updatedBy: session.user.id },
+})
+revalidatePath("/stock"); revalidatePath("/stock/wb")
+```
 
-| Concern | At current scale (50-200 products) | At 10x scale (2000+ products) |
-|---------|-------------------------------------|-------------------------------|
-| Photos | Local filesystem, served by Next.js | Move to S3/Cloudflare R2 (change only `upload.service.ts`) |
-| Auth | JWT sessions, 10 concurrent users | No change needed |
-| DB | Single Postgres on VPS | Add read replica, connection pooling (PgBouncer) |
-| API | No external API needed | Add versioned Route Handlers if mobile app needed |
-| RBAC | sections[] on User | Extract to Permission model + policy table |
+### Revalidation strategy
 
----
+- После write — `revalidatePath("/stock")` + `revalidatePath("/stock/wb")` — обе страницы разделяют источники.
+- `router.refresh()` на клиенте после mutation — уже паттерн проекта (см. GlobalRatesBar debounced save).
+
+## Suggested build order — 7 планов внутри Phase 14
+
+```
+14-01  Schema + routing rename (/inventory → /stock)
+14-02  WbWarehouse seed script
+14-03  wb-sync extension (per-warehouse write)
+14-04  Excel upload + parser (Иваново остатки)
+14-05  Production stock manual input + turnover norm
+14-06  /stock RSC page + flat table (without cluster expand)
+14-07  /stock/wb + cluster expand + per-warehouse detail
+```
+
+### Обоснование последовательности
+
+**14-01 (Schema + routing) — первый.** Все следующие планы опираются на наличие моделей и /stock route. Routing rename делается одной миграцией в одной PR/commit, чтобы не оставлять кодовую базу с полуживым `/inventory`.
+
+**14-02 (WbWarehouse seed) — независим от 14-01 по коду, но зависит по БД.** Можно параллелить 14-02 и 14-03 при многочеловечной работе; в одиночку — последовательно.
+
+**14-03 (wb-sync extension) — зависит от 14-01 и 14-02.** WbCardWarehouseStock требует WbWarehouse records (FK Restrict). Если 14-02 не готов — добавить `upsert UNKNOWN cluster` fallback (см. выше) даёт independency.
+
+**14-04 (Excel Иваново) + 14-05 (Production manual) — независимы друг от друга**, оба зависят только от 14-01 (новые поля Product). Можно параллелить.
+
+**14-06 (/stock flat table) — зависит от 14-01, 14-03, 14-04, 14-05** (нужны данные из всех источников). Сознательно без cluster expand — сначала validate агрегации и UI, потом усложняем.
+
+**14-07 (cluster expand + /stock/wb)** — финальный UX polish. Может задержаться на один релиз без блока остальной функциональности — остатки уже видны.
+
+### Критические зависимости
+
+```
+14-01 ─────┬─→ 14-02 ─────┐
+           │              ├─→ 14-03 ─────┐
+           │              │              │
+           ├─────→ 14-04 ─┼──────────────┼─→ 14-06 ─→ 14-07
+           │              │              │
+           └─────→ 14-05 ─┴──────────────┘
+```
+
+## Паттерны (заимствуем из Phase 7)
+
+### Sticky table — `PriceCalculatorTable` как reference
+
+- 4 sticky колонки слева: Фото / Сводка / Ярлык / Артикул
+- rowSpan группировка: Product → WbCard → rows
+- content-visibility для производительности при 50+ товарах (проверено в Phase 7)
+- Per-user сохранение ширин столбцов через `UserPreference` с key `"stock.main.columnWidths"`
+
+**Для `/stock` table — те же паттерны:**
+- Sticky left: Фото / УКТ / Название
+- Sticky right: Об / Д (дефицит) — чтобы пользователь всегда видел итоги
+- rowSpan: Product row занимает N строк, где N = количество связанных WbCard (или 1 для товаров без WB карточек)
+
+### AppSetting debounced save — `GlobalRatesBar` pattern
+
+- `useDeferredValue` или lodash-debounce 500ms
+- `router.refresh()` после save для пересчёта всех Об/Д на странице
+- Zod validation server-side + client-side
+
+### Excel upload — `WbAutoPromoUploadButton` pattern
+
+- Hidden file input + styled button
+- Client-side file type validation (.xlsx only)
+- Progress toast (sonner)
+- Response: `{ imported, unknownSkus }` → показываем список нераспознанных УКТ
+
+## Anti-patterns (избегаем)
+
+### Anti-pattern 1: Считать stockQty на read-side
+
+**Плохо:** `/stock` RSC делает `SUM(WbCardWarehouseStock.quantity) GROUP BY wbCardId` на каждом рендере.
+
+**Почему плохо:** дублирует work wb-sync, медленный, лишняя нагрузка на БД при N пользователях смотрящих /stock.
+
+**Правильно:** `WbCard.stockQty` — already-aggregated, пишется раз при синхронизации.
+
+### Anti-pattern 2: Агрегация кластеров в SQL через $queryRaw
+
+**Плохо:** `SELECT cluster, SUM(quantity) FROM WbCardWarehouseStock JOIN WbWarehouse GROUP BY cluster, wbCardId`
+
+**Почему плохо:** Prisma-incompatible типы (raw SQL), сложнее тестировать, не даёт значимого выигрыша на 2500 rows.
+
+**Правильно:** fetch flat, group в JS как в `/prices/wb`.
+
+### Anti-pattern 3: Писать stockQty из нескольких мест
+
+**Плохо:** вручную апдейтить `stockQty` в UI action «пересчитать остатки».
+
+**Почему плохо:** рассинхронизация WbCard.stockQty ≠ SUM(WbCardWarehouseStock.quantity) → bugs в отчётах.
+
+**Правильно:** Single writer = wb-sync route. Всегда рассчитываем sum в той же транзакции, где пишем breakdown.
+
+### Anti-pattern 4: Дёргать Orders API повторно для `avgSalesSpeed7d`
+
+**Плохо:** В `/stock` page.tsx делать `fetchAvgSalesSpeed7d()` при рендере.
+
+**Почему плохо:** WB Orders API rate-limited (~1 req/min), блокирует render.
+
+**Правильно:** Reuse уже синхронизированного `WbCard.avgSalesSpeed7d` (pasted wb-sync в Phase 7).
+
+## Scalability considerations
+
+| Concern | Сейчас (50 товаров) | 200 товаров (цель MVP+) | 1000 товаров (hypothetical) |
+|---------|---------------------|-------------------------|------------------------------|
+| `/api/wb-sync` duration | ~2 мин | ~5-8 мин | Нужен queue (BullMQ) |
+| /stock RSC render | <500ms | <2s | Нужен cursor pagination |
+| Excel upload rows | <100 | <300 | >1000 — batchBacked processing |
+| WbCardWarehouseStock rows | 2500 | 10000 | 50000 — `@@index([cluster])` критичен |
+
+**MVP достаточно: 50-200 товаров.** Phase 14 не требует pagination, BullMQ или других масштабирующих механизмов.
+
+## Open questions — для phase-specific research
+
+- **WbWarehouse seed source** — исходный формат страницы seller.wildberries.ru/suppliers (HTML scrape из DevTools vs export). Отдельный research в Plan 14-02.
+- **Excel формат Иваново** — нужен реальный sample файл от клиента. Отдельный research в Plan 14-04 с фикстурой.
+- **Точность WB Statistics warehouseName** — мониторить в prod: случаются ли «unknown warehouses» в Statistics API, которых нет в seed? Fallback cluster="UNKNOWN" страхует.
 
 ## Sources
 
-- [Building APIs with Next.js (Official, Feb 2025)](https://nextjs.org/blog/building-apis-with-nextjs) — HIGH confidence
-- [Auth.js Role-Based Access Control (Official)](https://authjs.dev/guides/role-based-access-control) — HIGH confidence
-- [Next.js Project Structure (Official)](https://nextjs.org/docs/app/getting-started/project-structure) — HIGH confidence
-- [Next.js 16 App Router Project Structure — Makerkit](https://makerkit.dev/blog/tutorials/nextjs-app-router-project-structure) — MEDIUM confidence
-- [Enterprise Patterns with the Next.js App Router — Medium](https://medium.com/@vasanthancomrads/enterprise-patterns-with-the-next-js-app-router-ff4ca0ef04c4) — MEDIUM confidence
-- [Feature-Driven Architecture with Next.js — DEV Community](https://dev.to/rufatalv/feature-driven-architecture-with-nextjs-a-better-way-to-structure-your-application-1lph) — MEDIUM confidence
+- `C:\Claude\zoiten-pro\prisma\schema.prisma` (existing schema, lines 167-212 WbCard, 428-433 AppSetting, 436-463 CalculatedPrice) — HIGH
+- `C:\Claude\zoiten-pro\lib\wb-api.ts` (lines 182-208 fetchStocks, 748-814 fetchAvgSalesSpeed7d) — HIGH
+- `C:\Claude\zoiten-pro\app\api\wb-sync\route.ts` (lines 45, 80, 110, 142 — writes stockQty in 5 places) — HIGH
+- `C:\Claude\zoiten-pro\app\(dashboard)\prices\wb\page.tsx` (lines 245, 582-587 — card.stockQty читается) — HIGH
+- `C:\Claude\zoiten-pro\components\cards\WbCardsTable.tsx:361-362` (card.stockQty в UI таблицы карточек) — HIGH
+- `C:\Claude\zoiten-pro\lib\sections.ts:11` (/inventory → STOCK — **расхождение с PROJECT.md**) — HIGH
+- `C:\Claude\zoiten-pro\app\(dashboard)\inventory\page.tsx` (existing stub с ComingSoon) — HIGH
+- `C:\Claude\zoiten-pro\components\layout\nav-items.ts:34` (href="/inventory") — HIGH
+- `C:\Claude\zoiten-pro\app\api\wb-promotions-upload-excel\route.ts` (Excel upload pattern reference) — HIGH
+- `.planning\PROJECT.md` (target features, ключевой контекст milestone) — HIGH
+- `CLAUDE.md` (Phase 7 architecture, WB API details) — HIGH
