@@ -221,18 +221,18 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### `/stock/wb` — подраздел (per-nmId + кластеры)
 
-- [ ] **STOCK-21**: Табы `/stock` / `/stock/wb` / `/stock/ozon` — компонент `StockTabs` (паттерн `PricesTabs`); `/stock/ozon` = `<ComingSoon sectionName="Управление остатками Ozon" />`.
-- [ ] **STOCK-22**: RSC `/stock/wb` — таблица с rowSpan per Product → per WbCard (nmId); sticky колонки те же 4 + первые 4 data-колонки (РФ/Иваново/Производство/МП-сумма) как сводка; далее 7 кластерных колонок (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) каждая с О/З/Об/Д.
+- [x] **STOCK-21**: Табы `/stock` / `/stock/wb` / `/stock/ozon` — компонент `StockTabs` (паттерн `PricesTabs`); `/stock/ozon` = `<ComingSoon sectionName="Управление остатками Ozon" />`.
+- [x] **STOCK-22**: RSC `/stock/wb` — таблица с rowSpan per Product → per WbCard (nmId); sticky колонки те же 4 + первые 4 data-колонки (РФ/Иваново/Производство/МП-сумма) как сводка; далее 7 кластерных колонок (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) каждая с О/З/Об/Д.
 - [x] **STOCK-23**: Маппинг кластеров денормализован в `WbWarehouse.shortCluster` (при seed и auto-insert) — значения из набора `{ЦФО, ЮГ, Урал, ПФО, СЗО, СФО, Прочие}`. Full names в статическом `lib/wb-clusters.ts` (`CLUSTER_FULL_NAMES` map).
-- [ ] **STOCK-24**: Tooltip при hover на сокращённом названии кластера — shadcn `<Tooltip>` (уже в проекте) показывает full name из `CLUSTER_FULL_NAMES` + список склада-источников, если нужно.
-- [ ] **STOCK-25**: Expand кластера → replace кластерных О/З/Об/Д на набор per-warehouse columns внутри этого кластера; state в URL (`?expandedClusters=ЦФО,ПФО` comma-separated, human-readable); toggle-кнопки «Развернуть все / Свернуть все» в toolbar; shareable ссылки.
+- [x] **STOCK-24**: Tooltip при hover на сокращённом названии кластера — shadcn `<Tooltip>` (уже в проекте) показывает full name из `CLUSTER_FULL_NAMES` + список склада-источников, если нужно.
+- [x] **STOCK-25**: Expand кластера → replace кластерных О/З/Об/Д на набор per-warehouse columns внутри этого кластера; state в URL (`?expandedClusters=ЦФО,ПФО` comma-separated, human-readable); toggle-кнопки «Развернуть все / Свернуть все» в toolbar; shareable ссылки.
 
 ### Testing & Deploy
 
 - [x] **STOCK-26**: Vitest `tests/stock-math.test.ts` — 5+ test cases: happy path, О=null, З=0, normDays=0, normDays=100, О=0 (дефицит максимальный).
 - [x] **STOCK-27**: Vitest `tests/normalize-sku.test.ts` — canonical cases: `УКТ-000001` / `УКТ-1` / `1` / ` укт-000001 ` / `УКТ—000001` (em-dash) → все в `УКТ-000001`; invalid cases: `abc`, `УКТ-`, пустая строка → throw.
 - [x] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
-- [ ] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
+- [x] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
 
 ## v2 Requirements
 
@@ -447,15 +447,15 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-18 | Phase 14 | Complete |
 | STOCK-19 | Phase 14 | Complete |
 | STOCK-20 | Phase 14 | Complete |
-| STOCK-21 | Phase 14 | Pending |
-| STOCK-22 | Phase 14 | Pending |
+| STOCK-21 | Phase 14 | Complete |
+| STOCK-22 | Phase 14 | Complete |
 | STOCK-23 | Phase 14 | Complete |
-| STOCK-24 | Phase 14 | Pending |
-| STOCK-25 | Phase 14 | Pending |
+| STOCK-24 | Phase 14 | Complete |
+| STOCK-25 | Phase 14 | Complete |
 | STOCK-26 | Phase 14 | Complete |
 | STOCK-27 | Phase 14 | Complete |
 | STOCK-28 | Phase 14 | Complete |
-| STOCK-29 | Phase 14 | Pending |
+| STOCK-29 | Phase 14 | Complete |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
