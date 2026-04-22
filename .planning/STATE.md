@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase complete — ready for verification
+status: Milestone complete
 stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
-last_updated: "2026-04-22T09:13:44.861Z"
+last_updated: "2026-04-22T09:22:17.821Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 15 (per-cluster-orders) — EXECUTING
-Plan: 3 of 3
+Phase: 15
+Plan: Not started
 
 ## Performance Metrics
 
