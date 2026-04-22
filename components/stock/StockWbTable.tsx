@@ -4,7 +4,7 @@
 // Phase 14 (STOCK-22, STOCK-25): Client sticky-таблица /stock/wb с 7 кластерными колонками + expand.
 // URL state: ?expandedClusters=ЦФО,ПФО — shareable.
 
-import React, { useCallback } from "react"
+import React, { useCallback, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
 import { ClusterTooltip } from "./ClusterTooltip"
+import { WarehouseVisibilityPopover } from "./WarehouseVisibilityPopover"
 import type { ProductWbGroup, StockWbDataResult } from "@/lib/stock-wb-data"
 
 function formatStockValue(n: number): string {
@@ -35,6 +36,7 @@ interface Props {
   groups: ProductWbGroup[]
   turnoverNormDays: number
   clusterWarehouses: StockWbDataResult["clusterWarehouses"]
+  hiddenWarehouseIds: number[] // quick 260422-oy5 — per-user hidden warehouses
 }
 
 function StockCell({ value }: { value: number | null }) {
@@ -77,7 +79,7 @@ function isSortingCenter(name: string): boolean {
   return /^СЦ\s/i.test(name.trim())
 }
 
-export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Props) {
+export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -88,14 +90,24 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
   // По умолчанию СЦ скрыты. Явно "?hideSc=0" → показывать все склады.
   const hideSc = searchParams.get("hideSc") !== "0"
 
+  // Quick 260422-oy5: optimistic локальный state для per-user hidden warehouses.
+  // RSC revalidatePath синхронизирует с БД при следующем render — для optimistic
+  // совпадает с тем что persist отправляет, спец. useEffect-синхронизация не нужна.
+  const [hiddenIds, setHiddenIds] = useState<number[]>(hiddenWarehouseIds)
+  const hiddenSet = new Set(hiddenIds)
+
   // Отфильтрованные карты складов per-cluster для отображения при expand.
   // Агрегация на уровне кластера (collapsed view) всё равно использует все склады.
   const visibleClusterWarehouses: typeof clusterWarehouses = Object.fromEntries(
     CLUSTER_ORDER.map((c) => [
       c,
-      hideSc
-        ? (clusterWarehouses[c] ?? []).filter((w) => !isSortingCenter(w.warehouseName))
-        : (clusterWarehouses[c] ?? []),
+      (clusterWarehouses[c] ?? []).filter((w) => {
+        // Фильтр 1: СЦ по кнопке hideSc
+        if (hideSc && isSortingCenter(w.warehouseName)) return false
+        // Фильтр 2: per-user hidden (quick 260422-oy5)
+        if (hiddenSet.has(w.warehouseId)) return false
+        return true
+      }),
     ])
   ) as typeof clusterWarehouses
 
@@ -143,6 +155,11 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
         >
           {hideSc ? "Без СЦ" : "Все склады"}
         </Button>
+        <WarehouseVisibilityPopover
+          clusterWarehouses={clusterWarehouses}
+          hiddenIds={hiddenIds}
+          onChange={setHiddenIds}
+        />
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">

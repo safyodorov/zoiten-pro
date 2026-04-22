@@ -61,6 +61,9 @@ model User {
   role             UserRole              @default(VIEWER)
   allowedSections  ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
   sectionRoles     UserSectionRole[] // актуальный источник прав per раздел
+  // Per-user список скрытых WB-складов на странице /stock/wb (quick 260422-oy5).
+  // Чисто визуальный фильтр — НЕ влияет на агрегаты.
+  stockWbHiddenWarehouses Int[]                 @default([])
   preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
   assignedTickets  SupportTicket[]       @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
   authoredMessages SupportMessage[]      @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения

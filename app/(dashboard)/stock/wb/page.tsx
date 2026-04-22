@@ -1,7 +1,10 @@
 // app/(dashboard)/stock/wb/page.tsx
 // Phase 14 (STOCK-22, STOCK-25): RSC /stock/wb — nmId-level с кластерами.
+// Quick 260422-oy5: per-user фильтр скрытых WB-складов (User.stockWbHiddenWarehouses).
 
 import { requireSection } from "@/lib/rbac"
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
 import { getStockWbData } from "@/lib/stock-wb-data"
 import { StockWbTable } from "@/components/stock/StockWbTable"
 
@@ -11,7 +14,17 @@ export const metadata = {
 
 export default async function StockWbPage() {
   await requireSection("STOCK")
-  const data = await getStockWbData()
+  const [data, session] = await Promise.all([getStockWbData(), auth()])
+
+  // Quick 260422-oy5: per-user фильтр скрытых WB-складов
+  let hiddenWarehouseIds: number[] = []
+  if (session?.user?.id) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { stockWbHiddenWarehouses: true },
+    })
+    hiddenWarehouseIds = user?.stockWbHiddenWarehouses ?? []
+  }
 
   if (data.groups.length === 0) {
     return (
@@ -32,6 +45,7 @@ export default async function StockWbPage() {
         groups={data.groups}
         turnoverNormDays={data.turnoverNormDays}
         clusterWarehouses={data.clusterWarehouses}
+        hiddenWarehouseIds={hiddenWarehouseIds}
       />
     </div>
   )
