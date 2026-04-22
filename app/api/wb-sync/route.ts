@@ -14,7 +14,8 @@ import {
   fetchStandardCommissions,
   fetchStocks,
   fetchBuyoutPercent,
-  fetchAvgSalesSpeed7d,
+  fetchOrdersPerWarehouse,
+  type OrdersWarehouseStats,
   fetchStocksPerWarehouse,
   type WarehouseStockItem,
 } from "@/lib/wb-api"
@@ -79,17 +80,14 @@ export async function POST(): Promise<NextResponse> {
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
     const discountMap = await fetchWbDiscounts(nmIds)
 
-    // 8. Phase 7 (D-09): скорость заказов за 7 дней + заказы вчера
-    //    Degraded mode — если Orders API недоступен, поля останутся null,
-    //    основной sync не ломается.
-    let ordersStatsMap = new Map<
-      number,
-      { avg7d: number; yesterday: number }
-    >()
+    // 8. Phase 7 (D-09) + Phase 15 (ORDERS-02): заказы за 7 дней — per-card avg/yesterday + per-warehouse breakdown.
+    // Один запрос к Orders API (rate limit ~1 req/min) покрывает обе задачи.
+    // Degraded mode — если Orders API недоступен, поля останутся null, per-warehouse блок пропускается.
+    let ordersPerWarehouseMap = new Map<number, OrdersWarehouseStats>()
     try {
-      ordersStatsMap = await fetchAvgSalesSpeed7d(nmIds)
+      ordersPerWarehouseMap = await fetchOrdersPerWarehouse(nmIds, 7)
     } catch (e) {
-      console.error("fetchAvgSalesSpeed7d failed:", e)
+      console.error("fetchOrdersPerWarehouse failed:", e)
     }
 
     let synced = 0
@@ -107,8 +105,8 @@ export async function POST(): Promise<NextResponse> {
         const clubDiscount = priceData?.clubDiscount ?? null
         const stockQty = stockMap.get(card.nmId) ?? null
         const buyoutPct = buyoutMap.get(card.nmId) ?? null
-        const ordersStats = ordersStatsMap.get(card.nmId)
-        const avgSalesSpeed7d = ordersStats?.avg7d ?? null
+        const ordersStats = ordersPerWarehouseMap.get(card.nmId)
+        const avgSalesSpeed7d = ordersStats?.avg ?? null
         const ordersYesterday = ordersStats?.yesterday ?? null
 
         const stdComm = commMap.get(raw.subjectID)
@@ -281,12 +279,108 @@ export async function POST(): Promise<NextResponse> {
       }
     }
 
+    // Phase 15 (ORDERS-02): Clean-replace per-warehouse orders
+    let warehouseOrdersUpdated = 0
+    if (ordersPerWarehouseMap.size > 0) {
+      try {
+        await prisma.$transaction(
+          async (tx) => {
+            for (const [nmId, stats] of ordersPerWarehouseMap.entries()) {
+              const card = await tx.wbCard.findUnique({
+                where: { nmId },
+                select: { id: true },
+              })
+              if (!card) continue
+
+              const incomingWarehouseIds: number[] = []
+
+              for (const [warehouseName, ordersCount] of stats.perWarehouse.entries()) {
+                if (!warehouseName) continue
+
+                // Lookup by name FIRST — seed+stocks section уже могли создать этот склад
+                const existingByName = await tx.wbWarehouse.findFirst({
+                  where: { name: warehouseName },
+                  select: { id: true },
+                })
+
+                let warehouseId: number
+                if (existingByName) {
+                  warehouseId = existingByName.id
+                } else {
+                  warehouseId = stableWarehouseIdFromName(warehouseName)
+                  console.warn(
+                    `[wb-sync orders] Auto-insert неизвестный склад: id=${warehouseId} name="${warehouseName}"`,
+                  )
+                  await tx.wbWarehouse.create({
+                    data: {
+                      id: warehouseId,
+                      name: warehouseName,
+                      cluster: "Прочие склады",
+                      shortCluster: "Прочие",
+                      isActive: true,
+                      needsClusterReview: true,
+                    },
+                  })
+                }
+
+                incomingWarehouseIds.push(warehouseId)
+
+                await tx.wbCardWarehouseOrders.upsert({
+                  where: {
+                    wbCardId_warehouseId: {
+                      wbCardId: card.id,
+                      warehouseId,
+                    },
+                  },
+                  create: {
+                    wbCardId: card.id,
+                    warehouseId,
+                    ordersCount,
+                    periodDays: stats.periodDays,
+                  },
+                  update: {
+                    ordersCount,
+                    periodDays: stats.periodDays,
+                  },
+                })
+              }
+
+              // Clean: удалить склады которых нет в текущем ответе API
+              if (incomingWarehouseIds.length > 0) {
+                await tx.wbCardWarehouseOrders.deleteMany({
+                  where: {
+                    wbCardId: card.id,
+                    NOT: { warehouseId: { in: incomingWarehouseIds } },
+                  },
+                })
+              } else {
+                // Если кластеры пустые но card есть — обнуляем полностью (редкий кейс)
+                await tx.wbCardWarehouseOrders.deleteMany({
+                  where: { wbCardId: card.id },
+                })
+              }
+
+              warehouseOrdersUpdated++
+            }
+          },
+          { timeout: 60_000 },
+        )
+        console.log(
+          `[wb-sync] Обновлено per-warehouse orders для ${warehouseOrdersUpdated} wbCards`,
+        )
+      } catch (e) {
+        console.error("[wb-sync] Per-warehouse orders transaction failed:", e)
+        errors.push(`per-warehouse-orders: ${(e as Error).message}`)
+      }
+    }
+
     return NextResponse.json({
       synced,
       total: rawCards.length,
       pricesLoaded: priceMap.size,
       discountsLoaded: discountMap.size,
       warehouseStocksUpdated: stocksPerWarehouse.size,
+      warehouseOrdersUpdated,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     })
   } catch (e) {
