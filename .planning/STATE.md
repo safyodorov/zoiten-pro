@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 15-per-cluster-orders-01-PLAN.md
-last_updated: "2026-04-22T09:08:17.977Z"
+stopped_at: Completed 15-per-cluster-orders-02-PLAN.md
+last_updated: "2026-04-22T09:13:10.533Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 15 (per-cluster-orders) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Plan: 2 of 3
 | Phase 14-stock P06 | 4 минуты | 2 tasks | 4 files |
 | Phase 14-stock P07 | 559 | 3 tasks | 8 files |
 | Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
+| Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,7 @@ Recent decisions affecting current work:
 - [Phase 14-stock]: Plan 14-07: nginx redirect /inventory не нужен — Next.js 308 через next.config.ts достаточен
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d сохранена без изменений — backward compat, новый код использует fetchOrdersPerWarehouse
 - [Phase 15-per-cluster-orders]: avg в OrdersWarehouseStats = count / periodDays (не / 7 hardcoded) — поддерживает произвольный periodDays
+- [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d заменён на fetchOrdersPerWarehouse — один запрос к Orders API покрывает card-level avg/yesterday и per-warehouse breakdown (rate limit ~1 req/min)
 
 ### Roadmap Evolution
 
@@ -271,6 +273,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T09:08:17.972Z
-Stopped at: Completed 15-per-cluster-orders-01-PLAN.md
+Last session: 2026-04-22T09:13:10.527Z
+Stopped at: Completed 15-per-cluster-orders-02-PLAN.md
 Resume file: None
