@@ -198,10 +198,10 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 ### WB Integration (per-warehouse + API migration)
 
 - [x] **STOCK-06**: Wave 0 smoke-test (ручной) — curl на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses` с текущим `WB_API_TOKEN`: проверить scope Аналитика + Personal/Service token type. Если 401/403 → блокер, регенерация токена до coding.
-- [ ] **STOCK-07**: `fetchStocksPerWarehouse(nmIds: number[])` в `lib/wb-api.ts` — POST на новый endpoint; body `{nmIds, limit, offset}`; rate limit 3 req/min + 20s burst (sleep 20000ms между батчами); batch до 1000 nmIds; retry 60s на 429; возвращает `Map<nmId, Array<{warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient}>>`. Старая `fetchStocks()` помечена `@deprecated — sunset 2026-06-23`.
-- [ ] **STOCK-08**: Расширение `POST /api/wb-sync` — после `fetchStocksPerWarehouse` clean-replace per wbCardId в транзакции: `tx.wbCardWarehouseStock.deleteMany({wbCardId, NOT: {warehouseId: {in: incomingIds}}})` + `upsert` для входящих + `WbCard.stockQty = SUM(quantity)` той же транзакцией (denormalized для backward compat с `/prices/wb`).
+- [x] **STOCK-07**: `fetchStocksPerWarehouse(nmIds: number[])` в `lib/wb-api.ts` — POST на новый endpoint; body `{nmIds, limit, offset}`; rate limit 3 req/min + 20s burst (sleep 20000ms между батчами); batch до 1000 nmIds; retry 60s на 429; возвращает `Map<nmId, Array<{warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient}>>`. Старая `fetchStocks()` помечена `@deprecated — sunset 2026-06-23`.
+- [x] **STOCK-08**: Расширение `POST /api/wb-sync` — после `fetchStocksPerWarehouse` clean-replace per wbCardId в транзакции: `tx.wbCardWarehouseStock.deleteMany({wbCardId, NOT: {warehouseId: {in: incomingIds}}})` + `upsert` для входящих + `WbCard.stockQty = SUM(quantity)` той же транзакцией (denormalized для backward compat с `/prices/wb`).
 - [x] **STOCK-09**: Seed справочника `WbWarehouse` — скрипт `prisma/seed-wb-warehouses.ts` с hardcoded array (собранный через DevTools Network tab на seller.wildberries.ru); validation кластеров с пользователем в Zero Wave Plan 14-02. Маппинг: ЦФО=Центральный, ЮГ=Южный+Северо-Кавказский, Урал=Уральский, ПФО=Приволжский, СЗО=Северо-Западный, СФО=Дальневосточный+Сибирский, Прочие=остальные. Запускается однократно через `npx prisma db seed -- --wb-warehouses`.
-- [ ] **STOCK-10**: Auto-insert неизвестных складов — если `warehouseId` в ответе API нет в `WbWarehouse`, создать запись с `name=warehouseName`, `cluster="Прочие"`, `shortCluster="Прочие"`, `needsClusterReview=true`. Console warn в логи, sync не падает. В UI /stock/wb такие склады попадают в кластер «Прочие» с значком ⚠️.
+- [x] **STOCK-10**: Auto-insert неизвестных складов — если `warehouseId` в ответе API нет в `WbWarehouse`, создать запись с `name=warehouseName`, `cluster="Прочие"`, `shortCluster="Прочие"`, `needsClusterReview=true`. Console warn в логи, sync не падает. В UI /stock/wb такие склады попадают в кластер «Прочие» с значком ⚠️.
 
 ### Data Input — Иваново, Производство, Норма
 
@@ -433,10 +433,10 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-04 | Phase 14 | Complete |
 | STOCK-05 | Phase 14 | Complete |
 | STOCK-06 | Phase 14 | Complete |
-| STOCK-07 | Phase 14 | Pending |
-| STOCK-08 | Phase 14 | Pending |
+| STOCK-07 | Phase 14 | Complete |
+| STOCK-08 | Phase 14 | Complete |
 | STOCK-09 | Phase 14 | Complete |
-| STOCK-10 | Phase 14 | Pending |
+| STOCK-10 | Phase 14 | Complete |
 | STOCK-11 | Phase 14 | Pending |
 | STOCK-12 | Phase 14 | Pending |
 | STOCK-13 | Phase 14 | Pending |
