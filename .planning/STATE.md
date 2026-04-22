@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
-last_updated: "2026-04-22T09:22:17.821Z"
+last_updated: "2026-04-22T15:10:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -261,6 +261,7 @@ None yet.
 | fix-260419-pagi | Пагинация /products и /batches: сброс на page 1 + pageSize селектор | 2026-04-19 | 544ccdb |  | inline |
 | 260420-oxd | /support/returns: ffmpeg thumbnail для VIDEO + sharp для IMAGE + WB CDN tm/ + width/height/decoding | 2026-04-20 | eceae9e |  | [260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-](./quick/260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-/) |
 | 260421-iq7 | Товары: drag-and-drop порядок артикулов + barcodes → MarketplaceArticle + unique per marketplace | 2026-04-21 | 96fb4c7 | Verified | [260421-iq7-drag-and-drop-per](./quick/260421-iq7-drag-and-drop-per/) |
+| 260422-oy5 | Per-user фильтр складов в /stock/wb (чекбоксы по кластерам, persist в БД) | 2026-04-22 | 5caf963 |  | [260422-oy5-per-user-stock-wb](./quick/260422-oy5-per-user-stock-wb/) |
 
 ### Blockers/Concerns
 
@@ -276,6 +277,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T09:13:44.855Z
-Stopped at: Completed 15-per-cluster-orders-03-PLAN.md
+Last session: 2026-04-22T15:10:00.000Z
+Stopped at: Completed quick task 260422-oy5: Per-user фильтр складов в /stock/wb
 Resume file: None
