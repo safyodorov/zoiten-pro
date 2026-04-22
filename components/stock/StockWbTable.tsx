@@ -146,10 +146,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
-        <table className="w-full caption-bottom text-sm">
-          <TableHeader>
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+          <thead className="bg-background">
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
-            <TableRow>
+            <tr>
               <TableHead
                 className="sticky left-0 top-0 z-30 bg-background w-20 min-w-20 max-w-20 text-xs font-medium text-center border-b border-r"
                 rowSpan={3}
@@ -216,9 +216,9 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   </TableHead>
                 )
               })}
-            </TableRow>
+            </tr>
             {/* Уровень 2 — имя склада (только для expanded). Collapsed кластер уже занимает row 1+2 через rowSpan=2. */}
-            <TableRow>
+            <tr>
               {CLUSTER_ORDER.flatMap((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
                 const warehouses = visibleClusterWarehouses[cluster] ?? []
@@ -258,9 +258,9 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   </TableHead>
                 ]
               })}
-            </TableRow>
+            </tr>
             {/* Уровень 3 — О/З/Об/Д всегда (collapsed: 4 per cluster, expanded: 4 × warehouses.length) */}
-            <TableRow>
+            <tr>
               {/* Итого склады WB — 4 cells O/З/Об/Д под группой */}
               <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток">О</TableHead>
               <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Заказы/день">З</TableHead>
@@ -291,8 +291,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   <TableHead key={`${cluster}-d`} className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="Дефицит">Д</TableHead>,
                 ]
               })}
-            </TableRow>
-          </TableHeader>
+            </tr>
+          </thead>
           <TableBody>
             {groups.map((g, idx) => {
               const rowSpan = 1 + g.wbCards.length

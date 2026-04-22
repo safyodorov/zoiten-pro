@@ -171,10 +171,10 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
   // ── Table ──────────────────────────────────────────────────────
   return (
     <div className="overflow-auto border rounded h-full">
-      <table className="w-full caption-bottom text-sm">
-        <TableHeader>
+      <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+        <thead className="bg-background">
           {/* ── Уровень 1: группы колонок ── */}
-          <TableRow>
+          <tr>
             {/* Sticky 4 колонки с rowSpan=2 */}
             <TableHead
               rowSpan={2}
@@ -241,10 +241,10 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
             >
               Ozon
             </TableHead>
-          </TableRow>
+          </tr>
 
           {/* ── Уровень 2: sub-columns О/З/Об/Д ── */}
-          <TableRow>
+          <tr>
             {/* Производство → только О (inline input в данных) */}
             <TableHead
               className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1 w-[88px] min-w-[88px]"
@@ -298,8 +298,8 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                 Д
               </TableHead>,
             ])}
-          </TableRow>
-        </TableHeader>
+          </tr>
+        </thead>
 
         <TableBody>
           {products.map((p, idx) => {
