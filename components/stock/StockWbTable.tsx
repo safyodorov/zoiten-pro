@@ -261,6 +261,38 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
           <TableBody>
             {groups.map((g, idx) => {
               const rowSpan = 1 + g.wbCards.length
+
+              // Row-level агрегаты по всем wbCards продукта (Сводная)
+              const rowTotalStock = g.wbCards.reduce<number | null>(
+                (acc, c) => (c.totalStock === null ? acc : (acc ?? 0) + c.totalStock),
+                null,
+              )
+              const rowOrdersPerDay = g.wbCards.reduce<number | null>(
+                (acc, c) => (c.avgSalesSpeed7d === null ? acc : (acc ?? 0) + c.avgSalesSpeed7d),
+                null,
+              )
+              const rowMetrics = calculateStockMetrics({
+                stock: rowTotalStock,
+                ordersPerDay: rowOrdersPerDay,
+                turnoverNormDays,
+              })
+              const rowThreshold = deficitThreshold(turnoverNormDays, rowOrdersPerDay)
+
+              // Row-level per-cluster агрегаты (sum по всем wbCards)
+              const rowClusterAgg = Object.fromEntries(
+                CLUSTER_ORDER.map((cluster) => {
+                  const stockSum = g.wbCards.reduce<number | null>((acc, c) => {
+                    const t = c.clusters[cluster as ClusterShortName]?.totalStock
+                    return t == null ? acc : (acc ?? 0) + t
+                  }, null)
+                  const ordSum = g.wbCards.reduce<number | null>((acc, c) => {
+                    const t = c.clusters[cluster as ClusterShortName]?.ordersPerDay
+                    return t == null ? acc : (acc ?? 0) + t
+                  }, null)
+                  return [cluster, { stock: stockSum, orders: ordSum }]
+                })
+              ) as Record<ClusterShortName, { stock: number | null; orders: number | null }>
+
               return (
                 <React.Fragment key={g.productId}>
                   {/* Product Сводная строка */}
@@ -294,25 +326,51 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>
                     </TableCell>
-                    <TableCell className="sticky left-[320px] z-20 bg-background border-r w-20 align-top text-xs font-medium text-center">
+                    {/* ОДНА sticky колонка "Артикул WB" = 'Сводная' (совпадает с header rowSpan=3) */}
+                    <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 align-top text-xs font-medium text-center">
                       Сводная
                     </TableCell>
-                    <TableCell className="sticky left-[400px] z-20 bg-background border-r w-[120px] text-xs text-muted-foreground">
-                      —
-                    </TableCell>
-                    {/* 4 сводных placeholder */}
-                    <StockCell value={null} />
-                    <StockCell value={null} />
-                    <StockCell value={null} />
-                    <DeficitCell deficit={null} threshold={null} />
-                    {/* Кластеры — пусто на Сводной строке */}
+                    {/* МП О/З/Об/Д — row-level агрегат по всем wbCards */}
+                    <StockCell value={rowTotalStock} />
+                    <StockCell value={rowOrdersPerDay} />
+                    <StockCell value={rowMetrics.turnoverDays} />
+                    <DeficitCell deficit={rowMetrics.deficit} threshold={rowThreshold} />
+                    {/* Кластеры — row-level агрегат (сумма по wbCards). При expand — plotholder colSpan под 4-cell заголовок склада */}
                     {CLUSTER_ORDER.flatMap((cluster) => {
                       const isExpanded = expandedSet.has(cluster)
-                      const warehouses = clusterWarehouses[cluster] ?? []
-                      const cellCount = isExpanded ? Math.max(warehouses.length, 1) : 4
-                      return Array.from({ length: cellCount }, (_, i) => (
-                        <StockCell key={`${cluster}-sum-${i}`} value={null} />
-                      ))
+                      const warehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
+                      const agg = rowClusterAgg[cluster as ClusterShortName]
+
+                      if (isExpanded) {
+                        // Сводная на уровне Product при expanded кластере остаётся пустой для per-warehouse колонок
+                        // (за ordersCount в строке Сводной не виден individual warehouse split).
+                        // Placeholder colSpan=4 на каждый склад (или 4 если нет складов).
+                        const groupCount = warehouses.length > 0 ? warehouses.length : 1
+                        return Array.from({ length: groupCount }, (_, i) => (
+                          <TableCell
+                            key={`${cluster}-sum-wh-${i}`}
+                            colSpan={4}
+                            className={cn(
+                              "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
+                              i === groupCount - 1 && "border-r"
+                            )}
+                          >—</TableCell>
+                        ))
+                      }
+
+                      // Collapsed: О/З/Об/Д — сумма по кластеру
+                      const aggMetrics = calculateStockMetrics({
+                        stock: agg?.stock ?? null,
+                        ordersPerDay: agg?.orders ?? null,
+                        turnoverNormDays,
+                      })
+                      const aggThreshold = deficitThreshold(turnoverNormDays, agg?.orders ?? null)
+                      return [
+                        <StockCell key={`${cluster}-sum-o`} value={agg?.stock ?? null} />,
+                        <StockCell key={`${cluster}-sum-z`} value={agg?.orders ?? null} />,
+                        <StockCell key={`${cluster}-sum-ob`} value={aggMetrics.turnoverDays} />,
+                        <DeficitCell key={`${cluster}-sum-d`} deficit={aggMetrics.deficit} threshold={aggThreshold} />,
+                      ]
                     })}
                   </TableRow>
 
