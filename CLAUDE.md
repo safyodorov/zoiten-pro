@@ -433,6 +433,33 @@ middleware.ts                ← RBAC route guard (Edge runtime)
 - **SKU**: `$queryRaw SELECT nextval('product_sku_seq')` внутри транзакции
 - **WB v4 API**: ТОЛЬКО через `execSync('curl ...')`, НЕ через Node.js fetch (TLS fingerprint блокировка)
 
+## Sticky data-таблицы (pattern)
+
+**Применяется к:** `/stock`, `/stock/wb`, `/prices/wb`, `/cards/wb` и всем таблицам со sticky header + scroll.
+
+- **НЕ использовать shadcn `<Table>` / `<TableHeader>` / `<TableRow>` в шапке** — `<Table>` оборачивает `<table>` во внутренний overflow-контейнер (ломает sticky), `<TableHeader>` даёт `[&_tr]:border-b` (мельтешение при scroll), `<TableRow>` имеет hover/transition (мерцание).
+- **Использовать:**
+  - `<div className="overflow-auto h-full">` — единственный scroll-контейнер
+  - `<table className="w-full border-separate border-spacing-0">` (или с `table-fixed` если нужен resize)
+  - `<thead className="bg-background">` — сплошной фон блокирует просвечивание
+  - `<tr>` (прямой HTML) в шапке, не `<TableRow>`
+  - `<TableHead>` cells с `sticky top-0 z-20 bg-background border-b`
+  - Body: `<TableBody>` + `<TableRow>` (от shadcn — там hover OK)
+- **Flex layout для sticky:** `h-full flex flex-col` → `flex-1 min-h-0` → таблица сама вычисляет высоту. НЕ использовать `h-[calc(100vh-Npx)]`.
+
+### Форматирование чисел (Д, Об, остатки)
+
+- **Д (дефицит):** всегда `Math.trunc(n)` (integer, отбрасывание дробной части, правильно для negative).
+- **Об (оборачиваемость):** всегда `Math.trunc(n)`.
+- **Остатки (stockQty):** всегда integer (`Math.trunc(n)`).
+- **О/З (остатки / заказы)** в stock: `n < 10 ? toFixed(1) : Math.floor(n)`.
+
+### Формула дефицита
+
+`Д = (норма × З) − О` (БЕЗ коэффициента 0.3, убран 2026-04-22). Порог жёлтого = `норма × З`.
+
+Подробно: [memory/project_zoiten_table_pattern.md](../../Users/User/.claude/projects/C--Claude/memory/project_zoiten_table_pattern.md)
+
 ## GSD Workflow Enforcement
 
 Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.

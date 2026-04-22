@@ -699,7 +699,7 @@ export function PriceCalculatorTable({
           внутри этого скролл-контейнера, шапка страницы не прокручивается. */}
       <div className="relative overflow-auto flex-1 min-h-0">
         <table
-          className="caption-bottom text-sm border-collapse table-fixed"
+          className="caption-bottom text-sm border-separate border-spacing-0 table-fixed"
           style={{ width: "max-content", minWidth: "100%" }}
         >
           <thead className="sticky top-0 z-30 bg-background border-b">
