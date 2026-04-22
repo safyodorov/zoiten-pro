@@ -171,7 +171,42 @@ WB не даёт СПП через seller API. Решение:
 ssh root@85.198.97.89 "cd /opt/zoiten-pro && bash deploy.sh"
 ```
 
-`deploy.sh` выполняет: git pull → npm ci → prisma migrate deploy → next build → systemctl restart
+`deploy.sh` выполняет: git pull → npm ci → prisma migrate deploy → next build → **копирование `.next/static` и `public` в `.next/standalone/`** → systemctl restart.
+
+### ⚠ Критично: standalone output требует копирования
+
+`next.config.ts` использует `output: "standalone"`. Next build **не копирует автоматически**:
+1. `.next/static/` → chunks, CSS, webpack runtime
+2. `public/` → favicons, логотипы, прочие static assets
+
+Без этих шагов сайт выдаёт:
+- `404` на все chunks → `ChunkLoadError` → «Application error: a client-side exception»
+- `500` на `/_next/image` → фотографии товаров не отображаются
+- CSS не загружается → «вся красота пропала»
+
+**Поэтому:**
+- ❌ Никогда `ssh root@... "cd /opt/zoiten-pro && git pull && npm run build && systemctl restart"` — сломает прод
+- ✅ Всегда `bash deploy.sh` — есть sanity check (`ls chunks | wc -l`), который выдаст `exit 1` если chunks не скопированы
+
+### Восстановление после сломанного shortcut deploy
+
+```bash
+ssh root@85.198.97.89 'cd /opt/zoiten-pro && \
+  rm -rf .next/standalone/.next/static && \
+  cp -r .next/static .next/standalone/.next/static && \
+  cp -r public .next/standalone/public; \
+  systemctl restart zoiten-erp.service'
+```
+
+Пользователю после fix — **Ctrl+Shift+R** (hard reload), чтобы сбросить кешированный HTML со старыми chunk hashes.
+
+### ChunkLoadError для старых вкладок
+
+Даже при корректном deploy старые вкладки пользователя ломаются после rebuild (chunk hashes меняются). В проекте есть `app/global-error.tsx`, который ловит `ChunkLoadError` и делает автоматический `window.location.reload()` — но только если webpack runtime успел подгрузиться.
+
+### Фото и картинки — используй `<img>`, не `next/image`
+
+nginx обслуживает `/uploads/*` напрямую через alias на `/var/www/zoiten-uploads` (минуя Next.js middleware). Next.js `<Image>` делает internal fetch к `/_next/image?url=/uploads/...`, и middleware редиректит этот запрос на `/login` → optimizer получает null → 500. Поэтому во всех таблицах (`PriceCalculatorTable`, `StockProductTable`, `StockWbTable`, `WbCardsTable`) используется плоский `<img>` с `eslint-disable @next/next/no-img-element`.
 
 ## Env переменные
 
