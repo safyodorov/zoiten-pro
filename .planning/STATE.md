@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Phase 14-stock Plan 01 complete — Wave 0 checkpoint awaiting user
-last_updated: "2026-04-21T15:46:15.776Z"
+stopped_at: Completed 14-stock-02-PLAN.md
+last_updated: "2026-04-22T06:40:00.835Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 14 (stock) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Plan: 2 of 7
 | Phase 13-statistics P01 | 4min | 3 tasks | 7 files |
 | Phase 13-statistics P02 | 5min | 3 tasks | 11 files |
 | Phase 14-stock P01 | 391 | 2 tasks | 19 files |
+| Phase 14-stock P02 | 141s | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,8 @@ Recent decisions affecting current work:
 - [Phase 14-stock]: Prisma миграция Phase 14 создана вручную (нет локальной PG) — pending для VPS deploy в Plan 14-07
 - [Phase 14-stock]: Route rename /inventory→/stock: next.config.ts redirects() (308 permanent) + исправлены landing/dashboard компоненты (Rule 2)
 - [Phase 14-stock]: Wave 0 curl smoke test НЕ выполнен в плане — Plans 14-01/02/04/05 независимы, Plan 14-03 заблокирован до подтверждения token scope
+- [Phase ?]: Plan 14-03: использовать Statistics API вместо Analytics
+- [Phase 14-stock]: Plan 14-02: Synthetic IDs 90001-90067 для WbWarehouse складов без верифицированных warehouseId — реальные ID подтянутся при sync в Plan 14-03 fetchStocksPerWarehouse
 
 ### Roadmap Evolution
 
@@ -250,6 +253,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-21T15:46:15.771Z
-Stopped at: Phase 14-stock Plan 01 complete — Wave 0 checkpoint awaiting user
+Last session: 2026-04-22T06:40:00.828Z
+Stopped at: Completed 14-stock-02-PLAN.md
 Resume file: None

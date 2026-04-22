@@ -200,7 +200,7 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 - [x] **STOCK-06**: Wave 0 smoke-test (ручной) — curl на `POST https://seller-analytics-api.wildberries.ru/api/analytics/v1/stocks-report/wb-warehouses` с текущим `WB_API_TOKEN`: проверить scope Аналитика + Personal/Service token type. Если 401/403 → блокер, регенерация токена до coding.
 - [ ] **STOCK-07**: `fetchStocksPerWarehouse(nmIds: number[])` в `lib/wb-api.ts` — POST на новый endpoint; body `{nmIds, limit, offset}`; rate limit 3 req/min + 20s burst (sleep 20000ms между батчами); batch до 1000 nmIds; retry 60s на 429; возвращает `Map<nmId, Array<{warehouseId, warehouseName, regionName, quantity, inWayToClient, inWayFromClient}>>`. Старая `fetchStocks()` помечена `@deprecated — sunset 2026-06-23`.
 - [ ] **STOCK-08**: Расширение `POST /api/wb-sync` — после `fetchStocksPerWarehouse` clean-replace per wbCardId в транзакции: `tx.wbCardWarehouseStock.deleteMany({wbCardId, NOT: {warehouseId: {in: incomingIds}}})` + `upsert` для входящих + `WbCard.stockQty = SUM(quantity)` той же транзакцией (denormalized для backward compat с `/prices/wb`).
-- [ ] **STOCK-09**: Seed справочника `WbWarehouse` — скрипт `prisma/seed-wb-warehouses.ts` с hardcoded array (собранный через DevTools Network tab на seller.wildberries.ru); validation кластеров с пользователем в Zero Wave Plan 14-02. Маппинг: ЦФО=Центральный, ЮГ=Южный+Северо-Кавказский, Урал=Уральский, ПФО=Приволжский, СЗО=Северо-Западный, СФО=Дальневосточный+Сибирский, Прочие=остальные. Запускается однократно через `npx prisma db seed -- --wb-warehouses`.
+- [x] **STOCK-09**: Seed справочника `WbWarehouse` — скрипт `prisma/seed-wb-warehouses.ts` с hardcoded array (собранный через DevTools Network tab на seller.wildberries.ru); validation кластеров с пользователем в Zero Wave Plan 14-02. Маппинг: ЦФО=Центральный, ЮГ=Южный+Северо-Кавказский, Урал=Уральский, ПФО=Приволжский, СЗО=Северо-Западный, СФО=Дальневосточный+Сибирский, Прочие=остальные. Запускается однократно через `npx prisma db seed -- --wb-warehouses`.
 - [ ] **STOCK-10**: Auto-insert неизвестных складов — если `warehouseId` в ответе API нет в `WbWarehouse`, создать запись с `name=warehouseName`, `cluster="Прочие"`, `shortCluster="Прочие"`, `needsClusterReview=true`. Console warn в логи, sync не падает. В UI /stock/wb такие склады попадают в кластер «Прочие» с значком ⚠️.
 
 ### Data Input — Иваново, Производство, Норма
@@ -223,7 +223,7 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 - [ ] **STOCK-21**: Табы `/stock` / `/stock/wb` / `/stock/ozon` — компонент `StockTabs` (паттерн `PricesTabs`); `/stock/ozon` = `<ComingSoon sectionName="Управление остатками Ozon" />`.
 - [ ] **STOCK-22**: RSC `/stock/wb` — таблица с rowSpan per Product → per WbCard (nmId); sticky колонки те же 4 + первые 4 data-колонки (РФ/Иваново/Производство/МП-сумма) как сводка; далее 7 кластерных колонок (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) каждая с О/З/Об/Д.
-- [ ] **STOCK-23**: Маппинг кластеров денормализован в `WbWarehouse.shortCluster` (при seed и auto-insert) — значения из набора `{ЦФО, ЮГ, Урал, ПФО, СЗО, СФО, Прочие}`. Full names в статическом `lib/wb-clusters.ts` (`CLUSTER_FULL_NAMES` map).
+- [x] **STOCK-23**: Маппинг кластеров денормализован в `WbWarehouse.shortCluster` (при seed и auto-insert) — значения из набора `{ЦФО, ЮГ, Урал, ПФО, СЗО, СФО, Прочие}`. Full names в статическом `lib/wb-clusters.ts` (`CLUSTER_FULL_NAMES` map).
 - [ ] **STOCK-24**: Tooltip при hover на сокращённом названии кластера — shadcn `<Tooltip>` (уже в проекте) показывает full name из `CLUSTER_FULL_NAMES` + список склада-источников, если нужно.
 - [ ] **STOCK-25**: Expand кластера → replace кластерных О/З/Об/Д на набор per-warehouse columns внутри этого кластера; state в URL (`?expandedClusters=ЦФО,ПФО` comma-separated, human-readable); toggle-кнопки «Развернуть все / Свернуть все» в toolbar; shareable ссылки.
 
@@ -435,7 +435,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-06 | Phase 14 | Complete |
 | STOCK-07 | Phase 14 | Pending |
 | STOCK-08 | Phase 14 | Pending |
-| STOCK-09 | Phase 14 | Pending |
+| STOCK-09 | Phase 14 | Complete |
 | STOCK-10 | Phase 14 | Pending |
 | STOCK-11 | Phase 14 | Pending |
 | STOCK-12 | Phase 14 | Pending |
@@ -449,7 +449,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-20 | Phase 14 | Pending |
 | STOCK-21 | Phase 14 | Pending |
 | STOCK-22 | Phase 14 | Pending |
-| STOCK-23 | Phase 14 | Pending |
+| STOCK-23 | Phase 14 | Complete |
 | STOCK-24 | Phase 14 | Pending |
 | STOCK-25 | Phase 14 | Pending |
 | STOCK-26 | Phase 14 | Complete |
