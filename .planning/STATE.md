@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 14-stock-03-PLAN.md
-last_updated: "2026-04-22T06:42:22.563Z"
+stopped_at: Completed 14-stock-05-PLAN.md
+last_updated: "2026-04-22T06:49:48.296Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 14 (stock) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 
 ## Performance Metrics
 
@@ -93,6 +93,7 @@ Plan: 4 of 7
 | Phase 14-stock P01 | 391 | 2 tasks | 19 files |
 | Phase 14-stock P02 | 141s | 1 tasks | 2 files |
 | Phase 14-stock P03 | ~15 минут | 2 tasks | 3 files |
+| Phase 14-stock P05 | 10 минут | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -216,6 +217,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Plan 14-03: использовать Statistics API вместо Analytics
 - [Phase 14-stock]: Plan 14-02: Synthetic IDs 90001-90067 для WbWarehouse складов без верифицированных warehouseId — реальные ID подтянутся при sync в Plan 14-03 fetchStocksPerWarehouse
 - [Phase 14-stock]: Plan 14-03: Statistics API вместо Analytics API (base token 403) + stableWarehouseIdFromName djb2 hash для pseudo-Int warehouseId (Statistics API не содержит числового ID)
+- [Phase 14-stock]: vi.hoisted для vitest mock hoisting в stock-actions.test.ts — устраняет ReferenceError при vi.mock factory
+- [Phase 14-stock]: TurnoverNormInput использует controlled input + useRef debounce — паттерн GlobalRatesBar
 
 ### Roadmap Evolution
 
@@ -255,6 +258,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T06:42:22.558Z
-Stopped at: Completed 14-stock-03-PLAN.md
+Last session: 2026-04-22T06:49:48.291Z
+Stopped at: Completed 14-stock-05-PLAN.md
 Resume file: None

@@ -207,9 +207,9 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 - [ ] **STOCK-11**: Excel-импорт Иваново — `POST /api/stock/ivanovo-upload` multipart; парсер `lib/parse-ivanovo-excel.ts` (паттерн из `parse-auto-promo-excel.ts`, колонки: A=SKU, B=quantity); preview Dialog с diff old→new qty + секции `unmatched/duplicates/invalid` (не блокируют confirm).
 - [ ] **STOCK-12**: Server action `upsertIvanovoStock(rows: Array<{sku, quantity}>)` — normalizeSku → lookup Product по sku → `tx.product.update({where: {sku}, data: {ivanovoStock: qty, ivanovoStockUpdatedAt: now}})`; возвращает `{imported, notFound, duplicates, invalid}` + downloadable CSV с ошибками; `revalidatePath("/stock")`.
-- [ ] **STOCK-13**: Inline-редактирование `Product.productionStock` в `/stock` — input на каждой строке Product (Сводная), debounced save 500ms через server action `updateProductionStock(productId, value)`; Zod `int().min(0).max(99999)` или null (пустое поле → null); `revalidatePath("/stock")`.
-- [ ] **STOCK-14**: Inline-редактирование «Нормы оборачиваемости» в шапке `/stock` — компонент `TurnoverNormInput` (паттерн `GlobalRatesBar` из Phase 7); debounced save 500ms через `updateTurnoverNorm(days)`; AppSetting key `stock.turnoverNormDays`; Zod `int().min(1).max(100)`; `revalidatePath("/stock")` + `/stock/wb`.
-- [ ] **STOCK-15**: Кнопка «Обновить из WB» в шапке `/stock` — вызывает `POST /api/wb-sync` (существующий, расширенный STOCK-08); toast states loading/success/error; `revalidatePath("/stock")` + `/stock/wb` на сервере.
+- [x] **STOCK-13**: Inline-редактирование `Product.productionStock` в `/stock` — input на каждой строке Product (Сводная), debounced save 500ms через server action `updateProductionStock(productId, value)`; Zod `int().min(0).max(99999)` или null (пустое поле → null); `revalidatePath("/stock")`.
+- [x] **STOCK-14**: Inline-редактирование «Нормы оборачиваемости» в шапке `/stock` — компонент `TurnoverNormInput` (паттерн `GlobalRatesBar` из Phase 7); debounced save 500ms через `updateTurnoverNorm(days)`; AppSetting key `stock.turnoverNormDays`; Zod `int().min(1).max(100)`; `revalidatePath("/stock")` + `/stock/wb`.
+- [x] **STOCK-15**: Кнопка «Обновить из WB» в шапке `/stock` — вызывает `POST /api/wb-sync` (существующий, расширенный STOCK-08); toast states loading/success/error; `revalidatePath("/stock")` + `/stock/wb` на сервере.
 
 ### `/stock` — главная страница (Product-level)
 
@@ -439,9 +439,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-10 | Phase 14 | Complete |
 | STOCK-11 | Phase 14 | Pending |
 | STOCK-12 | Phase 14 | Pending |
-| STOCK-13 | Phase 14 | Pending |
-| STOCK-14 | Phase 14 | Pending |
-| STOCK-15 | Phase 14 | Pending |
+| STOCK-13 | Phase 14 | Complete |
+| STOCK-14 | Phase 14 | Complete |
+| STOCK-15 | Phase 14 | Complete |
 | STOCK-16 | Phase 14 | Pending |
 | STOCK-17 | Phase 14 | Pending |
 | STOCK-18 | Phase 14 | Pending |
