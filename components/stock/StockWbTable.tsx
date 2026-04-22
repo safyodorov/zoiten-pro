@@ -155,11 +155,15 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               >
                 Артикул WB
               </TableHead>
-              {/* МП О/З/Об/Д — плоские, rowSpan=3 (нет expand) */}
-              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП</TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="WB Заказы/день">З</TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Оборачиваемость">Об</TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r" rowSpan={3} title="Дефицит">Д</TableHead>
+              {/* Итого склады WB — группа 4 колонок, оформлена как collapsed кластер (rowSpan=2, h-[68px]) */}
+              <TableHead
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
+                colSpan={4}
+                rowSpan={2}
+                title="Итого по всем складам WB (все кластеры включая СЦ)"
+              >
+                Итого склады WB
+              </TableHead>
               {/* 7 кластерных колонок */}
               {CLUSTER_ORDER.map((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
@@ -244,6 +248,11 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
             </TableRow>
             {/* Уровень 3 — О/З/Об/Д всегда (collapsed: 4 per cluster, expanded: 4 × warehouses.length) */}
             <TableRow>
+              {/* Итого склады WB — 4 cells O/З/Об/Д под группой */}
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток">О</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Заказы/день">З</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Оборачиваемость">Об</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="Дефицит">Д</TableHead>
               {CLUSTER_ORDER.flatMap((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
                 const warehouses = visibleClusterWarehouses[cluster] ?? []
