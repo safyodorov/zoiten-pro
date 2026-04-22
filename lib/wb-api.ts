@@ -179,6 +179,11 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
 
 // ── Получение остатков через Statistics API ──────────────────────
 
+/**
+ * @deprecated Использовать fetchStocksPerWarehouse() — возвращает агрегированные
+ * данные без разбивки по складам. Физически не удаляется до sunset 2026-06-23
+ * (Plan STOCK-FUT-09). Сохранён для backward compat.
+ */
 export async function fetchStocks(): Promise<Map<number, number>> {
   const token = getToken()
   const stockMap = new Map<number, number>()
@@ -745,6 +750,96 @@ export interface OrdersStats {
  *  Имя `fetchAvgSalesSpeed7d` сохранено для обратной совместимости — поля
  *  `WbCard.avgSalesSpeed7d` и `WbCard.ordersYesterday` пишутся в wb-sync route.
  */
+// ──────────────────────────────────────────────────────────────────
+// Phase 14: Per-Warehouse Stocks via Statistics API (STOCK-07)
+// ──────────────────────────────────────────────────────────────────
+//
+// DEVIATION от Plan 14-03: исходный план использовал Analytics API
+// (POST /api/analytics/v1/stocks-report/wb-warehouses), но base-токен
+// возвращает 403 "base token is not allowed". Верифицировано curl на VPS 2026-04-22.
+//
+// РЕШЕНИЕ: Statistics API (GET /api/v1/supplier/stocks?dateFrom=...)
+// уже используется в fetchStocks() и возвращает per-warehouse данные
+// (поле warehouseName). Один запрос = все данные, rate limit ~1 req/min.
+//
+// Endpoint верифицирован на VPS — возвращает поля:
+//   warehouseName, nmId, quantity, inWayToClient, inWayFromClient, quantityFull
+
+const STATISTICS_API_STOCKS = "https://statistics-api.wildberries.ru/api/v1/supplier/stocks"
+
+/** Per-warehouse остаток для одного nmId на одном складе. */
+export interface WarehouseStockItem {
+  /** Название склада WB (напр. "Невинномысск", "Коледино") */
+  warehouseName: string
+  /** Доступное кол-во, шт */
+  quantity: number
+  /** В пути к клиенту, шт */
+  inWayToClient: number
+  /** В пути от клиента (возвраты), шт */
+  inWayFromClient: number
+}
+
+/**
+ * Получить per-warehouse остатки через Statistics API.
+ *
+ * Endpoint: GET /api/v1/supplier/stocks?dateFrom=<1 day ago>
+ * Rate limit: ~1 запрос в минуту per токен. Один запрос = ВСЕ данные.
+ * НЕ ставить в batch-цикл.
+ *
+ * @param nmIds Фильтр по nmId — только эти nmId попадут в результат.
+ *   API возвращает все nmId продавца, фильтрация на клиенте.
+ * @returns Map<nmId, WarehouseStockItem[]> сгруппированные по nmId.
+ *   nmId без данных отсутствует в Map (не пустой массив).
+ */
+export async function fetchStocksPerWarehouse(
+  nmIds: number[],
+): Promise<Map<number, WarehouseStockItem[]>> {
+  const result = new Map<number, WarehouseStockItem[]>()
+  if (nmIds.length === 0) return result
+
+  const token = getToken()
+
+  // dateFrom = вчера (ISO format) — Statistics API требует дату начала
+  const dateFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const url = `${STATISTICS_API_STOCKS}?dateFrom=${encodeURIComponent(dateFrom)}`
+
+  const res = await fetch(url, {
+    headers: { Authorization: token },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Statistics API stocks per-warehouse ${res.status}: ${text}`)
+  }
+
+  const rows: Array<{
+    nmId: number
+    warehouseName: string
+    quantity: number
+    inWayToClient: number
+    inWayFromClient: number
+    quantityFull?: number
+  }> = await res.json()
+
+  if (!Array.isArray(rows)) return result
+
+  // Фильтруем по запрошенным nmIds и группируем
+  const nmIdSet = new Set(nmIds)
+  for (const row of rows) {
+    if (!nmIdSet.has(row.nmId)) continue
+    const items = result.get(row.nmId) ?? []
+    items.push({
+      warehouseName: row.warehouseName ?? "",
+      quantity: row.quantity ?? 0,
+      inWayToClient: row.inWayToClient ?? 0,
+      inWayFromClient: row.inWayFromClient ?? 0,
+    })
+    result.set(row.nmId, items)
+  }
+
+  return result
+}
+
 export async function fetchAvgSalesSpeed7d(
   nmIds: number[],
 ): Promise<Map<number, OrdersStats>> {
