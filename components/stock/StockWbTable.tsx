@@ -182,10 +182,11 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                       <button
                         type="button"
                         onClick={() => toggleCluster(cluster)}
-                        className="text-muted-foreground hover:text-foreground"
+                        className="inline-flex items-center justify-center h-7 px-2.5 ml-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent hover:border-primary transition-colors cursor-pointer"
                         aria-label={isExpanded ? `Свернуть кластер ${cluster}` : `Развернуть кластер ${cluster}`}
+                        title={isExpanded ? `Свернуть ${cluster}` : `Развернуть ${cluster}`}
                       >
-                        {isExpanded ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
+                        {isExpanded ? <ChevronLeft size={16} strokeWidth={2.5} /> : <ChevronRight size={16} strokeWidth={2.5} />}
                       </button>
                     </div>
                   </TableHead>
