@@ -416,11 +416,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
                       Сводная
                     </TableCell>
-                    {/* Иваново — Product-level остаток, rowSpan на всю группу (1 + wbCards.length) */}
-                    <TableCell
-                      rowSpan={rowSpan}
-                      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r align-top w-20 min-w-20 max-w-20"
-                    >
+                    {/* Иваново — Product-level остаток (в Сводной строке; в per-nmId строках пусто) */}
+                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r w-20 min-w-20 max-w-20">
                       {g.ivanovoStock !== null ? formatInt(g.ivanovoStock) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     {/* Всего на WB — физ. остаток + товар в пути (с border-r для разделения) */}
@@ -490,6 +487,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                       <TableRow key={card.wbCardId} className="border-t border-t-border/60">
                         <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                           {card.nmId}
+                        </TableCell>
+                        {/* Иваново — пустая ячейка в per-nmId строках (значение только в Сводной) */}
+                        <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">
+                          —
                         </TableCell>
                         {/* Phase 15.1: card-level in-way агрегат */}
                         {(() => {
