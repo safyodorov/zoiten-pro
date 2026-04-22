@@ -45,6 +45,12 @@ fi
 echo "==> Running database migrations..."
 npx prisma migrate deploy
 
+# ── Phase 14: seed WB складов (one-time, выполнить вручную после первого deploy) ──
+# После первого deploy Phase 14 выполнить:
+#   npm run seed:wb-warehouses
+# Проверить: psql $DATABASE_URL -tAc 'SELECT COUNT(*) FROM "WbWarehouse"' → > 10
+# После seed — нажать «Обновить из WB» в /stock → заполнится WbCardWarehouseStock
+
 # ── Post-migration sanity check (260421-iq7) ──
 # После миграции все Barcode должны иметь marketplaceArticleId NOT NULL.
 echo "==> [260421-iq7] Post-migration sanity check..."

@@ -524,5 +524,95 @@ If the service failed, confirm the CRON_SECRET in /etc/zoiten.pro.env matches wh
 
 ---
 
-*Last updated: 2026-04-06*
-*Covers: Phase 06 deployment (Plans 01 and 02)*
+## 11. Phase 14: Управление остатками (v1.2)
+
+### 11.1 Первый deploy Phase 14
+
+Миграция Phase 14 (`prisma/migrations/20260421_phase14_stock/`) создана вручную и применится автоматически при запуске `npx prisma migrate deploy` в deploy.sh.
+
+**После deploy скрипта выполнить:**
+
+**1. Seed справочника WB складов** (один раз после первого deploy Phase 14):
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && npm run seed:wb-warehouses"
+```
+
+Проверить:
+
+```bash
+ssh root@85.198.97.89 "psql \$DATABASE_URL -tAc 'SELECT COUNT(*) FROM \"WbWarehouse\"'"
+```
+
+Ожидается: > 10 складов.
+
+**2. Nginx rewrite `/inventory → /stock`** (для поддержки старых закладок):
+
+Добавить в `/etc/nginx/sites-enabled/zoiten-pro` ПЕРЕД `location /`:
+
+```nginx
+location ~* ^/inventory(.*)$ {
+  return 301 /stock$1;
+}
+```
+
+Применить:
+
+```bash
+ssh root@85.198.97.89 "nginx -t && systemctl reload nginx"
+```
+
+Проверить:
+
+```bash
+curl -I https://zoiten.pro/inventory
+# Ожидается: 301 Location: https://zoiten.pro/stock
+```
+
+> Примечание: Next.js также настроен на 308 redirect /inventory → /stock через `next.config.ts`.
+> nginx 301 обрабатывает прямые запросы к /inventory до того как они достигают Next.js.
+
+**3. Первый sync per-warehouse остатков:**
+
+- Открыть https://zoiten.pro/stock
+- Нажать «Обновить из WB» → ждать ~1-2 мин
+- Проверить: таблица показывает остатки в колонках Иваново/Производство/МП
+
+**4. Проверить /stock/wb:**
+
+- Перейти на вкладку «WB склады» — должна появиться таблица с 7 кластерными колонками
+- Если пусто (empty state) — сначала нажать «Обновить из WB» на странице /stock
+
+### 11.2 Troubleshooting Phase 14
+
+**HTTP 403 при нажатии «Обновить из WB» (WB API):**
+
+```
+WB Statistics API 403 → base token не имеет scope Статистика (bit 6)
+```
+
+Решение:
+- Регенерировать токен в seller.wildberries.ru → Настройки → Доступ к API
+- Тип: Personal (не Standard)
+- Scope: Контент, Цены, Статистика, Аналитика, Отзывы, Тарифы
+- Обновить `WB_API_TOKEN` в `/etc/zoiten.pro.env`
+- `systemctl restart zoiten-erp.service`
+
+**Миграция Phase 14 не применилась:**
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && npx prisma migrate deploy"
+```
+
+**seed:wb-warehouses завершился с ошибкой:**
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && npx ts-node prisma/seed-wb-warehouses.ts"
+# или
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && npx tsx prisma/seed-wb-warehouses.ts"
+```
+
+---
+
+*Last updated: 2026-04-22*
+*Covers: Phase 06 deployment (Plans 01 and 02); Phase 14 v1.2 (Plans 01–07)*
