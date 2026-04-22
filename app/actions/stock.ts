@@ -14,38 +14,70 @@ import { requireSection } from "@/lib/rbac"
 import { revalidatePath } from "next/cache"
 
 // ──────────────────────────────────────────────────────────────────
-// upsertIvanovoStock — Plan 14-04 (заглушка, реализуется в 14-04)
+// upsertIvanovoStock — Plan 14-04 (реализация)
+// Вызывается из IvanovoUploadDialog.tsx после подтверждения пользователем.
+// Принимает rows из preview-ответа API route (sku-based, не productId).
 // ──────────────────────────────────────────────────────────────────
 
-export interface UpsertIvanovoRow {
-  productId: string
-  qty: number
+const IvanovoRowSchema = z.object({
+  sku: z.string().min(1),
+  quantity: z.number().int().min(0).max(999999),
+})
+
+export type UpsertIvanovoResult = {
+  imported: number
+  notFound: string[]        // SKU которых нет в БД (race condition после preview)
+  errors: Array<{ sku: string; error: string }>
 }
 
-export interface UpsertIvanovoResult {
-  ok: true
-  updated: number
-}
-
+/**
+ * Применяет остатки склада Иваново из Excel к таблице Product (by SKU).
+ * Требует STOCK MANAGE. Транзакция — при ошибке одной строки остальные сохраняются.
+ */
 export async function upsertIvanovoStock(
-  rows: UpsertIvanovoRow[]
+  rows: Array<{ sku: string; quantity: number }>,
 ): Promise<UpsertIvanovoResult> {
   await requireSection("STOCK", "MANAGE")
 
-  let updated = 0
+  // Валидируем каждую строку через Zod
+  const validRows: Array<z.infer<typeof IvanovoRowSchema>> = []
+  const errors: Array<{ sku: string; error: string }> = []
+
   for (const row of rows) {
-    await prisma.product.update({
-      where: { id: row.productId },
-      data: {
-        ivanovoStock: row.qty,
-        ivanovoStockUpdatedAt: new Date(),
-      },
-    })
-    updated++
+    const parsed = IvanovoRowSchema.safeParse(row)
+    if (parsed.success) {
+      validRows.push(parsed.data)
+    } else {
+      errors.push({ sku: row.sku ?? "(нет)", error: parsed.error.message })
+    }
   }
 
+  const result: UpsertIvanovoResult = { imported: 0, notFound: [], errors }
+  const now = new Date()
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of validRows) {
+      try {
+        const updated = await tx.product.updateMany({
+          where: { sku: row.sku, deletedAt: null },
+          data: {
+            ivanovoStock: row.quantity,
+            ivanovoStockUpdatedAt: now,
+          },
+        })
+        if (updated.count === 0) {
+          result.notFound.push(row.sku)
+        } else {
+          result.imported += updated.count
+        }
+      } catch (e) {
+        result.errors.push({ sku: row.sku, error: (e as Error).message })
+      }
+    }
+  })
+
   revalidatePath("/stock")
-  return { ok: true, updated }
+  return result
 }
 
 // ──────────────────────────────────────────────────────────────────
