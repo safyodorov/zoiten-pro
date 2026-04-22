@@ -33,7 +33,7 @@ export interface StockAggregates {
   wbTotalOrdersPerDay: number | null // SUM(wbCard.avgSalesSpeed7d) по всем WB articles
   mpTotalStock: number | null        // WB + Ozon (Ozon placeholder, сейчас равен wbTotalStock)
   mpTotalOrdersPerDay: number | null // Равен wbTotalOrdersPerDay пока нет Ozon
-  rfTotalStock: number | null        // Иваново + Производство + МП
+  rfTotalStock: number | null        // Иваново + МП (БЕЗ Производства — решение 2026-04-22)
 }
 
 export interface StockProductRow {
@@ -177,10 +177,10 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
     const mpTotalStock = wbTotalStock
     const mpTotalOrdersPerDay = wbTotalOrdersPerDay
 
-    // РФ = Иваново + Производство + МП
+    // РФ = Иваново + МП (БЕЗ Производства — решение 2026-04-22)
+    // Производство — отдельный столбец для планируемого прихода, не складской остаток.
     const rfParts: number[] = []
     if (p.ivanovoStock !== null) rfParts.push(p.ivanovoStock)
-    if (p.productionStock !== null) rfParts.push(p.productionStock)
     if (mpTotalStock !== null) rfParts.push(mpTotalStock)
     const rfTotalStock = rfParts.length > 0 ? rfParts.reduce((a, b) => a + b, 0) : null
 

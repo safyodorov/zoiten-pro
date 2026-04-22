@@ -4,7 +4,8 @@
 // Структура:
 //   - 4 sticky колонки: Фото (left-0, 80px) | Сводка (left-[80px], 240px) | Ярлык (left-[320px], 80px) | Артикул (left-[400px], 120px)
 //   - 2-уровневый header: группы (top-0) + sub-columns О/З/Об/Д (top-[40px])
-//   - 6 групп колонок: РФ(1) | Иваново(1) | Производство(1 inline input) | МП(4) | WB(4) | Ozon(4)
+//   - 6 групп колонок: Производство(1 inline input) | РФ(1) | Иваново(1) | МП(4) | WB(4) | Ozon(4)
+//     (порядок изменён 2026-04-22: Производство перед РФ для наглядности планируемого прихода)
 //   - rowSpan: Фото+Сводка rowSpan = 1 + N_articles (Сводная строка + per-article строки)
 //   - DeficitCell: 3-уровневая цветовая кодировка (зелёный/жёлтый/красный)
 //   - Inline productionStock input: debounced 500ms через updateProductionStock server action
@@ -183,11 +184,17 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
               Артикул
             </TableHead>
 
-            {/* Группы: РФ (1 col), Иваново (1 col), Производство (1 col) */}
+            {/* Группы: Производство (1 col), РФ (1 col), Иваново (1 col) — порядок 2026-04-22 */}
             <TableHead
               colSpan={1}
               className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
-              title="Итого по РФ = Иваново + Производство + МП"
+            >
+              Производство
+            </TableHead>
+            <TableHead
+              colSpan={1}
+              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
+              title="Итого по РФ = Иваново + МП"
             >
               РФ
             </TableHead>
@@ -196,12 +203,6 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
               className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
             >
               Иваново
-            </TableHead>
-            <TableHead
-              colSpan={1}
-              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
-            >
-              Производство
             </TableHead>
 
             {/* Группы: МП / WB / Ozon — по 4 sub-columns */}
@@ -227,6 +228,13 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
 
           {/* ── Уровень 2: sub-columns О/З/Об/Д ── */}
           <TableRow>
+            {/* Производство → только О (inline input в данных) */}
+            <TableHead
+              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1"
+              title="Остаток (шт)"
+            >
+              О
+            </TableHead>
             {/* РФ → только О */}
             <TableHead
               className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1"
@@ -235,13 +243,6 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
               О
             </TableHead>
             {/* Иваново → только О */}
-            <TableHead
-              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1"
-              title="Остаток (шт)"
-            >
-              О
-            </TableHead>
-            {/* Производство → только О (inline input в данных) */}
             <TableHead
               className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1"
               title="Остаток (шт)"
@@ -359,14 +360,8 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                     Сводная
                   </TableCell>
 
-                  {/* РФ — О (агрегат Иваново + Производство + МП) */}
-                  <StockCell value={p.aggregates.rfTotalStock} />
-
-                  {/* Иваново — О */}
-                  <StockCell value={p.ivanovoStock} />
-
-                  {/* Производство — inline input */}
-                  <TableCell className="px-2 py-1 text-xs tabular-nums text-right">
+                  {/* Производство — inline input (перенесено перед РФ 2026-04-22) */}
+                  <TableCell className="px-2 py-1 text-xs tabular-nums text-right border-r">
                     <input
                       type="number"
                       min={0}
@@ -388,6 +383,12 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                       }}
                     />
                   </TableCell>
+
+                  {/* РФ — О (агрегат Иваново + МП, БЕЗ Производства) */}
+                  <StockCell value={p.aggregates.rfTotalStock} />
+
+                  {/* Иваново — О */}
+                  <StockCell value={p.ivanovoStock} />
 
                   {/* МП О/З/Об/Д */}
                   <StockCell value={p.aggregates.mpTotalStock} />
@@ -436,7 +437,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                         {a.marketplaceName}: {a.article}
                       </TableCell>
 
-                      {/* РФ/Иваново/Производство — только агрегат в Сводной строке */}
+                      {/* Производство/РФ/Иваново — только агрегат в Сводной строке */}
                       <StockCell value={null} />
                       <StockCell value={null} />
                       <StockCell value={null} />
