@@ -203,16 +203,20 @@ export async function POST(): Promise<NextResponse> {
 
               // Auto-insert неизвестных складов (STOCK-10) + upsert остатков
               for (const item of warehouseItems) {
-                // Генерируем stableId из имени склада (Statistics API не даёт числовой ID)
-                const warehouseId = stableWarehouseIdFromName(item.warehouseName)
-                incomingWarehouseIds.push(warehouseId)
-
-                // Auto-insert если склад не известен
-                const existingWarehouse = await tx.wbWarehouse.findUnique({
-                  where: { id: warehouseId },
+                // Сначала ищем склад ПО ИМЕНИ — seed (Plan 14-02) создал 75 складов
+                // с синтетическими ID 90001-90067 ИЛИ реальными WB ID (Коледино=507 и т.п.).
+                // Использование stableWarehouseIdFromName напрямую создало бы дубли.
+                const existingByName = await tx.wbWarehouse.findFirst({
+                  where: { name: item.warehouseName },
                   select: { id: true },
                 })
-                if (!existingWarehouse) {
+
+                let warehouseId: number
+                if (existingByName) {
+                  warehouseId = existingByName.id
+                } else {
+                  // Склад неизвестен — генерируем stable ID через hash и создаём
+                  warehouseId = stableWarehouseIdFromName(item.warehouseName)
                   console.warn(
                     `[wb-sync] Auto-insert неизвестный склад: id=${warehouseId} name="${item.warehouseName}"`,
                   )
@@ -227,6 +231,8 @@ export async function POST(): Promise<NextResponse> {
                     },
                   })
                 }
+
+                incomingWarehouseIds.push(warehouseId)
 
                 await tx.wbCardWarehouseStock.upsert({
                   where: {
