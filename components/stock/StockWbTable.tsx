@@ -57,6 +57,13 @@ function DeficitCell({ deficit, threshold }: { deficit: number | null; threshold
   )
 }
 
+// Префикс имени склада, обозначающий сортировочный центр.
+// При hideSc=true эти склады не отображаются при expand, но их остатки и заказы
+// продолжают учитываться в кластерном агрегате (collapsed view).
+function isSortingCenter(name: string): boolean {
+  return /^СЦ\s/i.test(name.trim())
+}
+
 export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -64,6 +71,27 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
   const expandedSet = new Set<string>(
     (searchParams.get("expandedClusters") ?? "").split(",").filter(Boolean)
   )
+
+  // По умолчанию СЦ скрыты. Явно "?hideSc=0" → показывать все склады.
+  const hideSc = searchParams.get("hideSc") !== "0"
+
+  // Отфильтрованные карты складов per-cluster для отображения при expand.
+  // Агрегация на уровне кластера (collapsed view) всё равно использует все склады.
+  const visibleClusterWarehouses: typeof clusterWarehouses = Object.fromEntries(
+    CLUSTER_ORDER.map((c) => [
+      c,
+      hideSc
+        ? (clusterWarehouses[c] ?? []).filter((w) => !isSortingCenter(w.warehouseName))
+        : (clusterWarehouses[c] ?? []),
+    ])
+  ) as typeof clusterWarehouses
+
+  const toggleHideSc = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (hideSc) params.set("hideSc", "0")
+    else params.delete("hideSc")
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }, [hideSc, searchParams, router])
 
   const toggleCluster = useCallback((cluster: string) => {
     const next = new Set(expandedSet)
@@ -90,68 +118,57 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         <Button variant="ghost" size="sm" onClick={expandAll}>Развернуть все</Button>
         <Button variant="ghost" size="sm" onClick={collapseAll}>Свернуть все</Button>
+        <span className="text-muted-foreground mx-2">·</span>
+        <Button
+          variant={hideSc ? "default" : "outline"}
+          size="sm"
+          onClick={toggleHideSc}
+          title={hideSc ? "Сейчас: только основные склады. Нажать — показать все (включая СЦ)" : "Сейчас: все склады. Нажать — скрыть СЦ (их остатки учитываются в кластере)"}
+        >
+          {hideSc ? "Без СЦ" : "Все склады"}
+        </Button>
       </div>
 
       <div className="overflow-x-auto border rounded">
         <Table>
           <TableHeader>
-            {/* Уровень 1 — группы */}
+            {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
             <TableRow>
               <TableHead
                 className="sticky left-0 top-0 z-30 bg-background w-20 text-xs font-medium text-center border-b border-r"
-                rowSpan={2}
+                rowSpan={3}
               >
                 Фото
               </TableHead>
               <TableHead
                 className="sticky left-[80px] top-0 z-30 bg-background w-60 text-xs font-medium text-center border-b border-r"
-                rowSpan={2}
+                rowSpan={3}
               >
                 Сводка
               </TableHead>
               <TableHead
                 className="sticky left-[320px] top-0 z-30 bg-background w-24 text-xs font-medium text-center border-b border-r"
-                rowSpan={2}
+                rowSpan={3}
               >
                 Артикул WB
               </TableHead>
-              {/* 4 сводных — МП О/З/Об/Д */}
-              <TableHead
-                className="top-0 z-20 bg-background text-xs font-medium text-center border-b"
-                rowSpan={2}
-                title="Остаток (шт) МП = WB"
-              >
-                МП О
-              </TableHead>
-              <TableHead
-                className="top-0 z-20 bg-background text-xs font-medium text-center border-b"
-                rowSpan={2}
-                title="WB Заказы/день"
-              >
-                З
-              </TableHead>
-              <TableHead
-                className="top-0 z-20 bg-background text-xs font-medium text-center border-b"
-                rowSpan={2}
-                title="Оборачиваемость"
-              >
-                Об
-              </TableHead>
-              <TableHead
-                className="top-0 z-20 bg-background text-xs font-medium text-center border-b border-r"
-                rowSpan={2}
-                title="Дефицит"
-              >
-                Д
-              </TableHead>
+              {/* МП О/З/Об/Д — плоские, rowSpan=3 (нет expand) */}
+              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП О</TableHead>
+              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="WB Заказы/день">З</TableHead>
+              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Оборачиваемость">Об</TableHead>
+              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b border-r" rowSpan={3} title="Дефицит">Д</TableHead>
               {/* 7 кластерных колонок */}
               {CLUSTER_ORDER.map((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
-                const warehouses = clusterWarehouses[cluster] ?? []
-                const colSpan = isExpanded ? Math.max(warehouses.length, 1) : 4
+                const allWarehouses = clusterWarehouses[cluster] ?? []
+                const visibleWarehouses = visibleClusterWarehouses[cluster] ?? []
+                // collapsed: colSpan=4 (O/З/Об/Д) | expanded: visible × 4 (каждый склад имеет О/З/Об/Д) | empty expanded: colSpan=4 placeholder
+                const colSpan = isExpanded
+                  ? (visibleWarehouses.length > 0 ? visibleWarehouses.length * 4 : 4)
+                  : 4
                 return (
                   <TableHead
                     key={cluster}
@@ -159,7 +176,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     className="top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1"
                   >
                     <div className="flex items-center justify-center gap-1">
-                      <ClusterTooltip shortName={cluster} warehouseCount={warehouses.length}>
+                      <ClusterTooltip shortName={cluster} warehouseCount={allWarehouses.length}>
                         <span>{cluster}</span>
                       </ClusterTooltip>
                       <button
@@ -175,40 +192,69 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 )
               })}
             </TableRow>
-            {/* Уровень 2 — sub-columns */}
+            {/* Уровень 2 — для collapsed: О/З/Об/Д (rowSpan=2, т.к. заменяют level 3); для expanded: имена складов colSpan=4 */}
             <TableRow>
               {CLUSTER_ORDER.flatMap((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
-                const warehouses = clusterWarehouses[cluster] ?? []
+                const warehouses = visibleClusterWarehouses[cluster] ?? []
 
+                // Expanded: имя склада colSpan=4 per склад
                 if (isExpanded && warehouses.length > 0) {
                   return warehouses.map((w, idx) => (
                     <TableHead
                       key={`${cluster}-wh-${w.warehouseId}`}
+                      colSpan={4}
                       className={cn(
                         "top-[40px] z-20 bg-background text-xs text-center border-b px-2 py-1",
                         idx === warehouses.length - 1 && "border-r",
                         w.needsClusterReview && "text-yellow-600"
                       )}
+                      title={w.warehouseName}
                     >
-                      {w.needsClusterReview && <span className="mr-1">⚠️</span>}
-                      {w.warehouseName}
+                      <span className="line-clamp-1">
+                        {w.needsClusterReview && <span className="mr-1">⚠️</span>}
+                        {w.warehouseName}
+                      </span>
                     </TableHead>
                   ))
                 }
 
+                // Expanded пустой (нет складов в кластере) — placeholder colSpan=4
                 if (isExpanded && warehouses.length === 0) {
                   return [
-                    <TableHead key={`${cluster}-empty`} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1">—</TableHead>
+                    <TableHead key={`${cluster}-empty-lvl2`} colSpan={4} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1">—</TableHead>
                   ]
                 }
 
+                // Collapsed: О/З/Об/Д с rowSpan=2 (покрывают level 3)
                 return [
-                  <TableHead key={`${cluster}-o`} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Остаток">О</TableHead>,
-                  <TableHead key={`${cluster}-z`} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Заказы/день">З</TableHead>,
-                  <TableHead key={`${cluster}-ob`} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Оборачиваемость">Об</TableHead>,
-                  <TableHead key={`${cluster}-d`} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1" title="Дефицит">Д</TableHead>,
+                  <TableHead key={`${cluster}-o`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Остаток">О</TableHead>,
+                  <TableHead key={`${cluster}-z`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Заказы/день">З</TableHead>,
+                  <TableHead key={`${cluster}-ob`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Оборачиваемость">Об</TableHead>,
+                  <TableHead key={`${cluster}-d`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1" title="Дефицит">Д</TableHead>,
                 ]
+              })}
+            </TableRow>
+            {/* Уровень 3 — для expanded: О/З/Об/Д per склад. Для collapsed cells — level 2 покрывает rowSpan=2. */}
+            <TableRow>
+              {CLUSTER_ORDER.flatMap((cluster) => {
+                const isExpanded = expandedSet.has(cluster)
+                const warehouses = visibleClusterWarehouses[cluster] ?? []
+
+                if (!isExpanded) return []  // collapsed: cells покрыты rowSpan=2 из level 2
+
+                if (warehouses.length === 0) return []  // placeholder уже colSpan=4 в level 2
+
+                // Expanded: 4 cells O/З/Об/Д per склад
+                return warehouses.flatMap((w, idx) => {
+                  const lastWarehouse = idx === warehouses.length - 1
+                  return [
+                    <TableHead key={`${cluster}-${w.warehouseId}-o`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Остаток">О</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-z`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Заказы/день">З</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-ob`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Оборачиваемость">Об</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-d`} className={cn("top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1", lastWarehouse && "border-r")} title="Дефицит">Д</TableHead>,
+                  ]
+                })
               })}
             </TableRow>
           </TableHeader>
@@ -293,31 +339,49 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                         {CLUSTER_ORDER.flatMap((cluster) => {
                           const isExpanded = expandedSet.has(cluster)
                           const clusterData = card.clusters[cluster as ClusterShortName]
-                          const warehouses = clusterWarehouses[cluster as ClusterShortName] ?? []
+                          const warehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
 
                           if (isExpanded) {
                             if (warehouses.length === 0) {
-                              return [<StockCell key={`${card.wbCardId}-${cluster}-empty`} value={null} />]
+                              // placeholder colSpan=4 под single level-2 TableHead
+                              return [
+                                <TableCell key={`${card.wbCardId}-${cluster}-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground border-r">—</TableCell>
+                              ]
                             }
-                            return warehouses.map((w, wIdx) => {
+                            // Per-warehouse 4 cells (О/З/Об/Д) — такая же структура как в collapsed кластере
+                            return warehouses.flatMap((w, wIdx) => {
                               const slot = clusterData?.warehouses.find((s) => s.warehouseId === w.warehouseId)
-                              const ordersPerDay = slot?.ordersPerDay ?? null
-                              return (
+                              const whStock = slot?.quantity ?? null
+                              const whOrdersPerDay = slot?.ordersPerDay ?? null
+                              const whMetrics = calculateStockMetrics({
+                                stock: whStock,
+                                ordersPerDay: whOrdersPerDay,
+                                turnoverNormDays,
+                              })
+                              const whThreshold = deficitThreshold(turnoverNormDays, whOrdersPerDay)
+                              const lastWarehouse = wIdx === warehouses.length - 1
+                              return [
+                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-o`} value={whStock} />,
+                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-z`} value={whOrdersPerDay} />,
+                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-ob`} value={whMetrics.turnoverDays} />,
                                 <TableCell
-                                  key={`${card.wbCardId}-${cluster}-${w.warehouseId}`}
+                                  key={`${card.wbCardId}-${cluster}-${w.warehouseId}-d`}
                                   className={cn(
                                     "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
-                                    wIdx === warehouses.length - 1 && "border-r"
+                                    lastWarehouse && "border-r",
+                                    whMetrics.deficit === null && "text-muted-foreground",
+                                    whMetrics.deficit !== null && whMetrics.deficit <= 0 && "text-green-600 dark:text-green-500",
+                                    whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit > 0 && whMetrics.deficit < whThreshold && "text-yellow-600 dark:text-yellow-400",
+                                    whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit >= whThreshold && "text-red-600 dark:text-red-500 font-medium",
                                   )}
-                                  title={slot ? `Остаток: ${formatStockValue(slot.quantity)} шт${slot.ordersCount ? ` · Заказов/${card.periodDays ?? 7}д: ${slot.ordersCount}` : ""}` : undefined}
                                 >
-                                  {ordersPerDay !== null ? formatStockValue(ordersPerDay) : <span className="text-muted-foreground">—</span>}
-                                </TableCell>
-                              )
+                                  {whMetrics.deficit !== null ? formatStockValue(whMetrics.deficit) : "—"}
+                                </TableCell>,
+                              ]
                             })
                           }
 
-                          // Collapsed: 4 sub-columns О/З/Об/Д (Phase 15: З = per-cluster ordersPerDay)
+                          // Collapsed: 4 sub-columns О/З/Об/Д (Phase 15: З = per-cluster ordersPerDay, учитывает ВСЕ склады включая СЦ)
                           const clusterOrdersPerDay = clusterData?.ordersPerDay ?? null
                           const clusterMetrics = calculateStockMetrics({
                             stock: clusterData?.totalStock ?? null,
