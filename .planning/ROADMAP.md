@@ -293,7 +293,7 @@ Plans:
 ### Phases (v1.2)
 
 - [x] **Phase 14: Управление остатками** — schema + WbWarehouse seed + wb-sync per-warehouse + Excel Иваново + Производство + Норма + /stock Product-level + /stock/wb с кластерами и expand до складов (completed 2026-04-22)
-- [ ] **Phase 15: Per-warehouse и per-cluster скорость заказов для /stock/wb** — Orders API per-warehouse + WbCardWarehouseOrders таблица + per-cluster aggregation + реальная З в UI
+- [x] **Phase 15: Per-warehouse и per-cluster скорость заказов для /stock/wb** — Orders API per-warehouse + WbCardWarehouseOrders таблица + per-cluster aggregation + реальная З в UI (completed 2026-04-22)
 
 ### Phase Details (v1.2)
 
@@ -361,5 +361,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
-| 15. Per-cluster скорость заказов /stock/wb | 2/3 | In Progress|  |
+| 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete   | 2026-04-22 |
 

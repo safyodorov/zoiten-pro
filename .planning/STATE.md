@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to execute
-stopped_at: Completed 15-per-cluster-orders-02-PLAN.md
-last_updated: "2026-04-22T09:13:10.533Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
+last_updated: "2026-04-22T09:13:44.861Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -99,6 +99,7 @@ Plan: 3 of 3
 | Phase 14-stock P07 | 559 | 3 tasks | 8 files |
 | Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
+| Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -233,6 +234,8 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d сохранена без изменений — backward compat, новый код использует fetchOrdersPerWarehouse
 - [Phase 15-per-cluster-orders]: avg в OrdersWarehouseStats = count / periodDays (не / 7 hardcoded) — поддерживает произвольный periodDays
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d заменён на fetchOrdersPerWarehouse — один запрос к Orders API покрывает card-level avg/yesterday и per-warehouse breakdown (rate limit ~1 req/min)
+- [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
+- [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
 
 ### Roadmap Evolution
 
@@ -273,6 +276,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T09:13:10.527Z
-Stopped at: Completed 15-per-cluster-orders-02-PLAN.md
+Last session: 2026-04-22T09:13:44.855Z
+Stopped at: Completed 15-per-cluster-orders-03-PLAN.md
 Resume file: None
