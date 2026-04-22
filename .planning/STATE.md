@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Milestone complete
-stopped_at: Completed 14-stock-07-PLAN.md — Phase 14 UAT checkpoint
-last_updated: "2026-04-22T07:28:20.561Z"
+status: Ready to execute
+stopped_at: Completed 15-per-cluster-orders-01-PLAN.md
+last_updated: "2026-04-22T09:08:17.977Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 14 — stock
+**Current focus:** Phase 15 — per-cluster-orders
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 15 (per-cluster-orders) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Plan: Not started
 | Phase 14-stock P04 | 327s | 2 tasks | 7 files |
 | Phase 14-stock P06 | 4 минуты | 2 tasks | 4 files |
 | Phase 14-stock P07 | 559 | 3 tasks | 8 files |
+| Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,8 @@ Recent decisions affecting current work:
 - [Phase 14-stock]: Inline production input: нативный <input> вместо shadcn Input — экономия места в ячейке таблицы (14-UI-SPEC §4)
 - [Phase 14-stock]: ClusterTooltip: render-prop (render={<span />}) вместо asChild — base-ui паттерн из PromoTooltip.tsx
 - [Phase 14-stock]: Plan 14-07: nginx redirect /inventory не нужен — Next.js 308 через next.config.ts достаточен
+- [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d сохранена без изменений — backward compat, новый код использует fetchOrdersPerWarehouse
+- [Phase 15-per-cluster-orders]: avg в OrdersWarehouseStats = count / periodDays (не / 7 hardcoded) — поддерживает произвольный periodDays
 
 ### Roadmap Evolution
 
@@ -268,6 +271,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T07:13:53.873Z
-Stopped at: Completed 14-stock-07-PLAN.md — Phase 14 UAT checkpoint
+Last session: 2026-04-22T09:08:17.972Z
+Stopped at: Completed 15-per-cluster-orders-01-PLAN.md
 Resume file: None

@@ -236,9 +236,9 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### Orders Per-Warehouse (Phase 15)
 
-- [ ] **ORDERS-01**: Prisma миграция — модель `WbCardWarehouseOrders(id, wbCardId, warehouseId, ordersCount Int @default(0), periodDays Int @default(7), updatedAt)` с `@@unique([wbCardId, warehouseId])`, indexes на `wbCardId` и `warehouseId`, FK `wbCardId → WbCard.id ON DELETE CASCADE`, FK `warehouseId → WbWarehouse.id`. Обратные relations в `WbCard.warehouseOrders` и `WbWarehouse.orders`.
-- [ ] **ORDERS-02**: При `POST /api/wb-sync` параллельно stocks загружаются orders за 7 дней через `GET statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=<7d ago>&flag=0`. `isCancel: true` ИСКЛЮЧАЮТСЯ. Clean-replace per `wbCardId` в транзакции: `deleteMany NOT IN incoming` + `upsert` per warehouse. Auto-insert неизвестных складов через `stableWarehouseIdFromName` + `needsClusterReview: true` (паттерн STOCK-10).
-- [ ] **ORDERS-03**: На `/stock/wb` колонка З каждого кластера (collapsed) = `SUM(ordersCount per warehouses of cluster) / periodDays`. При expand кластера — per-warehouse З = `ordersCount / periodDays`. Метрики Об/Д per-кластер пересчитываются от кластерной З (не от `card.avgSalesSpeed7d`) через существующую `calculateStockMetrics` из `lib/stock-math.ts`. `WbCard.avgSalesSpeed7d` остаётся fallback для nmId без per-warehouse данных и для Сводной колонки МП/З. `scripts/wb-sync-stocks.js` расширен секцией orders (идентичный паттерн stocks section).
+- [x] **ORDERS-01**: Prisma миграция — модель `WbCardWarehouseOrders(id, wbCardId, warehouseId, ordersCount Int @default(0), periodDays Int @default(7), updatedAt)` с `@@unique([wbCardId, warehouseId])`, indexes на `wbCardId` и `warehouseId`, FK `wbCardId → WbCard.id ON DELETE CASCADE`, FK `warehouseId → WbWarehouse.id`. Обратные relations в `WbCard.warehouseOrders` и `WbWarehouse.orders`.
+- [x] **ORDERS-02**: При `POST /api/wb-sync` параллельно stocks загружаются orders за 7 дней через `GET statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=<7d ago>&flag=0`. `isCancel: true` ИСКЛЮЧАЮТСЯ. Clean-replace per `wbCardId` в транзакции: `deleteMany NOT IN incoming` + `upsert` per warehouse. Auto-insert неизвестных складов через `stableWarehouseIdFromName` + `needsClusterReview: true` (паттерн STOCK-10).
+- [x] **ORDERS-03**: На `/stock/wb` колонка З каждого кластера (collapsed) = `SUM(ordersCount per warehouses of cluster) / periodDays`. При expand кластера — per-warehouse З = `ordersCount / periodDays`. Метрики Об/Д per-кластер пересчитываются от кластерной З (не от `card.avgSalesSpeed7d`) через существующую `calculateStockMetrics` из `lib/stock-math.ts`. `WbCard.avgSalesSpeed7d` остаётся fallback для nmId без per-warehouse данных и для Сводной колонки МП/З. `scripts/wb-sync-stocks.js` расширен секцией orders (идентичный паттерн stocks section).
 
 ## v2 Requirements
 
@@ -462,9 +462,9 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-27 | Phase 14 | Complete |
 | STOCK-28 | Phase 14 | Complete |
 | STOCK-29 | Phase 14 | Complete |
-| ORDERS-01 | Phase 15 | Pending |
-| ORDERS-02 | Phase 15 | Pending |
-| ORDERS-03 | Phase 15 | Pending |
+| ORDERS-01 | Phase 15 | Complete |
+| ORDERS-02 | Phase 15 | Complete |
+| ORDERS-03 | Phase 15 | Complete |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*

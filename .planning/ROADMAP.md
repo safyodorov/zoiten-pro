@@ -361,5 +361,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
-| 15. Per-cluster скорость заказов /stock/wb | 0/TBD | Planned |  |
+| 15. Per-cluster скорость заказов /stock/wb | 1/3 | In Progress|  |
 
