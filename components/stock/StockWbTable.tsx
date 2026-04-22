@@ -132,7 +132,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
         </Button>
       </div>
 
-      <div className="overflow-auto border rounded max-h-[calc(100vh-180px)]">
+      <div className="overflow-auto border rounded h-[calc(100vh-260px)]">
         <Table>
           <TableHeader>
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
@@ -156,7 +156,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 Артикул WB
               </TableHead>
               {/* МП О/З/Об/Д — плоские, rowSpan=3 (нет expand) */}
-              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП О</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="WB Заказы/день">З</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Оборачиваемость">Об</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r" rowSpan={3} title="Дефицит">Д</TableHead>

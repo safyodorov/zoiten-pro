@@ -153,7 +153,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
 
   // ── Table ──────────────────────────────────────────────────────
   return (
-    <div className="overflow-auto border rounded max-h-[calc(100vh-180px)]">
+    <div className="overflow-auto border rounded h-[calc(100vh-260px)]">
       <Table>
         <TableHeader>
           {/* ── Уровень 1: группы колонок ── */}
