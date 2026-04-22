@@ -234,6 +234,7 @@ Recent decisions affecting current work:
 - Phase 7 added: Управление ценами WB — калькулятор юнит-экономики с акциями и расчётными ценами (directory renamed to `07-prices-wb` for clarity)
 - Milestone v1.1 added (2026-04-17): +40 requirements (SUP-01..SUP-40), +6 phases (Phase 8..13) — Служба поддержки WB (отзывы/вопросы → возвраты → чат → шаблоны/обжалование → профиль/мессенджеры → статистика)
 - Milestone v1.2 added (2026-04-21): +29 requirements (STOCK-01..STOCK-29), +1 phase (Phase 14 = 7 plans) — Управление остатками (schema + WB per-warehouse + Excel Иваново + Производство + /stock + /stock/wb с кластерами)
+- Phase 15 added (2026-04-22): Per-warehouse и per-cluster скорость заказов для /stock/wb — расширение Phase 14: Orders API per-warehouse + WbCardWarehouseOrders таблица + реальные З/Об/Д per-кластер вместо единого avgSalesSpeed7d
 
 ### Pending Todos
 

@@ -293,6 +293,7 @@ Plans:
 ### Phases (v1.2)
 
 - [x] **Phase 14: Управление остатками** — schema + WbWarehouse seed + wb-sync per-warehouse + Excel Иваново + Производство + Норма + /stock Product-level + /stock/wb с кластерами и expand до складов (completed 2026-04-22)
+- [ ] **Phase 15: Per-warehouse и per-cluster скорость заказов для /stock/wb** — Orders API per-warehouse + WbCardWarehouseOrders таблица + per-cluster aggregation + реальная З в UI
 
 ### Phase Details (v1.2)
 
@@ -324,10 +325,25 @@ Plans:
 
 **UI hint**: yes
 
+### Phase 15: Per-warehouse и per-cluster скорость заказов для /stock/wb
+**Goal**: Менеджер открывает `/stock/wb` и видит **реальную скорость заказов per-кластер и per-склад** (за 7 дней), а не единое среднее по nmId. Каждый кластер (ЦФО/ЮГ/Урал/ПФО/СЗО/СФО/Прочие) и каждый склад при expand показывает свою колонку **З** (заказы/день) — сумма за 7 дней / 7 от заказов, привязанных к конкретному warehouseName из WB Orders API. Это даёт корректные метрики Об (оборачиваемость) и Д (дефицит) per-кластер, а не глобальные.
+**Depends on**: Phase 14 (WbCardWarehouseStock, lib/wb-api.ts, lib/wb-clusters.ts, StockWbTable, scripts/wb-sync-stocks.js — вся инфраструктура per-warehouse уже существует)
+**Requirements**: ORDERS-01, ORDERS-02, ORDERS-03 (будут созданы в plan-phase)
+**Success Criteria** (what must be TRUE):
+  1. При нажатии «Обновить из WB» на `/stock` параллельно с stocks загружаются orders за последние 7 дней через `GET statistics-api/api/v1/supplier/orders?dateFrom=<7d ago>` и сохраняются per-warehouse в новой таблице `WbCardWarehouseOrders (wbCardId, warehouseId, ordersCount, periodDays=7, updatedAt)` с уникальным индексом `(wbCardId, warehouseId)` и `onDelete: Cascade`.
+  2. На `/stock/wb` в колонке **З** каждого кластера (collapsed state) показывается сумма `ordersCount` по всем складам кластера, делённая на `periodDays` (заказы/день per-cluster). При expand → per-warehouse колонка показывает свою скорость: `ordersCount / periodDays`.
+  3. Оборачиваемость (Об) и дефицит (Д) per-кластер пересчитываются от **кластерной скорости заказов**, а не от `card.avgSalesSpeed7d`. Формула остаётся через `calculateStockMetrics` из `lib/stock-math.ts` — меняется только входное значение ordersPerDay.
+  4. `WbCard.avgSalesSpeed7d` остаётся для fallback (если per-warehouse данных нет — например для nmId без заказов за 7 дней) и для Сводной колонки МП/З на уровне nmId.
+  5. Auto-insert неизвестных складов продолжает работать (как в Phase 14) — если в orders появился склад, которого нет в WbWarehouse, он создаётся с `needsClusterReview: true`.
+  6. `scripts/wb-sync-stocks.js` дополняется секцией orders — чтобы оркестратор мог одним скриптом наполнять и остатки, и заказы без UI.
+**Plans**: TBD (run /gsd:plan-phase 15)
+
+**UI hint**: yes (изменение визуализации /stock/wb — пересчёт З/Об/Д per-кластер)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -345,3 +361,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
+| 15. Per-cluster скорость заказов /stock/wb | 0/TBD | Planned |  |
+
