@@ -132,7 +132,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
         </Button>
       </div>
 
-      <div className="overflow-x-auto border rounded">
+      <div className="overflow-auto border rounded max-h-[calc(100vh-180px)]">
         <Table>
           <TableHeader>
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
@@ -156,10 +156,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 Артикул WB
               </TableHead>
               {/* МП О/З/Об/Д — плоские, rowSpan=3 (нет expand) */}
-              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП О</TableHead>
-              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="WB Заказы/день">З</TableHead>
-              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Оборачиваемость">Об</TableHead>
-              <TableHead className="top-0 z-20 bg-background text-xs font-medium text-center border-b border-r" rowSpan={3} title="Дефицит">Д</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Остаток (шт) МП = WB">МП О</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="WB Заказы/день">З</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b" rowSpan={3} title="Оборачиваемость">Об</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r" rowSpan={3} title="Дефицит">Д</TableHead>
               {/* 7 кластерных колонок */}
               {CLUSTER_ORDER.map((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
@@ -173,7 +173,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   <TableHead
                     key={cluster}
                     colSpan={colSpan}
-                    className="top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1"
+                    className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1"
                   >
                     <div className="flex items-center justify-center gap-1">
                       <ClusterTooltip shortName={cluster} warehouseCount={allWarehouses.length}>
@@ -206,7 +206,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                       key={`${cluster}-wh-${w.warehouseId}`}
                       colSpan={4}
                       className={cn(
-                        "top-[40px] z-20 bg-background text-xs text-center border-b px-2 py-1",
+                        "sticky top-[40px] z-20 bg-background text-xs text-center border-b px-2 py-1",
                         idx === warehouses.length - 1 && "border-r",
                         w.needsClusterReview && "text-yellow-600"
                       )}
@@ -223,16 +223,16 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 // Expanded пустой (нет складов в кластере) — placeholder colSpan=4
                 if (isExpanded && warehouses.length === 0) {
                   return [
-                    <TableHead key={`${cluster}-empty-lvl2`} colSpan={4} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1">—</TableHead>
+                    <TableHead key={`${cluster}-empty-lvl2`} colSpan={4} className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1">—</TableHead>
                   ]
                 }
 
                 // Collapsed: О/З/Об/Д с rowSpan=2 (покрывают level 3)
                 return [
-                  <TableHead key={`${cluster}-o`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Остаток">О</TableHead>,
-                  <TableHead key={`${cluster}-z`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Заказы/день">З</TableHead>,
-                  <TableHead key={`${cluster}-ob`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Оборачиваемость">Об</TableHead>,
-                  <TableHead key={`${cluster}-d`} rowSpan={2} className="top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1" title="Дефицит">Д</TableHead>,
+                  <TableHead key={`${cluster}-o`} rowSpan={2} className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Остаток">О</TableHead>,
+                  <TableHead key={`${cluster}-z`} rowSpan={2} className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Заказы/день">З</TableHead>,
+                  <TableHead key={`${cluster}-ob`} rowSpan={2} className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1" title="Оборачиваемость">Об</TableHead>,
+                  <TableHead key={`${cluster}-d`} rowSpan={2} className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1" title="Дефицит">Д</TableHead>,
                 ]
               })}
             </TableRow>
@@ -250,10 +250,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 return warehouses.flatMap((w, idx) => {
                   const lastWarehouse = idx === warehouses.length - 1
                   return [
-                    <TableHead key={`${cluster}-${w.warehouseId}-o`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Остаток">О</TableHead>,
-                    <TableHead key={`${cluster}-${w.warehouseId}-z`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Заказы/день">З</TableHead>,
-                    <TableHead key={`${cluster}-${w.warehouseId}-ob`} className="top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Оборачиваемость">Об</TableHead>,
-                    <TableHead key={`${cluster}-${w.warehouseId}-d`} className={cn("top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1", lastWarehouse && "border-r")} title="Дефицит">Д</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-o`} className="sticky top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Остаток">О</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-z`} className="sticky top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Заказы/день">З</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-ob`} className="sticky top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1" title="Оборачиваемость">Об</TableHead>,
+                    <TableHead key={`${cluster}-${w.warehouseId}-d`} className={cn("sticky top-[80px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b px-1 py-1", lastWarehouse && "border-r")} title="Дефицит">Д</TableHead>,
                   ]
                 })
               })}
