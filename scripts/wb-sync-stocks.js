@@ -125,13 +125,131 @@ async function main() {
     })
   }
 
+  // ─── Phase 15 (ORDERS-02): orders per-warehouse ─────────────
+  console.log(`\nFetching orders (7 days)...`)
+  const PERIOD_DAYS = 7
+  const dateFrom7 = new Date(Date.now() - PERIOD_DAYS * 24 * 3600 * 1000).toISOString()
+  const cmdOrders = `curl -sS -H "Authorization: ${WB_API_TOKEN}" "https://statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=${encodeURIComponent(dateFrom7)}&flag=0"`
+  const rawOrders = execSync(cmdOrders, { encoding: "utf-8", maxBuffer: 200 * 1024 * 1024 })
+  let orders
+  try {
+    orders = JSON.parse(rawOrders)
+  } catch (e) {
+    console.error("Orders API JSON parse failed — пропускаем секцию orders:", e.message)
+    orders = null
+  }
+
+  let ordersMatched = 0
+  let ordersInserted = 0
+  let ordersUnknownWarehouses = 0
+  const newOrdersWarehouses = new Set()
+
+  if (Array.isArray(orders)) {
+    console.log(`Received ${orders.length} order rows`)
+
+    // Группируем по nmId → Map<warehouseName, count> (исключая isCancel)
+    const ordersByNmId = new Map()
+    for (const o of orders) {
+      if (o.isCancel) continue
+      const nm = o.nmId ?? o.nm_id
+      const wh = (o.warehouseName || "").trim()
+      if (!nm || !wh) continue
+      if (!ordersByNmId.has(nm)) ordersByNmId.set(nm, new Map())
+      const whMap = ordersByNmId.get(nm)
+      whMap.set(wh, (whMap.get(wh) ?? 0) + 1)
+    }
+    console.log(`Unique nmIds with orders: ${ordersByNmId.size}`)
+
+    for (const [nmId, whMap] of ordersByNmId) {
+      const wbCardId = cardByNmId.get(nmId)
+      if (!wbCardId) continue
+      ordersMatched++
+
+      await prisma.$transaction(async (tx) => {
+        const incoming = new Set()
+
+        for (const [warehouseName, ordersCount] of whMap) {
+          let wh = await tx.wbWarehouse.findFirst({
+            where: { name: warehouseName },
+            select: { id: true },
+          })
+
+          let warehouseId
+          if (wh) {
+            warehouseId = wh.id
+          } else {
+            warehouseId = stableWarehouseIdFromName(warehouseName)
+            try {
+              await tx.wbWarehouse.create({
+                data: {
+                  id: warehouseId,
+                  name: warehouseName,
+                  cluster: "Прочие склады",
+                  shortCluster: "Прочие",
+                  isActive: true,
+                  needsClusterReview: true,
+                },
+              })
+              newOrdersWarehouses.add(warehouseName)
+              ordersUnknownWarehouses++
+            } catch (e) {
+              // race condition — берём существующий
+              const existing = await tx.wbWarehouse.findFirst({
+                where: { name: warehouseName },
+                select: { id: true },
+              })
+              if (existing) warehouseId = existing.id
+              else throw e
+            }
+          }
+
+          incoming.add(warehouseId)
+
+          const existing = await tx.wbCardWarehouseOrders.findUnique({
+            where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
+            select: { id: true },
+          })
+
+          if (existing) {
+            await tx.wbCardWarehouseOrders.update({
+              where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
+              data: { ordersCount, periodDays: PERIOD_DAYS },
+            })
+          } else {
+            await tx.wbCardWarehouseOrders.create({
+              data: { wbCardId, warehouseId, ordersCount, periodDays: PERIOD_DAYS },
+            })
+            ordersInserted++
+          }
+        }
+
+        // Clean: удалить склады которых нет в текущем ответе
+        if (incoming.size > 0) {
+          await tx.wbCardWarehouseOrders.deleteMany({
+            where: {
+              wbCardId,
+              NOT: { warehouseId: { in: [...incoming] } },
+            },
+          })
+        }
+      })
+    }
+  }
+
   console.log(`\n== Результат ==`)
-  console.log(`Matched nmIds: ${matched} / ${byNmId.size}`)
-  console.log(`Новых записей WbCardWarehouseStock: ${inserted}`)
-  console.log(`Unknown warehouses auto-inserted: ${unknownWarehouses}`)
+  console.log(`[STOCKS] Matched nmIds: ${matched} / ${byNmId.size}`)
+  console.log(`[STOCKS] Новых записей WbCardWarehouseStock: ${inserted}`)
+  console.log(`[STOCKS] Unknown warehouses auto-inserted: ${unknownWarehouses}`)
   if (newWarehouses.size > 0) {
-    console.log(`\nНовые склады (needsClusterReview):`)
+    console.log(`\n[STOCKS] Новые склады (needsClusterReview):`)
     newWarehouses.forEach((n) => console.log(`  - ${n}`))
+  }
+  console.log(`\n[ORDERS] Matched nmIds: ${ordersMatched}`)
+  console.log(`[ORDERS] Новых записей WbCardWarehouseOrders: ${ordersInserted}`)
+  console.log(`[ORDERS] Unknown warehouses auto-inserted: ${ordersUnknownWarehouses}`)
+  if (newOrdersWarehouses.size > 0) {
+    console.log(`\n[ORDERS] Новые склады (needsClusterReview):`)
+    newOrdersWarehouses.forEach((n) => console.log(`  - ${n}`))
   }
 
   await prisma.$disconnect()
