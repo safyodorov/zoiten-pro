@@ -168,11 +168,12 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               >
                 Артикул WB
               </TableHead>
-              {/* Всего на WB — 1 колонка, физ. остаток + товар в пути (агрегат по nmId) */}
+              {/* Всего на WB — 1 колонка, rowSpan=3 (как sticky cols), 92px высота.
+                  Нет sub-cell в row 3 — просто одно число на всю группу. */}
               <TableHead
-                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px]"
                 colSpan={1}
-                rowSpan={2}
+                rowSpan={3}
                 title="Физический остаток по всем складам + Товар в пути (всего)"
               >
                 Всего на WB
