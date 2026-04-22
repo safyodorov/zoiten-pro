@@ -20,9 +20,14 @@ function stableWarehouseIdFromName(name) {
 }
 
 async function main() {
-  // Вчера (1 day ago) ISO
-  const date = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 19)
-  console.log(`Fetching stocks since ${date}...`)
+  // ВАЖНО: dateFrom в Statistics API stocks — фильтр по lastChangeDate.
+  // Если указать "вчера", вернутся ТОЛЬКО остатки изменённые за 24ч →
+  // стабильные остатки (не менялись) пропадут. Решение: использовать
+  // 2019-06-20 (дата запуска API) для полного snapshot всех остатков.
+  // Пример: nmId 418716179 с qty=90 на Электростали не менялся >24ч →
+  // без этого фикса возвращалась бы только inWay-запись (1 шт).
+  const date = "2019-06-20T00:00:00"
+  console.log(`Fetching stocks since ${date} (full snapshot)...`)
 
   const cmd = `curl -sS -H "Authorization: ${WB_API_TOKEN}" "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=${date}"`
   const raw = execSync(cmd, { encoding: "utf-8", maxBuffer: 100 * 1024 * 1024 })

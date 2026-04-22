@@ -799,8 +799,13 @@ export async function fetchStocksPerWarehouse(
 
   const token = getToken()
 
-  // dateFrom = вчера (ISO format) — Statistics API требует дату начала
-  const dateFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  // ВАЖНО: dateFrom — фильтр по lastChangeDate, не период возврата.
+  // Если ставить now-1d, вернутся только остатки изменённые за 24ч — стабильные
+  // (не менялись) пропадут из ответа. Используем 2019-06-20 (дата запуска API)
+  // для полного snapshot. Пример: nmId 418716179 имел qty=90 на Электростали,
+  // но с now-1d вернулась только 1 строка про inWay (1 шт) — реальные 90
+  // терялись. Фикс 2026-04-22.
+  const dateFrom = "2019-06-20T00:00:00"
   const url = `${STATISTICS_API_STOCKS}?dateFrom=${encodeURIComponent(dateFrom)}`
 
   const res = await fetch(url, {
