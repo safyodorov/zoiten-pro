@@ -281,7 +281,9 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       colSpan={4}
                       className={cn(
                         "sticky top-[40px] z-20 bg-background text-xs text-center border-b h-7 px-2 py-1",
-                        idx === warehouses.length - 1 && "border-r",
+                        idx === warehouses.length - 1
+                          ? "border-r"
+                          : "border-r border-r-border/40",
                         w.needsClusterReview && "text-yellow-600"
                       )}
                       title={w.warehouseName}
@@ -329,7 +331,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       <TableHead key={`${cluster}-${w.warehouseId}-o`} className="sticky top-[68px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b h-6 px-1 py-0" title="Остаток">О</TableHead>,
                       <TableHead key={`${cluster}-${w.warehouseId}-z`} className="sticky top-[68px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b h-6 px-1 py-0" title="Заказы/день">З</TableHead>,
                       <TableHead key={`${cluster}-${w.warehouseId}-ob`} className="sticky top-[68px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b h-6 px-1 py-0" title="Оборачиваемость">Об</TableHead>,
-                      <TableHead key={`${cluster}-${w.warehouseId}-d`} className={cn("sticky top-[68px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b h-6 px-1 py-0", lastWarehouse && "border-r")} title="Дефицит">Д</TableHead>,
+                      <TableHead key={`${cluster}-${w.warehouseId}-d`} className={cn("sticky top-[68px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b h-6 px-1 py-0", lastWarehouse ? "border-r" : "border-r border-r-border/40")} title="Дефицит">Д</TableHead>,
                     ]
                   })
                 }
@@ -469,7 +471,9 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                             colSpan={4}
                             className={cn(
                               "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
-                              i === groupCount - 1 && "border-r"
+                              i === groupCount - 1
+                                ? "border-r"
+                                : "border-r border-r-border/40"
                             )}
                           >—</TableCell>
                         ))
@@ -572,7 +576,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                                   key={`${card.wbCardId}-${cluster}-${w.warehouseId}-d`}
                                   className={cn(
                                     "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
-                                    lastWarehouse && "border-r",
+                                    lastWarehouse ? "border-r" : "border-r border-r-border/40",
                                     whMetrics.deficit === null && "text-muted-foreground",
                                     whMetrics.deficit !== null && whMetrics.deficit <= 0 && "text-green-600 dark:text-green-500",
                                     whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit > 0 && whMetrics.deficit < whThreshold && "text-yellow-600 dark:text-yellow-400",
