@@ -313,7 +313,7 @@ Plans:
 - [x] 14-01-PLAN.md — Schema + routing rename `/inventory` → `/stock` + Wave 0 smoke tests (WB endpoint curl + golden test stubs для stock-math / normalize-sku) — STOCK-01, STOCK-02, STOCK-03, STOCK-04, STOCK-05, STOCK-06, STOCK-26, STOCK-27
 - [x] 14-02-PLAN.md — WbWarehouse seed script (Zero Wave: сбор списка через DevTools Network tab на seller.wildberries.ru + валидация cluster names с пользователем) — STOCK-09, STOCK-23
 - [x] 14-03-PLAN.md — wb-sync extension: `fetchStocksPerWarehouse()` + WB API migration + transaction clean-replace в `/api/wb-sync` + auto-insert неизвестных складов — STOCK-07, STOCK-08, STOCK-10
-- [ ] 14-04-PLAN.md — Excel upload Иваново: `parseIvanovoExcel` (Zero Wave: real fixture от пользователя) + `POST /api/stock/ivanovo-upload` + preview Dialog + `upsertIvanovoStock` server action — STOCK-11, STOCK-12, STOCK-28
+- [x] 14-04-PLAN.md — Excel upload Иваново: `parseIvanovoExcel` (Zero Wave: real fixture от пользователя) + `POST /api/stock/ivanovo-upload` + preview Dialog + `upsertIvanovoStock` server action — STOCK-11, STOCK-12, STOCK-28
 - [x] 14-05-PLAN.md — Production manual input + turnover norm + refresh button: inline input `productionStock` (debounced) + `TurnoverNormInput` в шапке (pattern GlobalRatesBar) + кнопка «Обновить из WB» — STOCK-13, STOCK-14, STOCK-15
 - [ ] 14-06-PLAN.md — RSC page `/stock` (Product-level flat): data assembly + JS-агрегация + sticky 4 columns + 6 колоночных групп (РФ/Иваново/Производство/МП/WB/Ozon) + цветовая кодировка Д + фильтры MultiSelect + toggle «только с дефицитом» — STOCK-16, STOCK-17, STOCK-18, STOCK-19, STOCK-20
 - [ ] 14-07-PLAN.md — RSC page `/stock/wb` (nmId-level с кластерами): `StockTabs` + 7 кластерных колонок + expand до per-warehouse columns (state в URL searchParams) + ClusterTooltip + `/stock/ozon` ComingSoon + deploy + UAT — STOCK-21, STOCK-22, STOCK-24, STOCK-25, STOCK-29
@@ -344,4 +344,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 11. Шаблоны + Обжалование (reformulated — local-only + hybrid manual) | 3/4 | In Progress|  |
 | 12. Профиль покупателя + Мессенджеры (reformulated — hybrid Customer linking) | 2/3 | In Progress|  |
 | 13. Статистика | 2/3 | In Progress|  |
-| 14. Управление остатками | 4/7 | In Progress|  |
+| 14. Управление остатками | 5/7 | In Progress|  |

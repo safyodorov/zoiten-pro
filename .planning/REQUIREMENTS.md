@@ -205,8 +205,8 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### Data Input — Иваново, Производство, Норма
 
-- [ ] **STOCK-11**: Excel-импорт Иваново — `POST /api/stock/ivanovo-upload` multipart; парсер `lib/parse-ivanovo-excel.ts` (паттерн из `parse-auto-promo-excel.ts`, колонки: A=SKU, B=quantity); preview Dialog с diff old→new qty + секции `unmatched/duplicates/invalid` (не блокируют confirm).
-- [ ] **STOCK-12**: Server action `upsertIvanovoStock(rows: Array<{sku, quantity}>)` — normalizeSku → lookup Product по sku → `tx.product.update({where: {sku}, data: {ivanovoStock: qty, ivanovoStockUpdatedAt: now}})`; возвращает `{imported, notFound, duplicates, invalid}` + downloadable CSV с ошибками; `revalidatePath("/stock")`.
+- [x] **STOCK-11**: Excel-импорт Иваново — `POST /api/stock/ivanovo-upload` multipart; парсер `lib/parse-ivanovo-excel.ts` (паттерн из `parse-auto-promo-excel.ts`, колонки: A=SKU, B=quantity); preview Dialog с diff old→new qty + секции `unmatched/duplicates/invalid` (не блокируют confirm).
+- [x] **STOCK-12**: Server action `upsertIvanovoStock(rows: Array<{sku, quantity}>)` — normalizeSku → lookup Product по sku → `tx.product.update({where: {sku}, data: {ivanovoStock: qty, ivanovoStockUpdatedAt: now}})`; возвращает `{imported, notFound, duplicates, invalid}` + downloadable CSV с ошибками; `revalidatePath("/stock")`.
 - [x] **STOCK-13**: Inline-редактирование `Product.productionStock` в `/stock` — input на каждой строке Product (Сводная), debounced save 500ms через server action `updateProductionStock(productId, value)`; Zod `int().min(0).max(99999)` или null (пустое поле → null); `revalidatePath("/stock")`.
 - [x] **STOCK-14**: Inline-редактирование «Нормы оборачиваемости» в шапке `/stock` — компонент `TurnoverNormInput` (паттерн `GlobalRatesBar` из Phase 7); debounced save 500ms через `updateTurnoverNorm(days)`; AppSetting key `stock.turnoverNormDays`; Zod `int().min(1).max(100)`; `revalidatePath("/stock")` + `/stock/wb`.
 - [x] **STOCK-15**: Кнопка «Обновить из WB» в шапке `/stock` — вызывает `POST /api/wb-sync` (существующий, расширенный STOCK-08); toast states loading/success/error; `revalidatePath("/stock")` + `/stock/wb` на сервере.
@@ -231,7 +231,7 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 - [x] **STOCK-26**: Vitest `tests/stock-math.test.ts` — 5+ test cases: happy path, О=null, З=0, normDays=0, normDays=100, О=0 (дефицит максимальный).
 - [x] **STOCK-27**: Vitest `tests/normalize-sku.test.ts` — canonical cases: `УКТ-000001` / `УКТ-1` / `1` / ` укт-000001 ` / `УКТ—000001` (em-dash) → все в `УКТ-000001`; invalid cases: `abc`, `УКТ-`, пустая строка → throw.
-- [ ] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
+- [x] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
 - [ ] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
 
 ## v2 Requirements
@@ -437,8 +437,8 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-08 | Phase 14 | Complete |
 | STOCK-09 | Phase 14 | Complete |
 | STOCK-10 | Phase 14 | Complete |
-| STOCK-11 | Phase 14 | Pending |
-| STOCK-12 | Phase 14 | Pending |
+| STOCK-11 | Phase 14 | Complete |
+| STOCK-12 | Phase 14 | Complete |
 | STOCK-13 | Phase 14 | Complete |
 | STOCK-14 | Phase 14 | Complete |
 | STOCK-15 | Phase 14 | Complete |
@@ -454,7 +454,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-25 | Phase 14 | Pending |
 | STOCK-26 | Phase 14 | Complete |
 | STOCK-27 | Phase 14 | Complete |
-| STOCK-28 | Phase 14 | Pending |
+| STOCK-28 | Phase 14 | Complete |
 | STOCK-29 | Phase 14 | Pending |
 
 ---
