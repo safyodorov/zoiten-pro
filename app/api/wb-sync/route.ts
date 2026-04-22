@@ -15,7 +15,24 @@ import {
   fetchStocks,
   fetchBuyoutPercent,
   fetchAvgSalesSpeed7d,
+  fetchStocksPerWarehouse,
+  type WarehouseStockItem,
 } from "@/lib/wb-api"
+
+/**
+ * Генерирует стабильный числовой ID для склада по его имени.
+ * Используется когда Statistics API возвращает только warehouseName (без числового id).
+ * Диапазон: 10_000_001..18_446_744 — не пересекается с реальными WB warehouseId (< 1_000_000).
+ * Алгоритм: djb2 hash → Math.abs → 10_000_001 + (hash % 8_446_744).
+ */
+function stableWarehouseIdFromName(name: string): number {
+  let hash = 5381
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash) ^ name.charCodeAt(i)
+    hash = hash >>> 0 // unsigned 32-bit
+  }
+  return 10_000_001 + (hash % 8_446_744)
+}
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -47,6 +64,17 @@ export async function POST(): Promise<NextResponse> {
     // 6. Процент выкупа из Analytics API
     const nmIds = rawCards.map((c) => c.nmID)
     const buyoutMap = await fetchBuyoutPercent(nmIds)
+
+    // 6a. Phase 14 (STOCK-07, STOCK-08): per-warehouse остатки из Statistics API
+    // DEVIATION: Statistics API вместо Analytics API (base token 403 на Analytics)
+    // Один запрос возвращает ВСЕ данные — degraded mode при failure
+    let stocksPerWarehouse = new Map<number, WarehouseStockItem[]>()
+    try {
+      stocksPerWarehouse = await fetchStocksPerWarehouse(nmIds)
+      console.log(`[wb-sync] Получено per-warehouse остатков для ${stocksPerWarehouse.size} nmIds`)
+    } catch (e) {
+      console.warn("[wb-sync] fetchStocksPerWarehouse failed, skipping per-warehouse update:", e)
+    }
 
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
     const discountMap = await fetchWbDiscounts(nmIds)
@@ -158,11 +186,101 @@ export async function POST(): Promise<NextResponse> {
       }
     }
 
+    // Phase 14 (STOCK-08, STOCK-10): clean-replace per-warehouse stocks
+    // Выполняется после основного цикла upsert карточек — все WbCard уже в БД
+    if (stocksPerWarehouse.size > 0) {
+      try {
+        await prisma.$transaction(
+          async (tx) => {
+            for (const [nmId, warehouseItems] of stocksPerWarehouse.entries()) {
+              const card = await tx.wbCard.findUnique({
+                where: { nmId },
+                select: { id: true },
+              })
+              if (!card) continue
+
+              const incomingWarehouseIds: number[] = []
+
+              // Auto-insert неизвестных складов (STOCK-10) + upsert остатков
+              for (const item of warehouseItems) {
+                // Генерируем stableId из имени склада (Statistics API не даёт числовой ID)
+                const warehouseId = stableWarehouseIdFromName(item.warehouseName)
+                incomingWarehouseIds.push(warehouseId)
+
+                // Auto-insert если склад не известен
+                const existingWarehouse = await tx.wbWarehouse.findUnique({
+                  where: { id: warehouseId },
+                  select: { id: true },
+                })
+                if (!existingWarehouse) {
+                  console.warn(
+                    `[wb-sync] Auto-insert неизвестный склад: id=${warehouseId} name="${item.warehouseName}"`,
+                  )
+                  await tx.wbWarehouse.create({
+                    data: {
+                      id: warehouseId,
+                      name: item.warehouseName,
+                      cluster: "Прочие склады",
+                      shortCluster: "Прочие",
+                      isActive: true,
+                      needsClusterReview: true,
+                    },
+                  })
+                }
+
+                await tx.wbCardWarehouseStock.upsert({
+                  where: {
+                    wbCardId_warehouseId: {
+                      wbCardId: card.id,
+                      warehouseId,
+                    },
+                  },
+                  create: {
+                    wbCardId: card.id,
+                    warehouseId,
+                    quantity: item.quantity,
+                  },
+                  update: {
+                    quantity: item.quantity,
+                  },
+                })
+              }
+
+              // Clean: удалить склады которых нет в текущем ответе API
+              if (incomingWarehouseIds.length > 0) {
+                await tx.wbCardWarehouseStock.deleteMany({
+                  where: {
+                    wbCardId: card.id,
+                    NOT: { warehouseId: { in: incomingWarehouseIds } },
+                  },
+                })
+              }
+
+              // Денормализация WbCard.stockQty = SUM(quantity) для backward compat /prices/wb
+              const totalQty = warehouseItems.reduce((sum, w) => sum + w.quantity, 0)
+              await tx.wbCard.update({
+                where: { id: card.id },
+                data: { stockQty: totalQty },
+              })
+            }
+          },
+          { timeout: 60_000 }, // транзакция может быть длинной — 60s timeout
+        )
+        console.log(
+          `[wb-sync] Обновлено per-warehouse остатков для ${stocksPerWarehouse.size} wbCards`,
+        )
+      } catch (e) {
+        console.error("[wb-sync] Per-warehouse transaction failed:", e)
+        errors.push(`per-warehouse-stocks: ${(e as Error).message}`)
+      }
+    }
+
     return NextResponse.json({
       synced,
       total: rawCards.length,
       pricesLoaded: priceMap.size,
       discountsLoaded: discountMap.size,
+      warehouseStocksUpdated: stocksPerWarehouse.size,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     })
   } catch (e) {
