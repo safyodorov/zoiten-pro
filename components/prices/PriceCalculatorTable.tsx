@@ -878,7 +878,7 @@ export function PriceCalculatorTable({
                             <div className="text-xs text-muted-foreground">
                               Остаток:{" "}
                               <span className="text-foreground tabular-nums">
-                                {group.product.totalStock}
+                                {Math.trunc(group.product.totalStock)}
                               </span>{" "}
                               шт.
                             </div>

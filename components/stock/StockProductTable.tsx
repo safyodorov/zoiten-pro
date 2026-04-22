@@ -19,7 +19,6 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -44,16 +43,34 @@ function formatStockValue(n: number): string {
   return Math.floor(n).toString()
 }
 
+/** Целое число с отбрасыванием дробной части (Math.trunc корректен для negative: -1.7 → -1). */
+function formatInt(n: number): string {
+  return Math.trunc(n).toString()
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Sub-components
 // ──────────────────────────────────────────────────────────────────
 
-/** Ячейка О/З/Об — числовое значение или «—». */
+/** Ячейка О/З — числовое значение или «—». */
 function StockCell({ value }: { value: number | null }) {
   return (
     <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
       {value !== null ? (
         formatStockValue(value)
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      )}
+    </TableCell>
+  )
+}
+
+/** Ячейка Об — всегда целое с отбрасыванием дробной части. */
+function IntCell({ value }: { value: number | null }) {
+  return (
+    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
+      {value !== null ? (
+        formatInt(value)
       ) : (
         <span className="text-muted-foreground">—</span>
       )}
@@ -90,7 +107,7 @@ function DeficitCell({
           "text-red-600 dark:text-red-500 font-medium",
       )}
     >
-      {deficit !== null ? formatStockValue(deficit) : "—"}
+      {deficit !== null ? formatInt(deficit) : "—"}
     </TableCell>
   )
 }
@@ -154,7 +171,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
   // ── Table ──────────────────────────────────────────────────────
   return (
     <div className="overflow-auto border rounded h-full">
-      <Table>
+      <table className="w-full caption-bottom text-sm">
         <TableHeader>
           {/* ── Уровень 1: группы колонок ── */}
           <TableRow>
@@ -393,16 +410,16 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                   {/* Иваново — О */}
                   <StockCell value={p.ivanovoStock} />
 
-                  {/* МП О/З/Об/Д */}
+                  {/* МП О/З/Об/Д — Об integer */}
                   <StockCell value={p.aggregates.mpTotalStock} />
                   <StockCell value={p.aggregates.mpTotalOrdersPerDay} />
-                  <StockCell value={mpMetrics.turnoverDays} />
+                  <IntCell value={mpMetrics.turnoverDays} />
                   <DeficitCell deficit={mpMetrics.deficit} threshold={mpThreshold} />
 
-                  {/* WB О/З/Об/Д */}
+                  {/* WB О/З/Об/Д — Об integer */}
                   <StockCell value={p.aggregates.wbTotalStock} />
                   <StockCell value={p.aggregates.wbTotalOrdersPerDay} />
-                  <StockCell value={wbMetrics.turnoverDays} />
+                  <IntCell value={wbMetrics.turnoverDays} />
                   <DeficitCell deficit={wbMetrics.deficit} threshold={wbThreshold} />
 
                   {/* Ozon — placeholder «—» */}
@@ -449,13 +466,13 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                       {/* МП per-article (только WB сейчас) */}
                       <StockCell value={isWb ? a.wbCard!.stockQty : null} />
                       <StockCell value={isWb ? a.wbCard!.avgSalesSpeed7d : null} />
-                      <StockCell value={aMetrics.turnoverDays} />
+                      <IntCell value={aMetrics.turnoverDays} />
                       <DeficitCell deficit={aMetrics.deficit} threshold={aThreshold} />
 
                       {/* WB per-article */}
                       <StockCell value={isWb ? a.wbCard!.stockQty : null} />
                       <StockCell value={isWb ? a.wbCard!.avgSalesSpeed7d : null} />
-                      <StockCell value={aMetrics.turnoverDays} />
+                      <IntCell value={aMetrics.turnoverDays} />
                       <DeficitCell deficit={aMetrics.deficit} threshold={aThreshold} />
 
                       {/* Ozon — placeholder */}
@@ -470,7 +487,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
             )
           })}
         </TableBody>
-      </Table>
+      </table>
     </div>
   )
 }

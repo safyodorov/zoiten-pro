@@ -9,7 +9,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -27,6 +26,11 @@ function formatStockValue(n: number): string {
   return Math.floor(n).toString()
 }
 
+/** Целое с отбрасыванием дробной части (для Об, Д). */
+function formatInt(n: number): string {
+  return Math.trunc(n).toString()
+}
+
 interface Props {
   groups: ProductWbGroup[]
   turnoverNormDays: number
@@ -37,6 +41,15 @@ function StockCell({ value }: { value: number | null }) {
   return (
     <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
       {value !== null ? formatStockValue(value) : <span className="text-muted-foreground">—</span>}
+    </TableCell>
+  )
+}
+
+/** Ячейка Об — целое с отбрасыванием дробной части. */
+function IntCell({ value }: { value: number | null }) {
+  return (
+    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
+      {value !== null ? formatInt(value) : <span className="text-muted-foreground">—</span>}
     </TableCell>
   )
 }
@@ -52,7 +65,7 @@ function DeficitCell({ deficit, threshold }: { deficit: number | null; threshold
         deficit !== null && threshold !== null && deficit >= threshold && "text-red-600 dark:text-red-500 font-medium",
       )}
     >
-      {deficit !== null ? formatStockValue(deficit) : "—"}
+      {deficit !== null ? formatInt(deficit) : "—"}
     </TableCell>
   )
 }
@@ -133,7 +146,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
-        <Table>
+        <table className="w-full caption-bottom text-sm">
           <TableHeader>
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
             <TableRow>
@@ -355,7 +368,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     {/* МП О/З/Об/Д — row-level агрегат по всем wbCards */}
                     <StockCell value={rowTotalStock} />
                     <StockCell value={rowOrdersPerDay} />
-                    <StockCell value={rowMetrics.turnoverDays} />
+                    <IntCell value={rowMetrics.turnoverDays} />
                     <DeficitCell deficit={rowMetrics.deficit} threshold={rowThreshold} />
                     {/* Кластеры — row-level агрегат (сумма по wbCards). При expand — plotholder colSpan под 4-cell заголовок склада */}
                     {CLUSTER_ORDER.flatMap((cluster) => {
@@ -390,7 +403,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                       return [
                         <StockCell key={`${cluster}-sum-o`} value={agg?.stock ?? null} />,
                         <StockCell key={`${cluster}-sum-z`} value={agg?.orders ?? null} />,
-                        <StockCell key={`${cluster}-sum-ob`} value={aggMetrics.turnoverDays} />,
+                        <IntCell key={`${cluster}-sum-ob`} value={aggMetrics.turnoverDays} />,
                         <DeficitCell key={`${cluster}-sum-d`} deficit={aggMetrics.deficit} threshold={aggThreshold} />,
                       ]
                     })}
@@ -413,7 +426,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                         {/* МП О/З/Об/Д */}
                         <StockCell value={card.totalStock} />
                         <StockCell value={card.avgSalesSpeed7d} />
-                        <StockCell value={cardMetrics.turnoverDays} />
+                        <IntCell value={cardMetrics.turnoverDays} />
                         <DeficitCell deficit={cardMetrics.deficit} threshold={cardThreshold} />
                         {/* Кластеры */}
                         {CLUSTER_ORDER.flatMap((cluster) => {
@@ -443,7 +456,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                               return [
                                 <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-o`} value={whStock} />,
                                 <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-z`} value={whOrdersPerDay} />,
-                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-ob`} value={whMetrics.turnoverDays} />,
+                                <IntCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-ob`} value={whMetrics.turnoverDays} />,
                                 <TableCell
                                   key={`${card.wbCardId}-${cluster}-${w.warehouseId}-d`}
                                   className={cn(
@@ -455,7 +468,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                                     whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit >= whThreshold && "text-red-600 dark:text-red-500 font-medium",
                                   )}
                                 >
-                                  {whMetrics.deficit !== null ? formatStockValue(whMetrics.deficit) : "—"}
+                                  {whMetrics.deficit !== null ? formatInt(whMetrics.deficit) : "—"}
                                 </TableCell>,
                               ]
                             })
@@ -472,7 +485,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                           return [
                             <StockCell key={`${card.wbCardId}-${cluster}-o`} value={clusterData?.totalStock ?? null} />,
                             <StockCell key={`${card.wbCardId}-${cluster}-z`} value={clusterOrdersPerDay} />,
-                            <StockCell key={`${card.wbCardId}-${cluster}-ob`} value={clusterMetrics.turnoverDays} />,
+                            <IntCell key={`${card.wbCardId}-${cluster}-ob`} value={clusterMetrics.turnoverDays} />,
                             <DeficitCell key={`${card.wbCardId}-${cluster}-d`} deficit={clusterMetrics.deficit} threshold={clusterThreshold} />,
                           ]
                         })}
@@ -483,7 +496,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               )
             })}
           </TableBody>
-        </Table>
+        </table>
       </div>
     </div>
   )
