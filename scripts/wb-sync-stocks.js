@@ -244,11 +244,11 @@ async function main() {
   // Денормализация WbCard.stockQty = SUM(WbCardWarehouseStock.quantity)
   // Для /prices/wb и других мест где используется агрегат stockQty per nmId
   // (нужно потому что /api/wb-sync это делает, а этот скрипт его не вызывает).
-  const allCards = await prisma.wbCard.findMany({
+  const cardsForStockQty = await prisma.wbCard.findMany({
     select: { id: true, warehouses: { select: { quantity: true } } },
   })
   let stockQtyUpdated = 0
-  for (const c of allCards) {
+  for (const c of cardsForStockQty) {
     const total = c.warehouses.reduce((s, w) => s + w.quantity, 0)
     await prisma.wbCard.update({ where: { id: c.id }, data: { stockQty: total } })
     stockQtyUpdated++
