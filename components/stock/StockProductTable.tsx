@@ -187,7 +187,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
             {/* Группы: Производство (1 col), РФ (1 col), Иваново (1 col) — порядок 2026-04-22 */}
             <TableHead
               colSpan={1}
-              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
+              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 w-[88px] min-w-[88px]"
             >
               Производство
             </TableHead>
@@ -230,7 +230,7 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
           <TableRow>
             {/* Производство → только О (inline input в данных) */}
             <TableHead
-              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1"
+              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1 w-[88px] min-w-[88px]"
               title="Остаток (шт)"
             >
               О
@@ -360,13 +360,16 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                     Сводная
                   </TableCell>
 
-                  {/* Производство — inline input (перенесено перед РФ 2026-04-22) */}
-                  <TableCell className="px-2 py-1 text-xs tabular-nums text-right border-r">
+                  {/* Производство — inline input (перенесено перед РФ 2026-04-22).
+                      w-full у input + фикс ширина ячейки w-[88px] → колонка стабильна
+                      и в Сводной (input), и в per-article (StockCell).
+                      border-r убран — симметрия с РФ/Иваново StockCell. */}
+                  <TableCell className="px-2 py-1 h-8 text-xs tabular-nums text-right w-[88px] min-w-[88px]">
                     <input
                       type="number"
                       min={0}
                       max={99999}
-                      className="h-8 w-20 rounded border border-input bg-transparent px-2 text-xs tabular-nums text-right focus:ring-2 focus:ring-ring outline-none"
+                      className="h-7 w-full rounded border border-input bg-transparent px-1.5 text-xs tabular-nums text-right focus:ring-2 focus:ring-ring outline-none"
                       defaultValue={p.productionStock ?? ""}
                       placeholder="—"
                       aria-label={`Производство: ${p.name}`}
@@ -437,8 +440,9 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                         {a.marketplaceName}: {a.article}
                       </TableCell>
 
-                      {/* Производство/РФ/Иваново — только агрегат в Сводной строке */}
-                      <StockCell value={null} />
+                      {/* Производство/РФ/Иваново — только агрегат в Сводной строке.
+                          Первая ячейка (Производство) фикс ширина 88px — совпадает с Сводной для выравнивания колонки. */}
+                      <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground w-[88px] min-w-[88px]">—</TableCell>
                       <StockCell value={null} />
                       <StockCell value={null} />
 
