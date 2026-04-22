@@ -208,8 +208,22 @@ echo "==> Building application..."
 npm run build
 
 echo "==> Copying static assets to standalone..."
+# КРИТИЧНО: Next.js standalone output не копирует эти папки автоматически.
+# Без них: все /_next/static/chunks/*.js → 404 (ChunkLoadError в браузере),
+# все /_next/image → 500, public (favicons, логотипы) недоступны.
+# См. memory/project_zoiten_deploy.md (повторяющаяся проблема).
 [ -d public ] && cp -r public .next/standalone/public || mkdir -p .next/standalone/public
+rm -rf .next/standalone/.next/static  # очистить старые chunks перед копированием
 cp -r .next/static .next/standalone/.next/static
+
+# Sanity check: chunks должны существовать в standalone
+CHUNK_COUNT=$(ls .next/standalone/.next/static/chunks 2>/dev/null | wc -l)
+if [ "$CHUNK_COUNT" -lt 5 ]; then
+  echo "==> ERROR: standalone chunks не скопированы (найдено $CHUNK_COUNT файлов, ожидалось > 5)"
+  echo "==>   Сайт выдаст 404 на /_next/static/chunks/*.js и ChunkLoadError в браузере."
+  exit 1
+fi
+echo "✓ standalone chunks: $CHUNK_COUNT файлов"
 
 echo "==> Restarting service..."
 systemctl restart zoiten-erp
