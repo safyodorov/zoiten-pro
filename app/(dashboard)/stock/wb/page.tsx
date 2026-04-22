@@ -15,7 +15,7 @@ export default async function StockWbPage() {
 
   if (data.groups.length === 0) {
     return (
-      <div className="text-center py-16">
+      <div className="flex-1 min-h-0 text-center py-16">
         <h3 className="text-sm font-medium">Остатки WB не загружены</h3>
         <p className="text-xs text-muted-foreground mt-1">
           Нажмите «Обновить из WB» на странице{" "}
@@ -27,10 +27,12 @@ export default async function StockWbPage() {
   }
 
   return (
-    <StockWbTable
-      groups={data.groups}
-      turnoverNormDays={data.turnoverNormDays}
-      clusterWarehouses={data.clusterWarehouses}
-    />
+    <div className="flex-1 min-h-0">
+      <StockWbTable
+        groups={data.groups}
+        turnoverNormDays={data.turnoverNormDays}
+        clusterWarehouses={data.clusterWarehouses}
+      />
+    </div>
   )
 }

@@ -9,9 +9,11 @@ export default async function StockLayout({
   await requireSection("STOCK")
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="h-full flex flex-col p-6 gap-4">
       <StockTabs />
-      {children}
+      <div className="flex-1 min-h-0 flex flex-col gap-4">
+        {children}
+      </div>
     </div>
   )
 }

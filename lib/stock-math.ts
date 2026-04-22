@@ -11,7 +11,7 @@ export interface StockMetricsInput {
 
 export interface StockMetricsOutput {
   turnoverDays: number | null  // Об = О / З (дни до нуля)
-  deficit: number | null       // Д = (norm * 0.3 * З) - О (шт дефицита)
+  deficit: number | null       // Д = (norm × З) − О (шт дефицита; без буферного коэф.)
 }
 
 /**
@@ -19,13 +19,13 @@ export interface StockMetricsOutput {
  *
  * Формулы:
  *   Об = О / З (дней до нуля при текущих продажах)
- *   Д = (norm × 0.3 × З) − О (дефицит в штуках; < 0 = профицит, ≥ 0 = дефицит)
+ *   Д = (norm × З) − О (дефицит в штуках; < 0 = профицит, ≥ 0 = дефицит)
  *
  * Null-guards:
  *   - О = null → {null, null} (нет данных об остатке)
  *   - normDays ≤ 0 → {null, null} (некорректная норма)
  *   - З = null → Об = null, Д = null (нет данных о продажах)
- *   - З = 0 → Об = null (нет продаж — бесконечная оборачиваемость), Д = считается (0 * ... − О = −О)
+ *   - З = 0 → Об = null (нет продаж — бесконечная оборачиваемость), Д = −О (−остаток)
  */
 export function calculateStockMetrics(input: StockMetricsInput): StockMetricsOutput {
   const { stock, ordersPerDay, turnoverNormDays } = input
@@ -42,11 +42,12 @@ export function calculateStockMetrics(input: StockMetricsInput): StockMetricsOut
       ? null
       : stock / ordersPerDay
 
-  // Д = (norm * 0.3 * З) - О. Если З = null → Д = null
+  // Д = (norm × З) − О. Если З = null → Д = null
+  // (буферный коэффициент 0.3 убран 2026-04-22 — не нужен)
   const deficit =
     ordersPerDay === null
       ? null
-      : turnoverNormDays * 0.3 * ordersPerDay - stock
+      : turnoverNormDays * ordersPerDay - stock
 
   // Infinity/NaN guard
   return {
@@ -58,14 +59,14 @@ export function calculateStockMetrics(input: StockMetricsInput): StockMetricsOut
 /**
  * Порог для цветовой кодировки жёлтого (0 < Д < threshold).
  *
- * threshold = norm × 0.3 × З
+ * threshold = norm × З
  *
  * Используется для определения цвета ячейки Д:
- *   Д ≤ 0            → зелёный (норма)
- *   0 < Д < threshold → жёлтый (предупреждение)
- *   Д ≥ threshold    → красный (критический дефицит)
+ *   Д ≤ 0            → зелёный (остаток покрывает ≥ нормы дней продаж)
+ *   0 < Д < threshold → жёлтый (остаток < нормы, но > 0)
+ *   Д ≥ threshold    → красный (остатка нет совсем, О ≤ 0 или близко к 0)
  */
 export function deficitThreshold(turnoverNormDays: number, ordersPerDay: number | null): number | null {
   if (ordersPerDay === null || ordersPerDay === 0) return null
-  return turnoverNormDays * 0.3 * ordersPerDay
+  return turnoverNormDays * ordersPerDay
 }

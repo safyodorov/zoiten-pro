@@ -211,7 +211,7 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
   if (filters.onlyDeficit) {
     const { calculateStockMetrics } = await import("@/lib/stock-math")
     filteredRows = rows.filter((r) => {
-      // Дефицит определяем по РФ (агрегат): Д = (norm × 0.3 × З) − О
+      // Дефицит определяем по РФ (агрегат): Д = (norm × З) − О
       const rfMetrics = calculateStockMetrics({
         stock: r.aggregates.rfTotalStock,
         ordersPerDay: r.aggregates.wbTotalOrdersPerDay,

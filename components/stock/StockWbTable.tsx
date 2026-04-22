@@ -117,8 +117,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
   }, [searchParams, router])
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2 items-center">
+    <div className="h-full flex flex-col gap-3">
+      <div className="flex gap-2 items-center shrink-0">
         <Button variant="ghost" size="sm" onClick={expandAll}>Развернуть все</Button>
         <Button variant="ghost" size="sm" onClick={collapseAll}>Свернуть все</Button>
         <span className="text-muted-foreground mx-2">·</span>
@@ -132,7 +132,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
         </Button>
       </div>
 
-      <div className="overflow-auto border rounded h-[calc(100vh-260px)]">
+      <div className="overflow-auto border rounded flex-1 min-h-0">
         <Table>
           <TableHeader>
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}

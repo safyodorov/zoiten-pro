@@ -53,9 +53,9 @@ export default async function StockPage({ searchParams }: PageProps) {
   ])
 
   return (
-    <div className="space-y-6">
+    <div className="flex-1 min-h-0 flex flex-col gap-4">
       {/* Шапка: TurnoverNormInput слева, кнопки справа */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-4 shrink-0">
         <TurnoverNormInput initialDays={stockData.turnoverNormDays} />
         <div className="flex gap-2 ml-auto">
           <IvanovoUploadButton />
@@ -64,17 +64,21 @@ export default async function StockPage({ searchParams }: PageProps) {
       </div>
 
       {/* Фильтры */}
-      <StockFilters
-        brands={filterOptions.brands}
-        categories={filterOptions.categories}
-        subcategories={filterOptions.subcategories}
-      />
+      <div className="shrink-0">
+        <StockFilters
+          brands={filterOptions.brands}
+          categories={filterOptions.categories}
+          subcategories={filterOptions.subcategories}
+        />
+      </div>
 
-      {/* Таблица Product-level остатков */}
-      <StockProductTable
-        products={stockData.products}
-        turnoverNormDays={stockData.turnoverNormDays}
-      />
+      {/* Таблица Product-level остатков — fills remaining space */}
+      <div className="flex-1 min-h-0">
+        <StockProductTable
+          products={stockData.products}
+          turnoverNormDays={stockData.turnoverNormDays}
+        />
+      </div>
     </div>
   )
 }
