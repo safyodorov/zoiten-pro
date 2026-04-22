@@ -458,7 +458,34 @@ middleware.ts                ← RBAC route guard (Edge runtime)
 
 `Д = (норма × З) − О` (БЕЗ коэффициента 0.3, убран 2026-04-22). Порог жёлтого = `норма × З`.
 
+### Иерархия границ между группами
+
+Когда в таблице несколько уровней группировки (кластер → склады; product → nmId):
+- **Inter-group** (между группами) — `border-r` (полный цвет)
+- **Intra-group** (внутри группы) — `border-r border-r-border/40` (40% прозрачности)
+
+Пример: между кластерами ЦФО | ПФО — жирная; между складами внутри ЦФО — тонкая.
+
+### Product-level cell в таблице с mixed rowSpan
+
+**НЕ использовать** `rowSpan=rowSpan + align-top` для Product-level значения (Иваново, SKU и т.п.) в таблице, где соседние колонки имеют отдельные h-8 cells — число прижмётся к верху большой ячейки и выпадет из линии с соседями.
+
+**Правильно:** cell в Сводной строке (h-8 default middle-align) + placeholder `—` в per-item строках.
+
 Подробно: [memory/project_zoiten_table_pattern.md](../../Users/User/.claude/projects/C--Claude/memory/project_zoiten_table_pattern.md)
+
+## Per-user UI настройки
+
+Фильтры, скрытые колонки, сортировки и т.п., персистящиеся за пользователем:
+- **Поле прямо на `User`** (`Int[]`, `String` и т.п.) с `@default([])` — НЕ отдельная `UserPreference` таблица для v1
+- **НЕ localStorage** — теряется при смене браузера/устройства
+- **RBAC без MANAGE** — `requireSection("X")` (user меняет только свою настройку)
+- **Optimistic** — `useState` + `useTransition` + `revalidatePath` на сервере
+- **Визуальный фильтр только** — data helpers и агрегаты считают по полному набору
+
+Первое применение: `User.stockWbHiddenWarehouses Int[]` (quick 260422-oy5, /stock/wb).
+
+Подробно: [memory/project_zoiten_per_user_prefs.md](../../Users/User/.claude/projects/C--Claude/memory/project_zoiten_per_user_prefs.md)
 
 ## GSD Workflow Enforcement
 
