@@ -234,6 +234,12 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 - [x] **STOCK-28**: Vitest `tests/parse-ivanovo-excel.test.ts` — реальная fixture от пользователя (предоставить в Zero Wave Plan 14-04); 3+ test cases: happy, формулы vs значения, дубликаты SKU.
 - [x] **STOCK-29**: Deploy через `deploy.sh` с миграциями + human UAT чеклист: (a) `/stock` открывается без ошибок, (b) Excel Иваново загружается с preview, (c) Производство редактируется inline, (d) Норма редактируется в шапке, (e) кнопка «Обновить из WB» работает, (f) `/stock/wb` показывает кластеры, (g) expand кластера показывает склады, (h) tooltip работает, (i) nginx rewrite `/inventory` → `/stock` работает 1 релиз.
 
+### Orders Per-Warehouse (Phase 15)
+
+- [ ] **ORDERS-01**: Prisma миграция — модель `WbCardWarehouseOrders(id, wbCardId, warehouseId, ordersCount Int @default(0), periodDays Int @default(7), updatedAt)` с `@@unique([wbCardId, warehouseId])`, indexes на `wbCardId` и `warehouseId`, FK `wbCardId → WbCard.id ON DELETE CASCADE`, FK `warehouseId → WbWarehouse.id`. Обратные relations в `WbCard.warehouseOrders` и `WbWarehouse.orders`.
+- [ ] **ORDERS-02**: При `POST /api/wb-sync` параллельно stocks загружаются orders за 7 дней через `GET statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=<7d ago>&flag=0`. `isCancel: true` ИСКЛЮЧАЮТСЯ. Clean-replace per `wbCardId` в транзакции: `deleteMany NOT IN incoming` + `upsert` per warehouse. Auto-insert неизвестных складов через `stableWarehouseIdFromName` + `needsClusterReview: true` (паттерн STOCK-10).
+- [ ] **ORDERS-03**: На `/stock/wb` колонка З каждого кластера (collapsed) = `SUM(ordersCount per warehouses of cluster) / periodDays`. При expand кластера — per-warehouse З = `ordersCount / periodDays`. Метрики Об/Д per-кластер пересчитываются от кластерной З (не от `card.avgSalesSpeed7d`) через существующую `calculateStockMetrics` из `lib/stock-math.ts`. `WbCard.avgSalesSpeed7d` остаётся fallback для nmId без per-warehouse данных и для Сводной колонки МП/З. `scripts/wb-sync-stocks.js` расширен секцией orders (идентичный паттерн stocks section).
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
@@ -456,8 +462,12 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-27 | Phase 14 | Complete |
 | STOCK-28 | Phase 14 | Complete |
 | STOCK-29 | Phase 14 | Complete |
+| ORDERS-01 | Phase 15 | Pending |
+| ORDERS-02 | Phase 15 | Pending |
+| ORDERS-03 | Phase 15 | Pending |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
 *Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned (Phase 8..13)*
 *Milestone v1.2 added: 2026-04-21 | +29 requirements (STOCK-01..STOCK-29) | 1 new phase planned (Phase 14)*
+*Phase 15 added: 2026-04-22 | +3 requirements (ORDERS-01..ORDERS-03) | extends Phase 14 with per-warehouse orders*

@@ -209,6 +209,8 @@ model WbCard {
   calculatedPrices    CalculatedPrice[]
   // Phase 14: Per-warehouse stock breakdown
   warehouses          WbCardWarehouseStock[]
+  // Phase 15: Per-warehouse orders breakdown (ORDERS-01)
+  warehouseOrders     WbCardWarehouseOrders[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 }
@@ -793,6 +795,7 @@ model WbWarehouse {
   isActive           Boolean                @default(true)
   needsClusterReview Boolean                @default(false)
   stocks             WbCardWarehouseStock[]
+  orders             WbCardWarehouseOrders[]
 }
 
 model WbCardWarehouseStock {
@@ -802,6 +805,25 @@ model WbCardWarehouseStock {
   warehouseId Int
   warehouse   WbWarehouse @relation(fields: [warehouseId], references: [id])
   quantity    Int         @default(0)
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([wbCardId, warehouseId])
+  @@index([wbCardId])
+  @@index([warehouseId])
+}
+
+// Phase 15: Per-warehouse orders (ORDERS-01)
+// Заказы минус отмены за periodDays (default 7 дней) per (wbCardId, warehouseId).
+// Обновляется при /api/wb-sync через fetchOrdersPerWarehouse + clean-replace per wbCardId.
+// Clean-replace: deleteMany NOT IN incoming + upsert по unique (wbCardId, warehouseId).
+model WbCardWarehouseOrders {
+  id          String      @id @default(cuid())
+  wbCardId    String
+  wbCard      WbCard      @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
+  warehouseId Int
+  warehouse   WbWarehouse @relation(fields: [warehouseId], references: [id])
+  ordersCount Int         @default(0)
+  periodDays  Int         @default(7)
   updatedAt   DateTime    @updatedAt
 
   @@unique([wbCardId, warehouseId])
