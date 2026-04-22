@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "seed:employees": "npx tsx prisma/seed-employees.ts"
+    "seed:employees": "npx tsx prisma/seed-employees.ts",
+    "seed:wb-warehouses": "tsx prisma/seed-wb-warehouses.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
