@@ -301,6 +301,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                             }
                             return warehouses.map((w, wIdx) => {
                               const slot = clusterData?.warehouses.find((s) => s.warehouseId === w.warehouseId)
+                              const ordersPerDay = slot?.ordersPerDay ?? null
                               return (
                                 <TableCell
                                   key={`${card.wbCardId}-${cluster}-${w.warehouseId}`}
@@ -308,23 +309,25 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                                     "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
                                     wIdx === warehouses.length - 1 && "border-r"
                                   )}
+                                  title={slot ? `Остаток: ${formatStockValue(slot.quantity)} шт${slot.ordersCount ? ` · Заказов/${card.periodDays ?? 7}д: ${slot.ordersCount}` : ""}` : undefined}
                                 >
-                                  {slot ? formatStockValue(slot.quantity) : <span className="text-muted-foreground">—</span>}
+                                  {ordersPerDay !== null ? formatStockValue(ordersPerDay) : <span className="text-muted-foreground">—</span>}
                                 </TableCell>
                               )
                             })
                           }
 
-                          // Collapsed: 4 sub-columns О/З/Об/Д
+                          // Collapsed: 4 sub-columns О/З/Об/Д (Phase 15: З = per-cluster ordersPerDay)
+                          const clusterOrdersPerDay = clusterData?.ordersPerDay ?? null
                           const clusterMetrics = calculateStockMetrics({
                             stock: clusterData?.totalStock ?? null,
-                            ordersPerDay: card.avgSalesSpeed7d,
+                            ordersPerDay: clusterOrdersPerDay,
                             turnoverNormDays,
                           })
-                          const clusterThreshold = deficitThreshold(turnoverNormDays, card.avgSalesSpeed7d)
+                          const clusterThreshold = deficitThreshold(turnoverNormDays, clusterOrdersPerDay)
                           return [
                             <StockCell key={`${card.wbCardId}-${cluster}-o`} value={clusterData?.totalStock ?? null} />,
-                            <StockCell key={`${card.wbCardId}-${cluster}-z`} value={card.avgSalesSpeed7d} />,
+                            <StockCell key={`${card.wbCardId}-${cluster}-z`} value={clusterOrdersPerDay} />,
                             <StockCell key={`${card.wbCardId}-${cluster}-ob`} value={clusterMetrics.turnoverDays} />,
                             <DeficitCell key={`${card.wbCardId}-${cluster}-d`} deficit={clusterMetrics.deficit} threshold={clusterThreshold} />,
                           ]
