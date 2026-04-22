@@ -113,13 +113,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 Сводка
               </TableHead>
               <TableHead
-                className="sticky left-[320px] top-0 z-30 bg-background w-20 text-xs font-medium text-center border-b border-r"
-                rowSpan={2}
-              >
-                nmId
-              </TableHead>
-              <TableHead
-                className="sticky left-[400px] top-0 z-30 bg-background w-[120px] text-xs font-medium text-center border-b border-r"
+                className="sticky left-[320px] top-0 z-30 bg-background w-24 text-xs font-medium text-center border-b border-r"
                 rowSpan={2}
               >
                 Артикул WB
@@ -287,11 +281,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
 
                     return (
                       <TableRow key={card.wbCardId} className="border-t border-t-border/60">
-                        <TableCell className="sticky left-[320px] z-20 bg-background border-r w-20 text-xs tabular-nums">
+                        <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 text-xs tabular-nums">
                           {card.nmId}
-                        </TableCell>
-                        <TableCell className="sticky left-[400px] z-20 bg-background border-r w-[120px] text-xs line-clamp-1">
-                          {card.wbCardName ?? "—"}
                         </TableCell>
                         {/* МП О/З/Об/Д */}
                         <StockCell value={card.totalStock} />
