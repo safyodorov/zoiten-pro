@@ -213,11 +213,11 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### `/stock` — главная страница (Product-level)
 
-- [ ] **STOCK-16**: RSC страница `/stock` — таблица с rowSpan: первая строка «Сводная» (Product-level, агрегация всех артикулов) + одна строка per-артикул (MarketplaceArticle) ниже; разделитель между Product (жирный), между артикулами (тонкий).
-- [ ] **STOCK-17**: Sticky колонки при горизонтальном скролле — Фото (80px) + Сводка (240px: название + УКТ + бренд) + Ярлык (80px) + Артикул (120px); z-index слои по аналогии с `PriceCalculatorTable`; `position: sticky; left: {accumulated}`.
-- [ ] **STOCK-18**: Колонки данных после sticky — 6 групп: **РФ** (О) / **Иваново** (О) / **Производство** (О) / **МП** (О/З/Об/Д, сумма по всем маркетплейсам) / **WB** (О/З/Об/Д) / **Ozon** (О/З/Об/Д, все «—» placeholder). Colgroup headers 2 уровня (группа + под-колонка) с `position: sticky top-0 / top-[40px]` + `bg-background`.
-- [ ] **STOCK-19**: Формат чисел и цвета — `<10 → toFixed(1)`, `≥10 → Math.floor`; null → «—». Цветовая кодировка Д (3-уровневая): Д≤0 → зелёный (всё ок), 0<Д<норма×0.3×З → жёлтый (думать о закупке), Д≥норма×0.3×З → красный (срочно).
-- [ ] **STOCK-20**: Фильтры `/stock` — MultiSelect бренд/категория/подкатегория (паттерн `PricesFilters`) + toggle «только с дефицитом» (Д>0 хотя бы в одной группе); все через URL searchParams.
+- [x] **STOCK-16**: RSC страница `/stock` — таблица с rowSpan: первая строка «Сводная» (Product-level, агрегация всех артикулов) + одна строка per-артикул (MarketplaceArticle) ниже; разделитель между Product (жирный), между артикулами (тонкий).
+- [x] **STOCK-17**: Sticky колонки при горизонтальном скролле — Фото (80px) + Сводка (240px: название + УКТ + бренд) + Ярлык (80px) + Артикул (120px); z-index слои по аналогии с `PriceCalculatorTable`; `position: sticky; left: {accumulated}`.
+- [x] **STOCK-18**: Колонки данных после sticky — 6 групп: **РФ** (О) / **Иваново** (О) / **Производство** (О) / **МП** (О/З/Об/Д, сумма по всем маркетплейсам) / **WB** (О/З/Об/Д) / **Ozon** (О/З/Об/Д, все «—» placeholder). Colgroup headers 2 уровня (группа + под-колонка) с `position: sticky top-0 / top-[40px]` + `bg-background`.
+- [x] **STOCK-19**: Формат чисел и цвета — `<10 → toFixed(1)`, `≥10 → Math.floor`; null → «—». Цветовая кодировка Д (3-уровневая): Д≤0 → зелёный (всё ок), 0<Д<норма×0.3×З → жёлтый (думать о закупке), Д≥норма×0.3×З → красный (срочно).
+- [x] **STOCK-20**: Фильтры `/stock` — MultiSelect бренд/категория/подкатегория (паттерн `PricesFilters`) + toggle «только с дефицитом» (Д>0 хотя бы в одной группе); все через URL searchParams.
 
 ### `/stock/wb` — подраздел (per-nmId + кластеры)
 
@@ -442,11 +442,11 @@ Explicitly excluded. Documented to prevent scope creep.
 | STOCK-13 | Phase 14 | Complete |
 | STOCK-14 | Phase 14 | Complete |
 | STOCK-15 | Phase 14 | Complete |
-| STOCK-16 | Phase 14 | Pending |
-| STOCK-17 | Phase 14 | Pending |
-| STOCK-18 | Phase 14 | Pending |
-| STOCK-19 | Phase 14 | Pending |
-| STOCK-20 | Phase 14 | Pending |
+| STOCK-16 | Phase 14 | Complete |
+| STOCK-17 | Phase 14 | Complete |
+| STOCK-18 | Phase 14 | Complete |
+| STOCK-19 | Phase 14 | Complete |
+| STOCK-20 | Phase 14 | Complete |
 | STOCK-21 | Phase 14 | Pending |
 | STOCK-22 | Phase 14 | Pending |
 | STOCK-23 | Phase 14 | Complete |
