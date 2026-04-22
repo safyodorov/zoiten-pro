@@ -840,6 +840,122 @@ export async function fetchStocksPerWarehouse(
   return result
 }
 
+/** Phase 15 (ORDERS-02): per-warehouse заказы за периодом.
+ *
+ *  Один запрос к Statistics Orders API возвращает ВСЕ заказы продавца за
+ *  `periodDays` (default 7). Функция считает одновременно:
+ *  - avg: заказы минус отмены / periodDays (backward compat с fetchAvgSalesSpeed7d)
+ *  - yesterday: заказы за вчерашний день (Moscow TZ, YYYY-MM-DD префикс)
+ *  - perWarehouse: Map<warehouseName, количество заказов минус отмены> для ORDERS-02
+ *
+ *  `isCancel: true` исключаются из ВСЕХ трёх счётчиков — "заказы минус отмены".
+ *
+ *  Rate limit WB Statistics API ~1 req/min. Один вызов = все данные.
+ *  При 429 — sleep(60s) + один рекурсивный retry (паттерн fetchAvgSalesSpeed7d).
+ *
+ *  @param nmIds — фильтр по nmId (API возвращает все, фильтрация на клиенте).
+ *  @param periodDays — окно в днях (default 7).
+ *  @returns Map<nmId, OrdersWarehouseStats>. nmId без заказов отсутствует.
+ */
+export interface OrdersWarehouseStats {
+  /** Заказы минус отмены за periodDays / periodDays (шт/день). */
+  avg: number
+  /** Заказы минус отмены за вчерашний день (Moscow TZ), шт. */
+  yesterday: number
+  /** Заказы минус отмены per-warehouse по имени склада (warehouseName → count). */
+  perWarehouse: Map<string, number>
+  /** Окно в днях (для downstream расчётов). */
+  periodDays: number
+}
+
+export async function fetchOrdersPerWarehouse(
+  nmIds: number[],
+  periodDays: number = 7,
+): Promise<Map<number, OrdersWarehouseStats>> {
+  const result = new Map<number, OrdersWarehouseStats>()
+  if (nmIds.length === 0) return result
+
+  const token = getToken()
+
+  const dateFrom = new Date()
+  dateFrom.setDate(dateFrom.getDate() - periodDays)
+  const dateFromIso = dateFrom.toISOString()
+
+  const url =
+    `https://statistics-api.wildberries.ru/api/v1/supplier/orders` +
+    `?dateFrom=${encodeURIComponent(dateFromIso)}&flag=0`
+
+  const res = await fetch(url, { headers: { Authorization: token } })
+
+  if (res.status === 429) {
+    await sleep(60_000)
+    return fetchOrdersPerWarehouse(nmIds, periodDays)
+  }
+
+  if (!res.ok) {
+    console.error(`WB Orders API (fetchOrdersPerWarehouse) ${res.status}`)
+    return result
+  }
+
+  const orders = (await res.json()) as Array<{
+    nmId?: number
+    nm_id?: number
+    warehouseName?: string
+    isCancel?: boolean
+    date?: string
+  }>
+  if (!Array.isArray(orders)) return result
+
+  // Окно "вчера" в Moscow TZ — идентично fetchAvgSalesSpeed7d
+  const mskNow = new Date(Date.now() + 3 * 3600_000)
+  const yy = mskNow.getUTCFullYear()
+  const mm = String(mskNow.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(mskNow.getUTCDate() - 1).padStart(2, "0")
+  const yesterdayPrefix = `${yy}-${mm}-${dd}`
+
+  const requested = new Set(nmIds)
+  const totals = new Map<number, number>()
+  const yesterdayCounts = new Map<number, number>()
+  const perWarehouseMap = new Map<number, Map<string, number>>()
+
+  for (const o of orders) {
+    if (o.isCancel) continue
+    const nm = o.nmId ?? o.nm_id
+    if (nm == null || !requested.has(nm)) continue
+    const wh = (o.warehouseName ?? "").trim()
+
+    totals.set(nm, (totals.get(nm) ?? 0) + 1)
+    if (o.date && o.date.startsWith(yesterdayPrefix)) {
+      yesterdayCounts.set(nm, (yesterdayCounts.get(nm) ?? 0) + 1)
+    }
+    if (wh) {
+      let perWh = perWarehouseMap.get(nm)
+      if (!perWh) {
+        perWh = new Map<string, number>()
+        perWarehouseMap.set(nm, perWh)
+      }
+      perWh.set(wh, (perWh.get(wh) ?? 0) + 1)
+    }
+  }
+
+  for (const nmId of requested) {
+    const t = totals.get(nmId) ?? 0
+    const y = yesterdayCounts.get(nmId) ?? 0
+    const perWh = perWarehouseMap.get(nmId) ?? new Map<string, number>()
+    if (t === 0 && y === 0 && perWh.size === 0) continue
+    result.set(nmId, {
+      avg: t / periodDays,
+      yesterday: y,
+      perWarehouse: perWh,
+      periodDays,
+    })
+  }
+
+  return result
+}
+
+// Phase 15 note: новый код должен использовать fetchOrdersPerWarehouse — она
+// возвращает per-warehouse breakdown вдобавок к avg/yesterday одним HTTP-запросом.
 export async function fetchAvgSalesSpeed7d(
   nmIds: number[],
 ): Promise<Map<number, OrdersStats>> {
