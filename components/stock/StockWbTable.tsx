@@ -138,19 +138,19 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
             <TableRow>
               <TableHead
-                className="sticky left-0 top-0 z-30 bg-background w-20 text-xs font-medium text-center border-b border-r"
+                className="sticky left-0 top-0 z-30 bg-background w-20 min-w-20 max-w-20 text-xs font-medium text-center border-b border-r"
                 rowSpan={3}
               >
                 Фото
               </TableHead>
               <TableHead
-                className="sticky left-[80px] top-0 z-30 bg-background w-60 text-xs font-medium text-center border-b border-r"
+                className="sticky left-[80px] top-0 z-30 bg-background w-60 min-w-60 max-w-60 text-xs font-medium text-center border-b border-r"
                 rowSpan={3}
               >
                 Сводка
               </TableHead>
               <TableHead
-                className="sticky left-[320px] top-0 z-30 bg-background w-24 text-xs font-medium text-center border-b border-r"
+                className="sticky left-[320px] top-0 z-30 bg-background w-24 min-w-24 max-w-24 text-xs font-medium text-center border-b border-r"
                 rowSpan={3}
               >
                 Артикул WB
@@ -299,7 +299,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   <TableRow className={cn(idx > 0 && "border-t-4 border-t-border")}>
                     <TableCell
                       rowSpan={rowSpan}
-                      className="sticky left-0 z-20 bg-background border-r w-20 align-top p-2"
+                      className="sticky left-0 z-20 bg-background border-r w-20 min-w-20 max-w-20 align-top p-2"
                     >
                       <div className="flex justify-center">
                         {g.photoUrl ? (
@@ -318,7 +318,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     </TableCell>
                     <TableCell
                       rowSpan={rowSpan}
-                      className="sticky left-[80px] z-20 bg-background border-r w-60 align-top p-3"
+                      className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
                     >
                       <div className="flex flex-col gap-1">
                         <div className="text-sm font-medium leading-snug line-clamp-2">{g.productName}</div>
@@ -327,7 +327,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                       </div>
                     </TableCell>
                     {/* ОДНА sticky колонка "Артикул WB" = 'Сводная' (совпадает с header rowSpan=3) */}
-                    <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 align-top text-xs font-medium text-center">
+                    <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
                       Сводная
                     </TableCell>
                     {/* МП О/З/Об/Д — row-level агрегат по всем wbCards */}
@@ -385,7 +385,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
 
                     return (
                       <TableRow key={card.wbCardId} className="border-t border-t-border/60">
-                        <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 text-xs tabular-nums">
+                        <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                           {card.nmId}
                         </TableCell>
                         {/* МП О/З/Об/Д */}
