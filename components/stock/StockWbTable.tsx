@@ -168,6 +168,14 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               >
                 Артикул WB
               </TableHead>
+              {/* Иваново — Product-level остаток (из Excel), rowSpan=3 = одна ячейка на Product group */}
+              <TableHead
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px] w-20 min-w-20 max-w-20"
+                rowSpan={3}
+                title="Остаток на складе Иваново (из Excel)"
+              >
+                Иваново
+              </TableHead>
               {/* Всего на WB — 1 колонка, rowSpan=3 (как sticky cols), 92px высота.
                   Нет sub-cell в row 3 — просто одно число на всю группу. */}
               <TableHead
@@ -407,6 +415,13 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     {/* ОДНА sticky колонка "Артикул WB" = 'Сводная' (совпадает с header rowSpan=3) */}
                     <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
                       Сводная
+                    </TableCell>
+                    {/* Иваново — Product-level остаток, rowSpan на всю группу (1 + wbCards.length) */}
+                    <TableCell
+                      rowSpan={rowSpan}
+                      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r align-top w-20 min-w-20 max-w-20"
+                    >
+                      {g.ivanovoStock !== null ? formatInt(g.ivanovoStock) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     {/* Всего на WB — физ. остаток + товар в пути (с border-r для разделения) */}
                     <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
