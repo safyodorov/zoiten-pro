@@ -5,7 +5,6 @@
 // URL state: ?expandedClusters=ЦФО,ПФО — shareable.
 
 import React, { useCallback } from "react"
-import Image from "next/image"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -232,7 +231,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     >
                       <div className="flex justify-center">
                         {g.photoUrl ? (
-                          <Image
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
                             src={g.photoUrl}
                             alt={g.productName}
                             width={72}

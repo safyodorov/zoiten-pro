@@ -14,7 +14,6 @@
 "use client"
 
 import React, { useRef, useTransition } from "react"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -315,7 +314,10 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                   >
                     <div className="sticky top-2 flex justify-center">
                       {p.photoUrl ? (
-                        <Image
+                        // eslint-disable-next-line @next/next/no-img-element
+                        // Используем обычный <img>, а не next/image, т.к. middleware блокирует
+                        // internal fetch /_next/image к /uploads/* (редирект на /login) → "received null"
+                        <img
                           src={p.photoUrl}
                           alt={p.name}
                           width={72}
