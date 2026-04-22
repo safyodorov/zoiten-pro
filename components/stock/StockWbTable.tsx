@@ -408,8 +408,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
                       Сводная
                     </TableCell>
-                    {/* Всего на WB — физ. остаток + товар в пути */}
-                    <IntCell value={rowTotalOnWb} />
+                    {/* Всего на WB — физ. остаток + товар в пути (с border-r для разделения) */}
+                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                      {rowTotalOnWb !== null ? formatInt(rowTotalOnWb) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     {/* Товар в пути — 3 cells Всего/от/к */}
                     <IntCell value={rowInWayTotal} />
                     <IntCell value={rowInWayFrom} />
@@ -486,8 +488,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                               : (card.totalStock ?? 0) + (cardInWayTotal ?? 0)
                           return (
                             <>
-                              {/* Всего на WB */}
-                              <IntCell value={cardTotalOnWb} />
+                              {/* Всего на WB (border-r для разделения от Товар в пути) */}
+                              <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                                {cardTotalOnWb !== null ? formatInt(cardTotalOnWb) : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
                               {/* Товар в пути — Всего/от/к */}
                               <IntCell value={cardInWayTotal} />
                               <IntCell value={card.inWayFromClient} />
