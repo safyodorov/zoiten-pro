@@ -177,18 +177,23 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               >
                 Всего на WB
               </TableHead>
-              {/* Товар в пути — 3 колонки: Всего/от/к (агрегат per nmId) */}
+              {/* Товар в пути — 3 колонки: Всего/от/к (агрегат per nmId).
+                  rowSpan=2 — покрывает row 2 (placeholder) чтобы визуально была
+                  единая ячейка как у 'Всего на WB' и collapsed кластеров. */}
               <TableHead
-                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-10"
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={3}
+                rowSpan={2}
                 title="Товар в пути (агрегат по nmId)"
               >
                 Товар в пути
               </TableHead>
-              {/* Итого склады WB — 4 колонок О/З/Об/Д по физ. остаткам (без in-way) */}
+              {/* Итого склады WB — 4 колонок О/З/Об/Д по физ. остаткам (без in-way).
+                  rowSpan=2 — покрывает row 2 placeholder. */}
               <TableHead
-                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-10"
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={4}
+                rowSpan={2}
                 title="Итого по всем складам WB (физ. остаток, без товара в пути)"
               >
                 Итого склады WB
