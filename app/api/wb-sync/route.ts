@@ -232,6 +232,13 @@ export async function POST(): Promise<NextResponse> {
 
                 incomingWarehouseIds.push(warehouseId)
 
+                // Полный остаток = на складе + в пути к клиенту + возврат от клиента
+                // (= quantityFull в WB Statistics API). Товар в пути уже отправлен,
+                // но ещё принадлежит продавцу пока не выкуплен. Менеджер хочет видеть
+                // это как остаток. Решение 2026-04-22 после примера nmId=418716179
+                // (qty=0, inWayToClient=1) — пользователь видел 0, а товар в пути был.
+                const fullQty = item.quantity + item.inWayToClient + item.inWayFromClient
+
                 await tx.wbCardWarehouseStock.upsert({
                   where: {
                     wbCardId_warehouseId: {
@@ -242,10 +249,10 @@ export async function POST(): Promise<NextResponse> {
                   create: {
                     wbCardId: card.id,
                     warehouseId,
-                    quantity: item.quantity,
+                    quantity: fullQty,
                   },
                   update: {
-                    quantity: item.quantity,
+                    quantity: fullQty,
                   },
                 })
               }
@@ -260,8 +267,11 @@ export async function POST(): Promise<NextResponse> {
                 })
               }
 
-              // Денормализация WbCard.stockQty = SUM(quantity) для backward compat /prices/wb
-              const totalQty = warehouseItems.reduce((sum, w) => sum + w.quantity, 0)
+              // Денормализация WbCard.stockQty = SUM(quantity + inWay) для backward compat /prices/wb
+              const totalQty = warehouseItems.reduce(
+                (sum, w) => sum + w.quantity + w.inWayToClient + w.inWayFromClient,
+                0,
+              )
               await tx.wbCard.update({
                 where: { id: card.id },
                 data: { stockQty: totalQty },
