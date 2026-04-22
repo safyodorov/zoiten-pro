@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase complete — ready for verification
+status: Milestone complete
 stopped_at: Completed 14-stock-07-PLAN.md — Phase 14 UAT checkpoint
-last_updated: "2026-04-22T07:13:53.879Z"
+last_updated: "2026-04-22T07:28:20.561Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 14 (stock) — EXECUTING
-Plan: 7 of 7
+Phase: 14
+Plan: Not started
 
 ## Performance Metrics
 
