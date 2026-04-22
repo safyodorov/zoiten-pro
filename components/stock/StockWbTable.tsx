@@ -169,11 +169,18 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 const colSpan = isExpanded
                   ? (visibleWarehouses.length > 0 ? visibleWarehouses.length * 4 : 4)
                   : 4
+                // Collapsed: rowSpan=2 (cluster cell покрывает level 1 + level 2 = 68px, выглядит цельно)
+                // Expanded: rowSpan=1 (level 2 рендерит имена складов отдельно)
+                const rowSpan = isExpanded ? 1 : 2
                 return (
                   <TableHead
                     key={cluster}
                     colSpan={colSpan}
-                    className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-10"
+                    rowSpan={rowSpan}
+                    className={cn(
+                      "sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1",
+                      isExpanded ? "h-10" : "h-[68px]"
+                    )}
                   >
                     <div className="flex items-center justify-center gap-1">
                       <ClusterTooltip shortName={cluster} warehouseCount={allWarehouses.length}>
@@ -193,14 +200,17 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 )
               })}
             </TableRow>
-            {/* Уровень 2 — имя склада (expanded) или пустой placeholder (collapsed). Высота всегда одинаковая. */}
+            {/* Уровень 2 — имя склада (только для expanded). Collapsed кластер уже занимает row 1+2 через rowSpan=2. */}
             <TableRow>
               {CLUSTER_ORDER.flatMap((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
                 const warehouses = visibleClusterWarehouses[cluster] ?? []
 
+                // Collapsed: cells покрыты rowSpan=2 из level 1 cluster cell — ничего не рендерим
+                if (!isExpanded) return []
+
                 // Expanded с складами: имя склада colSpan=4 per склад
-                if (isExpanded && warehouses.length > 0) {
+                if (warehouses.length > 0) {
                   return warehouses.map((w, idx) => (
                     <TableHead
                       key={`${cluster}-wh-${w.warehouseId}`}
@@ -220,15 +230,15 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                   ))
                 }
 
-                // Expanded пустой (нет складов) или Collapsed: пустой placeholder colSpan=4
-                // ВАЖНО: рендерим всегда row 2 — чтобы высота header не прыгала между 2 и 3 рядами.
+                // Expanded пустой (нет складов) — placeholder colSpan=4 с подписью «нет складов»
                 return [
                   <TableHead
                     key={`${cluster}-placeholder-lvl2`}
                     colSpan={4}
-                    className="sticky top-[40px] z-20 bg-background border-b border-r h-7"
-                    aria-hidden="true"
-                  />
+                    className="sticky top-[40px] z-20 bg-background text-[10px] text-muted-foreground text-center border-b border-r h-7 px-2"
+                  >
+                    нет складов
+                  </TableHead>
                 ]
               })}
             </TableRow>
