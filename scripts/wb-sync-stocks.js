@@ -99,8 +99,9 @@ async function main() {
 
         incoming.add(warehouseId)
 
-        // Агрегация: у одного склада может быть несколько записей (разные barcode / размеры) — суммируем
-        const qty = (item.quantity || 0) + (item.inWayToClient || 0) + (item.inWayFromClient || 0)
+        // Phase 15.1: per-warehouse — только физический остаток (без in-way).
+        // In-way хранится отдельно на WbCard.inWayTo/From (см. ниже).
+        const qty = item.quantity || 0
 
         const existing = await tx.wbCardWarehouseStock.findUnique({
           where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
@@ -241,16 +242,35 @@ async function main() {
     }
   }
 
-  // Денормализация WbCard.stockQty = SUM(WbCardWarehouseStock.quantity)
-  // Для /prices/wb и других мест где используется агрегат stockQty per nmId
-  // (нужно потому что /api/wb-sync это делает, а этот скрипт его не вызывает).
+  // Денормализация на WbCard per nmId:
+  //   stockQty = sum(warehouse.quantity)
+  //   inWayToClient = sum inWayToClient из raw rows (за весь snapshot)
+  //   inWayFromClient = sum inWayFromClient
+  // Нужно потому что /api/wb-sync это делает, а этот скрипт выполняется отдельно.
+  const inWayByNmId = new Map()
+  for (const s of stocks) {
+    if (!s.nmId) continue
+    const entry = inWayByNmId.get(s.nmId) ?? { to: 0, from: 0 }
+    entry.to += s.inWayToClient || 0
+    entry.from += s.inWayFromClient || 0
+    inWayByNmId.set(s.nmId, entry)
+  }
+
   const cardsForStockQty = await prisma.wbCard.findMany({
-    select: { id: true, warehouses: { select: { quantity: true } } },
+    select: { id: true, nmId: true, warehouses: { select: { quantity: true } } },
   })
   let stockQtyUpdated = 0
   for (const c of cardsForStockQty) {
     const total = c.warehouses.reduce((s, w) => s + w.quantity, 0)
-    await prisma.wbCard.update({ where: { id: c.id }, data: { stockQty: total } })
+    const inWay = inWayByNmId.get(c.nmId) ?? { to: 0, from: 0 }
+    await prisma.wbCard.update({
+      where: { id: c.id },
+      data: {
+        stockQty: total,
+        inWayToClient: inWay.to,
+        inWayFromClient: inWay.from,
+      },
+    })
     stockQtyUpdated++
   }
 

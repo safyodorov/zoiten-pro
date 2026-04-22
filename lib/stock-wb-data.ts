@@ -31,7 +31,10 @@ export interface WbStockRow {
   nmId: number
   wbCardName: string | null
   avgSalesSpeed7d: number | null
-  totalStock: number | null  // SUM всех складов
+  totalStock: number | null  // SUM всех складов (физ. остаток)
+  // Phase 15.1: товар в пути (агрегат per nmId, без per-warehouse разбивки)
+  inWayToClient: number | null
+  inWayFromClient: number | null
   clusters: Record<ClusterShortName, ClusterAggregate>
   // Phase 15 (ORDERS-03):
   periodDays: number | null         // periodDays из первой WbCardWarehouseOrders записи (обычно 7)
@@ -260,6 +263,8 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
         wbCardName: card?.name ?? null,
         avgSalesSpeed7d: card?.avgSalesSpeed7d ?? null,
         totalStock,
+        inWayToClient: card?.inWayToClient ?? null,
+        inWayFromClient: card?.inWayFromClient ?? null,
         clusters,
         periodDays: cardPeriodDays,
       }

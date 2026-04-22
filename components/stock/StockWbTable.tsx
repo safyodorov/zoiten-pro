@@ -168,12 +168,28 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
               >
                 Артикул WB
               </TableHead>
-              {/* Итого склады WB — группа 4 колонок, оформлена как collapsed кластер (rowSpan=2, h-[68px]) */}
+              {/* Всего на WB — 1 колонка, физ. остаток + товар в пути (агрегат по nmId) */}
               <TableHead
                 className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
-                colSpan={4}
+                colSpan={1}
                 rowSpan={2}
-                title="Итого по всем складам WB (все кластеры включая СЦ)"
+                title="Физический остаток по всем складам + Товар в пути (всего)"
+              >
+                Всего на WB
+              </TableHead>
+              {/* Товар в пути — 3 колонки: Всего/от/к (агрегат per nmId) */}
+              <TableHead
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-10"
+                colSpan={3}
+                title="Товар в пути (агрегат по nmId)"
+              >
+                Товар в пути
+              </TableHead>
+              {/* Итого склады WB — 4 колонок О/З/Об/Д по физ. остаткам (без in-way) */}
+              <TableHead
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-10"
+                colSpan={4}
+                title="Итого по всем складам WB (физ. остаток, без товара в пути)"
               >
                 Итого склады WB
               </TableHead>
@@ -261,8 +277,12 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
             </tr>
             {/* Уровень 3 — О/З/Об/Д всегда (collapsed: 4 per cluster, expanded: 4 × warehouses.length) */}
             <tr>
+              {/* Товар в пути — 3 cells Всего / от / к под группой */}
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Всего в пути (к + от клиента)">Всего</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="В пути ОТ клиента (возвраты)">от</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="В пути К клиенту">к</TableHead>
               {/* Итого склады WB — 4 cells O/З/Об/Д под группой */}
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток">О</TableHead>
+              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток (физ., без in-way)">О</TableHead>
               <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Заказы/день">З</TableHead>
               <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Оборачиваемость">Об</TableHead>
               <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="Дефицит">Д</TableHead>
@@ -306,6 +326,23 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                 (acc, c) => (c.avgSalesSpeed7d === null ? acc : (acc ?? 0) + c.avgSalesSpeed7d),
                 null,
               )
+              // Phase 15.1: агрегат in-way по всем wbCards (для Сводной строки)
+              const rowInWayTo = g.wbCards.reduce<number | null>(
+                (acc, c) => (c.inWayToClient === null ? acc : (acc ?? 0) + c.inWayToClient),
+                null,
+              )
+              const rowInWayFrom = g.wbCards.reduce<number | null>(
+                (acc, c) => (c.inWayFromClient === null ? acc : (acc ?? 0) + c.inWayFromClient),
+                null,
+              )
+              const rowInWayTotal =
+                rowInWayTo === null && rowInWayFrom === null
+                  ? null
+                  : (rowInWayTo ?? 0) + (rowInWayFrom ?? 0)
+              const rowTotalOnWb =
+                rowTotalStock === null && rowInWayTotal === null
+                  ? null
+                  : (rowTotalStock ?? 0) + (rowInWayTotal ?? 0)
               const rowMetrics = calculateStockMetrics({
                 stock: rowTotalStock,
                 ordersPerDay: rowOrdersPerDay,
@@ -365,7 +402,15 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                     <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
                       Сводная
                     </TableCell>
-                    {/* МП О/З/Об/Д — row-level агрегат по всем wbCards */}
+                    {/* Всего на WB — физ. остаток + товар в пути */}
+                    <IntCell value={rowTotalOnWb} />
+                    {/* Товар в пути — 3 cells Всего/от/к */}
+                    <IntCell value={rowInWayTotal} />
+                    <IntCell value={rowInWayFrom} />
+                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                      {rowInWayTo !== null ? formatInt(rowInWayTo) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    {/* Итого склады WB — О/З/Об/Д (physical stock only) */}
                     <StockCell value={rowTotalStock} />
                     <StockCell value={rowOrdersPerDay} />
                     <IntCell value={rowMetrics.turnoverDays} />
@@ -423,7 +468,30 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses }: Pr
                         <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                           {card.nmId}
                         </TableCell>
-                        {/* МП О/З/Об/Д */}
+                        {/* Phase 15.1: card-level in-way агрегат */}
+                        {(() => {
+                          const cardInWayTotal =
+                            card.inWayToClient === null && card.inWayFromClient === null
+                              ? null
+                              : (card.inWayToClient ?? 0) + (card.inWayFromClient ?? 0)
+                          const cardTotalOnWb =
+                            card.totalStock === null && cardInWayTotal === null
+                              ? null
+                              : (card.totalStock ?? 0) + (cardInWayTotal ?? 0)
+                          return (
+                            <>
+                              {/* Всего на WB */}
+                              <IntCell value={cardTotalOnWb} />
+                              {/* Товар в пути — Всего/от/к */}
+                              <IntCell value={cardInWayTotal} />
+                              <IntCell value={card.inWayFromClient} />
+                              <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                                {card.inWayToClient !== null ? formatInt(card.inWayToClient) : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                            </>
+                          )
+                        })()}
+                        {/* Итого склады WB О/З/Об/Д (physical stock only) */}
                         <StockCell value={card.totalStock} />
                         <StockCell value={card.avgSalesSpeed7d} />
                         <IntCell value={cardMetrics.turnoverDays} />

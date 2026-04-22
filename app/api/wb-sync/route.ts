@@ -232,13 +232,9 @@ export async function POST(): Promise<NextResponse> {
 
                 incomingWarehouseIds.push(warehouseId)
 
-                // Полный остаток = на складе + в пути к клиенту + возврат от клиента
-                // (= quantityFull в WB Statistics API). Товар в пути уже отправлен,
-                // но ещё принадлежит продавцу пока не выкуплен. Менеджер хочет видеть
-                // это как остаток. Решение 2026-04-22 после примера nmId=418716179
-                // (qty=0, inWayToClient=1) — пользователь видел 0, а товар в пути был.
-                const fullQty = item.quantity + item.inWayToClient + item.inWayFromClient
-
+                // Phase 15.1: per-warehouse stock = только физический остаток (без in-way).
+                // In-way (to/from client) хранится на уровне nmId в WbCard.inWayTo/From —
+                // отображается отдельной колонкой 'Товар в пути' в /stock/wb.
                 await tx.wbCardWarehouseStock.upsert({
                   where: {
                     wbCardId_warehouseId: {
@@ -249,10 +245,10 @@ export async function POST(): Promise<NextResponse> {
                   create: {
                     wbCardId: card.id,
                     warehouseId,
-                    quantity: fullQty,
+                    quantity: item.quantity,
                   },
                   update: {
-                    quantity: fullQty,
+                    quantity: item.quantity,
                   },
                 })
               }
@@ -267,14 +263,24 @@ export async function POST(): Promise<NextResponse> {
                 })
               }
 
-              // Денормализация WbCard.stockQty = SUM(quantity + inWay) для backward compat /prices/wb
-              const totalQty = warehouseItems.reduce(
-                (sum, w) => sum + w.quantity + w.inWayToClient + w.inWayFromClient,
+              // Денормализация per-nmId: WbCard.stockQty = SUM(физ. остаток),
+              // WbCard.inWayToClient / inWayFromClient = SUM(inWay по всем складам).
+              const totalStock = warehouseItems.reduce((s, w) => s + w.quantity, 0)
+              const totalInWayTo = warehouseItems.reduce(
+                (s, w) => s + w.inWayToClient,
+                0,
+              )
+              const totalInWayFrom = warehouseItems.reduce(
+                (s, w) => s + w.inWayFromClient,
                 0,
               )
               await tx.wbCard.update({
                 where: { id: card.id },
-                data: { stockQty: totalQty },
+                data: {
+                  stockQty: totalStock,
+                  inWayToClient: totalInWayTo,
+                  inWayFromClient: totalInWayFrom,
+                },
               })
             }
           },

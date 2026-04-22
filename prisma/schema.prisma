@@ -192,7 +192,9 @@ model WbCard {
   price               Float? // цена продавца со скидкой, руб
   discountWb          Float? // скидка WB (СПП), % — с точностью до 0.1%
   clubDiscount        Int? // скидка WB клуба, %
-  stockQty            Int? // остаток товара, шт
+  stockQty            Int? // остаток товара, шт (физический, без in-way)
+  inWayToClient       Int? // в пути к клиенту, шт — sum по всем складам per nmId (Phase 15.1)
+  inWayFromClient     Int? // возврат от клиента, шт — sum по всем складам per nmId (Phase 15.1)
   buyoutPercent       Float? // процент выкупа за месяц, %
   commFbwStd          Float? // комиссия стандартная FBW, %
   commFbsStd          Float? // комиссия стандартная FBS, %
