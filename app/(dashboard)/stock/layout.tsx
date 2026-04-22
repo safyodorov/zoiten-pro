@@ -1,4 +1,5 @@
 import { requireSection } from "@/lib/rbac"
+import { StockTabs } from "@/components/stock/StockTabs"
 
 export default async function StockLayout({
   children,
@@ -9,7 +10,7 @@ export default async function StockLayout({
 
   return (
     <div className="p-6 space-y-6">
-      {/* StockTabs будет добавлен в Plan 14-07 */}
+      <StockTabs />
       {children}
     </div>
   )
