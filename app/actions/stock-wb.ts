@@ -49,3 +49,45 @@ export async function saveStockWbHiddenWarehouses(
   revalidatePath("/stock/wb")
   return { ok: true }
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 16 (STOCK-35): per-user toggle кнопки «По размерам» в /stock/wb.
+// Паттерн идентичен saveStockWbHiddenWarehouses (quick 260422-oy5).
+// ──────────────────────────────────────────────────────────────────
+
+const ShowSizesSchema = z.object({
+  value: z.boolean(),
+})
+
+export type SaveStockWbShowSizesResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+/**
+ * Сохраняет per-user флаг «показывать размерные строки в /stock/wb».
+ * RBAC: STOCK VIEW — user меняет СВОЮ preference (не MANAGE).
+ */
+export async function saveStockWbShowSizes(
+  value: boolean,
+): Promise<SaveStockWbShowSizesResult> {
+  await requireSection("STOCK") // user меняет свою preference, не MANAGE
+
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) return { ok: false, error: "Не авторизован" }
+
+  const parsed = ShowSizesSchema.safeParse({ value })
+  if (!parsed.success) return { ok: false, error: "Некорректные данные" }
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { stockWbShowSizes: parsed.data.value },
+    })
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "DB error" }
+  }
+
+  revalidatePath("/stock/wb")
+  return { ok: true }
+}
