@@ -207,9 +207,18 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
         for (const ws of card.warehouses) allWarehouseIds.add(ws.warehouseId)
         for (const wo of card.warehouseOrders) allWarehouseIds.add(wo.warehouseId)
 
-        // Lookup stocks по warehouseId
-        const stockByWarehouseId = new Map<number, typeof card.warehouses[number]>()
-        for (const ws of card.warehouses) stockByWarehouseId.set(ws.warehouseId, ws)
+        // Phase 16 fix: stocks aggregated per warehouseId — теперь несколько rows
+        // per warehouse (по одному на techSize), нужно SUM, не set/overwrite.
+        // До фикса: Map.set перезаписывал rows → quantity = только последний размер.
+        const stockSumByWarehouseId = new Map<number, number>()
+        for (const ws of card.warehouses) {
+          const prev = stockSumByWarehouseId.get(ws.warehouseId) ?? 0
+          stockSumByWarehouseId.set(ws.warehouseId, prev + (ws.quantity ?? 0))
+        }
+        // Флаг наличия записи в stocks (для отличия "0 шт" vs "нет данных")
+        const hasStockEntryByWarehouseId = new Set<number>(
+          card.warehouses.map((ws) => ws.warehouseId),
+        )
 
         // Lookup warehouse meta (имя, кластер, флаг) — приоритет из stocks, затем из orders
         const warehouseMetaById = new Map<number, { name: string; shortCluster: string | null; needsClusterReview: boolean }>()
@@ -240,10 +249,11 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
           ) as ClusterShortName
 
           const aggregate = clusters[shortCluster]!
-          const stockEntry = stockByWarehouseId.get(warehouseId)
+          const hasStockEntry = hasStockEntryByWarehouseId.has(warehouseId)
           const orderEntry = ordersByWarehouseId.get(warehouseId)
 
-          const quantity = stockEntry?.quantity ?? 0
+          // Phase 16 fix: quantity = SUM по всем techSize на этом складе (а не одна строка)
+          const quantity = stockSumByWarehouseId.get(warehouseId) ?? 0
           const ordersCount = orderEntry?.ordersCount ?? 0
           const ordersPerDay = orderEntry ? ordersCount / orderEntry.periodDays : null
 
@@ -257,7 +267,7 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
           })
 
           // Stocks aggregation (только если в stocks была запись)
-          if (stockEntry) {
+          if (hasStockEntry) {
             aggregate.totalStock = (aggregate.totalStock ?? 0) + quantity
             if (totalStock === null) totalStock = 0
             totalStock += quantity
