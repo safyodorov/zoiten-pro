@@ -4,7 +4,7 @@
 // Phase 14 (STOCK-22, STOCK-25): Client sticky-таблица /stock/wb с 7 кластерными колонками + expand.
 // URL state: ?expandedClusters=ЦФО,ПФО — shareable.
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,8 @@ import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
 import { ClusterTooltip } from "./ClusterTooltip"
 import { WarehouseVisibilityPopover } from "./WarehouseVisibilityPopover"
-import type { ProductWbGroup, StockWbDataResult } from "@/lib/stock-wb-data"
+import type { ProductWbGroup, StockWbDataResult, WbStockSizeRow } from "@/lib/stock-wb-data"
+import { saveStockWbShowSizes } from "@/app/actions/stock-wb"
 
 function formatStockValue(n: number): string {
   if (n < 10) return n.toFixed(1)
@@ -37,6 +38,8 @@ interface Props {
   turnoverNormDays: number
   clusterWarehouses: StockWbDataResult["clusterWarehouses"]
   hiddenWarehouseIds: number[] // quick 260422-oy5 — per-user hidden warehouses
+  // Phase 16 (STOCK-36): per-user toggle кнопки «По размерам»
+  initialShowSizes: boolean
 }
 
 function StockCell({ value }: { value: number | null }) {
@@ -79,7 +82,7 @@ function isSortingCenter(name: string): boolean {
   return /^СЦ\s/i.test(name.trim())
 }
 
-export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds }: Props) {
+export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds, initialShowSizes }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -95,6 +98,22 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
   // совпадает с тем что persist отправляет, спец. useEffect-синхронизация не нужна.
   const [hiddenIds, setHiddenIds] = useState<number[]>(hiddenWarehouseIds)
   const hiddenSet = new Set(hiddenIds)
+
+  // Phase 16 (STOCK-36): toggle «По размерам» — optimistic + persist в БД
+  const [showSizes, setShowSizes] = useState<boolean>(initialShowSizes)
+  const [isShowSizesPending, startShowSizesTransition] = useTransition()
+
+  const toggleShowSizes = useCallback(() => {
+    const next = !showSizes
+    setShowSizes(next) // optimistic
+    startShowSizesTransition(async () => {
+      const res = await saveStockWbShowSizes(next)
+      if (!res.ok) {
+        // Не откатываем — следующий revalidate синхронизирует из БД
+        console.error("Не удалось сохранить «По размерам»:", res.error)
+      }
+    })
+  }, [showSizes])
 
   // Отфильтрованные карты складов per-cluster для отображения при expand.
   // Агрегация на уровне кластера (collapsed view) всё равно использует все склады.
@@ -160,6 +179,19 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
           hiddenIds={hiddenIds}
           onChange={setHiddenIds}
         />
+        <Button
+          variant={showSizes ? "default" : "outline"}
+          size="sm"
+          onClick={toggleShowSizes}
+          disabled={isShowSizesPending}
+          title={
+            showSizes
+              ? "Сейчас: размерные строки видны под каждым артикулом. Нажать — скрыть."
+              : "Сейчас: размерные строки скрыты. Нажать — показать per-size разбивку."
+          }
+        >
+          По размерам
+        </Button>
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
