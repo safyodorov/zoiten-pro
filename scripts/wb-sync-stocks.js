@@ -61,7 +61,10 @@ async function main() {
     matched++
 
     await prisma.$transaction(async (tx) => {
-      const incoming = new Set()
+      // Phase 16 (STOCK-33): per-size upsert через compound unique
+      // (wbCardId, warehouseId, techSize). REPLACE (НЕ accumulating старого qty —
+      // это был bug, см. RESEARCH §Hypothesis 1 #File 1).
+      const incomingKeys = []  // [{ warehouseId, techSize }, ...]
 
       for (const item of items) {
         // Lookup by name (seed создал 75 известных складов)
@@ -97,37 +100,46 @@ async function main() {
           }
         }
 
-        incoming.add(warehouseId)
-
         // Phase 15.1: per-warehouse — только физический остаток (без in-way).
         // In-way хранится отдельно на WbCard.inWayTo/From (см. ниже).
         const qty = item.quantity || 0
+        const techSize = item.techSize || ""
 
-        const existing = await tx.wbCardWarehouseStock.findUnique({
-          where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
-          select: { quantity: true },
+        const wasExisting = await tx.wbCardWarehouseStock.findUnique({
+          where: {
+            wbCardId_warehouseId_techSize: { wbCardId, warehouseId, techSize },
+          },
+          select: { id: true },
         })
+        await tx.wbCardWarehouseStock.upsert({
+          where: {
+            wbCardId_warehouseId_techSize: { wbCardId, warehouseId, techSize },
+          },
+          create: { wbCardId, warehouseId, techSize, quantity: qty },
+          update: { quantity: qty },  // REPLACE
+        })
+        if (!wasExisting) inserted++
 
-        if (existing) {
-          await tx.wbCardWarehouseStock.update({
-            where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
-            data: { quantity: existing.quantity + qty },
-          })
-        } else {
-          await tx.wbCardWarehouseStock.create({
-            data: { wbCardId, warehouseId, quantity: qty },
-          })
-          inserted++
-        }
+        incomingKeys.push({ warehouseId, techSize })
       }
 
-      // Удалить склады которых нет в текущем ответе (clean-replace per wbCardId)
-      await tx.wbCardWarehouseStock.deleteMany({
-        where: {
-          wbCardId,
-          NOT: { warehouseId: { in: [...incoming] } },
-        },
+      // Phase 16: 2-step clean-replace — Prisma не поддерживает compound NOT IN
+      // (см. RESEARCH §Pitfall 1). findMany → JS-фильтр → deleteMany по id.
+      const existingRows = await tx.wbCardWarehouseStock.findMany({
+        where: { wbCardId },
+        select: { id: true, warehouseId: true, techSize: true },
       })
+      const incomingSet = new Set(
+        incomingKeys.map((k) => `${k.warehouseId}::${k.techSize}`),
+      )
+      const toDeleteIds = existingRows
+        .filter((r) => !incomingSet.has(`${r.warehouseId}::${r.techSize}`))
+        .map((r) => r.id)
+      if (toDeleteIds.length > 0) {
+        await tx.wbCardWarehouseStock.deleteMany({
+          where: { id: { in: toDeleteIds } },
+        })
+      }
     })
   }
 
@@ -172,7 +184,7 @@ async function main() {
       ordersMatched++
 
       await prisma.$transaction(async (tx) => {
-        const incoming = new Set()
+        const incomingOrdersWh = new Set()
 
         for (const [warehouseName, ordersCount] of whMap) {
           let wh = await tx.wbWarehouse.findFirst({
@@ -209,7 +221,7 @@ async function main() {
             }
           }
 
-          incoming.add(warehouseId)
+          incomingOrdersWh.add(warehouseId)
 
           const existing = await tx.wbCardWarehouseOrders.findUnique({
             where: { wbCardId_warehouseId: { wbCardId, warehouseId } },
@@ -230,11 +242,11 @@ async function main() {
         }
 
         // Clean: удалить склады которых нет в текущем ответе
-        if (incoming.size > 0) {
+        if (incomingOrdersWh.size > 0) {
           await tx.wbCardWarehouseOrders.deleteMany({
             where: {
               wbCardId,
-              NOT: { warehouseId: { in: [...incoming] } },
+              NOT: { warehouseId: { in: [...incomingOrdersWh] } },
             },
           })
         }

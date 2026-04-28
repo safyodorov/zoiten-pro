@@ -767,10 +767,14 @@ export interface OrdersStats {
 
 const STATISTICS_API_STOCKS = "https://statistics-api.wildberries.ru/api/v1/supplier/stocks"
 
-/** Per-warehouse остаток для одного nmId на одном складе. */
+/** Per-warehouse остаток для одного nmId на одном складе на одном размере. */
 export interface WarehouseStockItem {
   /** Название склада WB (напр. "Невинномысск", "Коледино") */
   warehouseName: string
+  /** Phase 16 (STOCK-32): тех. размер ("46", "48", "S", "M" или "0" для одно-размерных) */
+  techSize: string
+  /** Phase 16 (STOCK-32): WB barcode размерной позиции */
+  barcode: string
   /** Доступное кол-во, шт */
   quantity: number
   /** В пути к клиенту, шт */
@@ -820,6 +824,8 @@ export async function fetchStocksPerWarehouse(
   const rows: Array<{
     nmId: number
     warehouseName: string
+    techSize?: string
+    barcode?: string
     quantity: number
     inWayToClient: number
     inWayFromClient: number
@@ -835,6 +841,8 @@ export async function fetchStocksPerWarehouse(
     const items = result.get(row.nmId) ?? []
     items.push({
       warehouseName: row.warehouseName ?? "",
+      techSize: row.techSize ?? "",
+      barcode: row.barcode ?? "",
       quantity: row.quantity ?? 0,
       inWayToClient: row.inWayToClient ?? 0,
       inWayFromClient: row.inWayFromClient ?? 0,
@@ -869,6 +877,8 @@ export interface OrdersWarehouseStats {
   yesterday: number
   /** Заказы минус отмены per-warehouse по имени склада (warehouseName → count). */
   perWarehouse: Map<string, number>
+  /** Phase 16 (STOCK-32): per-warehouse + per-size агрегат. warehouseName → (techSize → count) */
+  perWarehouseSize: Map<string, Map<string, number>>
   /** Окно в днях (для downstream расчётов). */
   periodDays: number
 }
@@ -906,6 +916,7 @@ export async function fetchOrdersPerWarehouse(
     nmId?: number
     nm_id?: number
     warehouseName?: string
+    techSize?: string
     isCancel?: boolean
     date?: string
   }>
@@ -922,6 +933,8 @@ export async function fetchOrdersPerWarehouse(
   const totals = new Map<number, number>()
   const yesterdayCounts = new Map<number, number>()
   const perWarehouseMap = new Map<number, Map<string, number>>()
+  // Phase 16: per-warehouse + per-size агрегат
+  const perWarehouseSizeMap = new Map<number, Map<string, Map<string, number>>>()
 
   for (const o of orders) {
     if (o.isCancel) continue
@@ -941,17 +954,34 @@ export async function fetchOrdersPerWarehouse(
       }
       perWh.set(wh, (perWh.get(wh) ?? 0) + 1)
     }
+    if (wh) {
+      const size = (o.techSize ?? "").trim() || "0"
+      let perWhSize = perWarehouseSizeMap.get(nm)
+      if (!perWhSize) {
+        perWhSize = new Map<string, Map<string, number>>()
+        perWarehouseSizeMap.set(nm, perWhSize)
+      }
+      let perSize = perWhSize.get(wh)
+      if (!perSize) {
+        perSize = new Map<string, number>()
+        perWhSize.set(wh, perSize)
+      }
+      perSize.set(size, (perSize.get(size) ?? 0) + 1)
+    }
   }
 
   for (const nmId of requested) {
     const t = totals.get(nmId) ?? 0
     const y = yesterdayCounts.get(nmId) ?? 0
     const perWh = perWarehouseMap.get(nmId) ?? new Map<string, number>()
+    // Phase 16 (STOCK-32): per-warehouse + per-size агрегат для размерных строк UI
+    const perWhSize = perWarehouseSizeMap.get(nmId) ?? new Map<string, Map<string, number>>()
     if (t === 0 && y === 0 && perWh.size === 0) continue
     result.set(nmId, {
       avg: t / periodDays,
       yesterday: y,
       perWarehouse: perWh,
+      perWarehouseSize: perWhSize,
       periodDays,
     })
   }
