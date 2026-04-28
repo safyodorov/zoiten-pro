@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 16-01-PLAN.md
-last_updated: "2026-04-28T10:55:10.504Z"
+stopped_at: Completed 16-wb-stock-sizes-03-PLAN.md
+last_updated: "2026-04-28T11:27:39.360Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 16 (wb-stock-sizes) — EXECUTING
-Plan: 2 of 7
+Plan: 5 of 7
 
 ## Performance Metrics
 
@@ -101,6 +101,8 @@ Plan: 2 of 7
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
 | Phase 16-wb-stock-sizes P01 | 85s | 2 tasks | 2 files |
+| Phase 16-wb-stock-sizes P02 | 7.5min | 3 tasks | 5 files |
+| Phase 16-wb-stock-sizes P03 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -238,6 +240,10 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
 - [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
 - [Phase 16-wb-stock-sizes]: Plan 16-01: techSize именован как в WB API (не size), DELETE legacy rows для clean re-sync, миграция применяется ТОЛЬКО на VPS через bash deploy.sh в Plan 16-06
+- [Phase 16-wb-stock-sizes]: Plan 16-02: REPLACE upsert через compound unique (wbCardId, warehouseId, techSize) + 2-step clean-replace pattern (Prisma не поддерживает compound NOT IN)
+- [Phase 16-wb-stock-sizes]: Plan 16-02: Phase 15 orders-block в обоих sync файлах НЕ трогается (orders без размерной разбивки в БД, per-size агрегация на JS)
+- [Phase 16-wb-stock-sizes]: Plan 16-03: sortSizes — SIZE_ORDER приватная (XS<S<M<L<XL<2XL/XXL<3XL/XXXL<4XL/XXXXL), case-insensitive lookup; пустые в конец; pure helper для тестирования без Prisma
+- [Phase 16-wb-stock-sizes]: Plan 16-03: buildSizeBreakdown — pure helper, uniqueSizes<=1 возвращает []; per-size ordersCount=0/ordersPerDay=null (per-size orders не хранятся в БД); UI показывает '—' в колонке З
 
 ### Roadmap Evolution
 
@@ -280,6 +286,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-28T10:54:36.156Z
-Stopped at: Completed 16-01-PLAN.md
+Last session: 2026-04-28T11:27:05.411Z
+Stopped at: Completed 16-wb-stock-sizes-03-PLAN.md
 Resume file: None

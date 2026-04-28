@@ -362,7 +362,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
 | 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete    | 2026-04-22 |
-| 16. Размерная разбивка остатков WB | 0/7 | Planned    |  |
+| 16. Размерная разбивка остатков WB | 2/7 | In Progress|  |
 
 
 
@@ -384,8 +384,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 **Plans**: 7 plans (включая Wave 0 diagnostic)
 
 Plans:
-- [ ] 16-W0-PLAN.md — Wave 0: Diagnostic baseline `scripts/wb-stocks-diagnose.js` для контрольных nmId — STOCK-30
-- [ ] 16-01-PLAN.md — Wave 1: Schema migration `WbCardWarehouseStock.techSize` + compound unique + `User.stockWbShowSizes` + manual SQL — STOCK-31
+- [x] 16-W0-PLAN.md — Wave 0: Diagnostic baseline `scripts/wb-stocks-diagnose.js` для контрольных nmId — STOCK-30
+- [x] 16-01-PLAN.md — Wave 1: Schema migration `WbCardWarehouseStock.techSize` + compound unique + `User.stockWbShowSizes` + manual SQL — STOCK-31
 - [ ] 16-02-PLAN.md — Wave 2: Sync-bug fix — `WarehouseStockItem` расширение + per-size upsert REPLACE + 2-step clean-replace в обоих файлах (`scripts/wb-sync-stocks.js`, `app/api/wb-sync/route.ts`) — STOCK-32, STOCK-33
 - [ ] 16-03-PLAN.md — Wave 2: Data helper `WbStockSizeRow` + `buildSizeBreakdown` + `sortSizes` (parallel with 16-02) — STOCK-34
 - [ ] 16-04-PLAN.md — Wave 3: Server action `saveStockWbShowSizes` + RSC page чтение `stockWbShowSizes` + prop drilling — STOCK-35
