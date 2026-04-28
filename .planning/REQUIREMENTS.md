@@ -240,6 +240,17 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 - [x] **ORDERS-02**: При `POST /api/wb-sync` параллельно stocks загружаются orders за 7 дней через `GET statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=<7d ago>&flag=0`. `isCancel: true` ИСКЛЮЧАЮТСЯ. Clean-replace per `wbCardId` в транзакции: `deleteMany NOT IN incoming` + `upsert` per warehouse. Auto-insert неизвестных складов через `stableWarehouseIdFromName` + `needsClusterReview: true` (паттерн STOCK-10).
 - [x] **ORDERS-03**: На `/stock/wb` колонка З каждого кластера (collapsed) = `SUM(ordersCount per warehouses of cluster) / periodDays`. При expand кластера — per-warehouse З = `ordersCount / periodDays`. Метрики Об/Д per-кластер пересчитываются от кластерной З (не от `card.avgSalesSpeed7d`) через существующую `calculateStockMetrics` из `lib/stock-math.ts`. `WbCard.avgSalesSpeed7d` остаётся fallback для nmId без per-warehouse данных и для Сводной колонки МП/З. `scripts/wb-sync-stocks.js` расширен секцией orders (идентичный паттерн stocks section).
 
+### Per-Size Stock Breakdown (Phase 16)
+
+- [ ] **STOCK-30**: Diagnostic скрипт `scripts/wb-stocks-diagnose.js` — standalone Node.js скрипт, делает curl на `https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20T00:00:00`, читает `WbCardWarehouseStock` через Prisma, агрегирует по `(nmId, warehouseName)` (sum across techSize), считает diff `apiTotal − dbTotal`, выгружает CSV с колонками `nmId, warehouseName, apiTotal, dbTotal, diff, ratio` для всех несовпадений. Контрольные nmId — 859398279, 901585883. Wave 0 baseline + verification после фикса.
+- [ ] **STOCK-31**: Prisma миграция `20260423_phase16_size_breakdown` (manual SQL) — `ALTER TABLE "WbCardWarehouseStock" ADD COLUMN "techSize" TEXT NOT NULL DEFAULT ''`, `DROP CONSTRAINT "WbCardWarehouseStock_wbCardId_warehouseId_key"`, `CREATE UNIQUE INDEX "WbCardWarehouseStock_wbCardId_warehouseId_techSize_key" ON ("wbCardId", "warehouseId", "techSize")`, `DELETE FROM "WbCardWarehouseStock" WHERE "techSize" = ''` (truncate legacy aggregates), `ALTER TABLE "User" ADD COLUMN "stockWbShowSizes" BOOLEAN NOT NULL DEFAULT false`. `prisma/schema.prisma`: `WbCardWarehouseStock { techSize String @default("") }`, новый `@@unique([wbCardId, warehouseId, techSize])`, `User.stockWbShowSizes Boolean @default(false)`.
+- [ ] **STOCK-32**: Расширить `WarehouseStockItem` в `lib/wb-api.ts` полями `techSize: string` и `barcode: string`. `fetchStocksPerWarehouse` пропускает `row.techSize ?? ""` и `row.barcode ?? ""` в результат. `OrdersWarehouseStats` в `fetchOrdersPerWarehouse` дополнен полем `perWarehouseSize: Map<string, Map<string, number>>` (warehouseName → techSize → count). Тесты `tests/wb-stocks-per-warehouse.test.ts` и `tests/wb-orders-per-warehouse.test.ts` расширены.
+- [ ] **STOCK-33**: Sync-bug fix — оба файла (`scripts/wb-sync-stocks.js:106-122` и `app/api/wb-sync/route.ts:238-264`) переходят на per-size upsert по compound ключу `(wbCardId, warehouseId, techSize)` с `update: { quantity: incoming }` (REPLACE, НЕ accumulate). Clean-replace переписан на 2-step pattern: `findMany {wbCardId}` → JS-фильтр `!incomingSet.has({warehouseId}::{techSize})` → `deleteMany {id IN [...]}`. После re-sync `sum(quantity) per (wbCardId, warehouseId)` = WB API snapshot (verified diagnostic диff=0).
+- [ ] **STOCK-34**: Расширить `lib/stock-wb-data.ts` — добавить тип `WbStockSizeRow { techSize, totalStock, clusters }` со структурой идентичной `WbStockRow.clusters`; новые поля `WbStockRow.sizeBreakdown: WbStockSizeRow[]` и `WbStockRow.hasMultipleSizes: boolean`. Агрегация per-size: `Map<techSize, Map<warehouseId, qty>>` от `card.warehouses` и `Map<techSize, Map<warehouseName, count>>` от `OrdersWarehouseStats.perWarehouseSize`. Хелпер `sortSizes(sizes: string[])` экспортирован из `lib/wb-clusters.ts` — числовые ASC, буквенные через `SIZE_ORDER` map (`XS<S<M<L<XL<2XL<3XL<4XL`), пустые/`"0"` в конец.
+- [ ] **STOCK-35**: Server action `saveStockWbShowSizes(value: boolean)` в `app/actions/stock-wb.ts` — паттерн `saveStockWbHiddenWarehouses` (quick 260422-oy5), `requireSection("STOCK")` без MANAGE, Zod `z.object({ value: z.boolean() })`, обновление `User.stockWbShowSizes`, `revalidatePath("/stock/wb")`.
+- [ ] **STOCK-36**: UI кнопка «По размерам» в верхней панели `StockWbTable.tsx` (рядом с «Без СЦ»/«Склады») — `<Button variant={showSizes ? "default" : "outline"}>` с optimistic update (`useState` + `useTransition` → `saveStockWbShowSizes`). RSC `app/(dashboard)/stock/wb/page.tsx` читает `User.stockWbShowSizes` через session, передаёт `initialShowSizes` prop. Под per-nmId строкой при `showSizes && card.hasMultipleSizes` рендерятся `card.sizeBreakdown.map(...)` строки с приглушённым фоном (`bg-muted/30`), префиксом `↳ Размер X` в Артикул-колонке, placeholder `—` в Иваново/in-way, полная per-cluster структура О/З/Об/Д. `rowSpan` Фото/Сводки пересчитан с учётом размерных строк.
+- [ ] **STOCK-37**: Re-sync на VPS после deploy + UAT — после `bash deploy.sh` запустить `node scripts/wb-sync-stocks.js`, нажать «Обновить из WB» в UI, прогнать `node scripts/wb-stocks-diagnose.js` (diff=0 для всех контрольных rows). UAT-чеклист `16-HUMAN-UAT.md` с 9 пунктами: (a) /stock/wb открывается, (b) кнопка «По размерам» persist, (c) nmId 859398279 sum размеров = stockQty, (d) Котовск показывает 6 строк {46:11,48:10,50:10,54:10,58:10,60:10}, (e) per-cluster агрегаты при «Без СЦ»/hidden warehouses не меняются, (f) one-size товары без размерных строк, (g) sticky cells не пересекаются при showSizes+expand-all, (h) `/stock/wb` `/inventory` redirect 1 релиз, (i) diagnostic CSV diff=0.
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
@@ -312,7 +323,6 @@ Explicitly excluded. Documented to prevent scope creep.
 | Safety stock / EOQ / Reorder Point | Deferred — работает при 1000+ SKU, у нас 50-200 |
 | Ozon Stocks API в Phase 14 | Удвоит scope — placeholder колонки достаточны для v1.2 |
 | Автосписание Иваново по WB заказам | Физически разные склады, логика невалидна |
-| Остатки per-размер (techSize) | WB даёт агрегат по nmId, techSize-разрез = отдельная таблица позже |
 | ML-прогноз продаж / сезонности | Линейной экстраполяции avgSalesSpeed достаточно для v1.2 |
 | Real-time polling per-warehouse WB | Rate limit 3/min → невозможно; sync раз в день/час достаточно |
 | Inline-редактирование остатков Иваново/WB в UI | Ломает audit trail; только через Excel upload / WB sync |
@@ -465,9 +475,18 @@ Explicitly excluded. Documented to prevent scope creep.
 | ORDERS-01 | Phase 15 | Complete |
 | ORDERS-02 | Phase 15 | Complete |
 | ORDERS-03 | Phase 15 | Complete |
+| STOCK-30 | Phase 16 | Pending |
+| STOCK-31 | Phase 16 | Pending |
+| STOCK-32 | Phase 16 | Pending |
+| STOCK-33 | Phase 16 | Pending |
+| STOCK-34 | Phase 16 | Pending |
+| STOCK-35 | Phase 16 | Pending |
+| STOCK-36 | Phase 16 | Pending |
+| STOCK-37 | Phase 16 | Pending |
 
 ---
 *Defined: 2026-04-05 | 72 requirements | 7 phases*
 *Milestone v1.1 added: 2026-04-17 | +40 requirements (SUP-01..SUP-40) | 6 new phases planned (Phase 8..13)*
 *Milestone v1.2 added: 2026-04-21 | +29 requirements (STOCK-01..STOCK-29) | 1 new phase planned (Phase 14)*
 *Phase 15 added: 2026-04-22 | +3 requirements (ORDERS-01..ORDERS-03) | extends Phase 14 with per-warehouse orders*
+*Phase 16 added: 2026-04-22 | +8 requirements (STOCK-30..STOCK-37) | per-size breakdown в /stock/wb + sync bug fix*

@@ -343,7 +343,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -362,23 +362,38 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
 | 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete    | 2026-04-22 |
+| 16. Размерная разбивка остатков WB | 0/7 | Planned |  |
+
 
 
 ### Phase 16: Размерная разбивка остатков WB в /stock/wb + фикс sync bug
 
-**Goal:** Менеджер видит остатки WB не только per (nmId, склад/кластер), но и в разрезе **techSize** — кнопкой «По размерам» под каждой карточкой раскрываются строки per размер с той же структурой колонок (О/З/Об/Д per cluster + per warehouse при expanded). Параллельно расследуется и устраняется расхождение между WB API и БД (sum размеров API ≠ stockQty в БД).
+**Goal:** Менеджер видит остатки WB не только per (nmId, склад/кластер), но и в разрезе **techSize** — кнопкой «По размерам» под каждой карточкой раскрываются строки per размер с той же структурой колонок (О/З/Об/Д per cluster + per warehouse при expanded). Параллельно устраняется sync-bug — два разных бага в `scripts/wb-sync-stocks.js` (accumulation) и `app/api/wb-sync/route.ts` (overwrite на разных techSize) приводят к тому что sum(WbCardWarehouseStock.quantity) != WbCard.stockQty.
 
-**Requirements**: TBD (формализуется при /gsd:plan-phase)
+**Requirements**: STOCK-30, STOCK-31, STOCK-32, STOCK-33, STOCK-34, STOCK-35, STOCK-36, STOCK-37
 
 **Depends on:** Phase 14 (WbCardWarehouseStock, lib/wb-api.ts), Phase 15 (per-cluster orders), Phase 15.1 (in-way + Всего на WB), quick 260422-oy5 (per-user складские настройки) — всё расширяется.
 
-**Plans:** 0 plans (планируются через /gsd:plan-phase 16)
+**Success Criteria** (what must be TRUE):
+  1. `WbCardWarehouseStock` имеет per-size rows с unique `(wbCardId, warehouseId, techSize)`; `User.stockWbShowSizes Boolean` хранит per-user toggle
+  2. После re-sync `node scripts/wb-stocks-diagnose.js` показывает `diff=0` для контрольных nmId 859398279, 901585883 — sum quantity per (wbCardId, warehouseId) совпадает с WB API snapshot
+  3. На `/stock/wb` кнопка «По размерам» в верхней панели toggle'ит размерные строки под каждой nmId-строкой с полной структурой колонок (О per cluster + per warehouse при expanded). Состояние persist per-user в БД
+  4. Размерные строки показывают `↳ {techSize}` в Артикул-колонке, `bg-muted/30` фон; для one-size товаров (techSize="0") размерных строк НЕТ; sticky cells Фото/Сводка не пересекаются при expand-all+showSizes ON
+  5. Per-cluster агрегаты НЕ зависят от hideSc/hidden warehouses (locked: visual filter only); колонка З размерных строк = «—» (per-size orders не хранятся в БД, deferred до v2)
+
+**Plans**: 7 plans (включая Wave 0 diagnostic)
 
 Plans:
-- [ ] TBD — обычно ~5-6 планов:
-  1. Research / discover root cause sync bug (расхождение API vs БД)
-  2. Schema: WbCardWarehouseStock + techSize, unique (wbCardId, warehouseId, techSize) + миграция
-  3. Sync: per-size rows + правильный clean-replace + фикс accumulation
-  4. Data helper lib/stock-wb-data.ts: sizeBreakdown в ClusterAggregate / WarehouseSlot
-  5. UI: кнопка «По размерам» + per-size rows под каждым nmId + persist
-  6. Re-sync на VPS + UAT (Без СЦ + per-user скрытие должны работать на размерных строках)
+- [ ] 16-W0-PLAN.md — Wave 0: Diagnostic baseline `scripts/wb-stocks-diagnose.js` для контрольных nmId — STOCK-30
+- [ ] 16-01-PLAN.md — Wave 1: Schema migration `WbCardWarehouseStock.techSize` + compound unique + `User.stockWbShowSizes` + manual SQL — STOCK-31
+- [ ] 16-02-PLAN.md — Wave 2: Sync-bug fix — `WarehouseStockItem` расширение + per-size upsert REPLACE + 2-step clean-replace в обоих файлах (`scripts/wb-sync-stocks.js`, `app/api/wb-sync/route.ts`) — STOCK-32, STOCK-33
+- [ ] 16-03-PLAN.md — Wave 2: Data helper `WbStockSizeRow` + `buildSizeBreakdown` + `sortSizes` (parallel with 16-02) — STOCK-34
+- [ ] 16-04-PLAN.md — Wave 3: Server action `saveStockWbShowSizes` + RSC page чтение `stockWbShowSizes` + prop drilling — STOCK-35
+- [ ] 16-05-PLAN.md — Wave 3: UI кнопка «По размерам» + рендер размерных строк (parallel with 16-04) — STOCK-36
+- [ ] 16-06-PLAN.md — Wave 4: Deploy + Re-sync + 9-point Manual UAT + diagnostic verification (diff=0) — STOCK-37
+
+**Параллелизация:** 16-W0 → 16-01 → (16-02 || 16-03) → (16-04 || 16-05) → 16-06.
+
+**Wave 0:** `scripts/wb-stocks-diagnose.js` — golden baseline ДО фикса (diff!=0 ожидается), повторный прогон в Plan 16-06 верифицирует diff=0 после re-sync.
+
+**UI hint**: yes (изменение визуализации /stock/wb — кнопка «По размерам» + размерные строки под каждым nmId)
