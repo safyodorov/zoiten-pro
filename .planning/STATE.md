@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Управление остатками
+milestone: v1.1
+milestone_name: Служба поддержки WB
 status: In progress
-stopped_at: Completed 16-wb-stock-sizes-05-PLAN.md
-last_updated: "2026-04-28T11:40:51Z"
+stopped_at: Completed 16-wb-stock-sizes-06-PLAN.md (awaiting UAT — see 16-HUMAN-UAT.md)
+last_updated: "2026-04-28T11:54:30.403Z"
 progress:
-  total_phases: 14
+  total_phases: 13
   completed_phases: 13
-  total_plans: 58
-  completed_plans: 53
+  total_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -101,6 +101,7 @@ Plan: 16-05 completed; awaiting merge with parallel 16-01..16-04 + 16-06
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
 | Phase 16-wb-stock-sizes P05 | 4min | 3 tasks | 1 files |
+| Phase 16-wb-stock-sizes P06 | 4min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,7 @@ Recent decisions affecting current work:
 - [Phase 16-wb-stock-sizes]: Plan 16-05 — Размерная row column-структура идентична per-nmId (О/З/Об/Д per cluster + per-warehouse expanded), но З/Об/Д = null = «—» (per-size orders не доступны в БД, deferred до v2)
 - [Phase 16-wb-stock-sizes]: Plan 16-05 — React.Fragment key переехал с TableRow на Fragment (требование React: key на корневом элементе map callback'а после wrap)
 - [Phase 16-wb-stock-sizes]: Plan 16-05 — hideSc / hiddenWarehouseIds применяются к visibleClusterWarehouses в expanded view размерной row — visual filter only, идентично per-nmId
+- [Phase 16-wb-stock-sizes]: Plan 16-06 — Pre-UAT автоматизирован: deploy + re-sync + diagnostic выполнены агентом ДО checkpoint. Diagnostic full-set (87 nmId, 2237 пар) → diff=0, sync bug Phase 16-02 эмпирически устранён в проде.
 
 ### Roadmap Evolution
 
@@ -283,6 +285,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-28T11:40:51Z
-Stopped at: Completed 16-wb-stock-sizes-05-PLAN.md (parallel worktree agent-a4fc6692)
+Last session: 2026-04-28T11:54:30.398Z
+Stopped at: Completed 16-wb-stock-sizes-06-PLAN.md (awaiting UAT — see 16-HUMAN-UAT.md)
 Resume file: None
