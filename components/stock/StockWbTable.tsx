@@ -645,7 +645,70 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                           ]
                         })}
                       </TableRow>
-                      {/* Task 3 (B5): здесь будет блок размерных строк */}
+                      {/* Phase 16 (STOCK-36): размерные строки под per-nmId */}
+                      {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
+                        <TableRow
+                          key={`${card.wbCardId}-size-${sizeRow.techSize}`}
+                          className="border-t border-t-border/40 bg-muted/30"
+                        >
+                          {/* Артикул-колонка: ↳ {techSize} */}
+                          <TableCell className="sticky left-[320px] z-20 bg-muted/30 border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
+                            <span className="text-muted-foreground pl-3">↳ {sizeRow.techSize || "—"}</span>
+                          </TableCell>
+                          {/* Иваново — placeholder */}
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">—</TableCell>
+                          {/* Всего на WB — sizeRow.totalStock (без in-way) */}
+                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                            {sizeRow.totalStock !== null ? formatInt(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          {/* Товар в пути — placeholder × 3 (per-size in-way не хранится) */}
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>
+                          {/* Итого склады WB О/З/Об/Д — З=null → metrics все null */}
+                          <StockCell value={sizeRow.totalStock} />
+                          <StockCell value={null} />
+                          <IntCell value={null} />
+                          <DeficitCell deficit={null} threshold={null} />
+                          {/* Кластеры — то же flatMap по CLUSTER_ORDER, но через sizeRow.clusters */}
+                          {CLUSTER_ORDER.flatMap((cluster) => {
+                            const isExpanded = expandedSet.has(cluster)
+                            const visibleWarehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
+                            const sizeClusterAgg = sizeRow.clusters[cluster as ClusterShortName]
+                            if (isExpanded) {
+                              if (visibleWarehouses.length === 0) {
+                                return [
+                                  <TableCell key={`${cluster}-size-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>,
+                                ]
+                              }
+                              return visibleWarehouses.flatMap((w, idx) => {
+                                const isLast = idx === visibleWarehouses.length - 1
+                                const borderClass = isLast ? "border-r" : "border-r border-r-border/40"
+                                const slot = sizeClusterAgg.warehouses.find((slotW) => slotW.warehouseId === w.warehouseId)
+                                const slotQty = slot?.quantity ?? 0
+                                return [
+                                  <StockCell key={`${cluster}-size-${w.warehouseId}-o`} value={slotQty} />,
+                                  <StockCell key={`${cluster}-size-${w.warehouseId}-z`} value={null} />,
+                                  <IntCell key={`${cluster}-size-${w.warehouseId}-ob`} value={null} />,
+                                  <TableCell
+                                    key={`${cluster}-size-${w.warehouseId}-d`}
+                                    className={cn(
+                                      "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
+                                      borderClass,
+                                    )}
+                                  >—</TableCell>,
+                                ]
+                              })
+                            }
+                            return [
+                              <StockCell key={`${cluster}-size-o`} value={sizeClusterAgg.totalStock ?? null} />,
+                              <StockCell key={`${cluster}-size-z`} value={null} />,
+                              <IntCell key={`${cluster}-size-ob`} value={null} />,
+                              <DeficitCell key={`${cluster}-size-d`} deficit={null} threshold={null} />,
+                            ]
+                          })}
+                        </TableRow>
+                      ))}
                     </React.Fragment>
                     )
                   })}
