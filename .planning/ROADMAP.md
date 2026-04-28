@@ -363,3 +363,22 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
 | 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete    | 2026-04-22 |
 
+
+### Phase 16: Размерная разбивка остатков WB в /stock/wb + фикс sync bug
+
+**Goal:** Менеджер видит остатки WB не только per (nmId, склад/кластер), но и в разрезе **techSize** — кнопкой «По размерам» под каждой карточкой раскрываются строки per размер с той же структурой колонок (О/З/Об/Д per cluster + per warehouse при expanded). Параллельно расследуется и устраняется расхождение между WB API и БД (sum размеров API ≠ stockQty в БД).
+
+**Requirements**: TBD (формализуется при /gsd:plan-phase)
+
+**Depends on:** Phase 14 (WbCardWarehouseStock, lib/wb-api.ts), Phase 15 (per-cluster orders), Phase 15.1 (in-way + Всего на WB), quick 260422-oy5 (per-user складские настройки) — всё расширяется.
+
+**Plans:** 0 plans (планируются через /gsd:plan-phase 16)
+
+Plans:
+- [ ] TBD — обычно ~5-6 планов:
+  1. Research / discover root cause sync bug (расхождение API vs БД)
+  2. Schema: WbCardWarehouseStock + techSize, unique (wbCardId, warehouseId, techSize) + миграция
+  3. Sync: per-size rows + правильный clean-replace + фикс accumulation
+  4. Data helper lib/stock-wb-data.ts: sizeBreakdown в ClusterAggregate / WarehouseSlot
+  5. UI: кнопка «По размерам» + per-size rows под каждым nmId + persist
+  6. Re-sync на VPS + UAT (Без СЦ + per-user скрытие должны работать на размерных строках)

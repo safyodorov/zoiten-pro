@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
-last_updated: "2026-04-22T15:10:00.000Z"
+last_updated: "2026-04-22T15:30:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -243,6 +243,7 @@ Recent decisions affecting current work:
 - Milestone v1.1 added (2026-04-17): +40 requirements (SUP-01..SUP-40), +6 phases (Phase 8..13) — Служба поддержки WB (отзывы/вопросы → возвраты → чат → шаблоны/обжалование → профиль/мессенджеры → статистика)
 - Milestone v1.2 added (2026-04-21): +29 requirements (STOCK-01..STOCK-29), +1 phase (Phase 14 = 7 plans) — Управление остатками (schema + WB per-warehouse + Excel Иваново + Производство + /stock + /stock/wb с кластерами)
 - Phase 15 added (2026-04-22): Per-warehouse и per-cluster скорость заказов для /stock/wb — расширение Phase 14: Orders API per-warehouse + WbCardWarehouseOrders таблица + реальные З/Об/Д per-кластер вместо единого avgSalesSpeed7d
+- Phase 16 added (2026-04-22): Размерная разбивка остатков WB в /stock/wb + фикс sync bug — расширение схемы WbCardWarehouseStock с techSize, кнопка «По размерам» в UI с per-size строками, расследование расхождения API vs БД (например nmId 859398279 «Брюки» Котовск API ~70 шт vs БД 8)
 
 ### Pending Todos
 
@@ -277,6 +278,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T15:10:00.000Z
-Stopped at: Completed quick task 260422-oy5: Per-user фильтр складов в /stock/wb
+Last session: 2026-04-22T15:30:00.000Z
+Stopped at: Phase 16 added — Размерная разбивка остатков WB в /stock/wb + фикс sync bug
 Resume file: None
