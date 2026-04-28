@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 16-W0-PLAN.md
-last_updated: "2026-04-28T10:59:38.941Z"
+stopped_at: Completed 16-01-PLAN.md
+last_updated: "2026-04-28T10:55:10.504Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 16 (wb-stock-sizes) — EXECUTING
-Plan: 3 of 7
+Plan: 2 of 7
 
 ## Performance Metrics
 
@@ -101,7 +101,6 @@ Plan: 3 of 7
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
 | Phase 16-wb-stock-sizes P01 | 85s | 2 tasks | 2 files |
-| Phase 16-wb-stock-sizes PW0 | 1min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -239,7 +238,6 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
 - [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
 - [Phase 16-wb-stock-sizes]: Plan 16-01: techSize именован как в WB API (не size), DELETE legacy rows для clean re-sync, миграция применяется ТОЛЬКО на VPS через bash deploy.sh в Plan 16-06
-- [Phase 16-wb-stock-sizes]: Plan 16-W0: scripts/wb-stocks-diagnose.js (CommonJS, execSync curl + Prisma) — golden baseline tooling для расхождений API ↔ WbCardWarehouseStock. Только diff != 0 в CSV. Default nmIds [859398279, 901585883] из CONTEXT, env override WB_STOCKS_DIAGNOSE_NMIDS.
 
 ### Roadmap Evolution
 
@@ -282,6 +280,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-28T10:59:38.937Z
-Stopped at: Completed 16-W0-PLAN.md
+Last session: 2026-04-28T10:54:36.156Z
+Stopped at: Completed 16-01-PLAN.md
 Resume file: None

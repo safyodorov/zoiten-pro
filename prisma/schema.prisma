@@ -64,6 +64,8 @@ model User {
   // Per-user список скрытых WB-складов на странице /stock/wb (quick 260422-oy5).
   // Чисто визуальный фильтр — НЕ влияет на агрегаты.
   stockWbHiddenWarehouses Int[]                 @default([])
+  // Phase 16 (STOCK-31): per-user toggle кнопки «По размерам» в /stock/wb.
+  stockWbShowSizes        Boolean               @default(false)
   preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
   assignedTickets  SupportTicket[]       @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
   authoredMessages SupportMessage[]      @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
@@ -809,10 +811,14 @@ model WbCardWarehouseStock {
   wbCard      WbCard      @relation(fields: [wbCardId], references: [id], onDelete: Cascade)
   warehouseId Int
   warehouse   WbWarehouse @relation(fields: [warehouseId], references: [id])
+  // Phase 16 (STOCK-31): per-size остаток. "" = legacy/неизвестно (после миграции
+  // все rows с techSize="" удалены, при первом sync API заполнит реальные значения
+  // вроде "46", "48", "S", "M" или "0" для одно-размерных товаров).
+  techSize    String      @default("")
   quantity    Int         @default(0)
   updatedAt   DateTime    @updatedAt
 
-  @@unique([wbCardId, warehouseId])
+  @@unique([wbCardId, warehouseId, techSize])
   @@index([wbCardId])
   @@index([warehouseId])
 }

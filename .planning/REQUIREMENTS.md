@@ -242,7 +242,7 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 
 ### Per-Size Stock Breakdown (Phase 16)
 
-- [x] **STOCK-30**: Diagnostic скрипт `scripts/wb-stocks-diagnose.js` — standalone Node.js скрипт, делает curl на `https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20T00:00:00`, читает `WbCardWarehouseStock` через Prisma, агрегирует по `(nmId, warehouseName)` (sum across techSize), считает diff `apiTotal − dbTotal`, выгружает CSV с колонками `nmId, warehouseName, apiTotal, dbTotal, diff, ratio` для всех несовпадений. Контрольные nmId — 859398279, 901585883. Wave 0 baseline + verification после фикса.
+- [ ] **STOCK-30**: Diagnostic скрипт `scripts/wb-stocks-diagnose.js` — standalone Node.js скрипт, делает curl на `https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20T00:00:00`, читает `WbCardWarehouseStock` через Prisma, агрегирует по `(nmId, warehouseName)` (sum across techSize), считает diff `apiTotal − dbTotal`, выгружает CSV с колонками `nmId, warehouseName, apiTotal, dbTotal, diff, ratio` для всех несовпадений. Контрольные nmId — 859398279, 901585883. Wave 0 baseline + verification после фикса.
 - [x] **STOCK-31**: Prisma миграция `20260423_phase16_size_breakdown` (manual SQL) — `ALTER TABLE "WbCardWarehouseStock" ADD COLUMN "techSize" TEXT NOT NULL DEFAULT ''`, `DROP CONSTRAINT "WbCardWarehouseStock_wbCardId_warehouseId_key"`, `CREATE UNIQUE INDEX "WbCardWarehouseStock_wbCardId_warehouseId_techSize_key" ON ("wbCardId", "warehouseId", "techSize")`, `DELETE FROM "WbCardWarehouseStock" WHERE "techSize" = ''` (truncate legacy aggregates), `ALTER TABLE "User" ADD COLUMN "stockWbShowSizes" BOOLEAN NOT NULL DEFAULT false`. `prisma/schema.prisma`: `WbCardWarehouseStock { techSize String @default("") }`, новый `@@unique([wbCardId, warehouseId, techSize])`, `User.stockWbShowSizes Boolean @default(false)`.
 - [ ] **STOCK-32**: Расширить `WarehouseStockItem` в `lib/wb-api.ts` полями `techSize: string` и `barcode: string`. `fetchStocksPerWarehouse` пропускает `row.techSize ?? ""` и `row.barcode ?? ""` в результат. `OrdersWarehouseStats` в `fetchOrdersPerWarehouse` дополнен полем `perWarehouseSize: Map<string, Map<string, number>>` (warehouseName → techSize → count). Тесты `tests/wb-stocks-per-warehouse.test.ts` и `tests/wb-orders-per-warehouse.test.ts` расширены.
 - [ ] **STOCK-33**: Sync-bug fix — оба файла (`scripts/wb-sync-stocks.js:106-122` и `app/api/wb-sync/route.ts:238-264`) переходят на per-size upsert по compound ключу `(wbCardId, warehouseId, techSize)` с `update: { quantity: incoming }` (REPLACE, НЕ accumulate). Clean-replace переписан на 2-step pattern: `findMany {wbCardId}` → JS-фильтр `!incomingSet.has({warehouseId}::{techSize})` → `deleteMany {id IN [...]}`. После re-sync `sum(quantity) per (wbCardId, warehouseId)` = WB API snapshot (verified diagnostic диff=0).
@@ -475,7 +475,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | ORDERS-01 | Phase 15 | Complete |
 | ORDERS-02 | Phase 15 | Complete |
 | ORDERS-03 | Phase 15 | Complete |
-| STOCK-30 | Phase 16 | Complete |
+| STOCK-30 | Phase 16 | Pending |
 | STOCK-31 | Phase 16 | Complete |
 | STOCK-32 | Phase 16 | Pending |
 | STOCK-33 | Phase 16 | Pending |
