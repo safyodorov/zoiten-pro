@@ -218,4 +218,63 @@ describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
     expect(item).toHaveProperty("inWayToClient", 3)
     expect(item).toHaveProperty("inWayFromClient", 1)
   })
+
+  it("Phase 16 (STOCK-32): WarehouseStockItem содержит techSize и barcode", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        {
+          warehouseName: "Котовск",
+          nmId: 859398279,
+          techSize: "46",
+          barcode: "2044018340398",
+          quantity: 11,
+          inWayToClient: 0,
+          inWayFromClient: 0,
+        },
+      ],
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const result = await fetchStocksPerWarehouse([859398279])
+    const item = result.get(859398279)![0]!
+    expect(item.techSize).toBe("46")
+    expect(item.barcode).toBe("2044018340398")
+  })
+
+  it("Phase 16 (STOCK-32): несколько techSize для одного warehouseName — каждый отдельная WarehouseStockItem", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { warehouseName: "Котовск", nmId: 859398279, techSize: "46", barcode: "b46", quantity: 11, inWayToClient: 0, inWayFromClient: 0 },
+        { warehouseName: "Котовск", nmId: 859398279, techSize: "48", barcode: "b48", quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
+        { warehouseName: "Котовск", nmId: 859398279, techSize: "50", barcode: "b50", quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
+      ],
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const result = await fetchStocksPerWarehouse([859398279])
+    const items = result.get(859398279)!
+    expect(items).toHaveLength(3)
+    const sizes = items.map((i) => i.techSize).sort()
+    expect(sizes).toEqual(["46", "48", "50"])
+  })
+
+  it("Phase 16 (STOCK-32): отсутствие techSize/barcode → пустые строки", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { warehouseName: "Склад X", nmId: 999, quantity: 5, inWayToClient: 0, inWayFromClient: 0 },
+      ],
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const result = await fetchStocksPerWarehouse([999])
+    const item = result.get(999)![0]!
+    expect(item.techSize).toBe("")
+    expect(item.barcode).toBe("")
+  })
 })
