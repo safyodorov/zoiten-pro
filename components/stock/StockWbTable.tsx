@@ -380,7 +380,14 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
           </thead>
           <TableBody>
             {groups.map((g, idx) => {
-              const rowSpan = 1 + g.wbCards.length
+              // Phase 16 (STOCK-36): rowSpan учитывает размерные строки если showSizes ON
+              const totalSizeRows = showSizes
+                ? g.wbCards.reduce(
+                    (acc, c) => acc + (c.hasMultipleSizes ? c.sizeBreakdown.length : 0),
+                    0,
+                  )
+                : 0
+              const rowSpan = 1 + g.wbCards.length + totalSizeRows
 
               // Row-level агрегаты по всем wbCards продукта (Сводная)
               const rowTotalStock = g.wbCards.reduce<number | null>(
@@ -537,7 +544,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     const cardThreshold = deficitThreshold(turnoverNormDays, card.avgSalesSpeed7d)
 
                     return (
-                      <TableRow key={card.wbCardId} className="border-t border-t-border/60">
+                      <React.Fragment key={card.wbCardId}>
+                        <TableRow className="border-t border-t-border/60">
                         <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                           {card.nmId}
                         </TableCell>
@@ -637,6 +645,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                           ]
                         })}
                       </TableRow>
+                      {/* Task 3 (B5): здесь будет блок размерных строк */}
+                    </React.Fragment>
                     )
                   })}
                 </React.Fragment>
