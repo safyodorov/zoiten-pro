@@ -649,10 +649,13 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
                         <TableRow
                           key={`${card.wbCardId}-size-${sizeRow.techSize}`}
-                          className="border-t border-t-border/40 bg-muted/30"
+                          className="border-t border-t-border/40 bg-muted"
                         >
-                          {/* Артикул-колонка: ↳ {techSize} */}
-                          <TableCell className="sticky left-[320px] z-20 bg-muted/30 border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
+                          {/* Артикул-колонка: ↳ {techSize}.
+                              bg-muted СПЛОШНОЙ (не /30) — иначе при горизонтальном
+                              scroll non-sticky cells просвечивают через sticky.
+                              Паттерн из CLAUDE.md «Sticky data-таблицы». */}
+                          <TableCell className="sticky left-[320px] z-20 bg-muted border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                             <span className="text-muted-foreground pl-3">↳ {sizeRow.techSize || "—"}</span>
                           </TableCell>
                           {/* Иваново — placeholder */}
