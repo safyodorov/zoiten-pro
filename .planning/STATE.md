@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Служба поддержки WB
-status: Milestone complete
-stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
-last_updated: "2026-04-22T15:30:00.000Z"
+milestone: v1.2
+milestone_name: Управление остатками
+status: In progress
+stopped_at: Completed 16-wb-stock-sizes-05-PLAN.md
+last_updated: "2026-04-28T11:40:51Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 13
-  total_plans: 51
-  completed_plans: 52
+  total_plans: 58
+  completed_plans: 53
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 15 — per-cluster-orders
+**Current focus:** Phase 16 — wb-stock-sizes (parallel execution)
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
+Phase: 16 (wb-stock-sizes) — EXECUTING (parallel)
+Plan: 16-05 completed; awaiting merge with parallel 16-01..16-04 + 16-06
 
 ## Performance Metrics
 
@@ -100,6 +100,7 @@ Plan: Not started
 | Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
+| Phase 16-wb-stock-sizes P05 | 4min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -236,6 +237,10 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d заменён на fetchOrdersPerWarehouse — один запрос к Orders API покрывает card-level avg/yesterday и per-warehouse breakdown (rate limit ~1 req/min)
 - [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
 - [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — B5 split-pattern: структурное JSX изменение (Fragment wrap + rowSpan) и render в отдельных task'ах через TODO-маркер; балансировка скобок изолируется per task
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — Размерная row column-структура идентична per-nmId (О/З/Об/Д per cluster + per-warehouse expanded), но З/Об/Д = null = «—» (per-size orders не доступны в БД, deferred до v2)
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — React.Fragment key переехал с TableRow на Fragment (требование React: key на корневом элементе map callback'а после wrap)
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — hideSc / hiddenWarehouseIds применяются к visibleClusterWarehouses в expanded view размерной row — visual filter only, идентично per-nmId
 
 ### Roadmap Evolution
 
@@ -278,6 +283,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T15:30:00.000Z
-Stopped at: Phase 16 added — Размерная разбивка остатков WB в /stock/wb + фикс sync bug
+Last session: 2026-04-28T11:40:51Z
+Stopped at: Completed 16-wb-stock-sizes-05-PLAN.md (parallel worktree agent-a4fc6692)
 Resume file: None
