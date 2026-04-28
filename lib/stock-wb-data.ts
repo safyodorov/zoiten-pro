@@ -1,10 +1,12 @@
 // lib/stock-wb-data.ts
 // Phase 14 (STOCK-22): RSC data helper для /stock/wb — per-nmId данные с per-warehouse split.
 // Phase 15 (ORDERS-03): расширен per-warehouse orders aggregation per-cluster.
+// Phase 16 (STOCK-34): добавлен per-size breakdown — sizeBreakdown[] под каждой
+//   nmId-строкой; pure helper buildSizeBreakdown для тестирования без Prisma mock.
 // Группировка: Product → WbCard → кластер → склад
 
 import { prisma } from "@/lib/prisma"
-import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
+import { CLUSTER_ORDER, type ClusterShortName, sortSizes } from "@/lib/wb-clusters"
 
 export interface WarehouseSlot {
   warehouseId: number
@@ -25,6 +27,22 @@ export interface ClusterAggregate {
   ordersPerDay: number | null       // totalOrdersCount / periodDays
 }
 
+/**
+ * Phase 16 (STOCK-34): per-size агрегат для размерной строки в /stock/wb.
+ * Структура clusters идентична WbStockRow.clusters — UI рендерит ту же сетку
+ * О/З/Об/Д per cluster + per warehouse при expand.
+ *
+ * Note: ordersPerDay/totalOrdersCount per-size не хранятся в БД (per-size
+ * orders агрегация только в Map в памяти от fetchOrdersPerWarehouse, в БД
+ * есть только nmId-уровень WbCardWarehouseOrders). В размерных строках
+ * ordersPerDay = null → UI показывает «—» в колонке З.
+ */
+export interface WbStockSizeRow {
+  techSize: string
+  totalStock: number | null
+  clusters: Record<ClusterShortName, ClusterAggregate>
+}
+
 export interface WbStockRow {
   // Per-nmId
   wbCardId: string
@@ -38,6 +56,9 @@ export interface WbStockRow {
   clusters: Record<ClusterShortName, ClusterAggregate>
   // Phase 15 (ORDERS-03):
   periodDays: number | null         // periodDays из первой WbCardWarehouseOrders записи (обычно 7)
+  // Phase 16 (STOCK-34): per-size breakdown под этой nmId-строкой
+  sizeBreakdown: WbStockSizeRow[]
+  hasMultipleSizes: boolean
 }
 
 export interface ProductWbGroup {
@@ -257,6 +278,25 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
         }
       }
 
+      // Phase 16 (STOCK-34): per-size breakdown
+      const cardWarehouses = card?.warehouses ?? []
+      const sizeBreakdown = buildSizeBreakdown(
+        cardWarehouses.map((ws) => ({
+          warehouseId: ws.warehouseId,
+          techSize: ws.techSize ?? "",
+          quantity: ws.quantity ?? 0,
+          warehouse: ws.warehouse
+            ? {
+                name: ws.warehouse.name,
+                shortCluster: ws.warehouse.shortCluster ?? null,
+                needsClusterReview: ws.warehouse.needsClusterReview ?? false,
+              }
+            : null,
+        })),
+      )
+      const uniqueSizes = new Set<string>(cardWarehouses.map((ws) => ws.techSize ?? ""))
+      const hasMultipleSizes = uniqueSizes.size > 1
+
       return {
         wbCardId: card?.id ?? `missing-${a.article}`,
         nmId: isNaN(nmId) ? 0 : nmId,
@@ -267,6 +307,8 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
         inWayFromClient: card?.inWayFromClient ?? null,
         clusters,
         periodDays: cardPeriodDays,
+        sizeBreakdown,
+        hasMultipleSizes,
       }
     })
 
@@ -283,4 +325,103 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
   })
 
   return { groups, turnoverNormDays, clusterWarehouses }
+}
+
+/**
+ * Phase 16 (STOCK-34): построить per-size breakdown для одного nmId по
+ * card.warehouses[]. Pure function — можно тестировать без Prisma mock.
+ *
+ * Контракт:
+ *   - Если у nmId один уникальный techSize → возвращает [] (одно-размерные
+ *     товары не порождают размерных строк в UI; см. CONTEXT.md «Когда у nmId
+ *     1 размер — скрывать»).
+ *   - Иначе для каждого уникального techSize формирует WbStockSizeRow с такой
+ *     же структурой clusters, как у WbStockRow (Record<ClusterShortName,
+ *     ClusterAggregate>).
+ *   - Sort размеров через sortSizes() (числовая ASC / SIZE_ORDER / alpha
+ *     fallback / пустые в конец).
+ *   - ordersCount/ordersPerDay в каждом WarehouseSlot и ClusterAggregate
+ *     всегда 0/null — per-size orders не хранятся в БД (CONTEXT.md «Per-size
+ *     З default '—'»; UI рендерит как «—»).
+ *
+ * @param warehouses — записи WbCardWarehouseStock с присоединённой meta
+ *   склада (поле techSize присутствует после миграции 16-01).
+ * @returns массив WbStockSizeRow, отсортированный через sortSizes().
+ */
+export function buildSizeBreakdown(
+  warehouses: Array<{
+    warehouseId: number
+    techSize: string
+    quantity: number
+    warehouse: {
+      name: string
+      shortCluster: string | null
+      needsClusterReview: boolean
+    } | null
+  }>,
+): WbStockSizeRow[] {
+  // 1. Проверка количества уникальных размеров — одно-размерные товары не дают строк
+  const uniqueSizes = new Set<string>(warehouses.map((w) => w.techSize ?? ""))
+  if (uniqueSizes.size <= 1) return []
+
+  // 2. Group warehouses по techSize
+  const bySize = new Map<string, typeof warehouses>()
+  for (const w of warehouses) {
+    const ts = w.techSize ?? ""
+    const arr = bySize.get(ts) ?? []
+    arr.push(w)
+    bySize.set(ts, arr)
+  }
+
+  // 3. Build WbStockSizeRow per size
+  const rows: WbStockSizeRow[] = []
+  for (const [techSize, sizeWarehouses] of bySize.entries()) {
+    // Init clusters — все CLUSTER_ORDER ключи всегда присутствуют
+    const clusters = {} as Record<ClusterShortName, ClusterAggregate>
+    for (const sc of CLUSTER_ORDER) {
+      clusters[sc] = {
+        shortCluster: sc,
+        totalStock: null,
+        warehouses: [],
+        totalOrdersCount: null,
+        ordersPerDay: null,
+      }
+    }
+
+    let totalStock: number | null = null
+    for (const w of sizeWarehouses) {
+      const rawCluster = w.warehouse?.shortCluster ?? null
+      const shortCluster: ClusterShortName = (
+        rawCluster && (CLUSTER_ORDER as readonly string[]).includes(rawCluster)
+          ? rawCluster
+          : "Прочие"
+      ) as ClusterShortName
+      const agg = clusters[shortCluster]!
+
+      const qty = w.quantity ?? 0
+      agg.warehouses.push({
+        warehouseId: w.warehouseId,
+        warehouseName: w.warehouse?.name ?? `Склад ${w.warehouseId}`,
+        needsClusterReview: w.warehouse?.needsClusterReview ?? false,
+        quantity: qty,
+        ordersCount: 0,        // Phase 16: per-size orders не хранятся в БД
+        ordersPerDay: null,    //          → UI рендерит как «—»
+      })
+      agg.totalStock = (agg.totalStock ?? 0) + qty
+      totalStock = (totalStock ?? 0) + qty
+      // ordersPerDay/totalOrdersCount остаются null
+    }
+
+    rows.push({ techSize, totalStock, clusters })
+  }
+
+  // 4. Sort через sortSizes (стабильный порядок для UI)
+  const sortedSizes = sortSizes(rows.map((r) => r.techSize))
+  const indexBySize = new Map(sortedSizes.map((s, i) => [s, i]))
+  rows.sort(
+    (a, b) =>
+      (indexBySize.get(a.techSize) ?? 0) - (indexBySize.get(b.techSize) ?? 0),
+  )
+
+  return rows
 }

@@ -99,9 +99,13 @@ describe("buildSizeBreakdown (STOCK-34)", () => {
       shortCluster: "Антарктида",
       needsClusterReview: false,
     }
+    // Rule 1 (deviation): план задавал один размер '46' дважды — buildSizeBreakdown
+    // возвращает [] для одно-размерных. Чтобы протестировать routing неизвестного
+    // кластера, добавлен второй размер '48'.
     const result = buildSizeBreakdown([
       { warehouseId: 1, techSize: "46", quantity: 11, warehouse: koledino },
       { warehouseId: 999, techSize: "46", quantity: 1, warehouse: unknown },
+      { warehouseId: 1, techSize: "48", quantity: 5, warehouse: koledino },
     ])
     const size46 = result.find((r) => r.techSize === "46")!
     expect(size46.clusters["Прочие"].totalStock).toBe(1)
