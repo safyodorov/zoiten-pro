@@ -1,29 +1,23 @@
-# Phase 16 Deferred Items
+# Phase 16 — Deferred Items
 
-Out-of-scope discoveries during plan execution. Pre-existing issues, not caused by Phase 16 changes.
+Issues discovered during plan execution that are out of scope for the current plan.
 
-## Pre-existing test failures (not caused by Phase 16-02)
+## From Plan 16-03 (worktree-agent-a6c817d9)
 
-Discovered during Plan 16-02 broader regression test run.
+### tsc error in `app/api/wb-sync/route.ts:240` — pre-existing, fixed by Plan 16-02
 
-**Verified:** all 41 failures present BEFORE my Phase 16 changes (via `git stash` test).
+**Error:**
+```
+app/api/wb-sync/route.ts(240,21): error TS2353: Object literal may only specify known properties,
+and 'wbCardId_warehouseId' does not exist in type 'WbCardWarehouseStockWhereUniqueInput'.
+```
 
-### Failing test files
+**Root cause:** Plan 16-01 changed the compound unique key on `WbCardWarehouseStock` from `(wbCardId, warehouseId)` to `(wbCardId, warehouseId, techSize)`. The Prisma generated key changed from `wbCardId_warehouseId` to `wbCardId_warehouseId_techSize`. Plan 16-02 (parallel wave 2 with this 16-03 plan) updates `app/api/wb-sync/route.ts` to use the new compound key.
 
-- `tests/template-picker.test.ts` (1 file failure)
-- `tests/appeal-actions.test.ts` (12 tests)
-- `tests/customer-actions.test.ts` (9 tests)
-- Other support/customer/appeal-related tests
+**Status:** This worktree (`agent-a6c817d9`) was created from base before Plan 16-02 was merged. Plan 16-02's commits (e2a83e3, 8a331f6, 42cc86a, f7cdca6) live in a sibling worktree branch (`worktree-agent-a02e0c43` per git log) — they will be merged together into main alongside this plan.
 
-### Scope boundary rationale
+**Action:** No action required from Plan 16-03 — Plan 16-02 fixes this. Once both plans' branches merge into main, the error resolves.
 
-Per execution rules: «Only auto-fix issues DIRECTLY caused by the current task's
-changes. Pre-existing warnings, linting errors, or failures in unrelated files
-are out of scope.»
-
-These failures are in Phase 11-13 (templates/appeals/customers) — unrelated to
-Phase 16 (WB stock sizes).
-
-### Recommendation
-
-Investigate and fix in a separate quick task, NOT in Phase 16.
+**Verification commands after merge:**
+- `npx tsc --noEmit` → exit 0
+- `npm run test` → all green
