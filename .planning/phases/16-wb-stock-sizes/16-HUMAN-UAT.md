@@ -1,11 +1,16 @@
 # Phase 16 — Human UAT
 
+**Status:** ✅ APPROVED 2026-04-28
 **Phase:** 16-wb-stock-sizes
-**Дата deploy:** _________________ (заполнить после `bash deploy.sh`)
-**Git rev:** _________________ (`git rev-parse --short HEAD` после deploy)
-**Migration applied:** _________________ (timestamp когда `prisma migrate deploy` отработал)
-**Re-synced:** _________________ (timestamp последнего `node scripts/wb-sync-stocks.js`)
-**Tester:** _________________ (имя)
+**Дата deploy:** 2026-04-28 11:48 UTC
+**Git rev:** 62a9b8e (после двух gap-fix коммитов)
+**Migration applied:** 2026-04-28 11:48:23 UTC (20260423_phase16_size_breakdown)
+**Re-synced:** 2026-04-28 11:50 UTC (2312 per-size rows для 110 nmId)
+**Tester:** Сергей Фёдоров
+
+**Gap fixes during UAT:**
+1. `9770d69` fix(stock-wb-data): SUM quantity per warehouse — Map.set перезаписывал rows per (warehouseId, techSize), totalStock показывал только один размер (для nmId 859398279 видел 95 вместо 408)
+2. `62a9b8e` fix(stock-wb): размерная строка — сплошной bg-muted (не /30) — sticky-cell просвечивал при горизонтальном scroll, нарушение паттерна CLAUDE.md «Sticky data-таблицы»
 
 ---
 

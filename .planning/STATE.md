@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: In progress
-stopped_at: Completed 16-wb-stock-sizes-06-PLAN.md (awaiting UAT — see 16-HUMAN-UAT.md)
+status: Phase 16 approved
+stopped_at: Phase 16 UAT approved — размерная разбивка остатков WB + sync bug fixed (gap fixes 9770d69 + 62a9b8e)
 last_updated: "2026-04-28T11:54:30.403Z"
 progress:
   total_phases: 13
