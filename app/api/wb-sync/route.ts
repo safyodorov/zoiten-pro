@@ -197,7 +197,11 @@ export async function POST(): Promise<NextResponse> {
               })
               if (!card) continue
 
-              const incomingWarehouseIds: number[] = []
+              // Phase 16 (STOCK-33): per-size upsert через compound unique
+              // (wbCardId, warehouseId, techSize). До Phase 16 был bug: 6 rows
+              // одного склада (per techSize) ПЕРЕЗАПИСЫВАЛИ друг друга, БД
+              // содержала qty последнего techSize. См. RESEARCH §Hypothesis 1 #File 2.
+              const incomingKeys: Array<{ warehouseId: number; techSize: string }> = []
 
               // Auto-insert неизвестных складов (STOCK-10) + upsert остатков
               for (const item of warehouseItems) {
@@ -230,37 +234,48 @@ export async function POST(): Promise<NextResponse> {
                   })
                 }
 
-                incomingWarehouseIds.push(warehouseId)
-
-                // Phase 15.1: per-warehouse stock = только физический остаток (без in-way).
-                // In-way (to/from client) хранится на уровне nmId в WbCard.inWayTo/From —
-                // отображается отдельной колонкой 'Товар в пути' в /stock/wb.
+                // Phase 16 (STOCK-33): per-size upsert REPLACE
+                const techSize = item.techSize || ""
                 await tx.wbCardWarehouseStock.upsert({
                   where: {
-                    wbCardId_warehouseId: {
+                    wbCardId_warehouseId_techSize: {
                       wbCardId: card.id,
                       warehouseId,
+                      techSize,
                     },
                   },
                   create: {
                     wbCardId: card.id,
                     warehouseId,
+                    techSize,
                     quantity: item.quantity,
                   },
                   update: {
-                    quantity: item.quantity,
+                    quantity: item.quantity,  // REPLACE — не суммировать
                   },
                 })
+
+                incomingKeys.push({ warehouseId, techSize: item.techSize || "" })
               }
 
-              // Clean: удалить склады которых нет в текущем ответе API
-              if (incomingWarehouseIds.length > 0) {
-                await tx.wbCardWarehouseStock.deleteMany({
-                  where: {
-                    wbCardId: card.id,
-                    NOT: { warehouseId: { in: incomingWarehouseIds } },
-                  },
+              // Phase 16 (STOCK-33): 2-step clean-replace — Prisma не поддерживает
+              // compound NOT IN deleteMany (см. RESEARCH §Pitfall 1).
+              if (incomingKeys.length > 0) {
+                const existingRows = await tx.wbCardWarehouseStock.findMany({
+                  where: { wbCardId: card.id },
+                  select: { id: true, warehouseId: true, techSize: true },
                 })
+                const incomingSet = new Set(
+                  incomingKeys.map((k) => `${k.warehouseId}::${k.techSize}`),
+                )
+                const toDeleteIds = existingRows
+                  .filter((r) => !incomingSet.has(`${r.warehouseId}::${r.techSize}`))
+                  .map((r) => r.id)
+                if (toDeleteIds.length > 0) {
+                  await tx.wbCardWarehouseStock.deleteMany({
+                    where: { id: { in: toDeleteIds } },
+                  })
+                }
               }
 
               // Денормализация per-nmId: WbCard.stockQty = SUM(физ. остаток),
