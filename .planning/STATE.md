@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Служба поддержки WB
-status: Ready to execute
-stopped_at: Completed 16-wb-stock-sizes-04-PLAN.md
-last_updated: "2026-04-28T11:34:20.921Z"
+milestone: v1.2
+milestone_name: Управление остатками
+status: In progress
+stopped_at: Completed 16-wb-stock-sizes-05-PLAN.md
+last_updated: "2026-04-28T11:40:51Z"
 progress:
-  total_phases: 13
+  total_phases: 14
   completed_phases: 13
-  total_plans: 51
-  completed_plans: 52
+  total_plans: 58
+  completed_plans: 53
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 16 — wb-stock-sizes
+**Current focus:** Phase 16 — wb-stock-sizes (parallel execution)
 
 ## Current Position
 
-Phase: 16 (wb-stock-sizes) — EXECUTING
-Plan: 6 of 7
+Phase: 16 (wb-stock-sizes) — EXECUTING (parallel)
+Plan: 16-05 completed; awaiting merge with parallel 16-01..16-04 + 16-06
 
 ## Performance Metrics
 
@@ -100,10 +100,7 @@ Plan: 6 of 7
 | Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
-| Phase 16-wb-stock-sizes P01 | 85s | 2 tasks | 2 files |
-| Phase 16-wb-stock-sizes P02 | 7.5min | 3 tasks | 5 files |
-| Phase 16-wb-stock-sizes P03 | 5min | 2 tasks | 4 files |
-| Phase 16-wb-stock-sizes P04 | 6min | 2 tasks | 3 files |
+| Phase 16-wb-stock-sizes P05 | 4min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -240,12 +237,10 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d заменён на fetchOrdersPerWarehouse — один запрос к Orders API покрывает card-level avg/yesterday и per-warehouse breakdown (rate limit ~1 req/min)
 - [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
 - [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
-- [Phase 16-wb-stock-sizes]: Plan 16-01: techSize именован как в WB API (не size), DELETE legacy rows для clean re-sync, миграция применяется ТОЛЬКО на VPS через bash deploy.sh в Plan 16-06
-- [Phase 16-wb-stock-sizes]: Plan 16-02: REPLACE upsert через compound unique (wbCardId, warehouseId, techSize) + 2-step clean-replace pattern (Prisma не поддерживает compound NOT IN)
-- [Phase 16-wb-stock-sizes]: Plan 16-02: Phase 15 orders-block в обоих sync файлах НЕ трогается (orders без размерной разбивки в БД, per-size агрегация на JS)
-- [Phase 16-wb-stock-sizes]: Plan 16-03: sortSizes — SIZE_ORDER приватная (XS<S<M<L<XL<2XL/XXL<3XL/XXXL<4XL/XXXXL), case-insensitive lookup; пустые в конец; pure helper для тестирования без Prisma
-- [Phase 16-wb-stock-sizes]: Plan 16-03: buildSizeBreakdown — pure helper, uniqueSizes<=1 возвращает []; per-size ordersCount=0/ordersPerDay=null (per-size orders не хранятся в БД); UI показывает '—' в колонке З
-- [Phase 16-wb-stock-sizes]: Plan 16-04: Named ShowSizesSchema constant (B4) — Zod-схема z.object({ value: z.boolean() }) объявлена top-level для grep-friendliness, не inline в safeParse
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — B5 split-pattern: структурное JSX изменение (Fragment wrap + rowSpan) и render в отдельных task'ах через TODO-маркер; балансировка скобок изолируется per task
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — Размерная row column-структура идентична per-nmId (О/З/Об/Д per cluster + per-warehouse expanded), но З/Об/Д = null = «—» (per-size orders не доступны в БД, deferred до v2)
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — React.Fragment key переехал с TableRow на Fragment (требование React: key на корневом элементе map callback'а после wrap)
+- [Phase 16-wb-stock-sizes]: Plan 16-05 — hideSc / hiddenWarehouseIds применяются к visibleClusterWarehouses в expanded view размерной row — visual filter only, идентично per-nmId
 
 ### Roadmap Evolution
 
@@ -288,6 +283,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-28T11:34:20.916Z
-Stopped at: Completed 16-wb-stock-sizes-04-PLAN.md
+Last session: 2026-04-28T11:40:51Z
+Stopped at: Completed 16-wb-stock-sizes-05-PLAN.md (parallel worktree agent-a4fc6692)
 Resume file: None

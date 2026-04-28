@@ -362,7 +362,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 13. Статистика | 2/3 | In Progress|  |
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
 | 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete    | 2026-04-22 |
-| 16. Размерная разбивка остатков WB | 4/7 | In Progress|  |
+| 16. Размерная разбивка остатков WB | 1/7 | In Progress |  |
 
 
 
@@ -389,7 +389,7 @@ Plans:
 - [x] 16-02-PLAN.md — Wave 2: Sync-bug fix — `WarehouseStockItem` расширение + per-size upsert REPLACE + 2-step clean-replace в обоих файлах (`scripts/wb-sync-stocks.js`, `app/api/wb-sync/route.ts`) — STOCK-32, STOCK-33
 - [x] 16-03-PLAN.md — Wave 2: Data helper `WbStockSizeRow` + `buildSizeBreakdown` + `sortSizes` (parallel with 16-02) — STOCK-34
 - [ ] 16-04-PLAN.md — Wave 3: Server action `saveStockWbShowSizes` + RSC page чтение `stockWbShowSizes` + prop drilling — STOCK-35
-- [ ] 16-05-PLAN.md — Wave 3: UI кнопка «По размерам» + рендер размерных строк (parallel with 16-04) — STOCK-36
+- [x] 16-05-PLAN.md — Wave 3: UI кнопка «По размерам» + рендер размерных строк (parallel with 16-04) — STOCK-36
 - [ ] 16-06-PLAN.md — Wave 4: Deploy + Re-sync + 9-point Manual UAT + diagnostic verification (diff=0) — STOCK-37
 
 **Параллелизация:** 16-W0 → 16-01 → (16-02 || 16-03) → (16-04 || 16-05) → 16-06.

@@ -4,7 +4,7 @@
 // Phase 14 (STOCK-22, STOCK-25): Client sticky-таблица /stock/wb с 7 кластерными колонками + expand.
 // URL state: ?expandedClusters=ЦФО,ПФО — shareable.
 
-import React, { useCallback, useState } from "react"
+import React, { useCallback, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,8 @@ import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
 import { ClusterTooltip } from "./ClusterTooltip"
 import { WarehouseVisibilityPopover } from "./WarehouseVisibilityPopover"
-import type { ProductWbGroup, StockWbDataResult } from "@/lib/stock-wb-data"
+import type { ProductWbGroup, StockWbDataResult, WbStockSizeRow } from "@/lib/stock-wb-data"
+import { saveStockWbShowSizes } from "@/app/actions/stock-wb"
 
 function formatStockValue(n: number): string {
   if (n < 10) return n.toFixed(1)
@@ -37,6 +38,8 @@ interface Props {
   turnoverNormDays: number
   clusterWarehouses: StockWbDataResult["clusterWarehouses"]
   hiddenWarehouseIds: number[] // quick 260422-oy5 — per-user hidden warehouses
+  // Phase 16 (STOCK-36): per-user toggle кнопки «По размерам»
+  initialShowSizes: boolean
 }
 
 function StockCell({ value }: { value: number | null }) {
@@ -79,7 +82,7 @@ function isSortingCenter(name: string): boolean {
   return /^СЦ\s/i.test(name.trim())
 }
 
-export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds }: Props) {
+export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds, initialShowSizes }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -95,6 +98,22 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
   // совпадает с тем что persist отправляет, спец. useEffect-синхронизация не нужна.
   const [hiddenIds, setHiddenIds] = useState<number[]>(hiddenWarehouseIds)
   const hiddenSet = new Set(hiddenIds)
+
+  // Phase 16 (STOCK-36): toggle «По размерам» — optimistic + persist в БД
+  const [showSizes, setShowSizes] = useState<boolean>(initialShowSizes)
+  const [isShowSizesPending, startShowSizesTransition] = useTransition()
+
+  const toggleShowSizes = useCallback(() => {
+    const next = !showSizes
+    setShowSizes(next) // optimistic
+    startShowSizesTransition(async () => {
+      const res = await saveStockWbShowSizes(next)
+      if (!res.ok) {
+        // Не откатываем — следующий revalidate синхронизирует из БД
+        console.error("Не удалось сохранить «По размерам»:", res.error)
+      }
+    })
+  }, [showSizes])
 
   // Отфильтрованные карты складов per-cluster для отображения при expand.
   // Агрегация на уровне кластера (collapsed view) всё равно использует все склады.
@@ -160,6 +179,19 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
           hiddenIds={hiddenIds}
           onChange={setHiddenIds}
         />
+        <Button
+          variant={showSizes ? "default" : "outline"}
+          size="sm"
+          onClick={toggleShowSizes}
+          disabled={isShowSizesPending}
+          title={
+            showSizes
+              ? "Сейчас: размерные строки видны под каждым артикулом. Нажать — скрыть."
+              : "Сейчас: размерные строки скрыты. Нажать — показать per-size разбивку."
+          }
+        >
+          По размерам
+        </Button>
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
@@ -348,7 +380,14 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
           </thead>
           <TableBody>
             {groups.map((g, idx) => {
-              const rowSpan = 1 + g.wbCards.length
+              // Phase 16 (STOCK-36): rowSpan учитывает размерные строки если showSizes ON
+              const totalSizeRows = showSizes
+                ? g.wbCards.reduce(
+                    (acc, c) => acc + (c.hasMultipleSizes ? c.sizeBreakdown.length : 0),
+                    0,
+                  )
+                : 0
+              const rowSpan = 1 + g.wbCards.length + totalSizeRows
 
               // Row-level агрегаты по всем wbCards продукта (Сводная)
               const rowTotalStock = g.wbCards.reduce<number | null>(
@@ -505,7 +544,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     const cardThreshold = deficitThreshold(turnoverNormDays, card.avgSalesSpeed7d)
 
                     return (
-                      <TableRow key={card.wbCardId} className="border-t border-t-border/60">
+                      <React.Fragment key={card.wbCardId}>
+                        <TableRow className="border-t border-t-border/60">
                         <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
                           {card.nmId}
                         </TableCell>
@@ -605,6 +645,71 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                           ]
                         })}
                       </TableRow>
+                      {/* Phase 16 (STOCK-36): размерные строки под per-nmId */}
+                      {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
+                        <TableRow
+                          key={`${card.wbCardId}-size-${sizeRow.techSize}`}
+                          className="border-t border-t-border/40 bg-muted/30"
+                        >
+                          {/* Артикул-колонка: ↳ {techSize} */}
+                          <TableCell className="sticky left-[320px] z-20 bg-muted/30 border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
+                            <span className="text-muted-foreground pl-3">↳ {sizeRow.techSize || "—"}</span>
+                          </TableCell>
+                          {/* Иваново — placeholder */}
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">—</TableCell>
+                          {/* Всего на WB — sizeRow.totalStock (без in-way) */}
+                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                            {sizeRow.totalStock !== null ? formatInt(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          {/* Товар в пути — placeholder × 3 (per-size in-way не хранится) */}
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>
+                          {/* Итого склады WB О/З/Об/Д — З=null → metrics все null */}
+                          <StockCell value={sizeRow.totalStock} />
+                          <StockCell value={null} />
+                          <IntCell value={null} />
+                          <DeficitCell deficit={null} threshold={null} />
+                          {/* Кластеры — то же flatMap по CLUSTER_ORDER, но через sizeRow.clusters */}
+                          {CLUSTER_ORDER.flatMap((cluster) => {
+                            const isExpanded = expandedSet.has(cluster)
+                            const visibleWarehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
+                            const sizeClusterAgg = sizeRow.clusters[cluster as ClusterShortName]
+                            if (isExpanded) {
+                              if (visibleWarehouses.length === 0) {
+                                return [
+                                  <TableCell key={`${cluster}-size-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>,
+                                ]
+                              }
+                              return visibleWarehouses.flatMap((w, idx) => {
+                                const isLast = idx === visibleWarehouses.length - 1
+                                const borderClass = isLast ? "border-r" : "border-r border-r-border/40"
+                                const slot = sizeClusterAgg.warehouses.find((slotW) => slotW.warehouseId === w.warehouseId)
+                                const slotQty = slot?.quantity ?? 0
+                                return [
+                                  <StockCell key={`${cluster}-size-${w.warehouseId}-o`} value={slotQty} />,
+                                  <StockCell key={`${cluster}-size-${w.warehouseId}-z`} value={null} />,
+                                  <IntCell key={`${cluster}-size-${w.warehouseId}-ob`} value={null} />,
+                                  <TableCell
+                                    key={`${cluster}-size-${w.warehouseId}-d`}
+                                    className={cn(
+                                      "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
+                                      borderClass,
+                                    )}
+                                  >—</TableCell>,
+                                ]
+                              })
+                            }
+                            return [
+                              <StockCell key={`${cluster}-size-o`} value={sizeClusterAgg.totalStock ?? null} />,
+                              <StockCell key={`${cluster}-size-z`} value={null} />,
+                              <IntCell key={`${cluster}-size-ob`} value={null} />,
+                              <DeficitCell key={`${cluster}-size-d`} deficit={null} threshold={null} />,
+                            ]
+                          })}
+                        </TableRow>
+                      ))}
+                    </React.Fragment>
                     )
                   })}
                 </React.Fragment>
