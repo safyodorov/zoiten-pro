@@ -17,13 +17,16 @@ export default async function StockWbPage() {
   const [data, session] = await Promise.all([getStockWbData(), auth()])
 
   // Quick 260422-oy5: per-user фильтр скрытых WB-складов
+  // Phase 16 (STOCK-35): per-user toggle кнопки «По размерам»
   let hiddenWarehouseIds: number[] = []
+  let initialShowSizes = false
   if (session?.user?.id) {
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { stockWbHiddenWarehouses: true },
+      select: { stockWbHiddenWarehouses: true, stockWbShowSizes: true },
     })
     hiddenWarehouseIds = user?.stockWbHiddenWarehouses ?? []
+    initialShowSizes = user?.stockWbShowSizes ?? false
   }
 
   if (data.groups.length === 0) {
@@ -46,6 +49,7 @@ export default async function StockWbPage() {
         turnoverNormDays={data.turnoverNormDays}
         clusterWarehouses={data.clusterWarehouses}
         hiddenWarehouseIds={hiddenWarehouseIds}
+        initialShowSizes={initialShowSizes}
       />
     </div>
   )
