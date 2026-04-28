@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Milestone complete
-stopped_at: Completed 15-per-cluster-orders-03-PLAN.md
-last_updated: "2026-04-22T15:30:00.000Z"
+status: Ready to execute
+stopped_at: Completed 16-W0-PLAN.md
+last_updated: "2026-04-28T10:59:38.941Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 15 — per-cluster-orders
+**Current focus:** Phase 16 — wb-stock-sizes
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
+Phase: 16 (wb-stock-sizes) — EXECUTING
+Plan: 3 of 7
 
 ## Performance Metrics
 
@@ -100,6 +100,8 @@ Plan: Not started
 | Phase 15-per-cluster-orders P01 | 5 минут | 2 tasks | 5 files |
 | Phase 15-per-cluster-orders P02 | 8 минут | 2 tasks | 2 files |
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
+| Phase 16-wb-stock-sizes P01 | 85s | 2 tasks | 2 files |
+| Phase 16-wb-stock-sizes PW0 | 1min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -236,6 +238,8 @@ Recent decisions affecting current work:
 - [Phase 15-per-cluster-orders]: fetchAvgSalesSpeed7d заменён на fetchOrdersPerWarehouse — один запрос к Orders API покрывает card-level avg/yesterday и per-warehouse breakdown (rate limit ~1 req/min)
 - [Phase 15-per-cluster-orders]: Expanded per-warehouse показывает ordersPerDay (v1 spec); quantity виден через title tooltip
 - [Phase 15-per-cluster-orders]: allWarehouseIds = union(stocks, orders) — склад только в orders тоже попадает в кластерные колонки
+- [Phase 16-wb-stock-sizes]: Plan 16-01: techSize именован как в WB API (не size), DELETE legacy rows для clean re-sync, миграция применяется ТОЛЬКО на VPS через bash deploy.sh в Plan 16-06
+- [Phase 16-wb-stock-sizes]: Plan 16-W0: scripts/wb-stocks-diagnose.js (CommonJS, execSync curl + Prisma) — golden baseline tooling для расхождений API ↔ WbCardWarehouseStock. Только diff != 0 в CSV. Default nmIds [859398279, 901585883] из CONTEXT, env override WB_STOCKS_DIAGNOSE_NMIDS.
 
 ### Roadmap Evolution
 
@@ -278,6 +282,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-22T15:30:00.000Z
-Stopped at: Phase 16 added — Размерная разбивка остатков WB в /stock/wb + фикс sync bug
+Last session: 2026-04-28T10:59:38.937Z
+Stopped at: Completed 16-W0-PLAN.md
 Resume file: None
