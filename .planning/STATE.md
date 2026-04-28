@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 16-wb-stock-sizes-03-PLAN.md
-last_updated: "2026-04-28T11:27:39.360Z"
+stopped_at: Completed 16-wb-stock-sizes-04-PLAN.md
+last_updated: "2026-04-28T11:34:20.921Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 16 (wb-stock-sizes) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 
 ## Performance Metrics
 
@@ -103,6 +103,7 @@ Plan: 5 of 7
 | Phase 16-wb-stock-sizes P01 | 85s | 2 tasks | 2 files |
 | Phase 16-wb-stock-sizes P02 | 7.5min | 3 tasks | 5 files |
 | Phase 16-wb-stock-sizes P03 | 5min | 2 tasks | 4 files |
+| Phase 16-wb-stock-sizes P04 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,7 @@ Recent decisions affecting current work:
 - [Phase 16-wb-stock-sizes]: Plan 16-02: Phase 15 orders-block в обоих sync файлах НЕ трогается (orders без размерной разбивки в БД, per-size агрегация на JS)
 - [Phase 16-wb-stock-sizes]: Plan 16-03: sortSizes — SIZE_ORDER приватная (XS<S<M<L<XL<2XL/XXL<3XL/XXXL<4XL/XXXXL), case-insensitive lookup; пустые в конец; pure helper для тестирования без Prisma
 - [Phase 16-wb-stock-sizes]: Plan 16-03: buildSizeBreakdown — pure helper, uniqueSizes<=1 возвращает []; per-size ordersCount=0/ordersPerDay=null (per-size orders не хранятся в БД); UI показывает '—' в колонке З
+- [Phase 16-wb-stock-sizes]: Plan 16-04: Named ShowSizesSchema constant (B4) — Zod-схема z.object({ value: z.boolean() }) объявлена top-level для grep-friendliness, не inline в safeParse
 
 ### Roadmap Evolution
 
@@ -286,6 +288,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-28T11:27:05.411Z
-Stopped at: Completed 16-wb-stock-sizes-03-PLAN.md
+Last session: 2026-04-28T11:34:20.916Z
+Stopped at: Completed 16-wb-stock-sizes-04-PLAN.md
 Resume file: None
