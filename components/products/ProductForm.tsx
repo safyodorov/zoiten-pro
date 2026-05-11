@@ -1113,7 +1113,8 @@ function ProductNameField({
 
   return (
     <FormField
-      control={form.control}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      control={form.control as any}
       name="name"
       render={({ field }) => (
         <FormItem>
