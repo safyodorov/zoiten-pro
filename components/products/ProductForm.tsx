@@ -191,7 +191,10 @@ const formSchema = z.object({
   ),
   // Phase 17: динамические свойства (Record<propertyId, value>) + размерная сетка
   // NB: без .default() — zodResolver конфликтует с RHF 7.72 (см. CLAUDE.md Phase 4)
-  properties: z.record(z.string(), z.string()),
+  // value optional: для свойств которые есть на категории, но ещё не имеют значения
+  // в form state (например при первом рендере с пустой propertyValues), undefined
+  // допустим — submit не блокируется. Пустая строка/undefined → запись не создаётся.
+  properties: z.record(z.string(), z.string().optional()),
   sizes: z.array(z.object({ value: z.string() })),
 })
 
@@ -427,9 +430,11 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
     setShowMarketplaceSelect(false)
   }
 
-  // ── Submit handler ─────────────────────────────────────────────────
+  // ── Commit save (shared by submit и WB-import autosave) ───────────
+  // Возвращает true если сохранение прошло успешно, без router.refresh/push —
+  // вызывающий сам решает что делать после save (refresh, open dialog, etc.).
 
-  async function onSubmit(values: FormValues) {
+  async function commitSave(values: FormValues): Promise<boolean> {
     // 260421-iq7: marketplaces[].articles[].{value, barcodes[]} — sortOrder генерируется сервером
     // Phase 17 ext: barcodes теперь также содержат productSizeValue (резолвится в FK на сервере)
     const marketplacesData = values.marketplaces.map((mp) => ({
@@ -463,67 +468,93 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       .map((s) => ({ value: s.value.trim() }))
       .filter((s) => s.value.length > 0)
 
+    if (product?.id) {
+      if (currentDirectionHasSizes) {
+        const r = await saveProductSizes({ productId: product.id, sizes: sizesForSave })
+        if (!r.ok) {
+          toast.error(`Размеры: ${r.error}`)
+          return false
+        }
+      }
+      const result = await updateProduct({
+        ...values,
+        id: product.id,
+        marketplaces: marketplacesData,
+        categoryId: values.categoryId ?? undefined,
+        subcategoryId: values.subcategoryId ?? undefined,
+        abcStatus: values.abcStatus ?? undefined,
+        weightKg: values.weightKg ?? undefined,
+        heightCm: values.heightCm ?? undefined,
+        widthCm: values.widthCm ?? undefined,
+        depthCm: values.depthCm ?? undefined,
+      })
+      if (!result.ok) {
+        toast.error(result.error)
+        return false
+      }
+      if (propsForSave.length > 0) {
+        const r = await saveProductProperties({ productId: product.id, values: propsForSave })
+        if (!r.ok) toast.error(`Свойства: ${r.error}`)
+      }
+      return true
+    } else {
+      const result = await createProduct({
+        ...values,
+        marketplaces: marketplacesData,
+        categoryId: values.categoryId ?? undefined,
+        subcategoryId: values.subcategoryId ?? undefined,
+        abcStatus: values.abcStatus ?? undefined,
+        weightKg: values.weightKg ?? undefined,
+        heightCm: values.heightCm ?? undefined,
+        widthCm: values.widthCm ?? undefined,
+        depthCm: values.depthCm ?? undefined,
+      })
+      if (!result.ok) {
+        toast.error(result.error)
+        return false
+      }
+      // Phase 17: сохраняем свойства/размеры по id нового товара перед редиректом
+      if (propsForSave.length > 0) {
+        await saveProductProperties({ productId: result.id, values: propsForSave })
+      }
+      if (currentDirectionHasSizes && sizesForSave.length > 0) {
+        await saveProductSizes({ productId: result.id, sizes: sizesForSave })
+      }
+      toast.success("Товар создан")
+      router.push(`/products/${result.id}/edit`)
+      return true
+    }
+  }
+
+  // ── Submit handler ─────────────────────────────────────────────────
+
+  async function onSubmit(values: FormValues) {
     startTransition(async () => {
-      if (product?.id) {
-        // Phase 17 ext (2026-05-11): saveProductSizes ДО updateProduct.
-        // updateProduct резолвит barcode.productSizeValue → productSizeId через
-        // lookup ProductSize по (productId, value) — размеры должны существовать
-        // на момент create Barcode.
-        if (currentDirectionHasSizes) {
-          const r = await saveProductSizes({ productId: product.id, sizes: sizesForSave })
-          if (!r.ok) {
-            toast.error(`Размеры: ${r.error}`)
-            return
-          }
-        }
-        const result = await updateProduct({
-          ...values,
-          id: product.id,
-          marketplaces: marketplacesData,
-          categoryId: values.categoryId ?? undefined,
-          subcategoryId: values.subcategoryId ?? undefined,
-          abcStatus: values.abcStatus ?? undefined,
-          weightKg: values.weightKg ?? undefined,
-          heightCm: values.heightCm ?? undefined,
-          widthCm: values.widthCm ?? undefined,
-          depthCm: values.depthCm ?? undefined,
-        })
-        if (!result.ok) {
-          toast.error(result.error)
-          return
-        }
-        if (propsForSave.length > 0) {
-          const r = await saveProductProperties({ productId: product.id, values: propsForSave })
-          if (!r.ok) toast.error(`Свойства: ${r.error}`)
-        }
+      const ok = await commitSave(values)
+      if (ok && product?.id) {
         toast.success("Товар сохранён")
         router.refresh()
-      } else {
-        const result = await createProduct({
-          ...values,
-          marketplaces: marketplacesData,
-          categoryId: values.categoryId ?? undefined,
-          subcategoryId: values.subcategoryId ?? undefined,
-          abcStatus: values.abcStatus ?? undefined,
-          weightKg: values.weightKg ?? undefined,
-          heightCm: values.heightCm ?? undefined,
-          widthCm: values.widthCm ?? undefined,
-          depthCm: values.depthCm ?? undefined,
-        })
-        if (!result.ok) {
-          toast.error(result.error)
-          return
-        }
-        // Phase 17: сохраняем свойства/размеры по id нового товара перед редиректом
-        if (propsForSave.length > 0) {
-          await saveProductProperties({ productId: result.id, values: propsForSave })
-        }
-        if (currentDirectionHasSizes && sizesForSave.length > 0) {
-          await saveProductSizes({ productId: result.id, sizes: sizesForSave })
-        }
-        toast.success("Товар создан")
-        router.push(`/products/${result.id}/edit`)
       }
+    })
+  }
+
+  // ── WB Import autosave handler ─────────────────────────────────────
+  // Перед открытием WbImportDialog автосохраняем форму — иначе importFromWb
+  // на сервере читает product.category из БД, и если категория ещё не сохранена
+  // (только в form state), то previewWbImport вернёт пустой список свойств
+  // → пол/цвет/etc не подтянутся, а несохранённая категория потеряется при
+  // следующем router.refresh().
+
+  async function handleOpenWbImport() {
+    if (!product?.id) return
+    const valid = await form.trigger()
+    if (!valid) {
+      toast.error("Исправьте ошибки в форме перед импортом")
+      return
+    }
+    startTransition(async () => {
+      const ok = await commitSave(form.getValues())
+      if (ok) setWbImportOpen(true)
     })
   }
 
@@ -708,9 +739,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setWbImportOpen(true)}
+                  disabled={isPending}
+                  onClick={handleOpenWbImport}
                 >
-                  Импортировать из WB
+                  {isPending ? "Сохранение..." : "Импортировать из WB"}
                 </Button>
               )}
             </h2>
@@ -775,9 +807,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setWbImportOpen(true)}
+                  disabled={isPending}
+                  onClick={handleOpenWbImport}
                 >
-                  Импортировать из WB
+                  {isPending ? "Сохранение..." : "Импортировать из WB"}
                 </Button>
               )}
             </h2>
