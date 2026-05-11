@@ -5,6 +5,7 @@ export const maxDuration = 300
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 import { NextResponse } from "next/server"
 import {
   fetchAllCards,
@@ -146,7 +147,7 @@ export async function POST(): Promise<NextResponse> {
             // Phase 17: нормализованные characteristics + techSizes из WB Content API
             characteristics:
               card.characteristics === null
-                ? null
+                ? Prisma.DbNull
                 : (JSON.parse(JSON.stringify(card.characteristics)) as never),
             techSizes: card.techSizes,
             updatedAt: new Date(),
@@ -184,7 +185,7 @@ export async function POST(): Promise<NextResponse> {
             // Phase 17: нормализованные characteristics + techSizes из WB Content API
             characteristics:
               card.characteristics === null
-                ? null
+                ? Prisma.DbNull
                 : (JSON.parse(JSON.stringify(card.characteristics)) as never),
             techSizes: card.techSizes,
           },
