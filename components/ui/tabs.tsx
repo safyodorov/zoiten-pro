@@ -34,7 +34,9 @@ function TabsList({
 }
 
 // ── TabsTrigger ───────────────────────────────────────────────────
-// Uses data-selected: (base-ui), NOT data-state=active (radix/shadcn)
+// base-ui ставит на активный таб data-active + aria-selected="true"
+// (НЕ data-selected как в более старых версиях, и НЕ data-state=active как в radix).
+// Подтверждено в @base-ui/react/esm/tabs/tab/TabsTabDataAttributes.js.
 
 function TabsTrigger({
   className,
@@ -49,7 +51,8 @@ function TabsTrigger({
         // Hover для неактивных
         "hover:text-foreground hover:bg-muted/50 rounded-t-md",
         // Активный: фон + основной цвет + нижняя полоса
-        "data-selected:border-primary data-selected:text-primary data-selected:font-semibold data-selected:bg-primary/10",
+        // aria-selected — стандарт ARIA, надёжнее чем data-attribute (если base-ui сменит ключ)
+        "aria-selected:border-primary aria-selected:text-primary aria-selected:font-semibold aria-selected:bg-primary/10",
         className
       )}
       {...props}
