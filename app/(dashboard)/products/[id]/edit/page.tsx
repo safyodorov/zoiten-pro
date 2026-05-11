@@ -48,9 +48,18 @@ export default async function EditProductPage({
     prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
   ])
   if (!product) notFound()
+  // React key завязан на updatedAt — после router.refresh() (например, после
+  // WB-импорта) форма пересоздаётся с новыми defaultValues. Без этого
+  // useForm не переинициализирует значения при изменении props.
+  const formKey = `${product.id}-${product.updatedAt.getTime()}`
   return (
     <div className="space-y-4">
-      <ProductForm brands={brands} marketplaces={marketplaces} product={product} />
+      <ProductForm
+        key={formKey}
+        brands={brands}
+        marketplaces={marketplaces}
+        product={product}
+      />
     </div>
   )
 }

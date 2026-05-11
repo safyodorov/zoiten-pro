@@ -825,6 +825,13 @@ export async function importFromWb(
           data: { productSizeId: sizeId },
         })
       }
+
+      // Touch Product.updatedAt чтобы edit page formKey (= product.updatedAt) сменился
+      // → React пересоздаст ProductForm с новыми defaultValues после router.refresh().
+      await tx.product.update({
+        where: { id: parsed.productId },
+        data: { updatedAt: new Date() },
+      })
     })
 
     revalidatePath(`/products/${parsed.productId}/edit`)
