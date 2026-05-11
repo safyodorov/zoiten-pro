@@ -1,8 +1,48 @@
 // lib/wb-api.ts
 // Работа с Wildberries Content API и Prices API
 
+import { prisma } from "@/lib/prisma"
+
 const CONTENT_API = "https://content-api.wildberries.ru"
 const PRICES_API = "https://discounts-prices-api.wildberries.ru"
+
+// 2026-05-11: WB Analytics API лимит 3 reports/день. Жёсткий sky-cap чтобы избежать
+// 429 после исчерпания. Счётчик хранится в AppSetting('wbAnalyticsDailyCounter')
+// как JSON {date: "YYYY-MM-DD", count: N}. При смене даты обнуляется.
+const ANALYTICS_DAILY_MAX = 3
+
+async function checkAndIncrementAnalyticsCounter(): Promise<{
+  canRun: boolean
+  current: number
+  max: number
+}> {
+  const today = new Date().toISOString().split("T")[0]
+  const setting = await prisma.appSetting.findUnique({
+    where: { key: "wbAnalyticsDailyCounter" },
+  })
+  let data: { date: string; count: number } = { date: today, count: 0 }
+  if (setting) {
+    try {
+      const parsed = JSON.parse(setting.value)
+      if (parsed.date === today && typeof parsed.count === "number") {
+        data = parsed
+      }
+    } catch {}
+  }
+  if (data.count >= ANALYTICS_DAILY_MAX) {
+    return { canRun: false, current: data.count, max: ANALYTICS_DAILY_MAX }
+  }
+  data.count++
+  await prisma.appSetting.upsert({
+    where: { key: "wbAnalyticsDailyCounter" },
+    create: {
+      key: "wbAnalyticsDailyCounter",
+      value: JSON.stringify(data),
+    },
+    update: { value: JSON.stringify(data) },
+  })
+  return { canRun: true, current: data.count, max: ANALYTICS_DAILY_MAX }
+}
 
 function getToken(): string {
   const token = process.env.WB_API_TOKEN
@@ -152,7 +192,7 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
   const limit = 1000
 
   while (true) {
-    const res = await fetch(
+    const res = await retryFetch(
       `${PRICES_API}/api/v2/list/goods/filter?limit=${limit}&offset=${offset}`,
       {
         headers: { Authorization: token },
@@ -200,7 +240,7 @@ export async function fetchStocks(): Promise<Map<number, number>> {
   const stockMap = new Map<number, number>()
 
   try {
-    const res = await fetch(
+    const res = await retryFetch(
       "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
       { headers: { Authorization: token } }
     )
@@ -229,6 +269,16 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
   const token = getToken()
   const buyoutMap = new Map<number, number>()
 
+  // Защита от исчерпания дневного лимита WB Analytics API (3 reports/день).
+  const cap = await checkAndIncrementAnalyticsCounter()
+  if (!cap.canRun) {
+    console.warn(
+      `[WB Analytics] Дневной лимит исчерпан (${cap.current}/${cap.max}). ` +
+        `Процент выкупа пропускается до 00:00 UTC.`
+    )
+    return buyoutMap
+  }
+
   try {
     // Период: последний месяц
     const endDate = new Date().toISOString().split("T")[0]
@@ -237,7 +287,7 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
     const id = crypto.randomUUID()
 
     // 1. Создаём задание на отчёт
-    const createRes = await fetch(
+    const createRes = await retryFetch(
       "https://seller-analytics-api.wildberries.ru/api/v2/nm-report/downloads",
       {
         method: "POST",
@@ -446,7 +496,7 @@ export async function fetchStandardCommissions(): Promise<Map<number, { fbw: num
   const commMap = new Map<number, { fbw: number; fbs: number }>()
 
   try {
-    const res = await fetch(
+    const res = await retryFetch(
       "https://common-api.wildberries.ru/api/v1/tariffs/commission?locale=ru",
       { headers: { Authorization: token } }
     )
@@ -608,6 +658,28 @@ export interface WbPromotionNomenclatureRaw {
 /** Helper: пауза в ms (для rate limiting). */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * fetch с retry на 429 с экспоненциальным backoff (1s → 5s → 15s).
+ * Возвращает финальный Response — caller сам решает что делать с !ok после исчерпания retry.
+ *
+ * 2026-05-11: WB API rate limits (Tariffs 100/hour, Statistics 5/min, Analytics 3/day)
+ * легко исчерпываются при частых запусках /api/wb-sync. Без retry один 429 разваливал
+ * всю синхронизацию — этот helper даёт WB время остыть.
+ */
+async function retryFetch(
+  url: string,
+  opts: RequestInit = {},
+  backoffMs: number[] = [1000, 5000, 15000]
+): Promise<Response> {
+  let attempt = 0
+  while (true) {
+    const res = await fetch(url, opts)
+    if (res.status !== 429 || attempt >= backoffMs.length) return res
+    await sleep(backoffMs[attempt])
+    attempt++
+  }
 }
 
 /** Получить список всех акций WB в окне [startDate, endDate].
@@ -857,7 +929,7 @@ export async function fetchStocksPerWarehouse(
   const dateFrom = "2019-06-20T00:00:00"
   const url = `${STATISTICS_API_STOCKS}?dateFrom=${encodeURIComponent(dateFrom)}`
 
-  const res = await fetch(url, {
+  const res = await retryFetch(url, {
     headers: { Authorization: token },
   })
 
@@ -945,12 +1017,7 @@ export async function fetchOrdersPerWarehouse(
     `https://statistics-api.wildberries.ru/api/v1/supplier/orders` +
     `?dateFrom=${encodeURIComponent(dateFromIso)}&flag=0`
 
-  const res = await fetch(url, { headers: { Authorization: token } })
-
-  if (res.status === 429) {
-    await sleep(60_000)
-    return fetchOrdersPerWarehouse(nmIds, periodDays)
-  }
+  const res = await retryFetch(url, { headers: { Authorization: token } })
 
   if (!res.ok) {
     console.error(`WB Orders API (fetchOrdersPerWarehouse) ${res.status}`)
