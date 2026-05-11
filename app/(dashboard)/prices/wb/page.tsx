@@ -184,8 +184,14 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         product: {
           include: {
             cost: true,
-            subcategory: { select: { id: true, name: true, sortOrder: true } },
-            category: { select: { id: true, name: true, sortOrder: true } },
+            // sortOrder поля нужны для compareProductsByHierarchy;
+            // defaultDrrPct/defaultDefectRatePct используются в pricing-math
+            subcategory: {
+              select: { id: true, name: true, sortOrder: true, defaultDrrPct: true },
+            },
+            category: {
+              select: { id: true, name: true, sortOrder: true, defaultDefectRatePct: true },
+            },
             brand: {
               select: {
                 id: true,
