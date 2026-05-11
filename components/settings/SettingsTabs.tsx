@@ -70,18 +70,18 @@ interface SettingsTabsProps {
 
 export function SettingsTabs({ brands, marketplaces, directions, brandsLite }: SettingsTabsProps) {
   return (
-    <Tabs defaultValue="brands">
+    <Tabs defaultValue="directions">
       <TabsList>
-        <TabsTrigger value="brands">Бренды</TabsTrigger>
         <TabsTrigger value="directions">Направления</TabsTrigger>
+        <TabsTrigger value="brands">Бренды</TabsTrigger>
         <TabsTrigger value="categories">Категории</TabsTrigger>
         <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
       </TabsList>
-      <TabsContent value="brands">
-        <BrandsTab brands={brands} />
-      </TabsContent>
       <TabsContent value="directions">
         <DirectionsTab directions={directions} brands={brandsLite} />
+      </TabsContent>
+      <TabsContent value="brands">
+        <BrandsTab brands={brands} />
       </TabsContent>
       <TabsContent value="categories">
         <CategoriesTab brands={brands} />
