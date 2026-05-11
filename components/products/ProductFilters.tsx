@@ -6,34 +6,56 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ChevronDown, X } from "lucide-react"
 
-interface FilterOption {
+// Cascade-фильтрация: Направление → Бренд → Категория → Подкатегория.
+// При выборе родителя дочерние селекты:
+//   1) Сужают список опций (показывают только релевантные)
+//   2) Сбрасывают невалидные выборы (если выбранный бренд больше не в списке)
+
+interface DirectionOption {
   id: string
   name: string
 }
+interface BrandOption {
+  id: string
+  name: string
+  directionId: string | null
+}
+interface CategoryOption {
+  id: string
+  name: string
+  brandId: string
+}
+interface SubcategoryOption {
+  id: string
+  name: string
+  categoryId: string
+}
 
 interface ProductFiltersProps {
-  directions: FilterOption[]
-  brands: FilterOption[]
-  categories: FilterOption[]
-  subcategories: FilterOption[]
+  directions: DirectionOption[]
+  brands: BrandOption[]
+  categories: CategoryOption[]
+  subcategories: SubcategoryOption[]
   selectedDirectionIds: string[]
   selectedBrandIds: string[]
   selectedCategoryIds: string[]
   selectedSubcategoryIds: string[]
 }
 
-// ── Dropdown с чекбоксами (тот же паттерн что в WbFilters) ──────
+// ── MultiSelectDropdown (тот же что был) ────────────────────────
 
 function MultiSelectDropdown({
   label,
   options,
   selected,
   onChange,
+  disabled,
 }: {
   label: string
-  options: FilterOption[]
+  options: Array<{ id: string; name: string }>
   selected: string[]
   onChange: (values: string[]) => void
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -63,7 +85,8 @@ function MultiSelectDropdown({
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setOpen(!open)}
+        onClick={() => !disabled && setOpen(!open)}
+        disabled={disabled}
         className={`gap-1.5 ${selected.length > 0 ? "border-primary text-primary" : ""}`}
       >
         {displayLabel}
@@ -96,7 +119,7 @@ function MultiSelectDropdown({
   )
 }
 
-// ── Основной компонент фильтров ──────────────────────────────────
+// ── ProductFilters ───────────────────────────────────────────────
 
 export function ProductFilters({
   directions,
@@ -111,6 +134,29 @@ export function ProductFilters({
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Cascade: какие опции показываем в каждом следующем dropdown'е.
+  // Если ничего не выбрано в родителе — показываем все.
+  const visibleBrands =
+    selectedDirectionIds.length === 0
+      ? brands
+      : brands.filter(
+          (b) => b.directionId && selectedDirectionIds.includes(b.directionId)
+        )
+
+  const visibleBrandIds = new Set(visibleBrands.map((b) => b.id))
+
+  const visibleCategories =
+    selectedBrandIds.length === 0
+      ? categories.filter((c) => visibleBrandIds.has(c.brandId))
+      : categories.filter((c) => selectedBrandIds.includes(c.brandId))
+
+  const visibleCategoryIds = new Set(visibleCategories.map((c) => c.id))
+
+  const visibleSubcategories =
+    selectedCategoryIds.length === 0
+      ? subcategories.filter((s) => visibleCategoryIds.has(s.categoryId))
+      : subcategories.filter((s) => selectedCategoryIds.includes(s.categoryId))
+
   function buildUrl(overrides: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString())
     params.delete("page") // сбрасываем пагинацию при смене фильтра
@@ -122,16 +168,87 @@ export function ProductFilters({
     return `/products${qs ? `?${qs}` : ""}`
   }
 
+  // При изменении родителя — отфильтровать сохранённые в URL выборы детей,
+  // оставив только те которые валидны в новом контексте. Невалидные молча
+  // вычищаются. Это поведение «бережное»: если новый Direction всё ещё
+  // включает старый Brand — выбор остаётся.
+
   function setDirections(values: string[]) {
-    router.push(buildUrl({ directions: values.join(",") }))
+    // Brand остаётся если directionId в values (или values пустой)
+    const newBrandIds =
+      values.length === 0
+        ? selectedBrandIds
+        : selectedBrandIds.filter((bId) => {
+            const b = brands.find((x) => x.id === bId)
+            return b?.directionId && values.includes(b.directionId)
+          })
+    // Category должна быть у одного из выживших Brand
+    const newCategoryIds = selectedCategoryIds.filter((cId) => {
+      const c = categories.find((x) => x.id === cId)
+      if (!c) return false
+      // Если бренды не выбраны — оставляем категорию если её бренд в новой видимости
+      if (newBrandIds.length === 0) {
+        const visibleAfter =
+          values.length === 0
+            ? true
+            : brands.some(
+                (b) => b.id === c.brandId && b.directionId && values.includes(b.directionId)
+              )
+        return visibleAfter
+      }
+      return newBrandIds.includes(c.brandId)
+    })
+    // Subcategory должна быть у одной из выживших Category
+    const newSubcategoryIds = selectedSubcategoryIds.filter((sId) => {
+      const s = subcategories.find((x) => x.id === sId)
+      return s && newCategoryIds.includes(s.categoryId)
+    })
+
+    router.push(
+      buildUrl({
+        directions: values.join(","),
+        brands: newBrandIds.join(","),
+        categories: newCategoryIds.join(","),
+        subcategories: newSubcategoryIds.join(","),
+      })
+    )
   }
 
   function setBrands(values: string[]) {
-    router.push(buildUrl({ brands: values.join(",") }))
+    const newCategoryIds =
+      values.length === 0
+        ? selectedCategoryIds
+        : selectedCategoryIds.filter((cId) => {
+            const c = categories.find((x) => x.id === cId)
+            return c && values.includes(c.brandId)
+          })
+    const newSubcategoryIds = selectedSubcategoryIds.filter((sId) => {
+      const s = subcategories.find((x) => x.id === sId)
+      return s && newCategoryIds.includes(s.categoryId)
+    })
+    router.push(
+      buildUrl({
+        brands: values.join(","),
+        categories: newCategoryIds.join(","),
+        subcategories: newSubcategoryIds.join(","),
+      })
+    )
   }
 
   function setCategories(values: string[]) {
-    router.push(buildUrl({ categories: values.join(",") }))
+    const newSubcategoryIds =
+      values.length === 0
+        ? selectedSubcategoryIds
+        : selectedSubcategoryIds.filter((sId) => {
+            const s = subcategories.find((x) => x.id === sId)
+            return s && values.includes(s.categoryId)
+          })
+    router.push(
+      buildUrl({
+        categories: values.join(","),
+        subcategories: newSubcategoryIds.join(","),
+      })
+    )
   }
 
   function setSubcategories(values: string[]) {
@@ -139,7 +256,9 @@ export function ProductFilters({
   }
 
   function clearAll() {
-    router.push(buildUrl({ directions: "", brands: "", categories: "", subcategories: "" }))
+    router.push(
+      buildUrl({ directions: "", brands: "", categories: "", subcategories: "" })
+    )
   }
 
   const hasFilters =
@@ -151,26 +270,26 @@ export function ProductFilters({
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <MultiSelectDropdown
-        label="Бренд"
-        options={brands}
-        selected={selectedBrandIds}
-        onChange={setBrands}
-      />
-      <MultiSelectDropdown
         label="Направление"
         options={directions}
         selected={selectedDirectionIds}
         onChange={setDirections}
       />
       <MultiSelectDropdown
+        label="Бренд"
+        options={visibleBrands}
+        selected={selectedBrandIds}
+        onChange={setBrands}
+      />
+      <MultiSelectDropdown
         label="Категория"
-        options={categories}
+        options={visibleCategories}
         selected={selectedCategoryIds}
         onChange={setCategories}
       />
       <MultiSelectDropdown
         label="Подкатегория"
-        options={subcategories}
+        options={visibleSubcategories}
         selected={selectedSubcategoryIds}
         onChange={setSubcategories}
       />

@@ -117,10 +117,23 @@ export default async function ProductsPage({
         take: pageSize,
       }),
       prisma.product.count({ where }),
-      prisma.brand.findMany({ orderBy: { name: "asc" } }),
-      prisma.category.findMany({ orderBy: { name: "asc" } }),
-      prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
-      prisma.productDirection.findMany({ orderBy: { sortOrder: "asc" } }),
+      // Cascade-фильтрация: каждая dependent сущность включает FK на родителя
+      prisma.brand.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, directionId: true },
+      }),
+      prisma.category.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, brandId: true },
+      }),
+      prisma.subcategory.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, categoryId: true },
+      }),
+      prisma.productDirection.findMany({
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true },
+      }),
     ])
 
   const totalPages = Math.ceil(total / pageSize)
@@ -140,10 +153,10 @@ export default async function ProductsPage({
       <div className="flex items-center gap-4 flex-wrap">
         <ProductSearchInput defaultValue={q ?? ""} />
         <ProductFilters
-          directions={allDirections.map((d) => ({ id: d.id, name: d.name }))}
-          brands={allBrands.map((b) => ({ id: b.id, name: b.name }))}
-          categories={allCategories.map((c) => ({ id: c.id, name: c.name }))}
-          subcategories={allSubcategories.map((s) => ({ id: s.id, name: s.name }))}
+          directions={allDirections}
+          brands={allBrands}
+          categories={allCategories}
+          subcategories={allSubcategories}
           selectedDirectionIds={selectedDirectionIds}
           selectedBrandIds={selectedBrandIds}
           selectedCategoryIds={selectedCategoryIds}
