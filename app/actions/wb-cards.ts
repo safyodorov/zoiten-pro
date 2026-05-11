@@ -159,10 +159,14 @@ export async function createProductFromCards(
         sortOrder++
       }
 
+      // Phase 18: article = старое name (vendorCode из WB), name = временно тот же,
+      // пересчитается через regenerateProductName после создания (если категория задана).
       return tx.product.create({
         data: {
           sku,
+          article: firstCard.name,
           name: firstCard.name,
+          nameOverridden: false,
           photoUrl: firstCard.photoUrl,
           brandId,
           weightKg: firstCard.weightKg,
