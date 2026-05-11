@@ -35,6 +35,27 @@ export async function getUserPreference<T = unknown>(
   }
 }
 
+/** Прочитать persisted page size для раздела. Возвращает null если не задан
+ *  или значение некорректно. Section — стабильный ключ ("products", "cards-wb"...). */
+export async function getPageSizePref(section: string): Promise<number | null> {
+  const v = await getUserPreference<number>(`pageSize:${section}`)
+  if (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || v > 10000) {
+    return null
+  }
+  return v
+}
+
+/** Записать page size для раздела. Возвращает ok:false при некорректном size. */
+export async function setPageSizePref(
+  section: string,
+  size: number,
+): Promise<ActionResult> {
+  if (!Number.isFinite(size) || size <= 0 || size > 10000) {
+    return { ok: false, error: "Некорректный размер страницы" }
+  }
+  return setUserPreference(`pageSize:${section}`, size)
+}
+
 /** Записать per-user настройку (upsert). */
 export async function setUserPreference<T = unknown>(
   key: string,

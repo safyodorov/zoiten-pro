@@ -9,6 +9,7 @@ import { ProductStatusTabs } from "@/components/products/ProductStatusTabs"
 import { ProductSearchInput } from "@/components/products/ProductSearchInput"
 import { ProductFilters } from "@/components/products/ProductFilters"
 import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
+import { getPageSizePref } from "@/app/actions/user-preferences"
 
 const PAGE_SIZES = [20, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 20
@@ -97,9 +98,11 @@ export default async function ProductsPage({
     where.subcategoryId = { in: selectedSubcategoryIds }
   }
 
-  const pageSize = (PAGE_SIZES as readonly number[]).includes(Number(sizeParam))
-    ? Number(sizeParam)
-    : DEFAULT_PAGE_SIZE
+  // pageSize: URL ?size приоритетнее, иначе берём persisted user pref, иначе default
+  const urlSize = sizeParam ? Number(sizeParam) : null
+  const pageSize = urlSize && (PAGE_SIZES as readonly number[]).includes(urlSize)
+    ? urlSize
+    : (await getPageSizePref("products")) ?? DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
   const skip = (currentPage - 1) * pageSize
 

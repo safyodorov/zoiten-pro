@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { duplicateProduct, softDeleteProduct, hardDeleteProduct } from "@/app/actions/products"
+import { setPageSizePref } from "@/app/actions/user-preferences"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -93,6 +94,8 @@ export function ProductsTable({
   }
 
   function handlePageSizeChange(size: number) {
+    // Сохраняем выбор пользователя на сервере (fire-and-forget, не блокируем UI)
+    void setPageSizePref("products", size)
     router.push(buildUrl({ size, page: 1 }))
   }
 
