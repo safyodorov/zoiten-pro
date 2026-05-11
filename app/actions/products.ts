@@ -104,11 +104,6 @@ function handleP2002(e: unknown): { ok: false; error: string } | null {
 // Принимает Prisma transaction client — должна вызываться внутри tx чтобы запись
 // и пересчёт были атомарны.
 
-type PrismaTx = Omit<
-  ReturnType<typeof prisma.$transaction> extends Promise<infer U> ? unknown : never,
-  never
->
-
 async function regenerateProductName(
   tx: Prisma.TransactionClient,
   productId: string
@@ -455,10 +450,13 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
       `
       const sku = `УКТ-${String(nextval).padStart(6, "0")}`
 
-      return tx.product.create({
+      const duplicated = await tx.product.create({
         data: {
           sku,
-          name: `Копия — ${original.name}`,
+          // Phase 18: article копируется, name пересчитывается через regenerateProductName ниже
+          article: original.article,
+          name: original.article,
+          nameOverridden: false,
           photoUrl: null, // Per D-26: photo is NOT copied
           brandId: original.brandId,
           categoryId: original.categoryId ?? null,
@@ -480,6 +478,9 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
           },
         },
       })
+      // Phase 18: пересчитать составное name для дубля
+      await regenerateProductName(tx, duplicated.id)
+      return duplicated
     })
 
     revalidatePath("/products")
