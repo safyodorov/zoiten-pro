@@ -1330,9 +1330,9 @@ function SizesChipEditor({ sizeFields, form, onAdd, onRemove }: SizesChipEditorP
       {sizeFields.map((field, index) => (
         <FormField
           key={field.id}
-          control={form.control}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          name={`sizes.${index}.value` as any}
+          control={form.control as any}
+          name={`sizes.${index}.value`}
           render={({ field: f }) => {
             const isEditing = editingIndex === index
             return (
