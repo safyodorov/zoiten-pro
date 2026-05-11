@@ -182,8 +182,9 @@ const formSchema = z.object({
     })
   ),
   // Phase 17: динамические свойства (Record<propertyId, value>) + размерная сетка
-  properties: z.record(z.string(), z.string()).default({}),
-  sizes: z.array(z.object({ value: z.string() })).default([]),
+  // NB: без .default() — zodResolver конфликтует с RHF 7.72 (см. CLAUDE.md Phase 4)
+  properties: z.record(z.string(), z.string()),
+  sizes: z.array(z.object({ value: z.string() })),
 })
 
 type FormValues = z.infer<typeof formSchema>
