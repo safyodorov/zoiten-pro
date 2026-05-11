@@ -53,12 +53,22 @@ export default async function WbCardsPage({
   // Находим маркетплейс WB для проверки привязки
   const wbMarketplace = await prisma.marketplace.findFirst({ where: { slug: "wb" } })
 
-  const [cards, total, allBrands, allCategories] = await Promise.all([
+  const [cards, total, allBrandCategoryPairs] = await Promise.all([
     prisma.wbCard.findMany({ where, orderBy, skip, take: pageSize }),
     prisma.wbCard.count({ where }),
-    prisma.wbCard.findMany({ select: { brand: true }, distinct: ["brand"], where: { brand: { not: null } }, orderBy: { brand: "asc" } }),
-    prisma.wbCard.findMany({ select: { category: true }, distinct: ["category"], where: { category: { not: null } }, orderBy: { category: "asc" } }),
+    // Cascade фильтров: тянем distinct пары (brand, category) — client-side WbFilters
+    // строит список брендов и список категорий, фильтрующийся по выбранным брендам.
+    prisma.wbCard.findMany({
+      select: { brand: true, category: true },
+      distinct: ["brand", "category"],
+      where: { brand: { not: null }, category: { not: null } },
+      orderBy: [{ brand: "asc" }, { category: "asc" }],
+    }),
   ])
+
+  const brandCategoryPairs: Array<{ brand: string; category: string }> = allBrandCategoryPairs
+    .filter((p) => p.brand && p.category)
+    .map((p) => ({ brand: p.brand!, category: p.category! }))
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -93,8 +103,7 @@ export default async function WbCardsPage({
         </div>
       </div>
       <WbFilters
-        brands={allBrands.map((b) => b.brand!).filter(Boolean)}
-        categories={allCategories.map((c) => c.category!).filter(Boolean)}
+        brandCategoryPairs={brandCategoryPairs}
         selectedBrands={selectedBrands}
         selectedCategories={selectedCategories}
       />

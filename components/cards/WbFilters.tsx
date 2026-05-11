@@ -7,8 +7,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { ChevronDown, X } from "lucide-react"
 
 interface WbFiltersProps {
-  brands: string[]
-  categories: string[]
+  // Все distinct пары (brand, category) из WbCard — нужны для каскадной фильтрации.
+  // Brand и Category в WB карточках — это просто строки (значения полей WbCard),
+  // связь не через FK а через сосуществование в одной WbCard.
+  brandCategoryPairs: Array<{ brand: string; category: string }>
   selectedBrands: string[]
   selectedCategories: string[]
 }
@@ -87,13 +89,26 @@ function MultiSelectDropdown({
 // ── Основной компонент фильтров ──────────────────────────────────
 
 export function WbFilters({
-  brands,
-  categories,
+  brandCategoryPairs,
   selectedBrands,
   selectedCategories,
 }: WbFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // Все бренды (unique по строке)
+  const allBrands = Array.from(new Set(brandCategoryPairs.map((p) => p.brand))).sort()
+
+  // Категории, релевантные текущему выбору брендов:
+  //   - selectedBrands пуст → все категории
+  //   - selectedBrands заполнен → категории встречающиеся хотя бы в одном из выбранных брендов
+  const visibleCategories = Array.from(
+    new Set(
+      brandCategoryPairs
+        .filter((p) => selectedBrands.length === 0 || selectedBrands.includes(p.brand))
+        .map((p) => p.category)
+    )
+  ).sort()
 
   function buildUrl(overrides: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString())
@@ -107,7 +122,20 @@ export function WbFilters({
   }
 
   function setBrands(values: string[]) {
-    router.push(buildUrl({ brands: values.join(",") }))
+    // Бережно отфильтровать категории чтобы остались только валидные в новом контексте.
+    // Если новый Brand всё ещё содержит старую Category — оставляем выбор.
+    const newCategories =
+      values.length === 0
+        ? selectedCategories
+        : selectedCategories.filter((c) =>
+            brandCategoryPairs.some((p) => values.includes(p.brand) && p.category === c)
+          )
+    router.push(
+      buildUrl({
+        brands: values.join(","),
+        categories: newCategories.join(","),
+      })
+    )
   }
 
   function setCategories(values: string[]) {
@@ -124,13 +152,13 @@ export function WbFilters({
     <div className="flex items-center gap-2 flex-wrap">
       <MultiSelectDropdown
         label="Бренд"
-        options={brands}
+        options={allBrands}
         selected={selectedBrands}
         onChange={setBrands}
       />
       <MultiSelectDropdown
         label="Категория"
-        options={categories}
+        options={visibleCategories}
         selected={selectedCategories}
         onChange={setCategories}
       />
