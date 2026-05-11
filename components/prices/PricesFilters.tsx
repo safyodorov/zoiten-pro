@@ -11,15 +11,34 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ChevronDown, X, Check } from "lucide-react"
 
-interface FilterOption {
+// Cascade-фильтрация: Направление → Бренд → Категория → Подкатегория.
+// При выборе родителя дочерние селекты сужаются + бережно вычищают невалидные.
+interface DirectionOption {
   id: string
   name: string
 }
+interface BrandOption {
+  id: string
+  name: string
+  directionId: string | null
+}
+interface CategoryOption {
+  id: string
+  name: string
+  brandId: string
+}
+interface SubcategoryOption {
+  id: string
+  name: string
+  categoryId: string
+}
 
 interface PricesFiltersProps {
-  brands: FilterOption[]
-  categories: FilterOption[]
-  subcategories: FilterOption[]
+  directions: DirectionOption[]
+  brands: BrandOption[]
+  categories: CategoryOption[]
+  subcategories: SubcategoryOption[]
+  selectedDirectionIds: string[]
   selectedBrandIds: string[]
   selectedCategoryIds: string[]
   selectedSubcategoryIds: string[]
@@ -38,7 +57,7 @@ function MultiSelectDropdown({
   onChange,
 }: {
   label: string
-  options: FilterOption[]
+  options: Array<{ id: string; name: string }>
   selected: string[]
   onChange: (values: string[]) => void
 }) {
@@ -177,9 +196,11 @@ function SingleChoiceDropdown({
 // ── Main component ────────────────────────────────────────────────
 
 export function PricesFilters({
+  directions,
   brands,
   categories,
   subcategories,
+  selectedDirectionIds,
   selectedBrandIds,
   selectedCategoryIds,
   selectedSubcategoryIds,
@@ -191,6 +212,26 @@ export function PricesFilters({
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Cascade: какие опции показываем в каждом дочернем dropdown
+  const visibleBrands =
+    selectedDirectionIds.length === 0
+      ? brands
+      : brands.filter(
+          (b) => b.directionId && selectedDirectionIds.includes(b.directionId)
+        )
+  const visibleBrandIds = new Set(visibleBrands.map((b) => b.id))
+
+  const visibleCategories =
+    selectedBrandIds.length === 0
+      ? categories.filter((c) => visibleBrandIds.has(c.brandId))
+      : categories.filter((c) => selectedBrandIds.includes(c.brandId))
+  const visibleCategoryIds = new Set(visibleCategories.map((c) => c.id))
+
+  const visibleSubcategories =
+    selectedCategoryIds.length === 0
+      ? subcategories.filter((s) => visibleCategoryIds.has(s.categoryId))
+      : subcategories.filter((s) => selectedCategoryIds.includes(s.categoryId))
+
   function buildUrl(overrides: Record<string, string | undefined>) {
     const params = new URLSearchParams(searchParams.toString())
     for (const [key, value] of Object.entries(overrides)) {
@@ -201,8 +242,79 @@ export function PricesFilters({
     return `/prices/wb${qs ? `?${qs}` : ""}`
   }
 
-  function setMulti(key: string, values: string[]) {
-    router.push(buildUrl({ [key]: values.join(",") || undefined }))
+  // Бережно отфильтровать дочерние выборы при смене родителя.
+  function setDirections(values: string[]) {
+    const newBrandIds =
+      values.length === 0
+        ? selectedBrandIds
+        : selectedBrandIds.filter((bId) => {
+            const b = brands.find((x) => x.id === bId)
+            return b?.directionId && values.includes(b.directionId)
+          })
+    const newCategoryIds = selectedCategoryIds.filter((cId) => {
+      const c = categories.find((x) => x.id === cId)
+      if (!c) return false
+      if (newBrandIds.length === 0) {
+        if (values.length === 0) return true
+        return brands.some(
+          (b) => b.id === c.brandId && b.directionId && values.includes(b.directionId)
+        )
+      }
+      return newBrandIds.includes(c.brandId)
+    })
+    const newSubcategoryIds = selectedSubcategoryIds.filter((sId) => {
+      const s = subcategories.find((x) => x.id === sId)
+      return s && newCategoryIds.includes(s.categoryId)
+    })
+    router.push(
+      buildUrl({
+        directions: values.join(",") || undefined,
+        brands: newBrandIds.join(",") || undefined,
+        categories: newCategoryIds.join(",") || undefined,
+        subcategories: newSubcategoryIds.join(",") || undefined,
+      })
+    )
+  }
+
+  function setBrands(values: string[]) {
+    const newCategoryIds =
+      values.length === 0
+        ? selectedCategoryIds
+        : selectedCategoryIds.filter((cId) => {
+            const c = categories.find((x) => x.id === cId)
+            return c && values.includes(c.brandId)
+          })
+    const newSubcategoryIds = selectedSubcategoryIds.filter((sId) => {
+      const s = subcategories.find((x) => x.id === sId)
+      return s && newCategoryIds.includes(s.categoryId)
+    })
+    router.push(
+      buildUrl({
+        brands: values.join(",") || undefined,
+        categories: newCategoryIds.join(",") || undefined,
+        subcategories: newSubcategoryIds.join(",") || undefined,
+      })
+    )
+  }
+
+  function setCategories(values: string[]) {
+    const newSubcategoryIds =
+      values.length === 0
+        ? selectedSubcategoryIds
+        : selectedSubcategoryIds.filter((sId) => {
+            const s = subcategories.find((x) => x.id === sId)
+            return s && values.includes(s.categoryId)
+          })
+    router.push(
+      buildUrl({
+        categories: values.join(",") || undefined,
+        subcategories: newSubcategoryIds.join(",") || undefined,
+      })
+    )
+  }
+
+  function setSubcategories(values: string[]) {
+    router.push(buildUrl({ subcategories: values.join(",") || undefined }))
   }
 
   function clearFilters() {
@@ -210,6 +322,7 @@ export function PricesFilters({
   }
 
   const hasFilters =
+    selectedDirectionIds.length > 0 ||
     selectedBrandIds.length > 0 ||
     selectedCategoryIds.length > 0 ||
     selectedSubcategoryIds.length > 0 ||
@@ -221,22 +334,28 @@ export function PricesFilters({
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <MultiSelectDropdown
+        label="Направление"
+        options={directions}
+        selected={selectedDirectionIds}
+        onChange={setDirections}
+      />
+      <MultiSelectDropdown
         label="Бренд"
-        options={brands}
+        options={visibleBrands}
         selected={selectedBrandIds}
-        onChange={(v) => setMulti("brands", v)}
+        onChange={setBrands}
       />
       <MultiSelectDropdown
         label="Категория"
-        options={categories}
+        options={visibleCategories}
         selected={selectedCategoryIds}
-        onChange={(v) => setMulti("categories", v)}
+        onChange={setCategories}
       />
       <MultiSelectDropdown
         label="Подкатегория"
-        options={subcategories}
+        options={visibleSubcategories}
         selected={selectedSubcategoryIds}
-        onChange={(v) => setMulti("subcategories", v)}
+        onChange={setSubcategories}
       />
 
       {/* Товар: весь / с остатком */}

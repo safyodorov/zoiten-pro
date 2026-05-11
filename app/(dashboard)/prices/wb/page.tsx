@@ -71,6 +71,7 @@ const DEFAULT_RATES: Record<RateKey, number> = {
 
 interface PricesWbPageProps {
   searchParams: Promise<{
+    directions?: string
     brands?: string
     categories?: string
     subcategories?: string
@@ -89,6 +90,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
 
   // ── 0. Разобрать searchParams (фильтры) ─────────────────────────
   const {
+    directions: directionsParam,
     brands: brandsParam,
     categories: categoriesParam,
     subcategories: subcategoriesParam,
@@ -98,6 +100,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     calc: calcParam,
   } = await searchParams
 
+  const selectedDirectionIds = directionsParam
+    ? directionsParam.split(",").filter(Boolean)
+    : []
   const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
   const selectedCategoryIds = categoriesParam
     ? categoriesParam.split(",").filter(Boolean)
@@ -132,6 +137,10 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
   if (selectedBrandIds.length > 0) {
     productWhere.brandId = { in: selectedBrandIds }
   }
+  // Направление живёт на Brand → фильтр через nested brand.directionId
+  if (selectedDirectionIds.length > 0) {
+    productWhere.brand = { directionId: { in: selectedDirectionIds } }
+  }
   if (selectedCategoryIds.length > 0) {
     productWhere.categoryId = { in: selectedCategoryIds }
   }
@@ -149,6 +158,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     allBrands,
     allCategories,
     allSubcategories,
+    allDirections,
   ] = await Promise.all([
     // 6 глобальных ставок
     prisma.appSetting.findMany({
@@ -182,10 +192,23 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     getUserPreference<Record<string, number>>("prices.wb.columnWidths"),
     // Per-user список скрытых колонок (фильтр «Вид»)
     getUserPreference<string[]>("prices.wb.hiddenColumns"),
-    // Справочники для фильтров
-    prisma.brand.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.subcategory.findMany({ orderBy: { sortOrder: "asc" } }),
+    // Справочники для фильтров (cascade: каждый dependent с FK на родителя)
+    prisma.brand.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, directionId: true },
+    }),
+    prisma.category.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, brandId: true },
+    }),
+    prisma.subcategory.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, categoryId: true },
+    }),
+    prisma.productDirection.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
+    }),
   ])
 
   // ── 3. Построить ratesMap из AppSetting (fallback → DEFAULT_RATES) ──
@@ -629,9 +652,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       {/* Шапка: фильтры слева + кнопки синхронизации справа */}
       <div className="flex items-center gap-2 flex-wrap">
         <PricesFilters
-          brands={allBrands.map((b) => ({ id: b.id, name: b.name }))}
-          categories={allCategories.map((c) => ({ id: c.id, name: c.name }))}
-          subcategories={allSubcategories.map((s) => ({ id: s.id, name: s.name }))}
+          directions={allDirections}
+          brands={allBrands}
+          categories={allCategories}
+          subcategories={allSubcategories}
+          selectedDirectionIds={selectedDirectionIds}
           selectedBrandIds={selectedBrandIds}
           selectedCategoryIds={selectedCategoryIds}
           selectedSubcategoryIds={selectedSubcategoryIds}
