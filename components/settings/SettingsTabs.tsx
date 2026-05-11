@@ -23,6 +23,7 @@ interface CategoryPropertyRow {
   kind: PropertyKind
   options: string[]
   wbAttrName: string | null
+  includeInName: boolean // Phase 18
   sortOrder: number
 }
 
