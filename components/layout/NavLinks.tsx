@@ -34,6 +34,11 @@ export function NavLinks({
           <Link
             key={item.href}
             href={item.href}
+            // prefetch=false: после revalidatePath Next.js иначе делает prefetch
+            // RSC payload для всех 16 sidebar-ссылок одновременно, забивая
+            // navigation queue браузера. Навигация при клике остаётся быстрой
+            // (rendering < 200ms), prefetch не нужен.
+            prefetch={false}
             title={collapsed ? item.label : undefined}
             className={cn(
               "flex items-center text-sm transition-colors relative",
