@@ -43,7 +43,13 @@ function TabsTrigger({
   return (
     <TabsPrimitive.Tab
       className={cn(
-        "cursor-pointer select-none px-4 py-2 text-sm font-medium border-b-2 border-transparent data-selected:border-primary data-selected:text-primary transition-colors",
+        // Базовый стиль (неактивный): приглушённый цвет, прозрачная нижняя граница
+        "cursor-pointer select-none px-4 py-2 text-sm font-medium",
+        "border-b-2 border-transparent text-muted-foreground transition-colors",
+        // Hover для неактивных
+        "hover:text-foreground hover:bg-muted/50 rounded-t-md",
+        // Активный: фон + основной цвет + нижняя полоса
+        "data-selected:border-primary data-selected:text-primary data-selected:font-semibold data-selected:bg-primary/10",
         className
       )}
       {...props}
