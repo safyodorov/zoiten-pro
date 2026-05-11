@@ -498,12 +498,15 @@ export function parseCard(card: WbCardRaw) {
 
   // Phase 17: размеры — отфильтровать "0" (placeholder для one-size товаров) и пустые.
   // Дедуплицируем — WB иногда возвращает повторы в массиве sizes.
+  // sizeSkus: Map<techSize, string[]> — соответствие размер ↔ штрих-коды для
+  // последующей привязки Barcode.productSizeId при WB import.
   const techSizes: string[] = []
+  const sizeSkus: Array<{ techSize: string; skus: string[] }> = []
   for (const size of card.sizes ?? []) {
     const ts = (size.techSize ?? "").trim()
-    if (ts && ts !== "0" && !techSizes.includes(ts)) {
-      techSizes.push(ts)
-    }
+    if (!ts || ts === "0") continue
+    if (!techSizes.includes(ts)) techSizes.push(ts)
+    sizeSkus.push({ techSize: ts, skus: size.skus ?? [] })
   }
 
   // Phase 17: characteristics — пробрасываем как есть для записи в WbCard.characteristics (Json).
@@ -528,6 +531,7 @@ export function parseCard(card: WbCardRaw) {
     tags,
     characteristics,
     techSizes,
+    sizeSkus,
   }
 }
 

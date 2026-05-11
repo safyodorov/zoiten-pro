@@ -109,9 +109,11 @@ interface BrandWithCategories {
 }
 
 // 260421-iq7: barcodes теперь вложены в article, верхнеуровневый Product.barcodes удалён
+// 2026-05-11 (Phase 17 ext): barcodes расширены productSize (опциональная связь).
 interface BarcodeDB {
   id?: string
   value: string
+  productSize?: { id: string; value: string } | null
 }
 
 interface ProductArticleDB {
@@ -174,7 +176,13 @@ const formSchema = z.object({
           z.object({
             value: z.string().min(1, "Введите артикул"),
             barcodes: z
-              .array(z.object({ value: z.string().min(1, "Введите штрих-код") }))
+              .array(
+                z.object({
+                  value: z.string().min(1, "Введите штрих-код"),
+                  // Phase 17 ext: привязка к размеру (опционально, "" = без размера)
+                  productSizeValue: z.string().nullable().optional(),
+                })
+              )
               .max(20),
           })
         )
@@ -195,7 +203,10 @@ function groupArticlesWithBarcodes(
   articles: ProductArticleDB[]
 ): Array<{
   marketplaceId: string
-  articles: Array<{ value: string; barcodes: Array<{ value: string }> }>
+  articles: Array<{
+    value: string
+    barcodes: Array<{ value: string; productSizeValue: string | null }>
+  }>
 }> {
   const map = new Map<string, ProductArticleDB[]>()
   // sort globally by sortOrder — внутри каждого маркетплейса порядок сохранится
@@ -208,7 +219,11 @@ function groupArticlesWithBarcodes(
     marketplaceId,
     articles: arts.map((a) => ({
       value: a.article,
-      barcodes: a.barcodes.map((b) => ({ value: b.value })),
+      barcodes: a.barcodes.map((b) => ({
+        value: b.value,
+        // Phase 17 ext: productSize?.value хранится в form state
+        productSizeValue: b.productSize?.value ?? null,
+      })),
     })),
   }))
 }
@@ -416,11 +431,15 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
   async function onSubmit(values: FormValues) {
     // 260421-iq7: marketplaces[].articles[].{value, barcodes[]} — sortOrder генерируется сервером
+    // Phase 17 ext: barcodes теперь также содержат productSizeValue (резолвится в FK на сервере)
     const marketplacesData = values.marketplaces.map((mp) => ({
       marketplaceId: mp.marketplaceId,
       articles: mp.articles.map((a) => ({
         value: a.value,
-        barcodes: a.barcodes,
+        barcodes: a.barcodes.map((b) => ({
+          value: b.value,
+          productSizeValue: b.productSizeValue || null,
+        })),
       })),
     }))
 
@@ -446,6 +465,17 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
     startTransition(async () => {
       if (product?.id) {
+        // Phase 17 ext (2026-05-11): saveProductSizes ДО updateProduct.
+        // updateProduct резолвит barcode.productSizeValue → productSizeId через
+        // lookup ProductSize по (productId, value) — размеры должны существовать
+        // на момент create Barcode.
+        if (currentDirectionHasSizes) {
+          const r = await saveProductSizes({ productId: product.id, sizes: sizesForSave })
+          if (!r.ok) {
+            toast.error(`Размеры: ${r.error}`)
+            return
+          }
+        }
         const result = await updateProduct({
           ...values,
           id: product.id,
@@ -462,14 +492,9 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           toast.error(result.error)
           return
         }
-        // Phase 17: сохраняем свойства/размеры отдельными actions (не падать на чём-то одном)
         if (propsForSave.length > 0) {
           const r = await saveProductProperties({ productId: product.id, values: propsForSave })
           if (!r.ok) toast.error(`Свойства: ${r.error}`)
-        }
-        if (currentDirectionHasSizes) {
-          const r = await saveProductSizes({ productId: product.id, sizes: sizesForSave })
-          if (!r.ok) toast.error(`Размеры: ${r.error}`)
         }
         toast.success("Товар сохранён")
         router.refresh()
@@ -739,9 +764,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           </section>
         )}
 
-        {/* Section 1.6: Размерная сетка (Phase 17) — только если у направления hasSizes */}
+        {/* Section 1.6: Размерная сетка (Phase 17) — только если у направления hasSizes.
+            Компактный chips-layout: все размеры в одну строку с inline-добавлением. */}
         {currentDirectionHasSizes && (
-          <section className="space-y-4">
+          <section className="space-y-3">
             <h2 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
               <span>Размерная сетка</span>
               {product?.id && categoryProperties.length === 0 && (
@@ -755,52 +781,12 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                 </Button>
               )}
             </h2>
-            {sizeFields.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Размеры не добавлены. Нажмите «Добавить размер» или «Импортировать из WB».
-              </p>
-            )}
-            <div className="space-y-2">
-              {sizeFields.map((field, index) => (
-                <div key={field.id} className="flex items-center gap-2">
-                  <FormField
-                    control={form.control}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    name={`sizes.${index}.value` as any}
-                    render={({ field: f }) => (
-                      <FormItem className="flex-1">
-                        <FormControl>
-                          <Input
-                            placeholder="Размер (S, M, 46, 2XL...)"
-                            value={f.value ?? ""}
-                            onChange={(e) => f.onChange(e.target.value)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeSize(index)}
-                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                    aria-label="Удалить размер"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => appendSize({ value: "" })}
-              className="gap-1.5"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Добавить размер
-            </Button>
+            <SizesChipEditor
+              sizeFields={sizeFields}
+              form={form}
+              onAdd={(value) => appendSize({ value })}
+              onRemove={removeSize}
+            />
           </section>
         )}
 
@@ -841,6 +827,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                   groupIndex={groupIndex}
                   marketplaceName={mp?.name ?? mpField.marketplaceId}
                   form={form}
+                  directionHasSizes={currentDirectionHasSizes}
                   onRemoveGroup={() => removeMarketplace(groupIndex)}
                 />
               )
@@ -1032,6 +1019,7 @@ interface MarketplaceGroupInlineProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: ReturnType<typeof useForm<FormValues, any, any>>
   onRemoveGroup: () => void
+  directionHasSizes: boolean
 }
 
 function MarketplaceGroupInline({
@@ -1039,6 +1027,7 @@ function MarketplaceGroupInline({
   marketplaceName,
   form,
   onRemoveGroup,
+  directionHasSizes,
 }: MarketplaceGroupInlineProps) {
   const { fields, append, remove, move } = useFieldArray({
     control: form.control,
@@ -1090,6 +1079,7 @@ function MarketplaceGroupInline({
                 groupIndex={groupIndex}
                 articleIndex={articleIndex}
                 form={form}
+                directionHasSizes={directionHasSizes}
                 onRemove={() => remove(articleIndex)}
               />
             ))}
@@ -1122,6 +1112,7 @@ interface SortableArticleRowProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   form: ReturnType<typeof useForm<FormValues, any, any>>
   onRemove: () => void
+  directionHasSizes: boolean
 }
 
 function SortableArticleRow({
@@ -1130,7 +1121,15 @@ function SortableArticleRow({
   articleIndex,
   form,
   onRemove,
+  directionHasSizes,
 }: SortableArticleRowProps) {
+  // Phase 17 ext: реактивно читаем актуальный список размеров товара из form state
+  const watchedSizes = useWatch({ control: form.control, name: "sizes" }) as
+    | Array<{ value: string }>
+    | undefined
+  const sizeOptions = (watchedSizes ?? [])
+    .map((s) => (s?.value ?? "").trim())
+    .filter((v) => v.length > 0)
   const {
     attributes,
     listeners,
@@ -1213,30 +1212,60 @@ function SortableArticleRow({
           </FormLabel>
           <div className="space-y-2">
             {barcodeFields.map((bField, barcodeIndex) => (
-              <FormField
-                key={bField.id}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                control={form.control as any}
-                name={`marketplaces.${groupIndex}.articles.${articleIndex}.barcodes.${barcodeIndex}.value`}
-                render={({ field: f }) => (
-                  <FormItem>
-                    <div className="flex gap-2">
+              <div key={bField.id} className="flex gap-2 items-start">
+                <FormField
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  control={form.control as any}
+                  name={`marketplaces.${groupIndex}.articles.${articleIndex}.barcodes.${barcodeIndex}.value`}
+                  render={({ field: f }) => (
+                    <FormItem className="flex-1">
                       <FormControl>
                         <Input placeholder="Штрих-код" {...f} />
                       </FormControl>
-                      <button
-                        type="button"
-                        onClick={() => removeBarcode(barcodeIndex)}
-                        className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                        aria-label="Удалить штрих-код"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* Phase 17 ext: select «Размер» — виден только если у направления hasSizes */}
+                {directionHasSizes && (
+                  <FormField
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    control={form.control as any}
+                    name={`marketplaces.${groupIndex}.articles.${articleIndex}.barcodes.${barcodeIndex}.productSizeValue`}
+                    render={({ field: f }) => (
+                      <FormItem className="w-24 shrink-0">
+                        <FormControl>
+                          <select
+                            value={f.value ?? ""}
+                            onChange={(e) => f.onChange(e.target.value || null)}
+                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            title="Привязать к размеру"
+                          >
+                            <option value="">— размер —</option>
+                            {sizeOptions.map((sz) => (
+                              <option key={sz} value={sz}>
+                                {sz}
+                              </option>
+                            ))}
+                            {/* Если текущее значение не в options — оставляем чтобы не потерять связь */}
+                            {f.value && !sizeOptions.includes(f.value) && (
+                              <option value={f.value}>{f.value} (нет)</option>
+                            )}
+                          </select>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                 )}
-              />
+                <button
+                  type="button"
+                  onClick={() => removeBarcode(barcodeIndex)}
+                  className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-2"
+                  aria-label="Удалить штрих-код"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             ))}
           </div>
           <Button
@@ -1244,13 +1273,140 @@ function SortableArticleRow({
             variant="outline"
             size="sm"
             disabled={barcodeFields.length >= 20}
-            onClick={() => appendBarcode({ value: "" })}
+            onClick={() => appendBarcode({ value: "", productSizeValue: null })}
             className="gap-1.5"
           >
             <Plus className="h-3.5 w-3.5" />
             Добавить штрих-код
           </Button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── SizesChipEditor (Phase 17 ext, 2026-05-11) ─────────────────────
+// Компактный chips-layout для размерной сетки: все размеры в одну строку.
+// Click на chip → edit. Inline-input «+ добавить» в конце. Без DnD пока —
+// порядок задаётся очередностью добавления (sortOrder = index).
+
+interface SizesChipEditorProps {
+  sizeFields: Array<{ id: string; value: string }>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: ReturnType<typeof useForm<FormValues, any, any>>
+  onAdd: (value: string) => void
+  onRemove: (index: number) => void
+}
+
+function SizesChipEditor({ sizeFields, form, onAdd, onRemove }: SizesChipEditorProps) {
+  const [newValue, setNewValue] = useState("")
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState("")
+
+  function handleAdd() {
+    const v = newValue.trim()
+    if (!v) return
+    onAdd(v)
+    setNewValue("")
+  }
+
+  function handleStartEdit(index: number, currentValue: string) {
+    setEditingIndex(index)
+    setEditValue(currentValue)
+  }
+
+  function handleSaveEdit() {
+    if (editingIndex === null) return
+    const v = editValue.trim()
+    if (v) {
+      form.setValue(`sizes.${editingIndex}.value`, v, { shouldDirty: true })
+    }
+    setEditingIndex(null)
+    setEditValue("")
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 items-center">
+      {sizeFields.map((field, index) => (
+        <FormField
+          key={field.id}
+          control={form.control}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          name={`sizes.${index}.value` as any}
+          render={({ field: f }) => {
+            const isEditing = editingIndex === index
+            return (
+              <FormItem>
+                <FormControl>
+                  {isEditing ? (
+                    <Input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={handleSaveEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          handleSaveEdit()
+                        } else if (e.key === "Escape") {
+                          setEditingIndex(null)
+                          setEditValue("")
+                        }
+                      }}
+                      autoFocus
+                      className="h-7 w-20 text-xs px-2"
+                    />
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-1 text-xs hover:bg-muted/60 cursor-pointer group"
+                      onClick={() => handleStartEdit(index, f.value ?? "")}
+                      title="Клик чтобы изменить"
+                    >
+                      <span>{f.value || "—"}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onRemove(index)
+                        }}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        aria-label="Удалить размер"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                </FormControl>
+              </FormItem>
+            )
+          }}
+        />
+      ))}
+
+      {/* Inline-добавление */}
+      <div className="flex items-center gap-1">
+        <Input
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              handleAdd()
+            }
+          }}
+          placeholder={sizeFields.length === 0 ? "S, M, 46…" : "+"}
+          className="h-7 w-20 text-xs px-2"
+        />
+        {newValue.trim() && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-xs"
+            onClick={handleAdd}
+            aria-label="Добавить размер"
+          >
+            <Plus className="h-3 w-3" />
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -20,7 +20,11 @@ export default async function EditProductPage({
           orderBy: { sortOrder: "asc" },
           include: {
             marketplace: true,
-            barcodes: { orderBy: { createdAt: "asc" } },
+            barcodes: {
+              orderBy: { createdAt: "asc" },
+              // Phase 17 ext: productSize нужен для UI select «Размер»
+              include: { productSize: { select: { id: true, value: true } } },
+            },
           },
         },
         // Phase 17: values свойств + размерная сетка

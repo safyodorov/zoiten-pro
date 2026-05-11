@@ -16,7 +16,13 @@ type CreateResult = { ok: true; id: string } | { ok: false; error: string }
 // 260421-iq7: barcodes теперь nested внутри articles, верхнеуровневый
 // `barcodes` удалён. sortOrder генерируется сервером по индексу массива.
 
-const BarcodeSchema = z.object({ value: z.string().min(1) })
+// Phase 17 (2026-05-11): productSizeValue — value привязанного ProductSize
+// (например "46"). Резолвится в productSizeId внутри транзакции через lookup
+// в ProductSize по (productId, value). null/undefined = «без размера».
+const BarcodeSchema = z.object({
+  value: z.string().min(1),
+  productSizeValue: z.string().nullable().optional(),
+})
 
 const ArticleSchema = z.object({
   value: z.string().min(1),
@@ -104,6 +110,12 @@ export async function createProduct(
       `
       const sku = `УКТ-${String(nextval).padStart(6, "0")}`
 
+      // Phase 17 (2026-05-11): для новых товаров ProductSize ещё нет, поэтому
+      // productSizeId не проставляется при create. Юзер сначала создаёт товар
+      // и размеры (saveProductSizes отрабатывает после createProduct в форме),
+      // потом при следующем save updateProduct сделает связку.
+      // Здесь productSizeValue из incoming игнорируем — для новых товаров привязка
+      // делается на втором save или через WB import.
       return tx.product.create({
         data: {
           sku,
@@ -197,6 +209,15 @@ export async function updateProduct(
       // Отдельно barcode.deleteMany не нужен.
       await tx.marketplaceArticle.deleteMany({ where: { productId: parsed.id } })
 
+      // Phase 17 (2026-05-11): Map value→id для резолва productSizeValue→productSizeId.
+      // ProductSize должны быть уже созданы через saveProductSizes ДО updateProduct
+      // (см. ProductForm onSubmit). Если связь к несуществующему размеру — null.
+      const sizesRows = await tx.productSize.findMany({
+        where: { productId: parsed.id },
+        select: { id: true, value: true },
+      })
+      const sizeIdByValue = new Map(sizesRows.map((s) => [s.value, s.id]))
+
       // Создаём articles + nested barcodes последовательно (createMany не поддерживает nested writes).
       for (const mp of parsed.marketplaces) {
         for (let i = 0; i < mp.articles.length; i++) {
@@ -212,6 +233,9 @@ export async function updateProduct(
                   marketplaceId: mp.marketplaceId,
                   value: b.value,
                   productDeletedAt,
+                  productSizeId: b.productSizeValue
+                    ? sizeIdByValue.get(b.productSizeValue) ?? null
+                    : null,
                 })),
               },
             },
@@ -462,8 +486,18 @@ export async function saveProductProperties(
 }
 
 /**
- * Phase 17: Сохранить размерную сетку товара.
- * Clean-replace: удалить старые ProductSize, создать новые с sortOrder=index.
+ * Phase 17: Сохранить размерную сетку товара (upsert).
+ *
+ * 2026-05-11 (Barcode↔Size link): НЕ delete-all + recreate, иначе
+ * Barcode.productSizeId всех привязанных штрих-кодов обнулится через onDelete: SetNull.
+ *
+ * Логика:
+ *   1. Дедуп incoming по value
+ *   2. Найти existing размеры
+ *   3. Удалить те которых нет в incoming (их Barcode-связи обнулятся, это OK —
+ *      юзер сам убрал размер)
+ *   4. Update sortOrder для тех что остались (по value)
+ *   5. Create новые
  */
 export async function saveProductSizes(
   data: z.infer<typeof SaveSizesSchema>
@@ -472,31 +506,51 @@ export async function saveProductSizes(
     await requireSection("PRODUCTS", "MANAGE")
     const parsed = SaveSizesSchema.parse(data)
 
-    // Дедуп по value (case-sensitive)
-    const seen = new Set<string>()
-    const dedupedSizes: { value: string; sortOrder: number }[] = []
+    // Дедуп по value (case-sensitive), value → sortOrder
+    const incomingByValue = new Map<string, number>()
     for (let i = 0; i < parsed.sizes.length; i++) {
       const v = parsed.sizes[i].value.trim()
-      if (v && !seen.has(v)) {
-        seen.add(v)
-        dedupedSizes.push({ value: v, sortOrder: i })
+      if (v && !incomingByValue.has(v)) {
+        incomingByValue.set(v, i)
       }
     }
 
-    await prisma.$transaction([
-      prisma.productSize.deleteMany({ where: { productId: parsed.productId } }),
-      ...(dedupedSizes.length > 0
-        ? [
-            prisma.productSize.createMany({
-              data: dedupedSizes.map((s) => ({
-                productId: parsed.productId,
-                value: s.value,
-                sortOrder: s.sortOrder,
-              })),
-            }),
-          ]
-        : []),
-    ])
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.productSize.findMany({
+        where: { productId: parsed.productId },
+      })
+      const existingByValue = new Map(existing.map((e) => [e.value, e]))
+
+      // 1) Удалить размеры, отсутствующие в incoming
+      const toDeleteIds = existing
+        .filter((e) => !incomingByValue.has(e.value))
+        .map((e) => e.id)
+      if (toDeleteIds.length > 0) {
+        await tx.productSize.deleteMany({ where: { id: { in: toDeleteIds } } })
+      }
+
+      // 2) Update sortOrder для existing, если изменился
+      for (const [value, sortOrder] of incomingByValue) {
+        const ex = existingByValue.get(value)
+        if (ex && ex.sortOrder !== sortOrder) {
+          await tx.productSize.update({
+            where: { id: ex.id },
+            data: { sortOrder },
+          })
+        }
+      }
+
+      // 3) Create новые
+      const toCreate: { productId: string; value: string; sortOrder: number }[] = []
+      for (const [value, sortOrder] of incomingByValue) {
+        if (!existingByValue.has(value)) {
+          toCreate.push({ productId: parsed.productId, value, sortOrder })
+        }
+      }
+      if (toCreate.length > 0) {
+        await tx.productSize.createMany({ data: toCreate })
+      }
+    })
 
     revalidatePath(`/products/${parsed.productId}/edit`)
     revalidatePath("/products")
@@ -713,6 +767,63 @@ export async function importFromWb(
           },
         })
         sizesAdded++
+      }
+
+      // Phase 17 (2026-05-11): связать существующие Barcode с ProductSize
+      // по совпадению со skus из WB sizes[].
+      // Источник: WbCard.rawJson.sizes — массив { techSize, skus[] } из Content API.
+      // Логика: для каждого WB-size (techSize) → каждый sku из skus[] —
+      // найти Barcode товара со value=sku → проставить productSizeId.
+      // Это безопасный update — не создаёт новых barcode, не трогает не совпадающие.
+      const wbCardRaw = await tx.wbCard.findFirst({
+        where: {
+          nmId: {
+            in: await tx.marketplaceArticle
+              .findMany({
+                where: {
+                  productId: parsed.productId,
+                  marketplace: { slug: "wb" },
+                },
+                orderBy: { sortOrder: "asc" },
+                take: 1,
+                select: { article: true },
+              })
+              .then((rows) =>
+                rows
+                  .map((r) => parseInt(r.article, 10))
+                  .filter((n) => !Number.isNaN(n))
+              ),
+          },
+        },
+        select: { rawJson: true },
+      })
+
+      const rawSizes = (wbCardRaw?.rawJson as { sizes?: Array<{ techSize?: string; skus?: string[] }> } | null)?.sizes ?? []
+
+      // Карта value → id размеров товара (после возможного добавления выше)
+      const allSizes = await tx.productSize.findMany({
+        where: { productId: parsed.productId },
+        select: { id: true, value: true },
+      })
+      const sizeIdByValue = new Map(allSizes.map((s) => [s.value, s.id]))
+
+      for (const wbSize of rawSizes) {
+        const ts = String(wbSize.techSize ?? "").trim()
+        if (!ts || ts === "0") continue
+        const sizeId = sizeIdByValue.get(ts)
+        if (!sizeId) continue // размер не был создан (не в preview.sizes.fromWb)
+        const skus = wbSize.skus ?? []
+        if (skus.length === 0) continue
+
+        await tx.barcode.updateMany({
+          where: {
+            value: { in: skus },
+            marketplaceArticle: { productId: parsed.productId },
+            // Только не привязанные или привязанные к другому размеру → обновим
+            // (привязка к тому же размеру = noop, тоже не страшно)
+          },
+          data: { productSizeId: sizeId },
+        })
       }
     })
 

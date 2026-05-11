@@ -231,13 +231,17 @@ model ProductPropertyValue {
 // Phase 17: Размер товара — отдельная сущность (D-04).
 // Видим в UI если у направления товара hasSizes=true.
 // В будущих фазах сюда добавим barcode, weightKg для per-size остатков/продаж.
+//
+// 2026-05-11: barcodes — back-relation 1:N, Barcode.productSizeId nullable FK.
+// Один размер → N штрих-кодов (WB может выдавать дубли в sizes[].skus).
 model ProductSize {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   value     String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  sortOrder Int       @default(0)
+  barcodes  Barcode[]
+  createdAt DateTime  @default(now())
 
   @@unique([productId, value])
   @@index([productId])
@@ -419,10 +423,18 @@ model Barcode {
   // и Barcode.productDeletedAt всех штрих-кодов этого товара через цепочку
   // barcode.updateMany({ where: { marketplaceArticle: { productId } } }).
   productDeletedAt     DateTime?
+  // Phase 17 (2026-05-11): привязка штрих-кода к размеру товара (nullable).
+  // WB Content API возвращает sizes[].skus[] — каждый размер имеет свой штрих-код.
+  // null = «без размера» (одно-размерные товары: бытовая техника, аксессуары).
+  // onDelete: SetNull — удаление ProductSize не удаляет штрих-код, только обнуляет связь.
+  productSizeId        String?
+  productSize          ProductSize?       @relation(fields: [productSizeId], references: [id], onDelete: SetNull)
   createdAt            DateTime           @default(now())
   // Partial unique index (marketplaceId, value) WHERE productDeletedAt IS NULL создан
   // в миграции 20260421_article_sortorder_barcode_fk.
   // 1-20 barcodes per MarketplaceArticle enforced in service layer.
+
+  @@index([productSizeId])
 }
 
 // ──────────────────────────────────────────────────────────────────
