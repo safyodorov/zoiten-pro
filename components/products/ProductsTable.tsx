@@ -164,10 +164,13 @@ export function ProductsTable({
                   )}
                 </TableCell>
 
-                {/* Name — clickable → edit page, truncated */}
+                {/* Name — clickable → edit page, truncated.
+                    prefetch=false: с size=100 Next.js иначе выпускает 100 RSC prefetch
+                    параллельно и забивает Prisma connection pool — клик встаёт в очередь. */}
                 <TableCell className="font-medium max-w-[200px]">
                   <Link
                     href={`/products/${product.id}/edit`}
+                    prefetch={false}
                     className="hover:underline line-clamp-2"
                   >
                     {product.name}
