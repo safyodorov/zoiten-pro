@@ -27,6 +27,7 @@ import {
   addCardsToProduct,
   searchProducts,
 } from "@/app/actions/wb-cards"
+import { setPageSizePref } from "@/app/actions/user-preferences"
 
 // ── Типы ──────────────────────────────────────────────────────────
 
@@ -174,6 +175,7 @@ export function WbCardsTable({
   }
 
   function handlePageSizeChange(size: number) {
+    void setPageSizePref("cards-wb", size)
     router.push(buildUrl({ size, page: 1 }))
   }
 

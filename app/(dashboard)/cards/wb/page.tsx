@@ -5,6 +5,7 @@ import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
+import { getPageSizePref } from "@/app/actions/user-preferences"
 
 const DEFAULT_PAGE_SIZE = 50
 
@@ -39,7 +40,11 @@ export default async function WbCardsPage({
     where.category = { in: selectedCategories }
   }
 
-  const pageSize = [20, 50, 100].includes(Number(sizeParam)) ? Number(sizeParam) : DEFAULT_PAGE_SIZE
+  // pageSize: URL ?size приоритетнее, иначе persisted user pref, иначе default
+  const urlSize = sizeParam ? Number(sizeParam) : null
+  const pageSize = urlSize && [20, 50, 100].includes(urlSize)
+    ? urlSize
+    : (await getPageSizePref("cards-wb")) ?? DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
   const skip = (currentPage - 1) * pageSize
 

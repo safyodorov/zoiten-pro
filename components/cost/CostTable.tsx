@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { updateProductCost } from "@/app/actions/cost"
+import { setPageSizePref } from "@/app/actions/user-preferences"
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -164,6 +165,7 @@ export function CostTable({ products, currentPage, totalPages, totalItems, pageS
   }
 
   function handlePageSizeChange(size: number) {
+    void setPageSizePref("batches", size)
     router.push(buildUrl({ size, page: 1 }))
   }
 

@@ -7,6 +7,7 @@ import { CostTable } from "@/components/cost/CostTable"
 import { CostFilters } from "@/components/cost/CostFilters"
 import { CostSearchInput } from "@/components/cost/CostSearchInput"
 import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
+import { getPageSizePref } from "@/app/actions/user-preferences"
 
 const PAGE_SIZES = [20, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 20
@@ -49,9 +50,10 @@ export default async function BatchesPage({
     where.subcategoryId = { in: selectedSubcategoryIds }
   }
 
-  const pageSize = (PAGE_SIZES as readonly number[]).includes(Number(sizeParam))
-    ? Number(sizeParam)
-    : DEFAULT_PAGE_SIZE
+  const urlSize = sizeParam ? Number(sizeParam) : null
+  const pageSize = urlSize && (PAGE_SIZES as readonly number[]).includes(urlSize)
+    ? urlSize
+    : (await getPageSizePref("batches")) ?? DEFAULT_PAGE_SIZE
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
   const skip = (currentPage - 1) * pageSize
 
