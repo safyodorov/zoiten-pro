@@ -143,6 +143,12 @@ export async function POST(): Promise<NextResponse> {
             commFbsIu: iuComm?.fbs ?? null,
             label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
             rawJson: JSON.parse(JSON.stringify(raw)),
+            // Phase 17: нормализованные characteristics + techSizes из WB Content API
+            characteristics:
+              card.characteristics === null
+                ? null
+                : (JSON.parse(JSON.stringify(card.characteristics)) as never),
+            techSizes: card.techSizes,
             updatedAt: new Date(),
           },
           create: {
@@ -175,6 +181,12 @@ export async function POST(): Promise<NextResponse> {
             commFbsIu: iuComm?.fbs ?? null,
             label: card.tags.length > 0 ? card.tags.join(", ") : null,
             rawJson: JSON.parse(JSON.stringify(raw)),
+            // Phase 17: нормализованные characteristics + techSizes из WB Content API
+            characteristics:
+              card.characteristics === null
+                ? null
+                : (JSON.parse(JSON.stringify(card.characteristics)) as never),
+            techSizes: card.techSizes,
           },
         })
 

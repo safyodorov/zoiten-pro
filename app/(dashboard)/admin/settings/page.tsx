@@ -12,7 +12,10 @@ export default async function SettingsPage() {
       include: {
         categories: {
           orderBy: { sortOrder: "asc" },
-          include: { subcategories: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            subcategories: { orderBy: { sortOrder: "asc" } },
+            properties: { orderBy: { sortOrder: "asc" } }, // Phase 17
+          },
         },
       },
     }),

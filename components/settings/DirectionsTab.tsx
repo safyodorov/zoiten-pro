@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { SortableList, SortableItem } from "@/components/settings/SortableList"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   createProductDirection,
   updateProductDirection,
   deleteProductDirection,
   reorderProductDirections,
   setBrandDirection,
+  setDirectionHasSizes,
 } from "@/app/actions/reference"
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -27,6 +29,7 @@ interface BrandLite {
 interface DirectionWithBrands {
   id: string
   name: string
+  hasSizes: boolean
   brands: { id: string; name: string }[]
 }
 
@@ -108,6 +111,13 @@ function DirectionRow({
     })
   }
 
+  function handleToggleHasSizes(checked: boolean) {
+    startTransition(async () => {
+      const result = await setDirectionHasSizes({ directionId: direction.id, hasSizes: checked })
+      if (!result.ok) toast.error(result.error)
+    })
+  }
+
   return (
     <div className="py-2 border-b last:border-b-0">
       {/* Шапка: название + кнопки */}
@@ -147,6 +157,17 @@ function DirectionRow({
         ) : (
           <>
             <span className="flex-1 text-sm font-medium">{direction.name}</span>
+            <label
+              className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 cursor-pointer"
+              title="Товары этого направления имеют размерную сетку"
+            >
+              <Checkbox
+                checked={direction.hasSizes}
+                onCheckedChange={(c) => handleToggleHasSizes(c === true)}
+                disabled={isPending}
+              />
+              Размеры
+            </label>
             <span className="text-xs text-muted-foreground shrink-0">
               {direction.brands.length === 0
                 ? "нет брендов"

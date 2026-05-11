@@ -36,6 +36,50 @@ const SetBrandDirectionSchema = z.object({
   directionId: z.string().min(1).nullable(),
 })
 
+const SetDirectionHasSizesSchema = z.object({
+  directionId: z.string().min(1),
+  hasSizes: z.boolean(),
+})
+
+// Phase 17: CategoryProperty CRUD
+const PropertyKindEnum = z.enum(["STRING", "ENUM", "NUMBER"])
+
+const CategoryPropertySchema = z
+  .object({
+    categoryId: z.string().min(1),
+    name: z.string().min(1, "Не может быть пустым").max(100),
+    kind: PropertyKindEnum,
+    options: z.array(z.string().min(1).max(100)).max(50).default([]),
+    wbAttrName: z.string().max(100).nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kind === "ENUM" && data.options.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["options"],
+        message: "Для типа ENUM нужен хотя бы один вариант",
+      })
+    }
+  })
+
+const UpdateCategoryPropertySchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1).max(100),
+    kind: PropertyKindEnum,
+    options: z.array(z.string().min(1).max(100)).max(50).default([]),
+    wbAttrName: z.string().max(100).nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kind === "ENUM" && data.options.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["options"],
+        message: "Для типа ENUM нужен хотя бы один вариант",
+      })
+    }
+  })
+
 const CategorySchema = z.object({
   name: z.string().min(1, "Не может быть пустым").max(100),
   brandId: z.string().min(1),
@@ -272,6 +316,142 @@ export async function setBrandDirection(
       return { ok: false, error: "Направление не найдено" }
     }
     console.error("setBrandDirection error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// Phase 17: переключатель hasSizes per направление
+export async function setDirectionHasSizes(
+  data: z.infer<typeof SetDirectionHasSizesSchema>
+): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = SetDirectionHasSizesSchema.parse(data)
+    await prisma.productDirection.update({
+      where: { id: parsed.directionId },
+      data: { hasSizes: parsed.hasSizes },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Направление не найдено" }
+    }
+    console.error("setDirectionHasSizes error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// Phase 17: CategoryProperty CRUD ─────────────────────────────────
+
+export async function createCategoryProperty(
+  data: z.infer<typeof CategoryPropertySchema>
+): Promise<CreateResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = CategoryPropertySchema.parse(data)
+    const maxOrder = await prisma.categoryProperty.aggregate({
+      where: { categoryId: parsed.categoryId },
+      _max: { sortOrder: true },
+    })
+    const property = await prisma.categoryProperty.create({
+      data: {
+        categoryId: parsed.categoryId,
+        name: parsed.name,
+        kind: parsed.kind,
+        options: parsed.kind === "ENUM" ? parsed.options : [],
+        wbAttrName: parsed.wbAttrName ?? null,
+        sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
+      },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true, id: property.id }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2002") {
+      return { ok: false, error: "Свойство с таким названием уже есть в этой категории" }
+    }
+    if (e instanceof z.ZodError) {
+      return { ok: false, error: e.issues[0]?.message ?? "Ошибка валидации" }
+    }
+    console.error("createCategoryProperty error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function updateCategoryProperty(
+  data: z.infer<typeof UpdateCategoryPropertySchema>
+): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = UpdateCategoryPropertySchema.parse(data)
+    await prisma.categoryProperty.update({
+      where: { id: parsed.id },
+      data: {
+        name: parsed.name,
+        kind: parsed.kind,
+        options: parsed.kind === "ENUM" ? parsed.options : [],
+        wbAttrName: parsed.wbAttrName ?? null,
+      },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2002") {
+      return { ok: false, error: "Свойство с таким названием уже есть в этой категории" }
+    }
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Свойство не найдено" }
+    }
+    if (e instanceof z.ZodError) {
+      return { ok: false, error: e.issues[0]?.message ?? "Ошибка валидации" }
+    }
+    console.error("updateCategoryProperty error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function deleteCategoryProperty(id: string): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    // ProductPropertyValue с этим propertyId удалятся каскадно (onDelete: Cascade)
+    await prisma.categoryProperty.delete({ where: { id } })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Свойство не найдено" }
+    }
+    console.error("deleteCategoryProperty error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function reorderCategoryProperties(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) =>
+        prisma.categoryProperty.update({ where: { id }, data: { sortOrder: i } })
+      )
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderCategoryProperties error:", e)
     return { ok: false, error: "Ошибка сервера" }
   }
 }

@@ -131,10 +131,14 @@ model Marketplace {
 // Направление товаров (например «Бытовая техника», «Одежда»).
 // Один Direction → N брендов, через Brand.directionId.
 // Product получает направление через свой бренд (никаких отдельных Product.directionId).
+//
+// hasSizes (Phase 17): флаг видимости секции «Размерная сетка» в форме товара.
+// Одежда=true, Бытовая техника=false. Контролирует ProductForm + WB import.
 model ProductDirection {
   id        String   @id @default(cuid())
   name      String   @unique
   sortOrder Int      @default(0)
+  hasSizes  Boolean  @default(false)
   brands    Brand[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -158,6 +162,8 @@ model Category {
   sortOrder     Int           @default(0)
   subcategories Subcategory[]
   products      Product[]
+  // Phase 17 — Свойства определяются на уровне категории
+  properties    CategoryProperty[]
 
   // Phase 7: default процент брака (D-01)
   defaultDefectRatePct Float?
@@ -177,6 +183,64 @@ model Subcategory {
   defaultDrrPct Float?
 
   @@unique([name, categoryId])
+}
+
+// Phase 17: Свойства товаров — EAV, привязка к Категории (D-01).
+// Один CategoryProperty → N ProductPropertyValue (per товар).
+// kind=ENUM требует непустой options[]; STRING/NUMBER — options игнорируются.
+// wbAttrName — имя в WB Content API characteristics[].name для авто-импорта.
+enum PropertyKind {
+  STRING
+  ENUM
+  NUMBER
+}
+
+model CategoryProperty {
+  id         String                 @id @default(cuid())
+  categoryId String
+  category   Category               @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  kind       PropertyKind           @default(STRING)
+  options    String[]               @default([])
+  wbAttrName String?
+  sortOrder  Int                    @default(0)
+  values     ProductPropertyValue[]
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+
+  @@unique([categoryId, name])
+}
+
+// Phase 17: Значение свойства per товар.
+// Один Product → N значений (по одному на CategoryProperty).
+// value: всегда String — multi-value хранится через разделитель ", " (normalizeWbValue).
+model ProductPropertyValue {
+  id         String           @id @default(cuid())
+  productId  String
+  product    Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   CategoryProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  value      String
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([productId, propertyId])
+  @@index([propertyId])
+}
+
+// Phase 17: Размер товара — отдельная сущность (D-04).
+// Видим в UI если у направления товара hasSizes=true.
+// В будущих фазах сюда добавим barcode, weightKg для per-size остатков/продаж.
+model ProductSize {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([productId, value])
+  @@index([productId])
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -222,6 +286,11 @@ model WbCard {
   label               String?           @db.VarChar(100) // ярлык (ручной)
   availability        String            @default("IN_STOCK")
   rawJson             Json? // полный ответ API
+  // Phase 17: парсинг WB Content API в нормализованном виде.
+  // characteristics: массив { id, name, value }, value может быть string/number/array.
+  // techSizes: ["S","M","L"] из sizes[].techSize (исключая "0" для one-size товаров).
+  characteristics     Json?
+  techSizes           String[]          @default([])
   // Phase 7: Средняя скорость продаж за 7 дней (D-09)
   avgSalesSpeed7d     Float?
   // Заказы минус отмены за вчерашний день (Moscow TZ) — для сравнения с 7д-средней
@@ -277,6 +346,9 @@ model Product {
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
   articles                MarketplaceArticle[]
   cost                    ProductCost? // One-to-one: product → cost record
+  // Phase 17 — Свойства (EAV) и размерная сетка
+  propertyValues          ProductPropertyValue[]
+  sizes                   ProductSize[]
   // Phase 14: Stock management fields
   ivanovoStock              Int?
   productionStock           Int?

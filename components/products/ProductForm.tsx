@@ -25,8 +25,14 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 
 import { cn } from "@/lib/utils"
-import { createProduct, updateProduct } from "@/app/actions/products"
+import {
+  createProduct,
+  updateProduct,
+  saveProductProperties,
+  saveProductSizes,
+} from "@/app/actions/products"
 import { createBrand, createCategory, createSubcategory } from "@/app/actions/reference"
+import { WbImportDialog } from "@/components/products/WbImportDialog"
 import { CreatableCombobox } from "@/components/combobox/CreatableCombobox"
 import { PhotoUploadField } from "@/components/products/PhotoUploadField"
 import {
@@ -78,16 +84,27 @@ interface SubcategoryOption {
   name: string
 }
 
+// Phase 17
+type PropertyKind = "STRING" | "ENUM" | "NUMBER"
+interface CategoryPropertyOption {
+  id: string
+  name: string
+  kind: PropertyKind
+  options: string[]
+  wbAttrName: string | null
+}
+
 interface CategoryOption {
   id: string
   name: string
   subcategories: SubcategoryOption[]
+  properties: CategoryPropertyOption[]
 }
 
 interface BrandWithCategories {
   id: string
   name: string
-  direction: { id: string; name: string } | null
+  direction: { id: string; name: string; hasSizes: boolean } | null
   categories: CategoryOption[]
 }
 
@@ -121,6 +138,9 @@ interface ProductData {
   widthCm?: number | null
   depthCm?: number | null
   articles?: ProductArticleDB[]
+  // Phase 17
+  propertyValues?: Array<{ propertyId: string; value: string }>
+  sizes?: Array<{ value: string; sortOrder: number }>
 }
 
 interface ProductFormProps {
@@ -161,6 +181,9 @@ const formSchema = z.object({
         .max(10),
     })
   ),
+  // Phase 17: динамические свойства (Record<propertyId, value>) + размерная сетка
+  properties: z.record(z.string(), z.string()).default({}),
+  sizes: z.array(z.object({ value: z.string() })).default([]),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -217,8 +240,15 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       marketplaces: product?.articles
         ? groupArticlesWithBarcodes(product.articles)
         : [],
+      properties: Object.fromEntries(
+        (product?.propertyValues ?? []).map((pv) => [pv.propertyId, pv.value])
+      ),
+      sizes: (product?.sizes ?? []).map((s) => ({ value: s.value })),
     },
   })
+
+  // Phase 17: WB import dialog state
+  const [wbImportOpen, setWbImportOpen] = useState(false)
 
   // ── Field arrays ──────────────────────────────────────────────────
 
@@ -227,6 +257,13 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
     append: appendMarketplace,
     remove: removeMarketplace,
   } = useFieldArray({ control: form.control, name: "marketplaces" })
+
+  // Phase 17: размеры
+  const {
+    fields: sizeFields,
+    append: appendSize,
+    remove: removeSize,
+  } = useFieldArray({ control: form.control, name: "sizes" })
 
   // ── Watched values ─────────────────────────────────────────────────
 
@@ -272,6 +309,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
 
   const currentBrand = brandsState.find((b) => b.id === watchedBrandId)
   const currentDirectionName = currentBrand?.direction?.name ?? null
+  const currentDirectionHasSizes = currentBrand?.direction?.hasSizes ?? false
   const categoryOptions =
     currentBrand?.categories.map((c) => ({ value: c.id, label: c.name })) ?? []
 
@@ -280,6 +318,9 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   )
   const subcategoryOptions =
     currentCategory?.subcategories.map((s) => ({ value: s.id, label: s.name })) ?? []
+
+  // Phase 17: свойства активной категории
+  const categoryProperties = currentCategory?.properties ?? []
 
   const brandOptions = brandsState.map((b) => ({ value: b.id, label: b.name }))
 
@@ -312,7 +353,12 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
     if (!watchedBrandId) return
     const result = await createCategory({ name, brandId: watchedBrandId })
     if (result.ok) {
-      const newCategory: CategoryOption = { id: result.id, name, subcategories: [] }
+      const newCategory: CategoryOption = {
+        id: result.id,
+        name,
+        subcategories: [],
+        properties: [],
+      }
       setBrandsState((prev) =>
         prev.map((b) =>
           b.id === watchedBrandId
@@ -387,6 +433,16 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       toast.warning("Товар без штрих-кодов")
     }
 
+    // Phase 17: подготовка properties + sizes
+    // Values формы для свойств — только тех, что есть в текущей категории (если категория сменилась — старые игнорим)
+    const propsForSave = categoryProperties.map((p) => ({
+      propertyId: p.id,
+      value: (values.properties?.[p.id] ?? "").toString(),
+    }))
+    const sizesForSave = (values.sizes ?? [])
+      .map((s) => ({ value: s.value.trim() }))
+      .filter((s) => s.value.length > 0)
+
     startTransition(async () => {
       if (product?.id) {
         const result = await updateProduct({
@@ -401,12 +457,21 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           widthCm: values.widthCm ?? undefined,
           depthCm: values.depthCm ?? undefined,
         })
-        if (result.ok) {
-          toast.success("Товар сохранён")
-          router.refresh()
-        } else {
+        if (!result.ok) {
           toast.error(result.error)
+          return
         }
+        // Phase 17: сохраняем свойства/размеры отдельными actions (не падать на чём-то одном)
+        if (propsForSave.length > 0) {
+          const r = await saveProductProperties({ productId: product.id, values: propsForSave })
+          if (!r.ok) toast.error(`Свойства: ${r.error}`)
+        }
+        if (currentDirectionHasSizes) {
+          const r = await saveProductSizes({ productId: product.id, sizes: sizesForSave })
+          if (!r.ok) toast.error(`Размеры: ${r.error}`)
+        }
+        toast.success("Товар сохранён")
+        router.refresh()
       } else {
         const result = await createProduct({
           ...values,
@@ -419,12 +484,19 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           widthCm: values.widthCm ?? undefined,
           depthCm: values.depthCm ?? undefined,
         })
-        if (result.ok) {
-          toast.success("Товар создан")
-          router.push(`/products/${result.id}/edit`)
-        } else {
+        if (!result.ok) {
           toast.error(result.error)
+          return
         }
+        // Phase 17: сохраняем свойства/размеры по id нового товара перед редиректом
+        if (propsForSave.length > 0) {
+          await saveProductProperties({ productId: result.id, values: propsForSave })
+        }
+        if (currentDirectionHasSizes && sizesForSave.length > 0) {
+          await saveProductSizes({ productId: result.id, sizes: sizesForSave })
+        }
+        toast.success("Товар создан")
+        router.push(`/products/${result.id}/edit`)
       }
     })
   }
@@ -599,6 +671,137 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
             )}
           />
         </section>
+
+        {/* Section 1.5: Свойства (Phase 17) — динамические по категории товара */}
+        {watchedCategoryId && categoryProperties.length > 0 && (
+          <section className="space-y-4">
+            <h2 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+              <span>Свойства</span>
+              {product?.id && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWbImportOpen(true)}
+                >
+                  Импортировать из WB
+                </Button>
+              )}
+            </h2>
+            {categoryProperties.map((prop) => (
+              <FormField
+                key={prop.id}
+                control={form.control}
+                name={`properties.${prop.id}` as const}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{prop.name}</FormLabel>
+                    <FormControl>
+                      {prop.kind === "ENUM" ? (
+                        <NativeSelect
+                          value={field.value ?? ""}
+                          onChange={(v) => field.onChange(v)}
+                        >
+                          <option value="">— не указано —</option>
+                          {prop.options.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                          {/* Если текущее значение не входит в options (например, multi-value из WB) — оставляем как «прочее» */}
+                          {field.value &&
+                            !prop.options.includes(field.value) && (
+                              <option value={field.value}>{field.value}</option>
+                            )}
+                        </NativeSelect>
+                      ) : prop.kind === "NUMBER" ? (
+                        <Input
+                          type="number"
+                          step="any"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          placeholder="0"
+                        />
+                      ) : (
+                        <Input
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          placeholder={prop.wbAttrName ? `Из WB: «${prop.wbAttrName}»` : ""}
+                        />
+                      )}
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+          </section>
+        )}
+
+        {/* Section 1.6: Размерная сетка (Phase 17) — только если у направления hasSizes */}
+        {currentDirectionHasSizes && (
+          <section className="space-y-4">
+            <h2 className="text-lg font-medium border-b pb-2 flex items-center justify-between">
+              <span>Размерная сетка</span>
+              {product?.id && categoryProperties.length === 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWbImportOpen(true)}
+                >
+                  Импортировать из WB
+                </Button>
+              )}
+            </h2>
+            {sizeFields.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Размеры не добавлены. Нажмите «Добавить размер» или «Импортировать из WB».
+              </p>
+            )}
+            <div className="space-y-2">
+              {sizeFields.map((field, index) => (
+                <div key={field.id} className="flex items-center gap-2">
+                  <FormField
+                    control={form.control}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    name={`sizes.${index}.value` as any}
+                    render={({ field: f }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input
+                            placeholder="Размер (S, M, 46, 2XL...)"
+                            value={f.value ?? ""}
+                            onChange={(e) => f.onChange(e.target.value)}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeSize(index)}
+                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                    aria-label="Удалить размер"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => appendSize({ value: "" })}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Добавить размер
+            </Button>
+          </section>
+        )}
 
         {/* Section 2: Фото */}
         <section className="space-y-4">
@@ -805,6 +1008,15 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
           {isPending ? "Сохранение..." : "Сохранить товар"}
         </Button>
       </form>
+
+      {/* Phase 17: WB import dialog */}
+      {product?.id && (
+        <WbImportDialog
+          productId={product.id}
+          open={wbImportOpen}
+          onOpenChange={setWbImportOpen}
+        />
+      )}
     </Form>
   )
 }

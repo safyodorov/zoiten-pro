@@ -21,6 +21,14 @@ interface WbPhotoRaw {
   tm?: string
 }
 
+// Phase 17: characteristics[].value variadic (string | number | string[] | number[]).
+// Точные типы зависят от свойства WB. См. .planning/phases/17-.../17-RESEARCH.md.
+export interface WbCharacteristicRaw {
+  id: number
+  name: string
+  value: string | number | Array<string | number>
+}
+
 export interface WbCardRaw {
   nmID: number
   vendorCode: string
@@ -35,7 +43,10 @@ export interface WbCardRaw {
   sizes: Array<{
     skus: string[]
     price?: number
+    techSize?: string // Phase 17: размер ("S", "M", "46"); "0" = одно-размерный товар
+    wbSize?: string
   }>
+  characteristics?: WbCharacteristicRaw[] // Phase 17
   mediaFiles?: string[]
   dimensions?: {
     width: number
@@ -485,6 +496,20 @@ export function parseCard(card: WbCardRaw) {
   const widthCm = dims?.width ?? null
   const depthCm = dims?.length ?? null
 
+  // Phase 17: размеры — отфильтровать "0" (placeholder для one-size товаров) и пустые.
+  // Дедуплицируем — WB иногда возвращает повторы в массиве sizes.
+  const techSizes: string[] = []
+  for (const size of card.sizes ?? []) {
+    const ts = (size.techSize ?? "").trim()
+    if (ts && ts !== "0" && !techSizes.includes(ts)) {
+      techSizes.push(ts)
+    }
+  }
+
+  // Phase 17: characteristics — пробрасываем как есть для записи в WbCard.characteristics (Json).
+  // При импорте в Product свойства будут нормализованы через normalizeWbCharacteristicValue().
+  const characteristics = card.characteristics ?? null
+
   return {
     nmId: card.nmID,
     article: card.vendorCode,
@@ -501,7 +526,23 @@ export function parseCard(card: WbCardRaw) {
     widthCm,
     depthCm,
     tags,
+    characteristics,
+    techSizes,
   }
+}
+
+// Phase 17: Нормализация WB characteristics[].value → строка для ProductPropertyValue.
+// WB возвращает разнотипные значения (см. 17-RESEARCH.md):
+//   "1 год"             → "1 год"
+//   5                   → "5"
+//   ["Мужской"]         → "Мужской"
+//   ["68% полиэстер","20% вискоза"] → "68% полиэстер, 20% вискоза"
+export function normalizeWbCharacteristicValue(raw: unknown): string {
+  if (raw == null) return ""
+  if (Array.isArray(raw)) {
+    return raw.map((v) => String(v)).filter(Boolean).join(", ")
+  }
+  return String(raw)
 }
 
 // ──────────────────────────────────────────────────────────────────

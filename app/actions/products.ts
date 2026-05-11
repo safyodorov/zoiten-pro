@@ -393,3 +393,340 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
     return { ok: false, error: "Ошибка сервера" }
   }
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 17 — Свойства товаров + Размерная сетка + Импорт из WB
+// ──────────────────────────────────────────────────────────────────
+
+const SavePropertiesSchema = z.object({
+  productId: z.string().min(1),
+  values: z.array(
+    z.object({
+      propertyId: z.string().min(1),
+      value: z.string().max(2000),
+    })
+  ),
+})
+
+const SaveSizesSchema = z.object({
+  productId: z.string().min(1),
+  sizes: z
+    .array(z.object({ value: z.string().min(1).max(50) }))
+    .max(100),
+})
+
+const ImportFromWbSchema = z.object({
+  productId: z.string().min(1),
+  replaceExisting: z.boolean().default(false),
+})
+
+/**
+ * Phase 17: Сохранить значения свойств товара (EAV upsert).
+ * Пустое value → запись удаляется (NULL не хранится).
+ */
+export async function saveProductProperties(
+  data: z.infer<typeof SavePropertiesSchema>
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRODUCTS", "MANAGE")
+    const parsed = SavePropertiesSchema.parse(data)
+
+    await prisma.$transaction(async (tx) => {
+      for (const { propertyId, value } of parsed.values) {
+        const trimmed = value.trim()
+        if (trimmed === "") {
+          await tx.productPropertyValue.deleteMany({
+            where: { productId: parsed.productId, propertyId },
+          })
+        } else {
+          await tx.productPropertyValue.upsert({
+            where: {
+              productId_propertyId: { productId: parsed.productId, propertyId },
+            },
+            create: { productId: parsed.productId, propertyId, value: trimmed },
+            update: { value: trimmed },
+          })
+        }
+      }
+    })
+
+    revalidatePath(`/products/${parsed.productId}/edit`)
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("saveProductProperties error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+/**
+ * Phase 17: Сохранить размерную сетку товара.
+ * Clean-replace: удалить старые ProductSize, создать новые с sortOrder=index.
+ */
+export async function saveProductSizes(
+  data: z.infer<typeof SaveSizesSchema>
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRODUCTS", "MANAGE")
+    const parsed = SaveSizesSchema.parse(data)
+
+    // Дедуп по value (case-sensitive)
+    const seen = new Set<string>()
+    const dedupedSizes: { value: string; sortOrder: number }[] = []
+    for (let i = 0; i < parsed.sizes.length; i++) {
+      const v = parsed.sizes[i].value.trim()
+      if (v && !seen.has(v)) {
+        seen.add(v)
+        dedupedSizes.push({ value: v, sortOrder: i })
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.productSize.deleteMany({ where: { productId: parsed.productId } }),
+      ...(dedupedSizes.length > 0
+        ? [
+            prisma.productSize.createMany({
+              data: dedupedSizes.map((s) => ({
+                productId: parsed.productId,
+                value: s.value,
+                sortOrder: s.sortOrder,
+              })),
+            }),
+          ]
+        : []),
+    ])
+
+    revalidatePath(`/products/${parsed.productId}/edit`)
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("saveProductSizes error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// ── Helpers для импорта из WB ─────────────────────────────────────
+
+type WbCharacteristic = { id?: number; name?: string; value?: unknown }
+
+function normalizeWbValue(raw: unknown): string {
+  if (raw == null) return ""
+  if (Array.isArray(raw)) {
+    return raw
+      .map((v) => String(v))
+      .filter((s) => s.length > 0)
+      .join(", ")
+  }
+  return String(raw)
+}
+
+/**
+ * Phase 17: Найти WbCard, привязанную к товару через WB MarketplaceArticle (sortOrder=0 — основная).
+ * Возвращает null если у товара нет WB-артикулов или WbCard не найдена.
+ */
+async function findPrimaryWbCardForProduct(productId: string) {
+  const wbMarketplace = await prisma.marketplace.findUnique({
+    where: { slug: "wb" },
+    select: { id: true },
+  })
+  if (!wbMarketplace) return null
+
+  const article = await prisma.marketplaceArticle.findFirst({
+    where: { productId, marketplaceId: wbMarketplace.id },
+    orderBy: { sortOrder: "asc" },
+  })
+  if (!article) return null
+
+  const nmId = parseInt(article.article, 10)
+  if (Number.isNaN(nmId)) return null
+
+  return prisma.wbCard.findUnique({ where: { nmId } })
+}
+
+export type WbImportPreview = {
+  ok: true
+  hasWbCard: boolean
+  properties: Array<{
+    propertyId: string
+    propertyName: string
+    wbAttrName: string | null
+    wbValue: string | null // null = свойство не найдено в WB
+    currentValue: string | null
+    action: "will-set" | "will-overwrite" | "no-source" | "matches"
+  }>
+  sizes: {
+    fromWb: string[]
+    existing: string[]
+    toAdd: string[]
+  }
+}
+
+export type WbImportResult =
+  | { ok: true; properties: { applied: number; skipped: number }; sizes: { added: number; skipped: number } }
+  | { ok: false; error: string }
+
+/**
+ * Phase 17: Preview — что подтянется при импорте из WB (без записи).
+ */
+export async function previewWbImport(
+  productId: string
+): Promise<WbImportPreview | { ok: false; error: string }> {
+  try {
+    await requireSection("PRODUCTS", "MANAGE")
+
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: {
+        category: { include: { properties: { orderBy: { sortOrder: "asc" } } } },
+        propertyValues: true,
+        sizes: true,
+      },
+    })
+    if (!product) return { ok: false, error: "Товар не найден" }
+
+    const wbCard = await findPrimaryWbCardForProduct(productId)
+    if (!wbCard) {
+      return { ok: true, hasWbCard: false, properties: [], sizes: { fromWb: [], existing: [], toAdd: [] } }
+    }
+
+    const characteristics = (wbCard.characteristics as WbCharacteristic[] | null) ?? []
+    const charByName = new Map<string, WbCharacteristic>()
+    for (const c of characteristics) {
+      if (c.name) charByName.set(c.name, c)
+    }
+
+    const properties = (product.category?.properties ?? []).map((prop) => {
+      const currentVal = product.propertyValues.find((v) => v.propertyId === prop.id)?.value ?? null
+      const wbChar = prop.wbAttrName ? charByName.get(prop.wbAttrName) : undefined
+      const wbValue = wbChar ? normalizeWbValue(wbChar.value) : null
+
+      let action: "will-set" | "will-overwrite" | "no-source" | "matches"
+      if (wbValue === null) action = "no-source"
+      else if (currentVal === null) action = "will-set"
+      else if (currentVal === wbValue) action = "matches"
+      else action = "will-overwrite"
+
+      return {
+        propertyId: prop.id,
+        propertyName: prop.name,
+        wbAttrName: prop.wbAttrName,
+        wbValue,
+        currentValue: currentVal,
+        action,
+      }
+    })
+
+    const fromWb = wbCard.techSizes ?? []
+    const existing = product.sizes.map((s) => s.value)
+    const toAdd = fromWb.filter((v) => !existing.includes(v))
+
+    return {
+      ok: true,
+      hasWbCard: true,
+      properties,
+      sizes: { fromWb, existing, toAdd },
+    }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("previewWbImport error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+/**
+ * Phase 17: Импорт свойств и размеров из основной WB-карточки в товар.
+ *   - replaceExisting=false → не затирать существующие ProductPropertyValue
+ *   - размеры — addOnly (новые добавляются, дубли пропускаются)
+ */
+export async function importFromWb(
+  data: z.infer<typeof ImportFromWbSchema>
+): Promise<WbImportResult> {
+  try {
+    await requireSection("PRODUCTS", "MANAGE")
+    const parsed = ImportFromWbSchema.parse(data)
+
+    const preview = await previewWbImport(parsed.productId)
+    if (!preview.ok) return { ok: false, error: preview.error }
+    if (!preview.hasWbCard) {
+      return { ok: false, error: "У товара нет привязанной WB-карточки" }
+    }
+
+    let propApplied = 0
+    let propSkipped = 0
+    let sizesAdded = 0
+    let sizesSkipped = 0
+
+    await prisma.$transaction(async (tx) => {
+      for (const p of preview.properties) {
+        if (p.wbValue === null) {
+          propSkipped++
+          continue
+        }
+        if (p.action === "will-overwrite" && !parsed.replaceExisting) {
+          propSkipped++
+          continue
+        }
+        if (p.action === "matches") {
+          propSkipped++
+          continue
+        }
+        await tx.productPropertyValue.upsert({
+          where: {
+            productId_propertyId: {
+              productId: parsed.productId,
+              propertyId: p.propertyId,
+            },
+          },
+          create: {
+            productId: parsed.productId,
+            propertyId: p.propertyId,
+            value: p.wbValue,
+          },
+          update: { value: p.wbValue },
+        })
+        propApplied++
+      }
+
+      // Размеры — addOnly. Берём max sortOrder из существующих чтобы новые шли в конец.
+      const existing = await tx.productSize.findMany({
+        where: { productId: parsed.productId },
+        orderBy: { sortOrder: "desc" },
+        take: 1,
+      })
+      let nextOrder = (existing[0]?.sortOrder ?? -1) + 1
+
+      for (const sz of preview.sizes.fromWb) {
+        if (preview.sizes.existing.includes(sz)) {
+          sizesSkipped++
+          continue
+        }
+        await tx.productSize.create({
+          data: {
+            productId: parsed.productId,
+            value: sz,
+            sortOrder: nextOrder++,
+          },
+        })
+        sizesAdded++
+      }
+    })
+
+    revalidatePath(`/products/${parsed.productId}/edit`)
+    revalidatePath("/products")
+    return {
+      ok: true,
+      properties: { applied: propApplied, skipped: propSkipped },
+      sizes: { added: sizesAdded, skipped: sizesSkipped },
+    }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("importFromWb error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}

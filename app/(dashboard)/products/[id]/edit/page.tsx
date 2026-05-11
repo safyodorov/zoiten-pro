@@ -23,14 +23,20 @@ export default async function EditProductPage({
             barcodes: { orderBy: { createdAt: "asc" } },
           },
         },
+        // Phase 17: values свойств + размерная сетка
+        propertyValues: true,
+        sizes: { orderBy: { sortOrder: "asc" } },
       },
     }),
     prisma.brand.findMany({
       include: {
-        direction: { select: { id: true, name: true } },
+        direction: { select: { id: true, name: true, hasSizes: true } },
         categories: {
           orderBy: { sortOrder: "asc" },
-          include: { subcategories: { orderBy: { sortOrder: "asc" } } },
+          include: {
+            subcategories: { orderBy: { sortOrder: "asc" } },
+            properties: { orderBy: { sortOrder: "asc" } }, // Phase 17
+          },
         },
       },
       orderBy: { sortOrder: "asc" },

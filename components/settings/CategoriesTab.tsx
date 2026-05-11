@@ -23,6 +23,10 @@ import {
   deleteSubcategory,
   reorderCategories,
   reorderSubcategories,
+  createCategoryProperty,
+  updateCategoryProperty,
+  deleteCategoryProperty,
+  reorderCategoryProperties,
 } from "@/app/actions/reference"
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -33,11 +37,24 @@ interface Subcategory {
   categoryId: string
 }
 
+type PropertyKind = "STRING" | "ENUM" | "NUMBER"
+
+interface CategoryPropertyRow {
+  id: string
+  categoryId: string
+  name: string
+  kind: PropertyKind
+  options: string[]
+  wbAttrName: string | null
+  sortOrder: number
+}
+
 interface Category {
   id: string
   name: string
   brandId: string
   subcategories: Subcategory[]
+  properties: CategoryPropertyRow[]
 }
 
 interface BrandWithCategories {
@@ -48,6 +65,12 @@ interface BrandWithCategories {
 
 interface CategoriesTabProps {
   brands: BrandWithCategories[]
+}
+
+const KIND_LABELS: Record<PropertyKind, string> = {
+  STRING: "Строка",
+  ENUM: "Список",
+  NUMBER: "Число",
 }
 
 // ── SubcategoryRow — inline editing for subcategory ───────────────
@@ -187,6 +210,292 @@ function AddSubcategoryRow({ categoryId }: { categoryId: string }) {
   )
 }
 
+// ── PropertyRow — одно свойство категории, inline edit (Phase 17) ──
+
+function PropertyRow({ property }: { property: CategoryPropertyRow }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(property.name)
+  const [kind, setKind] = useState<PropertyKind>(property.kind)
+  const [optionsText, setOptionsText] = useState(property.options.join(", "))
+  const [wbAttrName, setWbAttrName] = useState(property.wbAttrName ?? "")
+  const [isPending, startTransition] = useTransition()
+
+  function handleSave() {
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+    const options =
+      kind === "ENUM"
+        ? optionsText
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean)
+        : []
+    startTransition(async () => {
+      const result = await updateCategoryProperty({
+        id: property.id,
+        name: trimmedName,
+        kind,
+        options,
+        wbAttrName: wbAttrName.trim() || null,
+      })
+      if (result.ok) {
+        toast.success("Сохранено")
+        setEditing(false)
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
+  function handleDelete() {
+    if (
+      !confirm(
+        `Удалить свойство "${property.name}"? Значения в товарах будут потеряны.`
+      )
+    )
+      return
+    startTransition(async () => {
+      const result = await deleteCategoryProperty(property.id)
+      if (result.ok) {
+        toast.success("Свойство удалено")
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
+  function handleCancel() {
+    setName(property.name)
+    setKind(property.kind)
+    setOptionsText(property.options.join(", "))
+    setWbAttrName(property.wbAttrName ?? "")
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-2 py-2 pl-2 border-b last:border-b-0 bg-muted/30 rounded">
+        <div className="flex items-center gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Название (Пол, Цвет)"
+            className="h-7 flex-1 text-xs"
+            disabled={isPending}
+            autoFocus
+          />
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value as PropertyKind)}
+            disabled={isPending}
+            className="h-7 rounded border border-input bg-transparent px-2 text-xs"
+          >
+            <option value="STRING">Строка</option>
+            <option value="ENUM">Список</option>
+            <option value="NUMBER">Число</option>
+          </select>
+        </div>
+        {kind === "ENUM" && (
+          <Input
+            value={optionsText}
+            onChange={(e) => setOptionsText(e.target.value)}
+            placeholder="Варианты через запятую (мужской, женский, унисекс)"
+            className="h-7 text-xs"
+            disabled={isPending}
+          />
+        )}
+        <Input
+          value={wbAttrName}
+          onChange={(e) => setWbAttrName(e.target.value)}
+          placeholder="Имя в WB Content API (опционально) — например «Пол»"
+          className="h-7 text-xs"
+          disabled={isPending}
+        />
+        <div className="flex justify-end gap-1">
+          <Button size="icon-xs" variant="ghost" onClick={handleSave} disabled={isPending} aria-label="Сохранить">
+            <Check className="size-3" />
+          </Button>
+          <Button size="icon-xs" variant="ghost" onClick={handleCancel} disabled={isPending} aria-label="Отмена">
+            <X className="size-3" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 pl-2 border-b last:border-b-0 group">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs font-medium truncate">
+          {property.name}{" "}
+          <span className="text-muted-foreground font-normal">
+            ({KIND_LABELS[property.kind]})
+          </span>
+        </div>
+        {property.kind === "ENUM" && property.options.length > 0 && (
+          <div className="text-[10px] text-muted-foreground truncate">
+            [{property.options.join(", ")}]
+          </div>
+        )}
+        {property.wbAttrName && (
+          <div className="text-[10px] text-muted-foreground truncate">
+            WB: «{property.wbAttrName}»
+          </div>
+        )}
+      </div>
+      <Button
+        size="icon-xs"
+        variant="ghost"
+        onClick={() => setEditing(true)}
+        disabled={isPending}
+        aria-label="Редактировать свойство"
+        className="opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <Pencil className="size-3" />
+      </Button>
+      <Button
+        size="icon-xs"
+        variant="ghost"
+        onClick={handleDelete}
+        disabled={isPending}
+        aria-label="Удалить свойство"
+        className={cn(
+          "opacity-0 group-hover:opacity-100 transition-opacity",
+          "text-destructive hover:text-destructive"
+        )}
+      >
+        <Trash2 className="size-3" />
+      </Button>
+    </div>
+  )
+}
+
+// ── AddPropertyRow — добавление нового свойства ───────────────────
+
+function AddPropertyRow({ categoryId }: { categoryId: string }) {
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState("")
+  const [kind, setKind] = useState<PropertyKind>("STRING")
+  const [optionsText, setOptionsText] = useState("")
+  const [wbAttrName, setWbAttrName] = useState("")
+  const [isPending, startTransition] = useTransition()
+
+  function handleAdd() {
+    const trimmedName = name.trim()
+    if (!trimmedName) return
+    const options =
+      kind === "ENUM"
+        ? optionsText
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean)
+        : []
+    startTransition(async () => {
+      const result = await createCategoryProperty({
+        categoryId,
+        name: trimmedName,
+        kind,
+        options,
+        wbAttrName: wbAttrName.trim() || null,
+      })
+      if (result.ok) {
+        toast.success("Свойство добавлено")
+        setName("")
+        setOptionsText("")
+        setWbAttrName("")
+        setKind("STRING")
+        setAdding(false)
+      } else {
+        toast.error(result.error)
+      }
+    })
+  }
+
+  if (!adding) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setAdding(true)}
+        className="h-6 px-2 mt-1 ml-2 gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="size-3" />
+        Свойство
+      </Button>
+    )
+  }
+
+  return (
+    <div className="space-y-2 pt-2 pl-2 border-l-2 border-primary/30 ml-2">
+      <div className="flex items-center gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd()
+            if (e.key === "Escape") setAdding(false)
+          }}
+          placeholder="Название (Пол, Цвет)"
+          className="h-7 flex-1 text-xs"
+          disabled={isPending}
+          autoFocus
+        />
+        <select
+          value={kind}
+          onChange={(e) => setKind(e.target.value as PropertyKind)}
+          disabled={isPending}
+          className="h-7 rounded border border-input bg-transparent px-2 text-xs"
+        >
+          <option value="STRING">Строка</option>
+          <option value="ENUM">Список</option>
+          <option value="NUMBER">Число</option>
+        </select>
+      </div>
+      {kind === "ENUM" && (
+        <Input
+          value={optionsText}
+          onChange={(e) => setOptionsText(e.target.value)}
+          placeholder="Варианты через запятую"
+          className="h-7 text-xs"
+          disabled={isPending}
+        />
+      )}
+      <Input
+        value={wbAttrName}
+        onChange={(e) => setWbAttrName(e.target.value)}
+        placeholder="Имя в WB Content API (опционально)"
+        className="h-7 text-xs"
+        disabled={isPending}
+      />
+      <div className="flex justify-end gap-1">
+        <Button
+          size="icon-xs"
+          variant="outline"
+          onClick={handleAdd}
+          disabled={isPending || !name.trim()}
+          aria-label="Добавить"
+        >
+          <Check className="size-3" />
+        </Button>
+        <Button
+          size="icon-xs"
+          variant="ghost"
+          onClick={() => {
+            setAdding(false)
+            setName("")
+            setOptionsText("")
+            setWbAttrName("")
+          }}
+          disabled={isPending}
+          aria-label="Отмена"
+        >
+          <X className="size-3" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // ── CategoryAccordionItem — category with inline edit + subcategories
 
 function CategoryAccordionItem({ category }: { category: Category }) {
@@ -227,6 +536,12 @@ function CategoryAccordionItem({ category }: { category: Category }) {
 
   function handleReorderSubs(ids: string[]) {
     reorderSubcategories(ids).then((r) => {
+      if (!r.ok) toast.error(r.error)
+    })
+  }
+
+  function handleReorderProps(ids: string[]) {
+    reorderCategoryProperties(ids).then((r) => {
       if (!r.ok) toast.error(r.error)
     })
   }
@@ -284,18 +599,42 @@ function CategoryAccordionItem({ category }: { category: Category }) {
         )}
       </div>
       <AccordionContent>
-        <div className="border-l ml-2 pl-2">
-          <SortableList items={category.subcategories} onReorder={handleReorderSubs}>
-            {category.subcategories.map((sub) => (
-              <SortableItem key={sub.id} id={sub.id}>
-                <SubcategoryRow sub={sub} />
-              </SortableItem>
-            ))}
-          </SortableList>
-          {category.subcategories.length === 0 && (
-            <p className="py-1.5 pl-2 text-xs text-muted-foreground">Нет подкатегорий</p>
-          )}
-          <AddSubcategoryRow categoryId={category.id} />
+        <div className="border-l ml-2 pl-2 space-y-3">
+          {/* Подкатегории */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1 pl-2">
+              Подкатегории
+            </p>
+            <SortableList items={category.subcategories} onReorder={handleReorderSubs}>
+              {category.subcategories.map((sub) => (
+                <SortableItem key={sub.id} id={sub.id}>
+                  <SubcategoryRow sub={sub} />
+                </SortableItem>
+              ))}
+            </SortableList>
+            {category.subcategories.length === 0 && (
+              <p className="py-1.5 pl-2 text-xs text-muted-foreground">Нет подкатегорий</p>
+            )}
+            <AddSubcategoryRow categoryId={category.id} />
+          </div>
+
+          {/* Свойства (Phase 17) */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1 pl-2">
+              Свойства
+            </p>
+            <SortableList items={category.properties} onReorder={handleReorderProps}>
+              {category.properties.map((prop) => (
+                <SortableItem key={prop.id} id={prop.id}>
+                  <PropertyRow property={prop} />
+                </SortableItem>
+              ))}
+            </SortableList>
+            {category.properties.length === 0 && (
+              <p className="py-1.5 pl-2 text-xs text-muted-foreground">Нет свойств</p>
+            )}
+            <AddPropertyRow categoryId={category.id} />
+          </div>
         </div>
       </AccordionContent>
     </AccordionItem>

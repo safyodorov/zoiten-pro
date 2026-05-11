@@ -14,11 +14,24 @@ interface Subcategory {
   categoryId: string
 }
 
+type PropertyKind = "STRING" | "ENUM" | "NUMBER"
+
+interface CategoryPropertyRow {
+  id: string
+  categoryId: string
+  name: string
+  kind: PropertyKind
+  options: string[]
+  wbAttrName: string | null
+  sortOrder: number
+}
+
 interface Category {
   id: string
   name: string
   brandId: string
   subcategories: Subcategory[]
+  properties: CategoryPropertyRow[]
 }
 
 interface BrandWithCategories {
@@ -42,6 +55,7 @@ interface BrandLite {
 interface DirectionWithBrands {
   id: string
   name: string
+  hasSizes: boolean
   brands: { id: string; name: string }[]
 }
 
