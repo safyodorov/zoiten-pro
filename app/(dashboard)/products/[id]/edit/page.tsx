@@ -52,6 +52,32 @@ export default async function EditProductPage({
   // WB-импорта) форма пересоздаётся с новыми defaultValues. Без этого
   // useForm не переинициализирует значения при изменении props.
   const formKey = `${product.id}-${product.updatedAt.getTime()}`
+
+  // 2026-05-11: suggestions для STRING-свойств — distinct значения из всех
+  // ProductPropertyValue, чтобы в форме был combobox с выбором из ранее
+  // введённых вариантов (например «слим», «классика» для свойства «Покрой»).
+  const stringPropIds = brands.flatMap((b) =>
+    b.categories.flatMap((c) =>
+      c.properties.filter((p) => p.kind === "STRING").map((p) => p.id)
+    )
+  )
+  const propertyValueRows =
+    stringPropIds.length > 0
+      ? await prisma.productPropertyValue.findMany({
+          where: { propertyId: { in: stringPropIds }, value: { not: "" } },
+          select: { propertyId: true, value: true },
+          distinct: ["propertyId", "value"],
+          orderBy: { value: "asc" },
+        })
+      : []
+  const propertyValueSuggestions: Record<string, string[]> = {}
+  for (const { propertyId, value } of propertyValueRows) {
+    if (!propertyValueSuggestions[propertyId]) {
+      propertyValueSuggestions[propertyId] = []
+    }
+    propertyValueSuggestions[propertyId].push(value)
+  }
+
   return (
     <div className="space-y-4">
       <ProductForm
@@ -59,6 +85,7 @@ export default async function EditProductPage({
         brands={brands}
         marketplaces={marketplaces}
         product={product}
+        propertyValueSuggestions={propertyValueSuggestions}
       />
     </div>
   )

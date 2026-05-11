@@ -149,6 +149,10 @@ interface ProductFormProps {
   brands: BrandWithCategories[]
   marketplaces: MarketplaceOption[]
   product?: ProductData
+  // 2026-05-11: map propertyId → ранее введённые distinct values для STRING-свойств.
+  // Используется для CreatableCombobox — выбор из существующих значений
+  // (например «слим», «классика» для «Покрой») + возможность ввести новое.
+  propertyValueSuggestions?: Record<string, string[]>
 }
 
 // ── Zod schema ─────────────────────────────────────────────────────
@@ -233,7 +237,12 @@ function groupArticlesWithBarcodes(
 
 // ── ProductForm ─────────────────────────────────────────────────────
 
-export function ProductForm({ brands, marketplaces, product }: ProductFormProps) {
+export function ProductForm({
+  brands,
+  marketplaces,
+  product,
+  propertyValueSuggestions,
+}: ProductFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [brandsState, setBrandsState] = useState<BrandWithCategories[]>(brands)
@@ -803,10 +812,21 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
                           placeholder="0"
                         />
                       ) : (
-                        <Input
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          placeholder={prop.wbAttrName ? `Из WB: «${prop.wbAttrName}»` : ""}
+                        // STRING: CreatableCombobox с выбором из ранее введённых
+                        // distinct values (suggestions из БД) + возможность ввести
+                        // новое значение. Если suggestions нет — поведение как
+                        // обычный input через onCreate.
+                        <CreatableCombobox
+                          options={(propertyValueSuggestions?.[prop.id] ?? []).map(
+                            (v) => ({ value: v, label: v })
+                          )}
+                          value={field.value ?? null}
+                          onValueChange={(v) => field.onChange(v ?? "")}
+                          onCreate={(v) => field.onChange(v)}
+                          placeholder={
+                            prop.wbAttrName ? `Из WB: «${prop.wbAttrName}»` : "Выбрать или ввести"
+                          }
+                          createLabel="Добавить"
                         />
                       )}
                     </FormControl>
