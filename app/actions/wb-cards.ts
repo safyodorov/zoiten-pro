@@ -320,10 +320,16 @@ export async function searchProducts(query: string) {
   await requireSection("PRODUCTS")
   if (!query.trim()) return []
 
+  // Phase 18: поиск по name (составное) + article + sku
+  const term = query.trim()
   return prisma.product.findMany({
     where: {
       deletedAt: null,
-      name: { contains: query.trim(), mode: "insensitive" },
+      OR: [
+        { name: { contains: term, mode: "insensitive" } },
+        { article: { contains: term, mode: "insensitive" } },
+        { sku: { contains: term, mode: "insensitive" } },
+      ],
     },
     select: { id: true, name: true, photoUrl: true },
     orderBy: { name: "asc" },

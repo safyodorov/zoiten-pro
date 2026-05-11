@@ -6,6 +6,8 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
+import { generateProductName } from "@/lib/product-name"
+import type { Prisma } from "@prisma/client"
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -35,7 +37,10 @@ const MarketplaceSchema = z.object({
 })
 
 const ProductSchema = z.object({
-  name: z.string().min(1).max(100),
+  // Phase 18: бывший name → article. name отдельно (автогенерируемое или manual override).
+  article: z.string().min(1).max(100),
+  name: z.string().max(255).optional(),
+  nameOverridden: z.boolean().optional().default(false),
   photoUrl: z.string().nullable().optional(),
   brandId: z.string().min(1),
   categoryId: z.string().optional(),
@@ -94,6 +99,54 @@ function handleP2002(e: unknown): { ok: false; error: string } | null {
   return { ok: false, error: "Уже существует" }
 }
 
+// ── Phase 18: regenerate составное name ──────────────────────────
+// Если nameOverridden=true → не трогаем, иначе пересчитываем по generateProductName.
+// Принимает Prisma transaction client — должна вызываться внутри tx чтобы запись
+// и пересчёт были атомарны.
+
+type PrismaTx = Omit<
+  ReturnType<typeof prisma.$transaction> extends Promise<infer U> ? unknown : never,
+  never
+>
+
+async function regenerateProductName(
+  tx: Prisma.TransactionClient,
+  productId: string
+): Promise<void> {
+  const p = await tx.product.findUnique({
+    where: { id: productId },
+    include: {
+      brand: { include: { direction: true } },
+      category: { select: { name: true } },
+      subcategory: { select: { name: true } },
+      propertyValues: {
+        include: { property: { select: { includeInName: true, sortOrder: true } } },
+      },
+    },
+  })
+  if (!p || p.nameOverridden) return
+  // Сортируем properties по sortOrder свойства — стабильный порядок в названии
+  const props = [...p.propertyValues].sort(
+    (a, b) => a.property.sortOrder - b.property.sortOrder
+  )
+  const name = generateProductName({
+    article: p.article,
+    category: p.category,
+    subcategory: p.subcategory,
+    brand: p.brand,
+    properties: props.map((pv) => ({
+      value: pv.value,
+      includeInName: pv.property.includeInName,
+    })),
+  })
+  if (name && name !== p.name) {
+    await tx.product.update({ where: { id: productId }, data: { name } })
+  } else if (!name) {
+    // Если совсем пусто — fallback на article чтобы не было empty string
+    await tx.product.update({ where: { id: productId }, data: { name: p.article } })
+  }
+}
+
 // ── createProduct ─────────────────────────────────────────────────
 
 export async function createProduct(
@@ -116,10 +169,14 @@ export async function createProduct(
       // потом при следующем save updateProduct сделает связку.
       // Здесь productSizeValue из incoming игнорируем — для новых товаров привязка
       // делается на втором save или через WB import.
-      return tx.product.create({
+      const created = await tx.product.create({
         data: {
           sku,
-          name: parsed.name,
+          article: parsed.article,
+          // Phase 18: name заполняется через regenerateProductName ниже. При nameOverridden=true
+          // юзер прислал manual name — берём как есть.
+          name: parsed.nameOverridden ? (parsed.name ?? parsed.article) : parsed.article,
+          nameOverridden: parsed.nameOverridden ?? false,
           photoUrl: parsed.photoUrl ?? null,
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
@@ -151,6 +208,11 @@ export async function createProduct(
           },
         },
       })
+      // Phase 18: пересчитать составное name (если не override). На этом этапе
+      // propertyValues и subcategory ещё пустые для нового товара — name = article.
+      // Финальный пересчёт делает saveProductProperties после первого save.
+      await regenerateProductName(tx, created.id)
+      return created
     })
 
     revalidatePath("/products")
@@ -186,23 +248,34 @@ export async function updateProduct(
       }
       const productDeletedAt = existing.deletedAt
 
-      await tx.product.update({
-        where: { id: parsed.id },
-        data: {
-          name: parsed.name,
-          photoUrl: parsed.photoUrl ?? null,
-          brandId: parsed.brandId,
-          categoryId: parsed.categoryId ?? null,
-          subcategoryId: parsed.subcategoryId ?? null,
-          label: parsed.label ?? null,
-          abcStatus: parsed.abcStatus ?? null,
-          availability: parsed.availability,
-          weightKg: parsed.weightKg ?? null,
-          heightCm: parsed.heightCm ?? null,
-          widthCm: parsed.widthCm ?? null,
-          depthCm: parsed.depthCm ?? null,
-        },
-      })
+      // Phase 18: article обновляется всегда. name и nameOverridden — только если
+      // прислан manual override. Иначе name пересчитывается через regenerateProductName.
+      const updateData: Prisma.ProductUpdateInput = {
+        article: parsed.article,
+        photoUrl: parsed.photoUrl ?? null,
+        brand: { connect: { id: parsed.brandId } },
+        category: parsed.categoryId
+          ? { connect: { id: parsed.categoryId } }
+          : { disconnect: true },
+        subcategory: parsed.subcategoryId
+          ? { connect: { id: parsed.subcategoryId } }
+          : { disconnect: true },
+        label: parsed.label ?? null,
+        abcStatus: parsed.abcStatus ?? null,
+        availability: parsed.availability,
+        weightKg: parsed.weightKg ?? null,
+        heightCm: parsed.heightCm ?? null,
+        widthCm: parsed.widthCm ?? null,
+        depthCm: parsed.depthCm ?? null,
+      }
+      if (parsed.nameOverridden) {
+        updateData.name = parsed.name ?? parsed.article
+        updateData.nameOverridden = true
+      } else {
+        // Юзер сбросил override (или не трогал) → пересчитать ниже
+        updateData.nameOverridden = false
+      }
+      await tx.product.update({ where: { id: parsed.id }, data: updateData })
 
       // 260421-iq7: replace-all стратегия. Удаляем все MarketplaceArticle товара —
       // Barcode каскадно удалятся через onDelete: Cascade на FK marketplaceArticleId.
@@ -242,6 +315,9 @@ export async function updateProduct(
           })
         }
       }
+
+      // Phase 18: если override не включен — пересчитать составное name по актуальным данным
+      await regenerateProductName(tx, parsed.id)
     })
 
     revalidatePath("/products")
@@ -472,6 +548,8 @@ export async function saveProductProperties(
           })
         }
       }
+      // Phase 18: пересчитать составное name после изменения свойств
+      await regenerateProductName(tx, parsed.productId)
     })
 
     revalidatePath(`/products/${parsed.productId}/edit`)
@@ -832,6 +910,8 @@ export async function importFromWb(
         where: { id: parsed.productId },
         data: { updatedAt: new Date() },
       })
+      // Phase 18: пересчитать составное name после WB-импорта свойств
+      await regenerateProductName(tx, parsed.productId)
     })
 
     revalidatePath(`/products/${parsed.productId}/edit`)

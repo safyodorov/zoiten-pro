@@ -92,6 +92,7 @@ interface CategoryPropertyOption {
   kind: PropertyKind
   options: string[]
   wbAttrName: string | null
+  includeInName?: boolean // Phase 18
 }
 
 interface CategoryOption {
@@ -127,7 +128,10 @@ interface ProductArticleDB {
 interface ProductData {
   id?: string
   sku?: string
+  // Phase 18
+  article?: string
   name?: string
+  nameOverridden?: boolean
   photoUrl?: string | null
   brandId?: string
   categoryId?: string | null
@@ -160,7 +164,10 @@ interface ProductFormProps {
 // сервером по индексу массива.
 
 const formSchema = z.object({
-  name: z.string().min(1, "Введите название").max(100, "Максимум 100 символов"),
+  // Phase 18: бывший name → article. name отдельно (auto или override).
+  article: z.string().min(1, "Введите артикул").max(100, "Максимум 100 символов"),
+  name: z.string().max(255, "Максимум 255 символов").optional(),
+  nameOverridden: z.boolean(),
   brandId: z.string().min(1, "Выберите бренд"),
   categoryId: z.string().nullable().optional(),
   subcategoryId: z.string().nullable().optional(),
@@ -252,7 +259,9 @@ export function ProductForm({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      article: product?.article ?? "",
       name: product?.name ?? "",
+      nameOverridden: product?.nameOverridden ?? false,
       brandId: product?.brandId ?? "",
       categoryId: product?.categoryId ?? null,
       subcategoryId: product?.subcategoryId ?? null,
@@ -607,20 +616,23 @@ export function ProductForm({
             </div>
           )}
 
-          {/* Name */}
+          {/* Phase 18: Article (бывшее name) */}
           <FormField
             control={form.control}
-            name="name"
+            name="article"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Наименование</FormLabel>
+                <FormLabel>Артикул</FormLabel>
                 <FormControl>
-                  <Input placeholder="Введите название товара" {...field} />
+                  <Input placeholder="Артикул товара (например GM-300, Navy30)" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
+
+          {/* Phase 18: Auto-generated Name + override */}
+          <ProductNameField form={form} />
 
           {/* Brand */}
           <FormField
@@ -1081,6 +1093,86 @@ export function ProductForm({
         />
       )}
     </Form>
+  )
+}
+
+// ── ProductNameField (Phase 18) ────────────────────────────────────
+// Поле «Наименование товара» — readonly с пометкой «формируется автоматически»
+// когда nameOverridden=false. Кнопка «Редактировать вручную» включает override.
+// При override = true: editable Input с пометкой и кнопкой «Сгенерировать
+// автоматически» (сбросить override → name пересчитается на сервере при save).
+
+function ProductNameField({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form,
+}: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  form: ReturnType<typeof useForm<FormValues, any, any>>
+}) {
+  const overridden = useWatch({ control: form.control, name: "nameOverridden" })
+
+  return (
+    <FormField
+      control={form.control}
+      name="name"
+      render={({ field }) => (
+        <FormItem>
+          <div className="flex items-center justify-between">
+            <FormLabel>
+              Наименование товара
+              {overridden ? (
+                <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                  (редактировалось вручную)
+                </span>
+              ) : (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  (формируется автоматически)
+                </span>
+              )}
+            </FormLabel>
+            {overridden ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  form.setValue("nameOverridden", false, { shouldDirty: true })
+                  // Очищаем поле name — на сервере пересчитается из article/category/...
+                  form.setValue("name", "", { shouldDirty: true })
+                }}
+              >
+                Сгенерировать автоматически
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  form.setValue("nameOverridden", true, { shouldDirty: true })
+                }}
+              >
+                Редактировать вручную
+              </Button>
+            )}
+          </div>
+          <FormControl>
+            <Input
+              placeholder={
+                overridden
+                  ? "Введите своё название"
+                  : "Сохранится автоматически после сохранения товара"
+              }
+              disabled={!overridden}
+              value={field.value ?? ""}
+              onChange={(e) => field.onChange(e.target.value)}
+              className={!overridden ? "bg-muted/40" : undefined}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   )
 }
 

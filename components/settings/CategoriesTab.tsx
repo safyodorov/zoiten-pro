@@ -46,6 +46,7 @@ interface CategoryPropertyRow {
   kind: PropertyKind
   options: string[]
   wbAttrName: string | null
+  includeInName: boolean // Phase 18
   sortOrder: number
 }
 
@@ -218,6 +219,7 @@ function PropertyRow({ property }: { property: CategoryPropertyRow }) {
   const [kind, setKind] = useState<PropertyKind>(property.kind)
   const [optionsText, setOptionsText] = useState(property.options.join(", "))
   const [wbAttrName, setWbAttrName] = useState(property.wbAttrName ?? "")
+  const [includeInName, setIncludeInName] = useState(property.includeInName)
   const [isPending, startTransition] = useTransition()
 
   function handleSave() {
@@ -237,6 +239,7 @@ function PropertyRow({ property }: { property: CategoryPropertyRow }) {
         kind,
         options,
         wbAttrName: wbAttrName.trim() || null,
+        includeInName,
       })
       if (result.ok) {
         toast.success("Сохранено")
@@ -269,6 +272,7 @@ function PropertyRow({ property }: { property: CategoryPropertyRow }) {
     setKind(property.kind)
     setOptionsText(property.options.join(", "))
     setWbAttrName(property.wbAttrName ?? "")
+    setIncludeInName(property.includeInName)
     setEditing(false)
   }
 
@@ -311,6 +315,16 @@ function PropertyRow({ property }: { property: CategoryPropertyRow }) {
           className="h-7 text-xs"
           disabled={isPending}
         />
+        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={includeInName}
+            onChange={(e) => setIncludeInName(e.target.checked)}
+            disabled={isPending}
+            className="size-3.5"
+          />
+          Включать в название товара
+        </label>
         <div className="flex justify-end gap-1">
           <Button size="icon-xs" variant="ghost" onClick={handleSave} disabled={isPending} aria-label="Сохранить">
             <Check className="size-3" />
@@ -340,6 +354,11 @@ function PropertyRow({ property }: { property: CategoryPropertyRow }) {
         {property.wbAttrName && (
           <div className="text-[10px] text-muted-foreground truncate">
             WB: «{property.wbAttrName}»
+          </div>
+        )}
+        {property.includeInName && (
+          <div className="text-[10px] text-primary truncate">
+            ✓ в названии товара
           </div>
         )}
       </div>
@@ -378,6 +397,7 @@ function AddPropertyRow({ categoryId }: { categoryId: string }) {
   const [kind, setKind] = useState<PropertyKind>("STRING")
   const [optionsText, setOptionsText] = useState("")
   const [wbAttrName, setWbAttrName] = useState("")
+  const [includeInName, setIncludeInName] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   function handleAdd() {
@@ -397,12 +417,14 @@ function AddPropertyRow({ categoryId }: { categoryId: string }) {
         kind,
         options,
         wbAttrName: wbAttrName.trim() || null,
+        includeInName,
       })
       if (result.ok) {
         toast.success("Свойство добавлено")
         setName("")
         setOptionsText("")
         setWbAttrName("")
+        setIncludeInName(false)
         setKind("STRING")
         setAdding(false)
       } else {
@@ -467,6 +489,16 @@ function AddPropertyRow({ categoryId }: { categoryId: string }) {
         className="h-7 text-xs"
         disabled={isPending}
       />
+      <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={includeInName}
+          onChange={(e) => setIncludeInName(e.target.checked)}
+          disabled={isPending}
+          className="size-3.5"
+        />
+        Включать в название товара
+      </label>
       <div className="flex justify-end gap-1">
         <Button
           size="icon-xs"

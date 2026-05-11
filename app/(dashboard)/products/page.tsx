@@ -73,9 +73,14 @@ export default async function ProductsPage({
     where.availability = "IN_STOCK"
   }
 
-  // Text search
+  // Text search — Phase 18: ищем по name (составное) + article (бывший name) + sku
   if (q && q.trim()) {
-    where.name = { contains: q.trim(), mode: "insensitive" }
+    const term = q.trim()
+    where.OR = [
+      { name: { contains: term, mode: "insensitive" } },
+      { article: { contains: term, mode: "insensitive" } },
+      { sku: { contains: term, mode: "insensitive" } },
+    ]
   }
 
   // Brand filter

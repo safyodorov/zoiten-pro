@@ -51,6 +51,7 @@ const CategoryPropertySchema = z
     kind: PropertyKindEnum,
     options: z.array(z.string().min(1).max(100)).max(50).default([]),
     wbAttrName: z.string().max(100).nullable().optional(),
+    includeInName: z.boolean().optional().default(false),
   })
   .superRefine((data, ctx) => {
     if (data.kind === "ENUM" && data.options.length === 0) {
@@ -69,6 +70,7 @@ const UpdateCategoryPropertySchema = z
     kind: PropertyKindEnum,
     options: z.array(z.string().min(1).max(100)).max(50).default([]),
     wbAttrName: z.string().max(100).nullable().optional(),
+    includeInName: z.boolean().optional().default(false),
   })
   .superRefine((data, ctx) => {
     if (data.kind === "ENUM" && data.options.length === 0) {
@@ -364,6 +366,7 @@ export async function createCategoryProperty(
         kind: parsed.kind,
         options: parsed.kind === "ENUM" ? parsed.options : [],
         wbAttrName: parsed.wbAttrName ?? null,
+        includeInName: parsed.includeInName ?? false,
         sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
       },
     })
@@ -397,6 +400,7 @@ export async function updateCategoryProperty(
         kind: parsed.kind,
         options: parsed.kind === "ENUM" ? parsed.options : [],
         wbAttrName: parsed.wbAttrName ?? null,
+        includeInName: parsed.includeInName ?? false,
       },
     })
     revalidatePath("/admin/settings")

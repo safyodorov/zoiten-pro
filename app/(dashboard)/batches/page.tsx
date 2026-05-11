@@ -38,7 +38,13 @@ export default async function BatchesPage({
   const where: any = { deletedAt: null }
 
   if (q?.trim()) {
-    where.name = { contains: q.trim(), mode: "insensitive" }
+    // Phase 18: ищем по name (составное) + article + sku
+    const term = q.trim()
+    where.OR = [
+      { name: { contains: term, mode: "insensitive" } },
+      { article: { contains: term, mode: "insensitive" } },
+      { sku: { contains: term, mode: "insensitive" } },
+    ]
   }
   if (selectedBrandIds.length > 0) {
     where.brandId = { in: selectedBrandIds }
