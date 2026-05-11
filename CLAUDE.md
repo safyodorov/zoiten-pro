@@ -543,6 +543,36 @@ saveProductProperties → ProductPropertyValue upsert
 
 **Auto-refresh формы после save/import** — через `key={product.id}-{updatedAt}` на `<ProductForm>` в edit page.tsx + явный `tx.product.update({ data: { updatedAt: new Date() } })` в `importFromWb`. Без этого `useForm` не переинициализирует defaultValues после `router.refresh()`.
 
+## Phase 18: Автогенерируемое Product.name + Article rename
+
+**Модель (2026-05-11):**
+- `Product.name` → `Product.article` (rename, VARCHAR 100) — короткий артикул производителя
+- `Product.name` — новая VARCHAR(255), автогенерируемая по формуле
+- `Product.nameOverridden Boolean @default(false)` — флаг ручного редактирования
+- `CategoryProperty.includeInName Boolean @default(false)` — флаг включения value в название
+
+**Формула** (`lib/product-name.ts:generateProductName`):
+- `Brand.direction.hasSizes=true` (одежда): `[Category] [Subcategory] [...properties с includeInName=true (по sortOrder)] [Article]`
+- иначе (бытовая техника / без direction): `[Subcategory ?? Category] [Article]`
+- Пустые/null части пропускаются.
+
+**Server-side regenerate** через `regenerateProductName(tx, productId)` ([app/actions/products.ts](app/actions/products.ts)). Вызывается из `createProduct`, `updateProduct`, `duplicateProduct`, `saveProductProperties`, `importFromWb`. Skip если `nameOverridden=true`.
+
+**UI**: `<ProductNameField>` в ProductForm — readonly при `nameOverridden=false` с кнопкой «Редактировать вручную»; editable при `nameOverridden=true` с кнопкой «Сгенерировать автоматически».
+
+**Search updates**: `/products`, `/batches`, `app/actions/wb-cards.ts:searchProducts` — OR-поиск по `name` (составное) + `article` + `sku`.
+
+**WB-импорт в Product создаёт `article = firstCard.name`** (vendorCode из WB), `name` пересчитывается через `regenerateProductName`.
+
+## WB API rate-limit защиты
+
+WB лимиты per-endpoint: **Tariffs 100/час**, **Statistics 5/мин**, **Analytics 3/день**, Prices 10/sec. Без защит — несколько кликов «Sync» подряд → 429 на все endpoints + WB-CDN блокирует IP.
+
+Три защиты в коде:
+1. **`retryFetch` helper** в `lib/wb-api.ts` — backoff 1s→5s→15s на 429. Применён к Prices, Tariffs, Statistics, Analytics create, StocksPerWarehouse, OrdersPerWarehouse.
+2. **Analytics daily cap** через `AppSetting('wbAnalyticsDailyCounter')` — JSON `{date, count}`, max 3/UTC-сутки. При исчерпании `fetchBuyoutPercent` возвращает пустой Map с warning. Остальная sync продолжает.
+3. **UI cooldown 5 минут** в `WbSyncButton.tsx` — localStorage `zoiten.wbSync.lastRun` + live-обратный отсчёт на кнопке.
+
 ## Production performance gotchas
 
 - **`<Link prefetch={false}>` обязателен в Sidebar** ([NavLinks.tsx](components/layout/NavLinks.tsx)) — иначе после `revalidatePath` Next.js prefetches все 16 ссылок одновременно → блокирует HTTP/2 navigation queue в браузере → клик встаёт в очередь на 20-30 сек.

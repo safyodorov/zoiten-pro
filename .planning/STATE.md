@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
-status: Phase 17 + ext done, cascade filters + global product order applied everywhere
-stopped_at: 2026-05-11 — cascade filters в /stock и /stock/wb развёрнуты на проде (d1317bb)
-last_updated: "2026-05-11T11:32:00.000Z"
+status: Phase 18 done, prod live with composite Product.name + article rename
+stopped_at: 2026-05-11 — Phase 18 + WB rate limits + UserPreference pageSize + STRING-property combobox suggestions
+last_updated: "2026-05-11T19:30:00.000Z"
 progress:
-  total_phases: 14
-  completed_phases: 14
-  total_plans: 55
-  completed_plans: 56
+  total_phases: 15
+  completed_phases: 15
+  total_plans: 56
+  completed_plans: 57
 ---
 
 # Project State
