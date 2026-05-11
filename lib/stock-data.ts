@@ -61,6 +61,7 @@ export interface StockDataResult {
 }
 
 export interface StockFilters {
+  directionIds?: string[]
   brandIds?: string[]
   categoryIds?: string[]
   subcategoryIds?: string[]
@@ -88,6 +89,10 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
 
   if (filters.brandIds && filters.brandIds.length > 0) {
     whereFilters.brandId = { in: filters.brandIds }
+  }
+  // Направление живёт на Brand → фильтр через nested brand.directionId
+  if (filters.directionIds && filters.directionIds.length > 0) {
+    whereFilters.brand = { directionId: { in: filters.directionIds } }
   }
   if (filters.categoryIds && filters.categoryIds.length > 0) {
     whereFilters.categoryId = { in: filters.categoryIds }
@@ -236,20 +241,25 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
 // ──────────────────────────────────────────────────────────────────
 
 export async function getStockFilterOptions() {
-  const [brands, categories, subcategories] = await Promise.all([
-    prisma.brand.findMany({
+  // Cascade: каждый dependent с FK на родителя для client-side фильтрации опций
+  const [directions, brands, categories, subcategories] = await Promise.all([
+    prisma.productDirection.findMany({
       select: { id: true, name: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.brand.findMany({
+      select: { id: true, name: true, directionId: true },
       orderBy: { name: "asc" },
     }),
     prisma.category.findMany({
-      select: { id: true, name: true },
+      select: { id: true, name: true, brandId: true },
       orderBy: { name: "asc" },
     }),
     prisma.subcategory.findMany({
-      select: { id: true, name: true },
+      select: { id: true, name: true, categoryId: true },
       orderBy: { name: "asc" },
     }),
   ])
 
-  return { brands, categories, subcategories }
+  return { directions, brands, categories, subcategories }
 }

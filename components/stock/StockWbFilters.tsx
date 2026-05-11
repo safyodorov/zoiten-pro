@@ -1,18 +1,13 @@
-// components/stock/StockFilters.tsx
-// Phase 14 (STOCK-20): Фильтры для /stock — URL searchParams-driven.
-// 2026-05-11: добавлен фильтр Направление + каскадная фильтрация
-//             (Направление → Бренд → Категория → Подкатегория).
-//
-// Каждый dependent dropdown сужается до релевантных опций. При смене
-// родительского фильтра дочерние выборы бережно вычищаются.
+// components/stock/StockWbFilters.tsx
+// 2026-05-11: каскадные фильтры для /stock/wb.
+// Структура идентична StockFilters но без toggle «Только с дефицитом»
+// (на /stock/wb он не релевантен — там кластерная разбивка остатков).
 
 "use client"
 
 import { useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MultiSelectDropdown } from "@/components/ui/multi-select-dropdown"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
 
 interface DirectionOption {
   id: string
@@ -34,19 +29,19 @@ interface SubcategoryOption {
   categoryId: string
 }
 
-interface StockFiltersProps {
+interface StockWbFiltersProps {
   directions: DirectionOption[]
   brands: BrandOption[]
   categories: CategoryOption[]
   subcategories: SubcategoryOption[]
 }
 
-export function StockFilters({
+export function StockWbFilters({
   directions,
   brands,
   categories,
   subcategories,
-}: StockFiltersProps) {
+}: StockWbFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -54,9 +49,8 @@ export function StockFilters({
   const selectedBrands = searchParams.get("brands")?.split(",").filter(Boolean) ?? []
   const selectedCategories = searchParams.get("categories")?.split(",").filter(Boolean) ?? []
   const selectedSubcategories = searchParams.get("subcategories")?.split(",").filter(Boolean) ?? []
-  const onlyDeficit = searchParams.get("deficit") === "1"
 
-  // Cascade: какие опции показываем в каждом дочернем dropdown
+  // Cascade: какие опции показываем
   const visibleBrands =
     selectedDirections.length === 0
       ? brands
@@ -76,7 +70,6 @@ export function StockFilters({
       ? subcategories.filter((s) => visibleCategoryIds.has(s.categoryId))
       : subcategories.filter((s) => selectedCategories.includes(s.categoryId))
 
-  // Bulk-обновление URL с очисткой "стейл" дочерних выборов.
   const pushUrl = useCallback(
     (overrides: Record<string, string[]>) => {
       const params = new URLSearchParams(searchParams.toString())
@@ -154,17 +147,6 @@ export function StockFilters({
     pushUrl({ subcategories: values })
   }
 
-  // Переключатель «Только с дефицитом»
-  const toggleDeficit = useCallback(
-    (checked: boolean) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (checked) params.set("deficit", "1")
-      else params.delete("deficit")
-      router.replace(`?${params.toString()}`, { scroll: false })
-    },
-    [searchParams, router],
-  )
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <MultiSelectDropdown
@@ -191,18 +173,6 @@ export function StockFilters({
         selected={selectedSubcategories}
         onChange={setSubcategories}
       />
-
-      {/* Toggle: Только с дефицитом */}
-      <div className="flex items-center gap-2 ml-2">
-        <Switch
-          id="deficit-toggle"
-          checked={onlyDeficit}
-          onCheckedChange={toggleDeficit}
-        />
-        <Label htmlFor="deficit-toggle" className="text-sm cursor-pointer">
-          Только с дефицитом
-        </Label>
-      </div>
     </div>
   )
 }

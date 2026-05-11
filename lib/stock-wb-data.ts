@@ -82,16 +82,40 @@ export interface StockWbDataResult {
 
 const TURNOVER_NORM_KEY = "stock.turnoverNormDays"
 
-export async function getStockWbData(): Promise<StockWbDataResult> {
+export interface StockWbFiltersInput {
+  directionIds?: string[]
+  brandIds?: string[]
+  categoryIds?: string[]
+  subcategoryIds?: string[]
+}
+
+export async function getStockWbData(
+  filters: StockWbFiltersInput = {},
+): Promise<StockWbDataResult> {
   const setting = await prisma.appSetting.findUnique({ where: { key: TURNOVER_NORM_KEY } })
   const turnoverNormDays = setting ? parseInt(setting.value, 10) : 37
 
-  // Все Product с WB-артикулами
+  // Все Product с WB-артикулами + фильтры (если есть)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const productWhere: any = {
+    deletedAt: null,
+    articles: { some: { marketplace: { name: { in: ["WB", "wb", "Wildberries"] } } } },
+  }
+  if (filters.brandIds && filters.brandIds.length > 0) {
+    productWhere.brandId = { in: filters.brandIds }
+  }
+  if (filters.directionIds && filters.directionIds.length > 0) {
+    productWhere.brand = { directionId: { in: filters.directionIds } }
+  }
+  if (filters.categoryIds && filters.categoryIds.length > 0) {
+    productWhere.categoryId = { in: filters.categoryIds }
+  }
+  if (filters.subcategoryIds && filters.subcategoryIds.length > 0) {
+    productWhere.subcategoryId = { in: filters.subcategoryIds }
+  }
+
   const products = await prisma.product.findMany({
-    where: {
-      deletedAt: null,
-      articles: { some: { marketplace: { name: { in: ["WB", "wb", "Wildberries"] } } } },
-    },
+    where: productWhere,
     include: {
       brand: true,
       articles: {

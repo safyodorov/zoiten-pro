@@ -27,6 +27,7 @@ export const metadata = {
 // Next.js 15: searchParams — Promise<Record<string, string | string[] | undefined>>
 interface PageProps {
   searchParams: Promise<{
+    directions?: string
     brands?: string
     categories?: string
     subcategories?: string
@@ -40,6 +41,7 @@ export default async function StockPage({ searchParams }: PageProps) {
   const params = await searchParams
 
   const filters: StockFiltersType = {
+    directionIds: params.directions?.split(",").filter(Boolean),
     brandIds: params.brands?.split(",").filter(Boolean),
     categoryIds: params.categories?.split(",").filter(Boolean),
     subcategoryIds: params.subcategories?.split(",").filter(Boolean),
@@ -66,6 +68,7 @@ export default async function StockPage({ searchParams }: PageProps) {
       {/* Фильтры */}
       <div className="shrink-0">
         <StockFilters
+          directions={filterOptions.directions}
           brands={filterOptions.brands}
           categories={filterOptions.categories}
           subcategories={filterOptions.subcategories}
