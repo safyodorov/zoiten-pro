@@ -474,6 +474,82 @@ middleware.ts                ← RBAC route guard (Edge runtime)
 
 Подробно: [memory/project_zoiten_table_pattern.md](../../Users/User/.claude/projects/C--Claude/memory/project_zoiten_table_pattern.md)
 
+## Каскадные фильтры в product-таблицах (pattern)
+
+**Применяется к:** `/products`, `/cards/wb`, `/prices/wb`, `/stock`, `/stock/wb` — везде где список товаров.
+
+Порядок фильтров: **Направление → Бренд → Категория → Подкатегория**. Каждый dropdown справа сужает опции под выбор родителя (client-side фильтрация). При смене родительского фильтра — невалидные дочерние выборы тихо вычищаются из URL.
+
+**В page.tsx запрашивай FK-поля у dependent сущностей:**
+```typescript
+prisma.brand.findMany({ select: { id, name, directionId } })
+prisma.category.findMany({ select: { id, name, brandId } })
+prisma.subcategory.findMany({ select: { id, name, categoryId } })
+```
+
+**В where Prisma:**
+```typescript
+if (filters.directionIds?.length) {
+  where.brand = { directionId: { in: filters.directionIds } }
+}
+```
+
+**В UI компоненте** — паттерн `setDirections/setBrands/setCategories`: при изменении проверяй сохранённые выборы детей и оставляй только валидные. Канонический образец — [components/products/ProductFilters.tsx](components/products/ProductFilters.tsx).
+
+**Исключение** `/cards/wb`: Brand и Category — это значения текстовых полей `WbCard.brand`/`WbCard.category` (WB-классификация, не наши FK). Каскад делается через distinct `(brand, category)` пар вместо JOIN'ов.
+
+## Глобальная иерархическая сортировка товаров (pattern)
+
+Все product-таблицы используют единый orderBy: **Направление.sortOrder → Бренд.sortOrder → Категория.sortOrder → Подкатегория.sortOrder → name (RU алфавит внутри уровня)**.
+
+`sortOrder` каждого уровня настраивается через DnD в `/admin/settings` (Направления / Бренды / Категории / Подкатегории). Pages только применяют — порядок настраивается **глобально**, не per-page.
+
+**В RSC page:**
+```typescript
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
+prisma.product.findMany({ orderBy: PRODUCT_HIERARCHY_ORDER_BY })
+```
+
+**Для in-memory sort уже собранных групп** (например `/prices/wb` где product загружается через MarketplaceArticle):
+```typescript
+import { compareProductsByHierarchy } from "@/lib/product-order"
+groups.sort((a, b) => compareProductsByHierarchy(a.product, b.product))
+```
+
+Применено в: `/products`, `/prices/wb`, `/stock` (через `lib/stock-data.ts`), `/stock/wb` (через `lib/stock-wb-data.ts`), `/batches`. Nullable relations (brand.direction, category, subcategory) сортируются с null в конец.
+
+## Phase 17: Свойства товаров + Размерная сетка + Barcode↔ProductSize
+
+**Модель:**
+- `ProductDirection { id, name, sortOrder, hasSizes Boolean }` — справочник направлений (один Direction → N брендов через `Brand.directionId String?` nullable FK)
+- `CategoryProperty { categoryId, name, kind: STRING|ENUM|NUMBER, options String[], wbAttrName String? }` — EAV-определение свойства per Категория. wbAttrName используется для авто-импорта из WB `characteristics[].name`.
+- `ProductPropertyValue` — значение свойства per товар, `@@unique([productId, propertyId])`. value всегда String (multi-value хранится через ", ").
+- `ProductSize { productId, value, sortOrder }` — размер как отдельная сущность, под будущие per-size остатки/продажи. `@@unique([productId, value])`.
+- `Barcode.productSizeId String?` — nullable FK на ProductSize. WB-импорт привязывает barcode к размеру через `WbCard.rawJson.sizes[].skus[]`.
+
+**WB Content API парсинг (`lib/wb-api.ts:parseCard`):**
+- `characteristics: WbCharacteristicRaw[] | null` → сохраняется в `WbCard.characteristics Json?`
+- `sizes[].techSize` → `WbCard.techSizes String[]` (фильтр `"0"` для one-size товаров)
+- `value` в characteristics может быть `string | number | string[] | number[]` — нормализуется через `normalizeWbCharacteristicValue()` в строку
+
+**Critical decision:** WB-импорт в Product (свойства + размеры) делается **только** по explicit user action через кнопку «Импортировать из WB» в форме товара ([WbImportDialog](components/products/WbImportDialog.tsx)). `/api/wb-sync` пишет только в `WbCard`. Защита от затирания ручных правок.
+
+**Save order в форме товара** (важно для Barcode↔Size связи):
+```
+saveProductSizes  → ProductSize records создаются
+updateProduct     → Barcode создаётся, productSizeId резолвится из value
+saveProductProperties → ProductPropertyValue upsert
+```
+
+**Auto-refresh формы после save/import** — через `key={product.id}-{updatedAt}` на `<ProductForm>` в edit page.tsx + явный `tx.product.update({ data: { updatedAt: new Date() } })` в `importFromWb`. Без этого `useForm` не переинициализирует defaultValues после `router.refresh()`.
+
+## Production performance gotchas
+
+- **`<Link prefetch={false}>` обязателен в Sidebar** ([NavLinks.tsx](components/layout/NavLinks.tsx)) — иначе после `revalidatePath` Next.js prefetches все 16 ссылок одновременно → блокирует HTTP/2 navigation queue в браузере → клик встаёт в очередь на 20-30 сек.
+- **Списки с size=100+ тоже без prefetch** ([ProductsTable.tsx](components/products/ProductsTable.tsx)) — иначе тот же эффект (100 RSC prefetch на каждый видимый Link).
+- **Next.js должен слушать только localhost** — `Environment=HOSTNAME=127.0.0.1` в systemd unit, не `0.0.0.0` (default). Иначе боты долбят порт 3001 напрямую минуя nginx + SSL + rate-limit и засирают логи `Failed to find Server Action "x"`. Подтверждено diagnostic: [.planning/debug/failed-to-find-server-action.md](.planning/debug/failed-to-find-server-action.md). UFW активен с allow 22/80/443/8502.
+- **`commit -am` НЕ берёт untracked файлы** — используй `git add -A && git commit -m ...` если в коммите новые файлы.
+
 ## Per-user UI настройки
 
 Фильтры, скрытые колонки, сортировки и т.п., персистящиеся за пользователем:

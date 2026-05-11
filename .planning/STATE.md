@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Служба поддержки WB
-status: Phase 16 approved
-stopped_at: Phase 16 UAT approved — размерная разбивка остатков WB + sync bug fixed (gap fixes 9770d69 + 62a9b8e)
-last_updated: "2026-04-28T11:54:30.403Z"
+milestone: post-v1.1 maintenance
+milestone_name: Post-release UX iterations
+status: Phase 17 + ext done, cascade filters + global product order applied everywhere
+stopped_at: 2026-05-11 — cascade filters в /stock и /stock/wb развёрнуты на проде (d1317bb)
+last_updated: "2026-05-11T11:32:00.000Z"
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 51
-  completed_plans: 52
+  total_phases: 14
+  completed_phases: 14
+  total_plans: 55
+  completed_plans: 56
 ---
 
 # Project State
