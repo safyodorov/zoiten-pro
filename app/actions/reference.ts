@@ -23,6 +23,19 @@ const UpdateBrandSchema = BrandSchema.extend({
   id: z.string().min(1),
 })
 
+const ProductDirectionSchema = z.object({
+  name: z.string().min(1, "Не может быть пустым").max(100),
+})
+
+const UpdateProductDirectionSchema = ProductDirectionSchema.extend({
+  id: z.string().min(1),
+})
+
+const SetBrandDirectionSchema = z.object({
+  brandId: z.string().min(1),
+  directionId: z.string().min(1).nullable(),
+})
+
 const CategorySchema = z.object({
   name: z.string().min(1, "Не может быть пустым").max(100),
   brandId: z.string().min(1),
@@ -142,6 +155,123 @@ export async function deleteBrand(id: string): Promise<ActionResult> {
       return { ok: false, error: "Бренд не найден" }
     }
     console.error("deleteBrand error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// ── ProductDirection Actions ──────────────────────────────────────
+
+export async function createProductDirection(
+  data: z.infer<typeof ProductDirectionSchema>
+): Promise<CreateResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = ProductDirectionSchema.parse(data)
+    const maxOrder = await prisma.productDirection.aggregate({ _max: { sortOrder: true } })
+    const direction = await prisma.productDirection.create({
+      data: { name: parsed.name, sortOrder: (maxOrder._max.sortOrder ?? -1) + 1 },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true, id: direction.id }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2002") {
+      return { ok: false, error: "Направление с таким названием уже существует" }
+    }
+    console.error("createProductDirection error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function updateProductDirection(
+  data: z.infer<typeof UpdateProductDirectionSchema>
+): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = UpdateProductDirectionSchema.parse(data)
+    await prisma.productDirection.update({
+      where: { id: parsed.id },
+      data: { name: parsed.name },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2002") {
+      return { ok: false, error: "Направление с таким названием уже существует" }
+    }
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Направление не найдено" }
+    }
+    console.error("updateProductDirection error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function deleteProductDirection(id: string): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    // Brand.direction onDelete: SetNull — связки обнулятся автоматически, FK не блокирует.
+    await prisma.productDirection.delete({ where: { id } })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Направление не найдено" }
+    }
+    console.error("deleteProductDirection error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function reorderProductDirections(ids: string[]): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    await prisma.$transaction(
+      ids.map((id, i) =>
+        prisma.productDirection.update({ where: { id }, data: { sortOrder: i } })
+      )
+    )
+    revalidatePath("/admin/settings")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("reorderProductDirections error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+export async function setBrandDirection(
+  data: z.infer<typeof SetBrandDirectionSchema>
+): Promise<ActionResult> {
+  try {
+    await requireSuperadmin()
+    const parsed = SetBrandDirectionSchema.parse(data)
+    await prisma.brand.update({
+      where: { id: parsed.brandId },
+      data: { directionId: parsed.directionId },
+    })
+    revalidatePath("/admin/settings")
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Бренд не найден" }
+    }
+    if ((e as { code?: string })?.code === "P2003") {
+      return { ok: false, error: "Направление не найдено" }
+    }
+    console.error("setBrandDirection error:", e)
     return { ok: false, error: "Ошибка сервера" }
   }
 }

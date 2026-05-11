@@ -1,5 +1,5 @@
 // app/(dashboard)/products/page.tsx
-// Product list — RSC page with server-side pagination, filter, search, brand/category filters
+// Product list — RSC page with server-side pagination, filter, search, brand/category/direction filters
 
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
@@ -8,7 +8,6 @@ import { ProductsTable } from "@/components/products/ProductsTable"
 import { ProductStatusTabs } from "@/components/products/ProductStatusTabs"
 import { ProductSearchInput } from "@/components/products/ProductSearchInput"
 import { ProductFilters } from "@/components/products/ProductFilters"
-import { Availability } from "@prisma/client"
 
 const PAGE_SIZES = [20, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 20
@@ -24,6 +23,7 @@ export default async function ProductsPage({
     brands?: string
     categories?: string
     subcategories?: string
+    directions?: string
   }>
 }) {
   await requireSection("PRODUCTS")
@@ -35,6 +35,7 @@ export default async function ProductsPage({
     brands: brandsParam,
     categories: categoriesParam,
     subcategories: subcategoriesParam,
+    directions: directionsParam,
   } = await searchParams
 
   // Parse filter arrays from comma-separated URL params
@@ -44,6 +45,9 @@ export default async function ProductsPage({
     : []
   const selectedSubcategoryIds = subcategoriesParam
     ? subcategoriesParam.split(",").filter(Boolean)
+    : []
+  const selectedDirectionIds = directionsParam
+    ? directionsParam.split(",").filter(Boolean)
     : []
 
   // Build where clause
@@ -77,6 +81,11 @@ export default async function ProductsPage({
     where.brandId = { in: selectedBrandIds }
   }
 
+  // Direction filter — через brand.directionId (Product.direction нет, направление живёт на бренде)
+  if (selectedDirectionIds.length > 0) {
+    where.brand = { directionId: { in: selectedDirectionIds } }
+  }
+
   // Category filter
   if (selectedCategoryIds.length > 0) {
     where.categoryId = { in: selectedCategoryIds }
@@ -93,20 +102,26 @@ export default async function ProductsPage({
   const currentPage = Math.max(1, parseInt(pageParam ?? "1", 10))
   const skip = (currentPage - 1) * pageSize
 
-  // Fetch products + all brands/categories/subcategories for filter dropdowns
-  const [products, total, allBrands, allCategories, allSubcategories] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      include: { brand: true, category: true, subcategory: true },
-      orderBy: { createdAt: "desc" },
-      skip,
-      take: pageSize,
-    }),
-    prisma.product.count({ where }),
-    prisma.brand.findMany({ orderBy: { name: "asc" } }),
-    prisma.category.findMany({ orderBy: { name: "asc" } }),
-    prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
-  ])
+  // Fetch products + all brands/categories/subcategories/directions for filter dropdowns
+  const [products, total, allBrands, allCategories, allSubcategories, allDirections] =
+    await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          brand: { include: { direction: true } },
+          category: true,
+          subcategory: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: pageSize,
+      }),
+      prisma.product.count({ where }),
+      prisma.brand.findMany({ orderBy: { name: "asc" } }),
+      prisma.category.findMany({ orderBy: { name: "asc" } }),
+      prisma.subcategory.findMany({ orderBy: { name: "asc" } }),
+      prisma.productDirection.findMany({ orderBy: { sortOrder: "asc" } }),
+    ])
 
   const totalPages = Math.ceil(total / pageSize)
   const currentStatus = status ?? "IN_STOCK"
@@ -125,9 +140,11 @@ export default async function ProductsPage({
       <div className="flex items-center gap-4 flex-wrap">
         <ProductSearchInput defaultValue={q ?? ""} />
         <ProductFilters
+          directions={allDirections.map((d) => ({ id: d.id, name: d.name }))}
           brands={allBrands.map((b) => ({ id: b.id, name: b.name }))}
           categories={allCategories.map((c) => ({ id: c.id, name: c.name }))}
           subcategories={allSubcategories.map((s) => ({ id: s.id, name: s.name }))}
+          selectedDirectionIds={selectedDirectionIds}
           selectedBrandIds={selectedBrandIds}
           selectedCategoryIds={selectedCategoryIds}
           selectedSubcategoryIds={selectedSubcategoryIds}

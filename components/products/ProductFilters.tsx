@@ -12,9 +12,11 @@ interface FilterOption {
 }
 
 interface ProductFiltersProps {
+  directions: FilterOption[]
   brands: FilterOption[]
   categories: FilterOption[]
   subcategories: FilterOption[]
+  selectedDirectionIds: string[]
   selectedBrandIds: string[]
   selectedCategoryIds: string[]
   selectedSubcategoryIds: string[]
@@ -97,9 +99,11 @@ function MultiSelectDropdown({
 // ── Основной компонент фильтров ──────────────────────────────────
 
 export function ProductFilters({
+  directions,
   brands,
   categories,
   subcategories,
+  selectedDirectionIds,
   selectedBrandIds,
   selectedCategoryIds,
   selectedSubcategoryIds,
@@ -118,6 +122,10 @@ export function ProductFilters({
     return `/products${qs ? `?${qs}` : ""}`
   }
 
+  function setDirections(values: string[]) {
+    router.push(buildUrl({ directions: values.join(",") }))
+  }
+
   function setBrands(values: string[]) {
     router.push(buildUrl({ brands: values.join(",") }))
   }
@@ -131,11 +139,14 @@ export function ProductFilters({
   }
 
   function clearAll() {
-    router.push(buildUrl({ brands: "", categories: "", subcategories: "" }))
+    router.push(buildUrl({ directions: "", brands: "", categories: "", subcategories: "" }))
   }
 
   const hasFilters =
-    selectedBrandIds.length > 0 || selectedCategoryIds.length > 0 || selectedSubcategoryIds.length > 0
+    selectedDirectionIds.length > 0 ||
+    selectedBrandIds.length > 0 ||
+    selectedCategoryIds.length > 0 ||
+    selectedSubcategoryIds.length > 0
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -144,6 +155,12 @@ export function ProductFilters({
         options={brands}
         selected={selectedBrandIds}
         onChange={setBrands}
+      />
+      <MultiSelectDropdown
+        label="Направление"
+        options={directions}
+        selected={selectedDirectionIds}
+        onChange={setDirections}
       />
       <MultiSelectDropdown
         label="Категория"

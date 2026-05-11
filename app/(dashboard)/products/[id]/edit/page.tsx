@@ -27,6 +27,7 @@ export default async function EditProductPage({
     }),
     prisma.brand.findMany({
       include: {
+        direction: { select: { id: true, name: true } },
         categories: {
           orderBy: { sortOrder: "asc" },
           include: { subcategories: { orderBy: { sortOrder: "asc" } } },

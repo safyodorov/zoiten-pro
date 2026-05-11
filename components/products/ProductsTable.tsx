@@ -24,7 +24,7 @@ interface Product {
   sku: string
   name: string
   photoUrl: string | null
-  brand: { id: string; name: string }
+  brand: { id: string; name: string; direction: { id: string; name: string } | null }
   category: { id: string; name: string } | null
   subcategory: { id: string; name: string } | null
   abcStatus: string | null
@@ -131,6 +131,7 @@ export function ProductsTable({
               <TableHead className="w-16">Фото</TableHead>
               <TableHead className="max-w-[200px]">Наименование</TableHead>
               <TableHead>Бренд</TableHead>
+              <TableHead>Направление</TableHead>
               <TableHead>Категория</TableHead>
               <TableHead>Подкатегория</TableHead>
               <TableHead className="w-16">ABC</TableHead>
@@ -141,7 +142,7 @@ export function ProductsTable({
           <TableBody>
             {products.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   Товары не найдены
                 </TableCell>
               </TableRow>
@@ -175,6 +176,13 @@ export function ProductsTable({
 
                 {/* Brand */}
                 <TableCell>{product.brand.name}</TableCell>
+
+                {/* Direction */}
+                <TableCell>
+                  {product.brand.direction?.name ?? (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
 
                 {/* Category */}
                 <TableCell>

@@ -128,12 +128,26 @@ model Marketplace {
   barcodes  Barcode[]
 }
 
+// Направление товаров (например «Бытовая техника», «Одежда»).
+// Один Direction → N брендов, через Brand.directionId.
+// Product получает направление через свой бренд (никаких отдельных Product.directionId).
+model ProductDirection {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  brands    Brand[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Brand {
-  id         String     @id @default(cuid())
-  name       String     @unique
-  sortOrder  Int        @default(0)
-  categories Category[]
-  products   Product[]
+  id          String            @id @default(cuid())
+  name        String            @unique
+  sortOrder   Int               @default(0)
+  directionId String?
+  direction   ProductDirection? @relation(fields: [directionId], references: [id], onDelete: SetNull)
+  categories  Category[]
+  products    Product[]
 }
 
 model Category {

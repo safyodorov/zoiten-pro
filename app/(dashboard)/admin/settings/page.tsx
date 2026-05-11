@@ -6,7 +6,7 @@ import { SettingsTabs } from "@/components/settings/SettingsTabs"
 export default async function SettingsPage() {
   await requireSuperadmin() // SUPERADMIN only (D-03)
 
-  const [brands, marketplaces] = await Promise.all([
+  const [brands, marketplaces, directions] = await Promise.all([
     prisma.brand.findMany({
       orderBy: { sortOrder: "asc" },
       include: {
@@ -17,11 +17,28 @@ export default async function SettingsPage() {
       },
     }),
     prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.productDirection.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: {
+        brands: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true } },
+      },
+    }),
   ])
+
+  const brandsLite = brands.map((b) => ({
+    id: b.id,
+    name: b.name,
+    directionId: b.directionId,
+  }))
 
   return (
     <div className="space-y-6">
-      <SettingsTabs brands={brands} marketplaces={marketplaces} />
+      <SettingsTabs
+        brands={brands}
+        marketplaces={marketplaces}
+        directions={directions}
+        brandsLite={brandsLite}
+      />
     </div>
   )
 }

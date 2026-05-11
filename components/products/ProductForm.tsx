@@ -87,6 +87,7 @@ interface CategoryOption {
 interface BrandWithCategories {
   id: string
   name: string
+  direction: { id: string; name: string } | null
   categories: CategoryOption[]
 }
 
@@ -270,6 +271,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   // ── Reference data derived from current brand ──────────────────────
 
   const currentBrand = brandsState.find((b) => b.id === watchedBrandId)
+  const currentDirectionName = currentBrand?.direction?.name ?? null
   const categoryOptions =
     currentBrand?.categories.map((c) => ({ value: c.id, label: c.name })) ?? []
 
@@ -293,7 +295,12 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   async function handleCreateBrand(name: string) {
     const result = await createBrand({ name })
     if (result.ok) {
-      const newBrand: BrandWithCategories = { id: result.id, name, categories: [] }
+      const newBrand: BrandWithCategories = {
+        id: result.id,
+        name,
+        direction: null,
+        categories: [],
+      }
       setBrandsState((prev) => [...prev, newBrand])
       form.setValue("brandId", result.id)
     } else {
@@ -476,6 +483,14 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
               </FormItem>
             )}
           />
+
+          {/* Direction — read-only, derived from selected brand */}
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Направление</p>
+            <p className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-md">
+              {currentDirectionName ?? (watchedBrandId ? "Не назначено" : "—")}
+            </p>
+          </div>
 
           {/* Category */}
           <FormField
