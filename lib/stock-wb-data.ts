@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { CLUSTER_ORDER, type ClusterShortName, sortSizes } from "@/lib/wb-clusters"
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 
 export interface WarehouseSlot {
   warehouseId: number
@@ -97,7 +98,8 @@ export async function getStockWbData(): Promise<StockWbDataResult> {
         include: { marketplace: true },
       },
     },
-    orderBy: { sku: "asc" },
+    // Глобальная иерархия: Направление → Бренд → Категория → Подкатегория → name
+    orderBy: PRODUCT_HIERARCHY_ORDER_BY,
   })
 
   // Собрать все WB nmIds

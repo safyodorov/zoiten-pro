@@ -10,6 +10,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { requireSection } from "@/lib/rbac"
+import { compareProductsByHierarchy } from "@/lib/product-order"
 import {
   calculatePricing,
   resolveDrrPct,
@@ -172,6 +173,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     // Привязанные статьи WB с учётом фильтров бренд/категория/подкатегория.
     // orderBy: sortOrder — чтобы порядок карточек в /prices/wb совпадал
     // с drag-and-drop-ом из /products/[id]/edit (первый = основной).
+    // Дополнительно подтягиваем sortOrder + direction для in-memory sort групп ниже.
     prisma.marketplaceArticle.findMany({
       where: {
         marketplaceId: wbMarketplace.id,
@@ -182,8 +184,16 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         product: {
           include: {
             cost: true,
-            subcategory: true,
-            category: true,
+            subcategory: { select: { id: true, name: true, sortOrder: true } },
+            category: { select: { id: true, name: true, sortOrder: true } },
+            brand: {
+              select: {
+                id: true,
+                name: true,
+                sortOrder: true,
+                direction: { select: { id: true, name: true, sortOrder: true } },
+              },
+            },
           },
         },
       },
@@ -638,10 +648,21 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     ? groups.filter((g) => g.product.totalStock > 0)
     : groups
 
-  // Сортировка групп по названию Product (для детерминизма)
-  filteredGroups.sort((a, b) =>
-    a.product.name.localeCompare(b.product.name, "ru"),
-  )
+  // Глобальная иерархическая сортировка: Направление → Бренд → Категория → Подкатегория → name
+  // groups[].product содержит только агрегированные поля — для иерархии берём
+  // оригинальный LinkedProduct через productByProductId Map.
+  const productByProductId = new Map<string, LinkedProduct>()
+  for (const a of linkedArticles) {
+    if (!productByProductId.has(a.product.id)) {
+      productByProductId.set(a.product.id, a.product)
+    }
+  }
+  filteredGroups.sort((a, b) => {
+    const pa = productByProductId.get(a.product.id)
+    const pb = productByProductId.get(b.product.id)
+    if (!pa || !pb) return 0
+    return compareProductsByHierarchy(pa, pb)
+  })
 
   return (
     // h-full + flex-col: шапка (ставки/фильтры/алерт) неподвижна,

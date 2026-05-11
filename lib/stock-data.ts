@@ -9,6 +9,7 @@
 // - Фильтр onlyDeficit: dynamically imported calculateStockMetrics
 
 import { prisma } from "@/lib/prisma"
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 
 // ──────────────────────────────────────────────────────────────────
 // Types (публичный контракт для StockProductTable + page.tsx)
@@ -106,7 +107,9 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
         orderBy: { sortOrder: "asc" },
       },
     },
-    orderBy: { sku: "asc" },
+    // Глобальная иерархия: Направление → Бренд → Категория → Подкатегория → name
+    // (sortOrder каждого уровня настраивается DnD в /admin/settings)
+    orderBy: PRODUCT_HIERARCHY_ORDER_BY,
   })
 
   // 3. Батч-запрос WbCard для всех WB-артикулов (один запрос на всю страницу)

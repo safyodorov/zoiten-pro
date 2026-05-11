@@ -8,6 +8,7 @@ import { ProductsTable } from "@/components/products/ProductsTable"
 import { ProductStatusTabs } from "@/components/products/ProductStatusTabs"
 import { ProductSearchInput } from "@/components/products/ProductSearchInput"
 import { ProductFilters } from "@/components/products/ProductFilters"
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 
 const PAGE_SIZES = [20, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 20
@@ -112,7 +113,9 @@ export default async function ProductsPage({
           category: true,
           subcategory: true,
         },
-        orderBy: { createdAt: "desc" },
+        // Иерархическая сортировка: Направление → Бренд → Категория → Подкатегория → name
+        // (sortOrder задаётся drag-and-drop в /admin/settings)
+        orderBy: PRODUCT_HIERARCHY_ORDER_BY,
         skip,
         take: pageSize,
       }),

@@ -6,6 +6,7 @@ import { requireSection } from "@/lib/rbac"
 import { CostTable } from "@/components/cost/CostTable"
 import { CostFilters } from "@/components/cost/CostFilters"
 import { CostSearchInput } from "@/components/cost/CostSearchInput"
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 
 const PAGE_SIZES = [20, 50, 100] as const
 const DEFAULT_PAGE_SIZE = 20
@@ -58,7 +59,8 @@ export default async function BatchesPage({
     prisma.product.findMany({
       where,
       include: { brand: true, category: true, subcategory: true, cost: true },
-      orderBy: { createdAt: "desc" },
+      // Иерархическая сортировка: Направление → Бренд → Категория → Подкатегория → name
+      orderBy: PRODUCT_HIERARCHY_ORDER_BY,
       skip,
       take: pageSize,
     }),
