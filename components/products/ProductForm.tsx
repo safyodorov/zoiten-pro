@@ -266,8 +266,23 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
     },
   })
 
-  // Phase 17: WB import dialog state
-  const [wbImportOpen, setWbImportOpen] = useState(false)
+  // Phase 17: WB import dialog state.
+  // 2026-05-11: state хранится в localStorage чтобы пережить recreate формы
+  // после revalidatePath в commitSave (formKey в edit page завязан на updatedAt
+  // → меняется → ProductForm пересоздаётся → useState reset). Без этого после
+  // autosave перед WB Import диалог мгновенно исчезает (recreate с initial false).
+  const wbImportStorageKey = product?.id ? `zoiten.wbImport.${product.id}` : null
+  const [wbImportOpen, setWbImportOpenState] = useState<boolean>(() => {
+    if (!wbImportStorageKey || typeof window === "undefined") return false
+    return window.localStorage.getItem(wbImportStorageKey) === "1"
+  })
+  const setWbImportOpen = (open: boolean) => {
+    setWbImportOpenState(open)
+    if (wbImportStorageKey && typeof window !== "undefined") {
+      if (open) window.localStorage.setItem(wbImportStorageKey, "1")
+      else window.localStorage.removeItem(wbImportStorageKey)
+    }
+  }
 
   // ── Field arrays ──────────────────────────────────────────────────
 
@@ -434,7 +449,11 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
   // Возвращает true если сохранение прошло успешно, без router.refresh/push —
   // вызывающий сам решает что делать после save (refresh, open dialog, etc.).
 
-  async function commitSave(values: FormValues): Promise<boolean> {
+  async function commitSave(
+    values: FormValues,
+    options: { saveProperties?: boolean } = {}
+  ): Promise<boolean> {
+    const saveProperties = options.saveProperties ?? true
     // 260421-iq7: marketplaces[].articles[].{value, barcodes[]} — sortOrder генерируется сервером
     // Phase 17 ext: barcodes теперь также содержат productSizeValue (резолвится в FK на сервере)
     const marketplacesData = values.marketplaces.map((mp) => ({
@@ -492,7 +511,10 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
         toast.error(result.error)
         return false
       }
-      if (propsForSave.length > 0) {
+      // 2026-05-11: saveProperties=false при autosave перед WB Import —
+      // иначе пустые value (для свойств которых нет в form state) затёрли бы
+      // существующие записи в БД через deleteMany.
+      if (saveProperties && propsForSave.length > 0) {
         const r = await saveProductProperties({ productId: product.id, values: propsForSave })
         if (!r.ok) toast.error(`Свойства: ${r.error}`)
       }
@@ -553,7 +575,7 @@ export function ProductForm({ brands, marketplaces, product }: ProductFormProps)
       return
     }
     startTransition(async () => {
-      const ok = await commitSave(form.getValues())
+      const ok = await commitSave(form.getValues(), { saveProperties: false })
       if (ok) setWbImportOpen(true)
     })
   }
