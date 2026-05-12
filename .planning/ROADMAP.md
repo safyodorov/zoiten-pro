@@ -397,3 +397,23 @@ Plans:
 **Wave 0:** `scripts/wb-stocks-diagnose.js` — golden baseline ДО фикса (diff!=0 ожидается), повторный прогон в Plan 16-06 верифицирует diff=0 после re-sync.
 
 **UI hint**: yes (изменение визуализации /stock/wb — кнопка «По размерам» + размерные строки под каждым nmId)
+
+
+## Backlog
+
+### Phase 999.1: WB Cooldown Bus — глобальный координатор cron + sync кнопок при 429 IP-блокировке (BACKLOG)
+
+**Goal:** [Captured for future planning — see context below]
+
+**Requirements:** TBD
+
+**Context (2026-05-12):** После rate-limit cascade этого дня выяснилось: per-endpoint locks работают (wbQuestionsLockedUntil, wbFeedbacksLockedUntil из quick task 260512-gvy + AppSetting('wbAnalyticsDailyCounter') из Phase 7), НО они не координируются между разными cron-сервисами (chat-sync 5мин, support-sync 15мин, returns-sync 1ч) и ручными кнопками (wb-sync, wb-sync-spp). Когда один endpoint в lock (например Statistics 429), остальные продолжают долбить соседние endpoint'ы того же scope WB_API_TOKEN, копя «репутацию IP» у WB anti-abuse.
+
+**Идея:** Централизованный AppSetting('wbCooldownUntil') или таблица per-endpoint cooldowns; helper `await withWbCooldownCheck(scope, fn)` который короткозамыкает запрос если scope «остужается» — без обращения к WB. UI должен видеть это в /api/wb-sync ответе.
+
+**Цель:** Убрать класс ошибок «когда Statistics блокирован, мы не нагружаем ему соседей через Tariffs/Prices/Analytics».
+
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
