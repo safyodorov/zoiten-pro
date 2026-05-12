@@ -103,15 +103,17 @@ describe("fetchOrdersPerWarehouse", () => {
     expect(url).toContain("dateFrom=")
   })
 
-  it("HTTP !ok (non-429) → пустой Map, не throw", async () => {
+  it("HTTP !ok (non-429) → throw (caller отвечает за graceful degradation)", async () => {
+    // 2026-05-12: после фикса wb-sync-nullifies-on-429 функция бросает на !ok,
+    // чтобы caller (route.ts) различал «данных нет» от «API упал» и не перетирал БД NULL'ом.
     ;(fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: false,
       status: 500,
+      text: async () => "Internal Server Error",
       json: async () => ({}),
     })
 
-    const result = await fetchOrdersPerWarehouse([100], 7)
-    expect(result.size).toBe(0)
+    await expect(fetchOrdersPerWarehouse([100], 7)).rejects.toThrow(/WB Orders API/)
   })
 
   it("пустой warehouseName не попадает в perWarehouse", async () => {
