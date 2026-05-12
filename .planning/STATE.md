@@ -270,6 +270,7 @@ None yet.
 | 260420-oxd | /support/returns: ffmpeg thumbnail для VIDEO + sharp для IMAGE + WB CDN tm/ + width/height/decoding | 2026-04-20 | eceae9e |  | [260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-](./quick/260420-oxd-support-returns-ffmpeg-thumbnail-wb-cdn-/) |
 | 260421-iq7 | Товары: drag-and-drop порядок артикулов + barcodes → MarketplaceArticle + unique per marketplace | 2026-04-21 | 96fb4c7 | Verified | [260421-iq7-drag-and-drop-per](./quick/260421-iq7-drag-and-drop-per/) |
 | 260422-oy5 | Per-user фильтр складов в /stock/wb (чекбоксы по кластерам, persist в БД) | 2026-04-22 | 5caf963 |  | [260422-oy5-per-user-stock-wb](./quick/260422-oy5-per-user-stock-wb/) |
+| 260512-gvy | support-sync: lock WB /questions при 429>60s через AppSetting('wbQuestionsLockedUntil') | 2026-05-12 | 0fb279e | Verified | [260512-gvy-support-sync-respect-x-ratelimit-retry-o](./quick/260512-gvy-support-sync-respect-x-ratelimit-retry-o/) |
 
 ### Blockers/Concerns
 
