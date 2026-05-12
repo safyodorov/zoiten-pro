@@ -33,9 +33,11 @@ const CHAT_PAUSE_MS = 1000
 const CHAT_MAX_PAGES = 20
 const CHAT_UPLOAD_DIR = process.env.UPLOAD_DIR || "/var/www/zoiten-uploads"
 const LAST_EVENT_NEXT_KEY = "support.chat.lastEventNext"
-// Персистентный lock при 429>cap на /questions (retryAfterSec > 60).
+// Персистентный lock при 429>cap на /questions и /feedbacks (retryAfterSec > 60).
 // AppSetting value = ISO-строка момента разблокировки.
+// 2026-05-12: Feedbacks тоже стал ловить 429 после rate-limit cascade — тот же паттерн.
 const QUESTIONS_LOCK_KEY = "wbQuestionsLockedUntil"
+const FEEDBACKS_LOCK_KEY = "wbFeedbacksLockedUntil"
 
 export interface SyncResult {
   feedbacksSynced: number
@@ -52,21 +54,67 @@ export async function syncSupport(
   let questionsSynced = 0
 
   // 1. Feedbacks — пагинация по skip, take=5000
+  // Lock-aware pre-check: симметрично с Questions (см. ниже).
   const feedbacks: Feedback[] = []
-  for (let skip = 0; ; skip += 5000) {
-    try {
-      const batch = await listFeedbacks({
-        isAnswered: opts.isAnswered,
-        take: 5000,
-        skip,
-      })
-      feedbacks.push(...batch)
-      if (batch.length < 5000) break
-    } catch (err) {
-      errors.push(
-        `Feedbacks skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
-      )
-      break
+  let feedbacksLocked = false
+  const feedbacksLockRow = await prisma.appSetting.findUnique({
+    where: { key: FEEDBACKS_LOCK_KEY },
+  })
+  if (feedbacksLockRow?.value) {
+    const unlockAt = new Date(feedbacksLockRow.value)
+    if (!Number.isNaN(unlockAt.getTime()) && unlockAt.getTime() > Date.now()) {
+      const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
+      const msg = `Feedbacks locked until ${mskStr} МСК (skipped, WB rate-limit)`
+      console.info(`[support-sync] ${msg}`)
+      errors.push(msg)
+      feedbacksLocked = true
+    }
+  }
+
+  if (!feedbacksLocked) {
+    let feedbacksCallSucceeded = false
+    for (let skip = 0; ; skip += 5000) {
+      try {
+        const batch = await listFeedbacks({
+          isAnswered: opts.isAnswered,
+          take: 5000,
+          skip,
+        })
+        feedbacks.push(...batch)
+        feedbacksCallSucceeded = true
+        if (batch.length < 5000) break
+      } catch (err) {
+        if (err instanceof WbRateLimitError) {
+          const unlockAt = new Date(Date.now() + err.retryAfterSec * 1000)
+          const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
+          console.warn(
+            `[support-sync] WB /feedbacks 429 retry=${err.retryAfterSec}s — locking until ${mskStr} МСК`
+          )
+          try {
+            await prisma.appSetting.upsert({
+              where: { key: FEEDBACKS_LOCK_KEY },
+              create: { key: FEEDBACKS_LOCK_KEY, value: unlockAt.toISOString() },
+              update: { value: unlockAt.toISOString() },
+            })
+          } catch (lockErr) {
+            errors.push(
+              `wbFeedbacksLockedUntil upsert: ${lockErr instanceof Error ? lockErr.message : "unknown"}`
+            )
+          }
+          errors.push(`Feedbacks skip=${skip}: ${err.message}`)
+        } else {
+          errors.push(
+            `Feedbacks skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
+          )
+        }
+        break
+      }
+    }
+
+    if (feedbacksCallSucceeded && feedbacksLockRow) {
+      await prisma.appSetting
+        .delete({ where: { key: FEEDBACKS_LOCK_KEY } })
+        .catch(() => {})
     }
   }
 

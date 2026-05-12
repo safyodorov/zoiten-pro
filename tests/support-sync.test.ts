@@ -312,15 +312,31 @@ describe("syncSupport", () => {
 
   // ── Новые тесты: lock-aware questions ───────────────────────
 
+  // 2026-05-12: lock-aware теперь применяется и к Feedbacks тоже (тот же паттерн).
+  // findUnique вызывается дважды per syncSupport (1: Feedbacks, 2: Questions),
+  // мокаем через mockImplementation с разводкой по key.
+  function mockLocks(prisma: any, locks: { feedbacks?: string | null; questions?: string | null }) {
+    prisma.appSetting.findUnique.mockImplementation((args: any) => {
+      const key = args?.where?.key
+      if (key === "wbFeedbacksLockedUntil") {
+        return Promise.resolve(locks.feedbacks ? { value: locks.feedbacks } : null)
+      }
+      if (key === "wbQuestionsLockedUntil") {
+        return Promise.resolve(locks.questions ? { value: locks.questions } : null)
+      }
+      return Promise.resolve(null)
+    })
+  }
+
   it("пропускает listQuestions если wbQuestionsLockedUntil > now", async () => {
     const { listFeedbacks, listQuestions } = (await import(
       "@/lib/wb-support-api"
     )) as any
     const { prisma } = (await import("@/lib/prisma")) as any
 
-    // Lock активен: разблокировка через 10 минут
+    // Только Questions lock активен; Feedbacks свободен.
     const unlockAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
-    prisma.appSetting.findUnique.mockResolvedValueOnce({ value: unlockAt })
+    mockLocks(prisma, { questions: unlockAt })
 
     listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
     listQuestions.mockResolvedValueOnce([])
@@ -328,14 +344,33 @@ describe("syncSupport", () => {
     const { syncSupport } = await import("@/lib/support-sync")
     const result = await syncSupport()
 
-    // listQuestions НЕ должен быть вызван при активном lock
     expect(listQuestions).not.toHaveBeenCalled()
-    // Ошибка содержит сообщение о lock
-    expect(result.errors.some((e: string) => e.includes("locked until"))).toBe(true)
-    // questionsSynced = 0 при skip
+    expect(result.errors.some((e: string) => e.includes("Questions locked until"))).toBe(true)
     expect(result.questionsSynced).toBe(0)
-    // Feedbacks при этом синкаются (listFeedbacks вызван)
     expect(listFeedbacks).toHaveBeenCalled()
+  })
+
+  it("пропускает listFeedbacks если wbFeedbacksLockedUntil > now (симметрично Questions)", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    // Только Feedbacks lock активен; Questions свободен.
+    const unlockAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    mockLocks(prisma, { feedbacks: unlockAt })
+
+    listFeedbacks.mockResolvedValue([])
+    listQuestions.mockResolvedValueOnce([])
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    const result = await syncSupport()
+
+    expect(listFeedbacks).not.toHaveBeenCalled()
+    expect(result.errors.some((e: string) => e.includes("Feedbacks locked until"))).toBe(true)
+    expect(result.feedbacksSynced).toBe(0)
+    // Questions при этом синкается
+    expect(listQuestions).toHaveBeenCalled()
   })
 
   it("записывает wbQuestionsLockedUntil при WbRateLimitError", async () => {
@@ -344,8 +379,7 @@ describe("syncSupport", () => {
     )) as any
     const { prisma } = (await import("@/lib/prisma")) as any
 
-    // Нет активного lock
-    prisma.appSetting.findUnique.mockResolvedValueOnce(null)
+    mockLocks(prisma, {})
 
     listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
     listQuestions.mockRejectedValueOnce(
@@ -357,14 +391,12 @@ describe("syncSupport", () => {
     await syncSupport()
     const after = Date.now()
 
-    // upsert вызван с key="wbQuestionsLockedUntil"
     expect(prisma.appSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { key: "wbQuestionsLockedUntil" },
       })
     )
 
-    // Значение разблокировки ≈ now + 720s ± 5s
     const upsertCall = prisma.appSetting.upsert.mock.calls.find(
       (c: any[]) => c[0]?.where?.key === "wbQuestionsLockedUntil"
     )
@@ -374,23 +406,45 @@ describe("syncSupport", () => {
     expect(Math.abs(storedDate - (after + 720 * 1000))).toBeLessThan(5000 + (after - before))
   })
 
+  it("записывает wbFeedbacksLockedUntil при WbRateLimitError на Feedbacks", async () => {
+    const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    mockLocks(prisma, {})
+
+    listFeedbacks.mockRejectedValueOnce(
+      new WbRateLimitError(720, "/api/v1/feedbacks?take=5000&skip=0")
+    )
+    listQuestions.mockResolvedValueOnce([])
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    await syncSupport()
+
+    expect(prisma.appSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: "wbFeedbacksLockedUntil" },
+      })
+    )
+  })
+
   it("удаляет wbQuestionsLockedUntil при успехе listQuestions (lockRow есть)", async () => {
     const { listFeedbacks, listQuestions } = (await import(
       "@/lib/wb-support-api"
     )) as any
     const { prisma } = (await import("@/lib/prisma")) as any
 
-    // Lock есть в БД но уже истёк (прошлая дата)
+    // Questions lock есть но истёк
     const expiredLock = new Date(Date.now() - 60 * 1000).toISOString()
-    prisma.appSetting.findUnique.mockResolvedValueOnce({ value: expiredLock })
+    mockLocks(prisma, { questions: expiredLock })
 
     listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
-    listQuestions.mockResolvedValueOnce([]) // успешный ответ
+    listQuestions.mockResolvedValueOnce([])
 
     const { syncSupport } = await import("@/lib/support-sync")
     await syncSupport()
 
-    // delete вызван с key="wbQuestionsLockedUntil" — cleanup устаревшего lock
     expect(prisma.appSetting.delete).toHaveBeenCalledWith({
       where: { key: "wbQuestionsLockedUntil" },
     })
@@ -402,8 +456,7 @@ describe("syncSupport", () => {
     )) as any
     const { prisma } = (await import("@/lib/prisma")) as any
 
-    // Нет lock в БД
-    prisma.appSetting.findUnique.mockResolvedValueOnce(null)
+    mockLocks(prisma, {})
 
     listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
     listQuestions.mockResolvedValueOnce([])
@@ -411,7 +464,6 @@ describe("syncSupport", () => {
     const { syncSupport } = await import("@/lib/support-sync")
     await syncSupport()
 
-    // delete НЕ должен быть вызван — нечего чистить
     expect(prisma.appSetting.delete).not.toHaveBeenCalledWith({
       where: { key: "wbQuestionsLockedUntil" },
     })
