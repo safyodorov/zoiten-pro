@@ -192,7 +192,8 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
   const limit = 1000
 
   while (true) {
-    const res = await retryFetch(
+    const res = await wbFetch(
+      "Prices API",
       `${PRICES_API}/api/v2/list/goods/filter?limit=${limit}&offset=${offset}`,
       {
         headers: { Authorization: token },
@@ -239,7 +240,8 @@ export async function fetchStocks(): Promise<Map<number, number>> {
   const token = getToken()
   const stockMap = new Map<number, number>()
 
-  const res = await retryFetch(
+  const res = await wbFetch(
+    "Statistics API (stocks)",
     "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
     { headers: { Authorization: token } }
   )
@@ -283,7 +285,8 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
     const id = crypto.randomUUID()
 
     // 1. Создаём задание на отчёт
-    const createRes = await retryFetch(
+    const createRes = await wbFetch(
+      "Analytics API (buyout)",
       "https://seller-analytics-api.wildberries.ru/api/v2/nm-report/downloads",
       {
         method: "POST",
@@ -491,7 +494,8 @@ export async function fetchStandardCommissions(): Promise<Map<number, { fbw: num
   const token = getToken()
   const commMap = new Map<number, { fbw: number; fbs: number }>()
 
-  const res = await retryFetch(
+  const res = await wbFetch(
+    "Tariffs API",
     "https://common-api.wildberries.ru/api/v1/tariffs/commission?locale=ru",
     { headers: { Authorization: token } }
   )
@@ -653,25 +657,44 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * fetch с retry на 429 с экспоненциальным backoff (1s → 5s → 15s).
- * Возвращает финальный Response — caller сам решает что делать с !ok после исчерпания retry.
+ * Типизированная ошибка rate-limit WB API. Несёт `retryAfterSec` из заголовка
+ * `X-Ratelimit-Retry` — route.ts пробрасывает это число в JSON-ответ, UI
+ * показывает «WB просит подождать X сек».
  *
- * 2026-05-11: WB API rate limits (Tariffs 100/hour, Statistics 5/min, Analytics 3/day)
- * легко исчерпываются при частых запусках /api/wb-sync. Без retry один 429 разваливал
- * всю синхронизацию — этот helper даёт WB время остыть.
+ * 2026-05-12: Заменяет старый паттерн `throw new Error("... 429: text")`.
+ * Возможность caller'у различить «провал API из-за rate-limit» от прочих
+ * ошибок и сообщить пользователю точное время ожидания.
  */
-async function retryFetch(
-  url: string,
-  opts: RequestInit = {},
-  backoffMs: number[] = [1000, 5000, 15000]
-): Promise<Response> {
-  let attempt = 0
-  while (true) {
-    const res = await fetch(url, opts)
-    if (res.status !== 429 || attempt >= backoffMs.length) return res
-    await sleep(backoffMs[attempt])
-    attempt++
+export class WbRateLimitError extends Error {
+  readonly endpoint: string
+  readonly retryAfterSec: number
+
+  constructor(endpoint: string, retryAfterSec: number) {
+    super(`WB ${endpoint}: 429 Too Many Requests (retry-after ${retryAfterSec}s)`)
+    this.name = "WbRateLimitError"
+    this.endpoint = endpoint
+    this.retryAfterSec = retryAfterSec
   }
+}
+
+/**
+ * Тонкая обёртка над fetch для WB API. На 429 — читает `X-Ratelimit-Retry`
+ * (секунды до восстановления) и бросает `WbRateLimitError`. На прочие
+ * ответы — возвращает Response как есть (caller сам проверяет `!res.ok`).
+ *
+ * 2026-05-12: ПРИНЦИПИАЛЬНАЯ замена retryFetch. Раньше при 429 повторяли
+ * запрос 3 раза с backoff 1s/5s/15s, считая что «WB остудится». На практике
+ * это исчерпывало лимит **быстрее** (1 клик = 4 запроса/endpoint) и не
+ * сбрасывало WB-таймер. WB сам знает, сколько ждать — возвращает в заголовке
+ * `X-Ratelimit-Retry`. Пробрасываем это число caller'у вместо слепых retry.
+ */
+async function wbFetch(endpoint: string, url: string, opts: RequestInit = {}): Promise<Response> {
+  const res = await fetch(url, opts)
+  if (res.status === 429) {
+    const retryAfterSec = parseInt(res.headers.get("X-Ratelimit-Retry") ?? "60", 10)
+    throw new WbRateLimitError(endpoint, retryAfterSec || 60)
+  }
+  return res
 }
 
 /** Получить список всех акций WB в окне [startDate, endDate].
@@ -921,7 +944,7 @@ export async function fetchStocksPerWarehouse(
   const dateFrom = "2019-06-20T00:00:00"
   const url = `${STATISTICS_API_STOCKS}?dateFrom=${encodeURIComponent(dateFrom)}`
 
-  const res = await retryFetch(url, {
+  const res = await wbFetch("Statistics API (per-warehouse stocks)", url, {
     headers: { Authorization: token },
   })
 
@@ -1009,7 +1032,9 @@ export async function fetchOrdersPerWarehouse(
     `https://statistics-api.wildberries.ru/api/v1/supplier/orders` +
     `?dateFrom=${encodeURIComponent(dateFromIso)}&flag=0`
 
-  const res = await retryFetch(url, { headers: { Authorization: token } })
+  const res = await wbFetch("Orders API (per-warehouse)", url, {
+    headers: { Authorization: token },
+  })
 
   if (!res.ok) {
     const text = await res.text()

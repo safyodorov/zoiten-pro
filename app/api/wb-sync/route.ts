@@ -19,7 +19,37 @@ import {
   type OrdersWarehouseStats,
   fetchStocksPerWarehouse,
   type WarehouseStockItem,
+  WbRateLimitError,
 } from "@/lib/wb-api"
+
+/**
+ * Информация о каждом упавшем external-API во время sync.
+ * UI читает `failures[]` и показывает warning toast с retry-after.
+ */
+interface SyncFailure {
+  endpoint: string
+  /** Какие поля БД не обновились из-за этого провала. */
+  fields: string[]
+  /** Секунды до восстановления (из X-Ratelimit-Retry для 429). null для не-rate-limit ошибок. */
+  retryAfterSec: number | null
+  message: string
+}
+
+function recordFailure(
+  failures: SyncFailure[],
+  endpoint: string,
+  fields: string[],
+  e: unknown,
+): void {
+  const err = e as Error
+  failures.push({
+    endpoint,
+    fields,
+    retryAfterSec: e instanceof WbRateLimitError ? e.retryAfterSec : null,
+    message: err?.message ?? String(e),
+  })
+  console.error(`[wb-sync] ${endpoint} failed → пропускаем ${fields.join(", ")}:`, e)
+}
 
 /**
  * Генерирует стабильный числовой ID для склада по его имени.
@@ -54,6 +84,11 @@ export async function POST(): Promise<NextResponse> {
     // При ошибке API (429, network, etc.) фетчер бросает — мы ловим здесь
     // и НЕ включаем поле в upsert.update, чтобы не затирать БД нулями.
     // Prisma игнорирует поля, которые не переданы в update — старые значения сохраняются.
+    //
+    // 2026-05-12: failures[] собирает rate-limit ошибки с X-Ratelimit-Retry,
+    // route возвращает их UI'ю — пользователь видит «WB просит подождать X сек»,
+    // а не ложный «успех».
+    const failures: SyncFailure[] = []
 
     // 2. Цены из Prices API
     let priceMap = new Map<number, import("@/lib/wb-api").PriceData>()
@@ -62,7 +97,7 @@ export async function POST(): Promise<NextResponse> {
       priceMap = await fetchAllPrices()
       pricesOk = true
     } catch (e) {
-      console.error("[wb-sync] fetchAllPrices failed, пропускаем ценовые поля:", e)
+      recordFailure(failures, "Prices API", ["price", "priceBeforeDiscount", "sellerDiscount", "clubDiscount"], e)
     }
 
     // 3. Стандартные комиссии из Tariffs API
@@ -72,7 +107,7 @@ export async function POST(): Promise<NextResponse> {
       commMap = await fetchStandardCommissions()
       commissionsOk = true
     } catch (e) {
-      console.error("[wb-sync] fetchStandardCommissions failed, пропускаем commFbw/commFbs:", e)
+      recordFailure(failures, "Tariffs API", ["commFbwStd", "commFbsStd"], e)
     }
 
     // 4. ИУ комиссии из БД
@@ -86,7 +121,7 @@ export async function POST(): Promise<NextResponse> {
       stockMap = await fetchStocks()
       stocksOk = true
     } catch (e) {
-      console.error("[wb-sync] fetchStocks failed, пропускаем stockQty:", e)
+      recordFailure(failures, "Statistics API (stocks)", ["stockQty"], e)
     }
 
     // 6. Процент выкупа из Analytics API
@@ -102,7 +137,7 @@ export async function POST(): Promise<NextResponse> {
       buyoutMap = await fetchBuyoutPercent(nmIds)
       buyoutOk = buyoutMap.size > 0
     } catch (e) {
-      console.error("[wb-sync] fetchBuyoutPercent failed, пропускаем buyoutPercent:", e)
+      recordFailure(failures, "Analytics API (buyout)", ["buyoutPercent"], e)
     }
 
     // 6a. Phase 14 (STOCK-07, STOCK-08): per-warehouse остатки из Statistics API
@@ -113,7 +148,7 @@ export async function POST(): Promise<NextResponse> {
       stocksPerWarehouse = await fetchStocksPerWarehouse(nmIds)
       console.log(`[wb-sync] Получено per-warehouse остатков для ${stocksPerWarehouse.size} nmIds`)
     } catch (e) {
-      console.warn("[wb-sync] fetchStocksPerWarehouse failed, skipping per-warehouse update:", e)
+      recordFailure(failures, "Statistics API (per-warehouse stocks)", ["WbCardWarehouseStock", "inWayToClient", "inWayFromClient"], e)
     }
 
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
@@ -129,7 +164,7 @@ export async function POST(): Promise<NextResponse> {
       ordersPerWarehouseMap = await fetchOrdersPerWarehouse(nmIds, 7)
       ordersOk = true
     } catch (e) {
-      console.error("[wb-sync] fetchOrdersPerWarehouse failed, пропускаем avgSalesSpeed7d/ordersYesterday:", e)
+      recordFailure(failures, "Orders API (per-warehouse)", ["avgSalesSpeed7d", "ordersYesterday", "WbCardWarehouseOrders"], e)
     }
 
     let synced = 0
@@ -495,6 +530,7 @@ export async function POST(): Promise<NextResponse> {
       discountsLoaded: discountMap.size,
       warehouseStocksUpdated: stocksPerWarehouse.size,
       warehouseOrdersUpdated,
+      failures: failures.length > 0 ? failures : undefined,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     })
   } catch (e) {

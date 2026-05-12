@@ -96,7 +96,22 @@ const DISCOUNTS_SUCCESS = new Map([[12345, 12.5]])
 const ORDERS_EMPTY = new Map()
 const STOCKS_PW_EMPTY = new Map()
 
+// 2026-05-12: WbRateLimitError должен быть РЕАЛЬНЫМ классом, не stub'ом, потому что
+// route.ts делает `e instanceof WbRateLimitError`. Если бы было `vi.fn()` — instanceof
+// бросает TypeError на «right-hand side not callable» → route 500 → все тесты падают.
+class WbRateLimitErrorMock extends Error {
+  readonly endpoint: string
+  readonly retryAfterSec: number
+  constructor(endpoint: string, retryAfterSec: number) {
+    super(`WB ${endpoint}: 429 Too Many Requests (retry-after ${retryAfterSec}s)`)
+    this.name = "WbRateLimitError"
+    this.endpoint = endpoint
+    this.retryAfterSec = retryAfterSec
+  }
+}
+
 vi.mock("@/lib/wb-api", () => ({
+  WbRateLimitError: WbRateLimitErrorMock,
   fetchAllCards: vi.fn(),
   parseCard: vi.fn((raw) => ({
     nmId: raw.nmID,
@@ -265,6 +280,60 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
   })
 
   // ─── Сценарий 7: все API throws → response 200 без краша (degraded mode) ─
+
+  // ─── Сценарий 8: WbRateLimitError пробрасывается в failures[] с retryAfterSec ─
+
+  it("Сц.8: WbRateLimitError → response.failures[] содержит endpoint + retryAfterSec", async () => {
+    const wbApi = await import("@/lib/wb-api")
+    vi.mocked(wbApi.fetchStocks).mockRejectedValue(
+      new WbRateLimitErrorMock("Statistics API (stocks)", 6249),
+    )
+    vi.mocked(wbApi.fetchAllPrices).mockRejectedValue(
+      new WbRateLimitErrorMock("Prices API", 3020),
+    )
+    vi.mocked(wbApi.fetchWbDiscounts).mockResolvedValue(new Map())
+
+    const { POST } = await importRoute()
+    const response = await POST()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.failures).toBeDefined()
+    expect(body.failures.length).toBeGreaterThanOrEqual(2)
+
+    const stocksFailure = body.failures.find(
+      (f: { endpoint: string }) => f.endpoint === "Statistics API (stocks)",
+    )
+    expect(stocksFailure).toBeDefined()
+    expect(stocksFailure.retryAfterSec).toBe(6249)
+    expect(stocksFailure.fields).toContain("stockQty")
+
+    const pricesFailure = body.failures.find(
+      (f: { endpoint: string }) => f.endpoint === "Prices API",
+    )
+    expect(pricesFailure).toBeDefined()
+    expect(pricesFailure.retryAfterSec).toBe(3020)
+    expect(pricesFailure.fields).toContain("price")
+  })
+
+  // ─── Сценарий 9: generic Error (не WbRateLimitError) → retryAfterSec=null ─
+
+  it("Сц.9: generic Error → failures[i].retryAfterSec=null", async () => {
+    const wbApi = await import("@/lib/wb-api")
+    vi.mocked(wbApi.fetchStocks).mockRejectedValue(new Error("Network timeout"))
+
+    const { POST } = await importRoute()
+    const response = await POST()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.failures).toBeDefined()
+    const stocksFailure = body.failures.find(
+      (f: { endpoint: string }) => f.endpoint === "Statistics API (stocks)",
+    )
+    expect(stocksFailure.retryAfterSec).toBeNull()
+    expect(stocksFailure.message).toContain("Network timeout")
+  })
 
   it("Сц.7: несколько API throws одновременно → 200 OK, upsert вызван (с контентными полями)", async () => {
     const wbApi = await import("@/lib/wb-api")
