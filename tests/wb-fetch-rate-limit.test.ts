@@ -4,9 +4,19 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Замокать prisma чтобы import lib/wb-api не падал на инициализации клиента
+// Замокать prisma — нужен appSetting для wb-cooldown (Backlog 999.1).
+// По умолчанию findUnique = null (нет cooldown), upsert/delete no-op.
+const appSettingFindUnique = vi.fn().mockResolvedValue(null)
+const appSettingUpsert = vi.fn().mockResolvedValue({})
+const appSettingDelete = vi.fn().mockResolvedValue({})
 vi.mock("@/lib/prisma", () => ({
-  prisma: {},
+  prisma: {
+    appSetting: {
+      findUnique: appSettingFindUnique,
+      upsert: appSettingUpsert,
+      delete: appSettingDelete,
+    },
+  },
 }))
 
 // Используем fetchStocks как proxy к wbFetch (helper не экспортируется)
@@ -14,6 +24,9 @@ describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn())
     vi.stubEnv("WB_API_TOKEN", "test-token")
+    appSettingFindUnique.mockReset().mockResolvedValue(null)
+    appSettingUpsert.mockReset().mockResolvedValue({})
+    appSettingDelete.mockReset().mockResolvedValue({})
   })
 
   it("429 + X-Ratelimit-Retry=6249 → WbRateLimitError.retryAfterSec=6249", async () => {
@@ -86,5 +99,44 @@ describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
     const { fetchStocks } = await import("@/lib/wb-api")
     const result = await fetchStocks()
     expect(result.get(100)).toBe(8) // 5 + 3
+  })
+
+  // Backlog 999.1: WB Cooldown Bus integration
+
+  it("активный global cooldown → throws WbRateLimitError БЕЗ обращения к WB", async () => {
+    const future = new Date(Date.now() + 720 * 1000).toISOString()
+    appSettingFindUnique.mockResolvedValue({ value: future })
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { fetchStocks, WbRateLimitError } = await import("@/lib/wb-api")
+    let caught: unknown
+    try {
+      await fetchStocks()
+    } catch (e) {
+      caught = e
+    }
+    expect(caught).toBeInstanceOf(WbRateLimitError)
+    expect((caught as { endpoint: string }).endpoint).toContain("global cooldown")
+    expect((caught as { retryAfterSec: number }).retryAfterSec).toBeGreaterThan(700)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("429 от WB → пишет global cooldown в AppSetting", async () => {
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: {
+        get: (key: string) => (key === "X-Ratelimit-Retry" ? "1800" : null),
+      },
+    })
+    appSettingFindUnique.mockResolvedValue(null)
+
+    const { fetchStocks } = await import("@/lib/wb-api")
+    await expect(fetchStocks()).rejects.toThrow()
+
+    expect(appSettingUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: "wbCooldownUntil" } })
+    )
   })
 })

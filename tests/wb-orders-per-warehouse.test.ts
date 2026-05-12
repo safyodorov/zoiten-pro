@@ -1,4 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+
+// Backlog 999.1: wb-api импортирует wb-cooldown, нужен prisma mock.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appSetting: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
+  },
+}))
+
 import { fetchOrdersPerWarehouse } from "@/lib/wb-api"
 
 // @ts-expect-error - mocking global fetch

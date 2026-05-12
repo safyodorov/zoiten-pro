@@ -2,6 +2,10 @@
 // Работа с Wildberries Content API и Prices API
 
 import { prisma } from "@/lib/prisma"
+import {
+  getWbCooldownSecondsRemaining,
+  setWbCooldownUntil,
+} from "@/lib/wb-cooldown"
 
 const CONTENT_API = "https://content-api.wildberries.ru"
 const PRICES_API = "https://discounts-prices-api.wildberries.ru"
@@ -689,10 +693,21 @@ export class WbRateLimitError extends Error {
  * `X-Ratelimit-Retry`. Пробрасываем это число caller'у вместо слепых retry.
  */
 async function wbFetch(endpoint: string, url: string, opts: RequestInit = {}): Promise<Response> {
+  // Backlog 999.1: глобальный WB cooldown bus. Если какой-то соседний WB_API_TOKEN
+  // endpoint уже в 429 — короткозамыкаемся БЕЗ запроса к WB, чтобы не продлевать
+  // anti-abuse penalty для IP.
+  const cooldownSec = await getWbCooldownSecondsRemaining()
+  if (cooldownSec > 0) {
+    throw new WbRateLimitError(`${endpoint} (global cooldown)`, cooldownSec)
+  }
+
   const res = await fetch(url, opts)
   if (res.status === 429) {
-    const retryAfterSec = parseInt(res.headers.get("X-Ratelimit-Retry") ?? "60", 10)
-    throw new WbRateLimitError(endpoint, retryAfterSec || 60)
+    const retryAfterSec = parseInt(res.headers.get("X-Ratelimit-Retry") ?? "60", 10) || 60
+    // Записываем глобальный cooldown — все остальные WB_API_TOKEN endpoint'ы
+    // увидят его на следующих вызовах и пропустят, не продлевая блок.
+    await setWbCooldownUntil(retryAfterSec).catch(() => {})
+    throw new WbRateLimitError(endpoint, retryAfterSec)
   }
   return res
 }

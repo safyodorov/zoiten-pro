@@ -401,19 +401,16 @@ Plans:
 
 ## Backlog
 
-### Phase 999.1: WB Cooldown Bus — глобальный координатор cron + sync кнопок при 429 IP-блокировке (BACKLOG)
+### Phase 999.1: WB Cooldown Bus — глобальный координатор cron + sync кнопок при 429 IP-блокировке ✅ DONE
 
-**Goal:** [Captured for future planning — see context below]
+**Status:** ✅ DONE 2026-05-12 (реализован inline через /gsd:fast в день добавления — сразу после серии rate-limit инцидентов).
 
-**Requirements:** TBD
+**Реализация:** `lib/wb-cooldown.ts` — `getWbCooldownUntil()` / `setWbCooldownUntil(retryAfterSec)` / `getWbCooldownSecondsRemaining()` с хранением в `AppSetting('wbCooldownUntil')`. Интегрирован в:
+- `lib/wb-api.ts::wbFetch` — pre-check throws `WbRateLimitError` если cooldown активен; on-429 пишет `cooldown = max(существующий, now+retryAfterSec)`
+- `lib/wb-support-api.ts::callApi` — тот же паттерн для FEEDBACKS_API (WB_API_TOKEN scope); WB_RETURNS_TOKEN / WB_CHAT_TOKEN scope-ы не затронуты (отдельный budget)
 
-**Context (2026-05-12):** После rate-limit cascade этого дня выяснилось: per-endpoint locks работают (wbQuestionsLockedUntil, wbFeedbacksLockedUntil из quick task 260512-gvy + AppSetting('wbAnalyticsDailyCounter') из Phase 7), НО они не координируются между разными cron-сервисами (chat-sync 5мин, support-sync 15мин, returns-sync 1ч) и ручными кнопками (wb-sync, wb-sync-spp). Когда один endpoint в lock (например Statistics 429), остальные продолжают долбить соседние endpoint'ы того же scope WB_API_TOKEN, копя «репутацию IP» у WB anti-abuse.
+**Эффект:** Когда любой endpoint WB_API_TOKEN scope ловит 429 с retry>60s — все остальные пути того же scope (cron + UI кнопки) короткозамыкаются БЕЗ обращения к WB. Убирает класс эскалаций «Statistics в lock → Tariffs/Prices долбят и продлевают штраф для IP».
 
-**Идея:** Централизованный AppSetting('wbCooldownUntil') или таблица per-endpoint cooldowns; helper `await withWbCooldownCheck(scope, fn)` который короткозамыкает запрос если scope «остужается» — без обращения к WB. UI должен видеть это в /api/wb-sync ответе.
+**Тесты:** `tests/wb-cooldown.test.ts` — 13 тестов get/set/cleanup + max-логика. Расширены `wb-fetch-rate-limit.test.ts` и `wb-support-api.test.ts`.
 
-**Цель:** Убрать класс ошибок «когда Statistics блокирован, мы не нагружаем ему соседей через Tariffs/Prices/Analytics».
-
-**Plans:** 0 plans
-
-Plans:
-- [ ] TBD (promote with /gsd:review-backlog when ready)
+**Plans:** 0 plans (выполнено inline без формального плана).

@@ -1,10 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
+// Backlog 999.1: wb-support-api теперь импортирует wb-cooldown, которому нужен prisma.
+const appSettingFindUnique = vi.fn().mockResolvedValue(null)
+const appSettingUpsert = vi.fn().mockResolvedValue({})
+const appSettingDelete = vi.fn().mockResolvedValue({})
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appSetting: {
+      findUnique: appSettingFindUnique,
+      upsert: appSettingUpsert,
+      delete: appSettingDelete,
+    },
+  },
+}))
+
 const ORIGINAL_ENV = process.env.WB_API_TOKEN
 
 beforeEach(() => {
   process.env.WB_API_TOKEN = "test-token"
   vi.stubGlobal("fetch", vi.fn())
+  appSettingFindUnique.mockReset().mockResolvedValue(null)
+  appSettingUpsert.mockReset().mockResolvedValue({})
+  appSettingDelete.mockReset().mockResolvedValue({})
 })
 
 afterEach(() => {

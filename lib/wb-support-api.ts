@@ -5,6 +5,11 @@
 // В отличие от card.wb.ru v4 (см. lib/wb-api.ts), эти API не блокируются
 // по TLS fingerprint — используем нативный fetch.
 
+import {
+  getWbCooldownSecondsRemaining,
+  setWbCooldownUntil,
+} from "@/lib/wb-cooldown"
+
 const FEEDBACKS_API = "https://feedbacks-api.wildberries.ru"
 const RETURNS_API = "https://returns-api.wildberries.ru" // Phase 9
 const CHAT_API = "https://buyer-chat-api.wildberries.ru" // Phase 10
@@ -119,6 +124,18 @@ async function callApi(
   init: RequestInit,
   attempt = 0
 ): Promise<Response> {
+  // Backlog 999.1: глобальный WB cooldown bus — только для WB_API_TOKEN scope
+  // (FEEDBACKS_API). Другие токены (Returns/Chat) идут мимо. Pre-check только
+  // на первой попытке (attempt=0), чтобы внутренний retry после sleep не упирался
+  // в lock, который сам только что не выставил.
+  const isWbApiToken = baseUrl === FEEDBACKS_API
+  if (isWbApiToken && attempt === 0) {
+    const cooldownSec = await getWbCooldownSecondsRemaining()
+    if (cooldownSec > 0) {
+      throw new WbRateLimitError(cooldownSec, `${path} (global cooldown)`)
+    }
+  }
+
   // Phase 10: для multipart/form-data (FormData body) fetch сам выставляет
   // Content-Type с boundary — НЕ перезаписываем на application/json.
   const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData
@@ -138,6 +155,11 @@ async function callApi(
     // при таком ожидании service timed out. Лучше throw — cron повторит через 15 мин.
     const MAX_RETRY_WAIT_MS = 60_000
     if (requestedMs > MAX_RETRY_WAIT_MS) {
+      // Записываем глобальный cooldown ТОЛЬКО для WB_API_TOKEN scope —
+      // другим токенам не мешаем.
+      if (isWbApiToken) {
+        await setWbCooldownUntil(Math.round(requestedMs / 1000)).catch(() => {})
+      }
       throw new WbRateLimitError(Math.round(requestedMs / 1000), path)
     }
     await new Promise((r) => setTimeout(r, requestedMs))

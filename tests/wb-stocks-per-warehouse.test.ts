@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
+// Backlog 999.1: wb-api теперь импортирует wb-cooldown, которому нужен prisma.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appSetting: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
+  },
+}))
+
 // ──────────────────────────────────────────────────────────────────
 // Phase 14 Plan 03 — per-warehouse stocks via Statistics API
 // ──────────────────────────────────────────────────────────────────
