@@ -90,12 +90,17 @@ export async function POST(): Promise<NextResponse> {
     }
 
     // 6. Процент выкупа из Analytics API
+    // fetchBuyoutPercent возвращает пустой Map и НЕ бросает в двух кейсах:
+    //   (а) дневной cap 3/день исчерпан (checkAndIncrementAnalyticsCounter)
+    //   (б) Analytics успешно вернул пустой отчёт (новый продавец / нет продаж)
+    // В обоих случаях buyoutMap.size === 0 → buyoutOk=false → поле пропускается в upsert,
+    // существующие значения сохраняются (как и для других API failure кейсов).
     const nmIds = rawCards.map((c) => c.nmID)
     let buyoutMap = new Map<number, number>()
     let buyoutOk = false
     try {
       buyoutMap = await fetchBuyoutPercent(nmIds)
-      buyoutOk = true
+      buyoutOk = buyoutMap.size > 0
     } catch (e) {
       console.error("[wb-sync] fetchBuyoutPercent failed, пропускаем buyoutPercent:", e)
     }
