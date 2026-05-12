@@ -271,6 +271,7 @@ None yet.
 | 260421-iq7 | Товары: drag-and-drop порядок артикулов + barcodes → MarketplaceArticle + unique per marketplace | 2026-04-21 | 96fb4c7 | Verified | [260421-iq7-drag-and-drop-per](./quick/260421-iq7-drag-and-drop-per/) |
 | 260422-oy5 | Per-user фильтр складов в /stock/wb (чекбоксы по кластерам, persist в БД) | 2026-04-22 | 5caf963 |  | [260422-oy5-per-user-stock-wb](./quick/260422-oy5-per-user-stock-wb/) |
 | 260512-gvy | support-sync: lock WB /questions + /feedbacks при 429>60s через AppSetting('wb{Questions,Feedbacks}LockedUntil') | 2026-05-12 | 4a50d97 | Verified | [260512-gvy-support-sync-respect-x-ratelimit-retry-o](./quick/260512-gvy-support-sync-respect-x-ratelimit-retry-o/) |
+| 260512-jxh | WB API токены — настройки CRUD: model WbApiToken в БД, JWT decoder, validation (decode→scope→probe), cache TTL 5s, UI tab в /admin/settings для superadmin | 2026-05-12 | d3b6714 | Needs Review | [260512-jxh-wb-api-crud-api-ssh](./quick/260512-jxh-wb-api-crud-api-ssh/) |
 
 ### Blockers/Concerns
 
