@@ -76,6 +76,7 @@ model User {
   appealsResolved  AppealRecord[]        @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
   autoReplyUpdates AutoReplyConfig[]     @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
   managerStats     ManagerSupportStats[] @relation("ManagerStats") // Phase 13 — денормализованная статистика менеджеров (SUP-39)
+  wbTokensUpdated  WbApiToken[]          @relation("WbTokenUpdater") // Quick 260512-jxh
   isActive         Boolean               @default(true)
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -971,4 +972,24 @@ model ManagerSupportStats {
 
   @@unique([userId, period])
   @@index([period])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260512-jxh: WB API токены — CRUD через UI вместо SSH.
+// Source of truth для трёх токенов: WB_API_TOKEN, WB_RETURNS_TOKEN, WB_CHAT_TOKEN.
+// Bootstrap из process.env при пустой БД (см. lib/wb-token.ts).
+// ──────────────────────────────────────────────────────────────────
+
+model WbApiToken {
+  name             String   @id // "WB_API_TOKEN" | "WB_RETURNS_TOKEN" | "WB_CHAT_TOKEN"
+  value            String   // Полное значение JWT (нужно для авторизации в WB API)
+  scopeBitmask     Int      // `s` из JWT payload (sum 2^bit)
+  issuedAt         DateTime // `iat` из JWT
+  expiresAt        DateTime // `exp` из JWT
+  sellerId         String?  // `sid` из JWT (для аудита)
+  organizationId   String?  // `oid` из JWT (для аудита)
+  updatedById      String?  // null для bootstrap из env
+  updatedBy        User?    @relation("WbTokenUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
