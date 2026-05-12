@@ -137,8 +137,7 @@ export async function POST(): Promise<NextResponse> {
         const iuComm = card.category ? iuMap.get(card.category) : undefined
 
         // Базовые поля из Content API — всегда присутствуют (fetchAllCards не упал)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updateData: Record<string, any> = {
+        const updateData: Prisma.WbCardUpdateInput = {
           article: card.article,
           name: card.name,
           brand: card.brand,
@@ -204,8 +203,7 @@ export async function POST(): Promise<NextResponse> {
 
         // create объект — те же поля что и update, но без undefined-ов (Prisma create не принимает undefined)
         // При создании новой карточки недоступные поля останутся NULL (schema default)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const createData: Record<string, any> = {
+        const createData: Prisma.WbCardCreateInput = {
           nmId: card.nmId,
           article: card.article,
           name: card.name,
