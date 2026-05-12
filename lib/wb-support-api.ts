@@ -9,6 +9,7 @@ import {
   getWbCooldownSecondsRemaining,
   setWbCooldownUntil,
 } from "@/lib/wb-cooldown"
+import { getWbToken } from "@/lib/wb-token"
 
 const FEEDBACKS_API = "https://feedbacks-api.wildberries.ru"
 const RETURNS_API = "https://returns-api.wildberries.ru" // Phase 9
@@ -16,26 +17,28 @@ const CHAT_API = "https://buyer-chat-api.wildberries.ru" // Phase 10
 const RATE_LIMIT_FALLBACK_MS = 6000
 
 // Токен Phase 8 (Feedbacks/Questions) — scope bit 5
-function getToken(): string {
-  const token = process.env.WB_API_TOKEN
-  if (!token) throw new Error("WB_API_TOKEN не настроен")
-  return token
+async function getToken(): Promise<string> {
+  return await getWbToken("WB_API_TOKEN")
 }
 
 // Токен Phase 9 (Returns/Claims) — scope bit 11 "Buyers Returns".
-// Fallback на WB_API_TOKEN для dev/test окружений.
-function getReturnsToken(): string {
-  const token = process.env.WB_RETURNS_TOKEN ?? process.env.WB_API_TOKEN
-  if (!token) throw new Error("WB_RETURNS_TOKEN или WB_API_TOKEN не настроен")
-  return token
+// Fallback на WB_API_TOKEN для dev/test окружений (паттерн оригинала).
+async function getReturnsToken(): Promise<string> {
+  try {
+    return await getWbToken("WB_RETURNS_TOKEN")
+  } catch {
+    return await getWbToken("WB_API_TOKEN")
+  }
 }
 
 // Токен Phase 10 (Buyers Chat) — scope bit 9 "Чат с покупателями".
 // Fallback на WB_API_TOKEN для dev/test окружений (паттерн Phase 9 getReturnsToken).
-function getChatToken(): string {
-  const token = process.env.WB_CHAT_TOKEN ?? process.env.WB_API_TOKEN
-  if (!token) throw new Error("WB_CHAT_TOKEN или WB_API_TOKEN не настроен")
-  return token
+async function getChatToken(): Promise<string> {
+  try {
+    return await getWbToken("WB_CHAT_TOKEN")
+  } catch {
+    return await getWbToken("WB_API_TOKEN")
+  }
 }
 
 // ── Типы ответов ──────────────────────────────────────────────
@@ -187,7 +190,7 @@ async function callApi(
 
 // Feedbacks/Questions API — использует WB_API_TOKEN (scope bit 5)
 async function callWb(path: string, init: RequestInit, attempt = 0): Promise<Response> {
-  return callApi(FEEDBACKS_API, getToken(), path, init, attempt)
+  return callApi(FEEDBACKS_API, await getToken(), path, init, attempt)
 }
 
 // Returns API — использует WB_RETURNS_TOKEN (scope bit 11 Buyers Returns)
@@ -196,7 +199,7 @@ async function callReturnsApi(
   init: RequestInit,
   attempt = 0
 ): Promise<Response> {
-  return callApi(RETURNS_API, getReturnsToken(), path, init, attempt)
+  return callApi(RETURNS_API, await getReturnsToken(), path, init, attempt)
 }
 
 // Chat API — использует WB_CHAT_TOKEN (scope bit 9 Buyers chat). Phase 10.
@@ -205,7 +208,7 @@ async function callChatApi(
   init: RequestInit,
   attempt = 0
 ): Promise<Response> {
-  return callApi(CHAT_API, getChatToken(), path, init, attempt)
+  return callApi(CHAT_API, await getChatToken(), path, init, attempt)
 }
 
 // ── Feedbacks ─────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
   getWbCooldownSecondsRemaining,
   setWbCooldownUntil,
 } from "@/lib/wb-cooldown"
+import { getWbToken } from "@/lib/wb-token"
 
 const CONTENT_API = "https://content-api.wildberries.ru"
 const PRICES_API = "https://discounts-prices-api.wildberries.ru"
@@ -48,10 +49,8 @@ async function checkAndIncrementAnalyticsCounter(): Promise<{
   return { canRun: true, current: data.count, max: ANALYTICS_DAILY_MAX }
 }
 
-function getToken(): string {
-  const token = process.env.WB_API_TOKEN
-  if (!token) throw new Error("WB_API_TOKEN не настроен")
-  return token
+async function getToken(): Promise<string> {
+  return await getWbToken("WB_API_TOKEN")
 }
 
 // ── Типы ответа Content API ─────────────────────────────────────
@@ -113,7 +112,7 @@ interface CardsListResponse {
 // ── Получение всех карточек через Content API ────────────────────
 
 export async function fetchAllCards(): Promise<WbCardRaw[]> {
-  const token = getToken()
+  const token = await getToken()
   const allCards: WbCardRaw[] = []
 
   let cursorUpdatedAt: string | undefined = undefined
@@ -189,7 +188,7 @@ export interface PriceData {
 }
 
 export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
-  const token = getToken()
+  const token = await getToken()
   const priceMap = new Map<number, PriceData>()
 
   let offset = 0
@@ -241,7 +240,7 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
  * (Plan STOCK-FUT-09). Сохранён для backward compat.
  */
 export async function fetchStocks(): Promise<Map<number, number>> {
-  const token = getToken()
+  const token = await getToken()
   const stockMap = new Map<number, number>()
 
   const res = await wbFetch(
@@ -268,7 +267,7 @@ export async function fetchStocks(): Promise<Map<number, number>> {
 // ── Получение процента выкупа через Analytics API ───────────────
 
 export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, number>> {
-  const token = getToken()
+  const token = await getToken()
   const buyoutMap = new Map<number, number>()
 
   // Защита от исчерпания дневного лимита WB Analytics API (3 reports/день).
@@ -397,7 +396,7 @@ export async function fetchWbDiscounts(
   nmIds: number[],
   sellerPriceMap?: Map<number, PriceData>
 ): Promise<Map<number, number>> {
-  const token = getToken()
+  const token = await getToken()
   const discountMap = new Map<number, number>()
 
   // ── Шаг 1: v4 API через curl (реальное время) ─────────────────
@@ -495,7 +494,7 @@ export async function fetchWbDiscounts(
 // ── Получение стандартных комиссий через Tariffs API ─────────────
 
 export async function fetchStandardCommissions(): Promise<Map<number, { fbw: number; fbs: number }>> {
-  const token = getToken()
+  const token = await getToken()
   const commMap = new Map<number, { fbw: number; fbs: number }>()
 
   const res = await wbFetch(
@@ -723,7 +722,7 @@ export async function fetchAllPromotions(
   startDate: Date,
   endDate: Date,
 ): Promise<WbPromotionRaw[]> {
-  const token = getToken()
+  const token = await getToken()
   const all: WbPromotionRaw[] = []
   let offset = 0
   const limit = 100
@@ -782,7 +781,7 @@ export async function fetchPromotionDetails(
   ids: number[],
 ): Promise<WbPromotionDetailsRaw[]> {
   if (ids.length === 0) return []
-  const token = getToken()
+  const token = await getToken()
   const details: WbPromotionDetailsRaw[] = []
 
   for (let i = 0; i < ids.length; i += 10) {
@@ -836,7 +835,7 @@ export async function fetchPromotionDetails(
 export async function fetchPromotionNomenclatures(
   promotionId: number,
 ): Promise<WbPromotionNomenclatureRaw[]> {
-  const token = getToken()
+  const token = await getToken()
   // WB API требует inAction=true (false возвращает 400 Invalid query params)
   const url =
     `${PROMO_API}/api/v1/calendar/promotions/nomenclatures` +
@@ -948,7 +947,7 @@ export async function fetchStocksPerWarehouse(
   const result = new Map<number, WarehouseStockItem[]>()
   if (nmIds.length === 0) return result
 
-  const token = getToken()
+  const token = await getToken()
 
   // ВАЖНО: dateFrom — фильтр по lastChangeDate, не период возврата.
   // Если ставить now-1d, вернутся только остатки изменённые за 24ч — стабильные
@@ -1037,7 +1036,7 @@ export async function fetchOrdersPerWarehouse(
   const result = new Map<number, OrdersWarehouseStats>()
   if (nmIds.length === 0) return result
 
-  const token = getToken()
+  const token = await getToken()
 
   const dateFrom = new Date()
   dateFrom.setDate(dateFrom.getDate() - periodDays)
@@ -1138,7 +1137,7 @@ export async function fetchOrdersPerWarehouse(
 export async function fetchAvgSalesSpeed7d(
   nmIds: number[],
 ): Promise<Map<number, OrdersStats>> {
-  const token = getToken()
+  const token = await getToken()
   const result = new Map<number, OrdersStats>()
   if (nmIds.length === 0) return result
 

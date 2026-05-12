@@ -1,5 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
+// Quick 260512-jxh: wb-api теперь получает токены через getWbToken.
+vi.mock("@/lib/wb-token", () => ({
+  getWbToken: vi.fn(async (name: string) => {
+    if (name === "WB_API_TOKEN") return "test-token"
+    if (name === "WB_RETURNS_TOKEN") return "test-returns-token"
+    if (name === "WB_CHAT_TOKEN") return "test-chat-token"
+    throw new Error(`${name} не настроен`)
+  }),
+  invalidateWbTokenCache: vi.fn(),
+  WB_TOKEN_NAMES: ["WB_API_TOKEN", "WB_RETURNS_TOKEN", "WB_CHAT_TOKEN"],
+}))
+
+// wb-cooldown нужен prisma.appSetting
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appSetting: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
+  },
+}))
+
 // ──────────────────────────────────────────────────────────────────
 // RED stub — план 07-00 Wave 0
 // ──────────────────────────────────────────────────────────────────

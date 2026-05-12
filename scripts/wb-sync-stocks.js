@@ -5,6 +5,8 @@
 const { execSync } = require("node:child_process")
 const { PrismaClient } = require("@prisma/client")
 
+// NB: standalone скрипт — читает env напрямую (не через lib/wb-token).
+// Для UI replace-flow см. lib/wb-token.ts. Quick 260512-jxh.
 const WB_API_TOKEN = process.env.WB_API_TOKEN
 if (!WB_API_TOKEN) {
   console.error("WB_API_TOKEN не установлен")

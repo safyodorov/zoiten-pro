@@ -11,6 +11,18 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+// Quick 260512-jxh: wb-api теперь получает токены через getWbToken.
+vi.mock("@/lib/wb-token", () => ({
+  getWbToken: vi.fn(async (name: string) => {
+    if (name === "WB_API_TOKEN") return "test-token"
+    if (name === "WB_RETURNS_TOKEN") return "test-returns-token"
+    if (name === "WB_CHAT_TOKEN") return "test-chat-token"
+    throw new Error(`${name} не настроен`)
+  }),
+  invalidateWbTokenCache: vi.fn(),
+  WB_TOKEN_NAMES: ["WB_API_TOKEN", "WB_RETURNS_TOKEN", "WB_CHAT_TOKEN"],
+}))
+
 import { fetchOrdersPerWarehouse } from "@/lib/wb-api"
 
 // @ts-expect-error - mocking global fetch

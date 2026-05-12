@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
 import { execSync } from "node:child_process"
+import { getWbToken } from "@/lib/wb-token"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -95,7 +96,7 @@ export async function POST(): Promise<NextResponse> {
     // 3. Fallback через Sales API
     if (v4Failed) {
       try {
-        const token = process.env.WB_API_TOKEN!
+        const token = await getWbToken("WB_API_TOKEN")
         const dateFrom = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
         const res = await fetch(
           `https://statistics-api.wildberries.ru/api/v1/supplier/sales?dateFrom=${dateFrom}&flag=0`,

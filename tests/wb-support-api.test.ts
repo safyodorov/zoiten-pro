@@ -14,6 +14,18 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
+// Quick 260512-jxh: wb-support-api теперь получает токены через getWbToken.
+vi.mock("@/lib/wb-token", () => ({
+  getWbToken: vi.fn(async (name: string) => {
+    if (name === "WB_API_TOKEN") return "test-token"
+    if (name === "WB_RETURNS_TOKEN") return "test-returns-token"
+    if (name === "WB_CHAT_TOKEN") return "test-chat-token"
+    throw new Error(`${name} не настроен`)
+  }),
+  invalidateWbTokenCache: vi.fn(),
+  WB_TOKEN_NAMES: ["WB_API_TOKEN", "WB_RETURNS_TOKEN", "WB_CHAT_TOKEN"],
+}))
+
 const ORIGINAL_ENV = process.env.WB_API_TOKEN
 
 beforeEach(() => {
@@ -224,13 +236,6 @@ describe("replyQuestion", () => {
   })
 })
 
-describe("getToken guard", () => {
-  it("кидает ошибку если WB_API_TOKEN не настроен", async () => {
-    delete process.env.WB_API_TOKEN
-    const { listFeedbacks } = await import("@/lib/wb-support-api")
-
-    await expect(listFeedbacks({ take: 10, skip: 0 })).rejects.toThrow(
-      "WB_API_TOKEN не настроен"
-    )
-  })
-})
+// Quick 260512-jxh: getToken guard теперь реализован в lib/wb-token.ts.
+// Тест getWbToken() с пустой БД и пустым env — в tests/wb-token-cache.test.ts (Test 5).
+// Здесь тест убран т.к. wb-token мокируется на уровне всего тест-файла.
