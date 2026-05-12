@@ -49,7 +49,9 @@ vi.mock("@/lib/prisma", () => ({
       updateMany: async () => ({ count: 0 }),
     },
     appSetting: {
-      upsert: async () => ({}),
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
     },
   },
 }))
@@ -57,47 +59,67 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/wb-support-api", () => ({
   listFeedbacks: vi.fn(),
   listQuestions: vi.fn(),
+  WbRateLimitError: class WbRateLimitError extends Error {
+    retryAfterSec: number
+    endpoint: string
+    constructor(retryAfterSec: number, endpoint: string) {
+      super(
+        `WB API 429: rate-limit требует ожидания ${retryAfterSec}s — превышает cap 60s, повторим на следующий cron tick`
+      )
+      this.name = "WbRateLimitError"
+      this.retryAfterSec = retryAfterSec
+      this.endpoint = endpoint
+    }
+  },
 }))
 
 vi.mock("@/lib/support-media", () => ({
   downloadMediaBatch: vi.fn().mockResolvedValue([]),
 }))
 
-beforeEach(() => {
+beforeEach(async () => {
   prismaState.tickets = []
   prismaState.messages = []
   prismaState.media = []
+
+  // Восстанавливаем дефолтные реализации vi.fn() после resetAllMocks
+  const { prisma } = (await import("@/lib/prisma")) as any
+  prisma.appSetting.findUnique.mockResolvedValue(null)
+  prisma.appSetting.upsert.mockResolvedValue({})
+  prisma.appSetting.delete.mockResolvedValue({})
+
+  const { downloadMediaBatch } = (await import("@/lib/support-media")) as any
+  downloadMediaBatch.mockResolvedValue([])
 })
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => vi.resetAllMocks())
 
 describe("syncSupport", () => {
   it("делает upsert SupportTicket FEEDBACK с корректными полями", async () => {
     const { listFeedbacks, listQuestions } = (await import(
       "@/lib/wb-support-api"
     )) as any
-    listFeedbacks
-      .mockResolvedValueOnce([
-        {
-          id: "YX52",
-          text: "Супер",
-          productValuation: 5,
-          createdDate: "2026-01-01T10:00:00Z",
-          state: "wbRu",
-          answer: null,
-          productDetails: {
-            imtId: 1,
-            nmId: 123,
-            productName: "X",
-            supplierArticle: "",
-            brandName: "",
-          },
-          photoLinks: [],
-          video: null,
+    // 1 feedback < 5000 → pagination breaks after first call
+    listFeedbacks.mockResolvedValueOnce([
+      {
+        id: "YX52",
+        text: "Супер",
+        productValuation: 5,
+        createdDate: "2026-01-01T10:00:00Z",
+        state: "wbRu",
+        answer: null,
+        productDetails: {
+          imtId: 1,
+          nmId: 123,
+          productName: "X",
+          supplierArticle: "",
+          brandName: "",
         },
-      ])
-      .mockResolvedValueOnce([])
-    listQuestions.mockResolvedValueOnce([])
+        photoLinks: [],
+        video: null,
+      },
+    ])
+    listQuestions.mockResolvedValue([])
 
     const { syncSupport } = await import("@/lib/support-sync")
     const res = await syncSupport({ isAnswered: false })
@@ -145,33 +167,32 @@ describe("syncSupport", () => {
     const { listFeedbacks, listQuestions } = (await import(
       "@/lib/wb-support-api"
     )) as any
-    listFeedbacks
-      .mockResolvedValueOnce([
-        {
-          id: "B1",
-          text: "txt",
-          productValuation: 5,
-          createdDate: "",
+    // 1 feedback < 5000 → pagination breaks after first call
+    listFeedbacks.mockResolvedValueOnce([
+      {
+        id: "B1",
+        text: "txt",
+        productValuation: 5,
+        createdDate: "",
+        state: "wbRu",
+        answer: {
+          text: "Ответ",
           state: "wbRu",
-          answer: {
-            text: "Ответ",
-            state: "wbRu",
-            editable: true,
-            createDate: "2026-01-02T00:00:00Z",
-          },
-          productDetails: {
-            imtId: 1,
-            nmId: 2,
-            productName: "",
-            supplierArticle: "",
-            brandName: "",
-          },
-          photoLinks: [],
-          video: null,
+          editable: true,
+          createDate: "2026-01-02T00:00:00Z",
         },
-      ])
-      .mockResolvedValueOnce([])
-    listQuestions.mockResolvedValueOnce([])
+        productDetails: {
+          imtId: 1,
+          nmId: 2,
+          productName: "",
+          supplierArticle: "",
+          brandName: "",
+        },
+        photoLinks: [],
+        video: null,
+      },
+    ])
+    listQuestions.mockResolvedValue([])
 
     const { syncSupport } = await import("@/lib/support-sync")
     await syncSupport()
@@ -204,21 +225,20 @@ describe("syncSupport", () => {
       video: null,
     }
     // 1-й sync: без ответа → NEW
-    listFeedbacks.mockResolvedValueOnce([{ ...base, answer: null }]).mockResolvedValueOnce([])
+    // mockResolvedValueOnce([batch]) — один вызов, 1 < 5000 → break, второй Once не нужен
+    listFeedbacks.mockResolvedValueOnce([{ ...base, answer: null }])
     listQuestions.mockResolvedValue([])
     const { syncSupport } = await import("@/lib/support-sync")
     await syncSupport()
     expect(prismaState.tickets[0].status).toBe("NEW")
 
     // 2-й sync: ответ появился в WB кабинете → status должен стать ANSWERED
-    listFeedbacks
-      .mockResolvedValueOnce([
-        {
-          ...base,
-          answer: { text: "Спасибо", state: "wbRu", editable: true, createDate: "" },
-        },
-      ])
-      .mockResolvedValueOnce([])
+    listFeedbacks.mockResolvedValueOnce([
+      {
+        ...base,
+        answer: { text: "Спасибо", state: "wbRu", editable: true, createDate: "" },
+      },
+    ])
     await syncSupport()
     expect(prismaState.tickets).toHaveLength(1)
     expect(prismaState.tickets[0].status).toBe("ANSWERED")
@@ -242,19 +262,18 @@ describe("syncSupport", () => {
       },
     }
     listFeedbacks.mockResolvedValue([])
-    listQuestions.mockResolvedValueOnce([{ ...base, answer: null }]).mockResolvedValueOnce([])
+    // mockResolvedValueOnce([batch]) — один вызов, 1 < 10000 → break, второй Once не нужен
+    listQuestions.mockResolvedValueOnce([{ ...base, answer: null }])
     const { syncSupport } = await import("@/lib/support-sync")
     await syncSupport()
     expect(prismaState.tickets[0].status).toBe("NEW")
 
-    listQuestions
-      .mockResolvedValueOnce([
-        {
-          ...base,
-          answer: { text: "Ответ", state: "wbRu", editable: true, createDate: "" },
-        },
-      ])
-      .mockResolvedValueOnce([])
+    listQuestions.mockResolvedValueOnce([
+      {
+        ...base,
+        answer: { text: "Ответ", state: "wbRu", editable: true, createDate: "" },
+      },
+    ])
     await syncSupport()
     expect(prismaState.tickets).toHaveLength(1)
     expect(prismaState.tickets[0].status).toBe("ANSWERED")
@@ -265,24 +284,23 @@ describe("syncSupport", () => {
       "@/lib/wb-support-api"
     )) as any
     listFeedbacks.mockResolvedValueOnce([])
-    listQuestions
-      .mockResolvedValueOnce([
-        {
-          id: "Q1",
-          text: "Вопрос?",
-          createdDate: "2026-01-01T00:00:00Z",
-          state: "wbRu",
-          answer: null,
-          productDetails: {
-            imtId: 1,
-            nmId: 99,
-            productName: "",
-            supplierArticle: "",
-            brandName: "",
-          },
+    // 1 question < 10000 → pagination breaks after first call, второй Once не нужен
+    listQuestions.mockResolvedValueOnce([
+      {
+        id: "Q1",
+        text: "Вопрос?",
+        createdDate: "2026-01-01T00:00:00Z",
+        state: "wbRu",
+        answer: null,
+        productDetails: {
+          imtId: 1,
+          nmId: 99,
+          productName: "",
+          supplierArticle: "",
+          brandName: "",
         },
-      ])
-      .mockResolvedValueOnce([])
+      },
+    ])
 
     const { syncSupport } = await import("@/lib/support-sync")
     const res = await syncSupport()
@@ -290,5 +308,112 @@ describe("syncSupport", () => {
     expect(prismaState.tickets[0].channel).toBe("QUESTION")
     expect(prismaState.messages[0].direction).toBe("INBOUND")
     expect(prismaState.messages[0].text).toBe("Вопрос?")
+  })
+
+  // ── Новые тесты: lock-aware questions ───────────────────────
+
+  it("пропускает listQuestions если wbQuestionsLockedUntil > now", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    // Lock активен: разблокировка через 10 минут
+    const unlockAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    prisma.appSetting.findUnique.mockResolvedValueOnce({ value: unlockAt })
+
+    listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
+    listQuestions.mockResolvedValueOnce([])
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    const result = await syncSupport()
+
+    // listQuestions НЕ должен быть вызван при активном lock
+    expect(listQuestions).not.toHaveBeenCalled()
+    // Ошибка содержит сообщение о lock
+    expect(result.errors.some((e: string) => e.includes("locked until"))).toBe(true)
+    // questionsSynced = 0 при skip
+    expect(result.questionsSynced).toBe(0)
+    // Feedbacks при этом синкаются (listFeedbacks вызван)
+    expect(listFeedbacks).toHaveBeenCalled()
+  })
+
+  it("записывает wbQuestionsLockedUntil при WbRateLimitError", async () => {
+    const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    // Нет активного lock
+    prisma.appSetting.findUnique.mockResolvedValueOnce(null)
+
+    listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
+    listQuestions.mockRejectedValueOnce(
+      new WbRateLimitError(720, "/api/v1/questions?take=10000&skip=0")
+    )
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    const before = Date.now()
+    await syncSupport()
+    const after = Date.now()
+
+    // upsert вызван с key="wbQuestionsLockedUntil"
+    expect(prisma.appSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { key: "wbQuestionsLockedUntil" },
+      })
+    )
+
+    // Значение разблокировки ≈ now + 720s ± 5s
+    const upsertCall = prisma.appSetting.upsert.mock.calls.find(
+      (c: any[]) => c[0]?.where?.key === "wbQuestionsLockedUntil"
+    )
+    const storedValue = upsertCall?.[0]?.create?.value ?? upsertCall?.[0]?.update?.value
+    const storedDate = new Date(storedValue).getTime()
+    expect(Math.abs(storedDate - (before + 720 * 1000))).toBeLessThan(5000)
+    expect(Math.abs(storedDate - (after + 720 * 1000))).toBeLessThan(5000 + (after - before))
+  })
+
+  it("удаляет wbQuestionsLockedUntil при успехе listQuestions (lockRow есть)", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    // Lock есть в БД но уже истёк (прошлая дата)
+    const expiredLock = new Date(Date.now() - 60 * 1000).toISOString()
+    prisma.appSetting.findUnique.mockResolvedValueOnce({ value: expiredLock })
+
+    listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
+    listQuestions.mockResolvedValueOnce([]) // успешный ответ
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    await syncSupport()
+
+    // delete вызван с key="wbQuestionsLockedUntil" — cleanup устаревшего lock
+    expect(prisma.appSetting.delete).toHaveBeenCalledWith({
+      where: { key: "wbQuestionsLockedUntil" },
+    })
+  })
+
+  it("НЕ удаляет wbQuestionsLockedUntil если lockRow = null (нечего чистить)", async () => {
+    const { listFeedbacks, listQuestions } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    // Нет lock в БД
+    prisma.appSetting.findUnique.mockResolvedValueOnce(null)
+
+    listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
+    listQuestions.mockResolvedValueOnce([])
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    await syncSupport()
+
+    // delete НЕ должен быть вызван — нечего чистить
+    expect(prisma.appSetting.delete).not.toHaveBeenCalledWith({
+      where: { key: "wbQuestionsLockedUntil" },
+    })
   })
 })

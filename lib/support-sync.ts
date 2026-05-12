@@ -12,6 +12,7 @@ import {
   listChats,
   getChatEvents,
   downloadChatAttachment,
+  WbRateLimitError,
   type Feedback,
   type Question,
   type Claim,
@@ -32,6 +33,9 @@ const CHAT_PAUSE_MS = 1000
 const CHAT_MAX_PAGES = 20
 const CHAT_UPLOAD_DIR = process.env.UPLOAD_DIR || "/var/www/zoiten-uploads"
 const LAST_EVENT_NEXT_KEY = "support.chat.lastEventNext"
+// Персистентный lock при 429>cap на /questions (retryAfterSec > 60).
+// AppSetting value = ISO-строка момента разблокировки.
+const QUESTIONS_LOCK_KEY = "wbQuestionsLockedUntil"
 
 export interface SyncResult {
   feedbacksSynced: number
@@ -67,21 +71,70 @@ export async function syncSupport(
   }
 
   // 2. Questions — пагинация по skip, take=10000
+  // Lock-aware pre-check: при 429 X-Ratelimit-Retry > 60s предыдущий tick
+  // записал ISO unlock-time. Пропускаем WB-вызов до момента разблокировки.
   const questions: Question[] = []
-  for (let skip = 0; ; skip += 10000) {
-    try {
-      const batch = await listQuestions({
-        isAnswered: opts.isAnswered,
-        take: 10000,
-        skip,
-      })
-      questions.push(...batch)
-      if (batch.length < 10000) break
-    } catch (err) {
-      errors.push(
-        `Questions skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
-      )
-      break
+  let questionsLocked = false
+  const lockRow = await prisma.appSetting.findUnique({
+    where: { key: QUESTIONS_LOCK_KEY },
+  })
+  if (lockRow?.value) {
+    const unlockAt = new Date(lockRow.value)
+    if (!Number.isNaN(unlockAt.getTime()) && unlockAt.getTime() > Date.now()) {
+      const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
+      const msg = `Questions locked until ${mskStr} МСК (skipped, WB rate-limit)`
+      console.info(`[support-sync] ${msg}`)
+      errors.push(msg)
+      questionsLocked = true
+    }
+  }
+
+  if (!questionsLocked) {
+    let questionsCallSucceeded = false
+    for (let skip = 0; ; skip += 10000) {
+      try {
+        const batch = await listQuestions({
+          isAnswered: opts.isAnswered,
+          take: 10000,
+          skip,
+        })
+        questions.push(...batch)
+        questionsCallSucceeded = true
+        if (batch.length < 10000) break
+      } catch (err) {
+        if (err instanceof WbRateLimitError) {
+          const unlockAt = new Date(Date.now() + err.retryAfterSec * 1000)
+          const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
+          console.warn(
+            `[support-sync] WB /questions 429 retry=${err.retryAfterSec}s — locking until ${mskStr} МСК`
+          )
+          try {
+            await prisma.appSetting.upsert({
+              where: { key: QUESTIONS_LOCK_KEY },
+              create: { key: QUESTIONS_LOCK_KEY, value: unlockAt.toISOString() },
+              update: { value: unlockAt.toISOString() },
+            })
+          } catch (lockErr) {
+            errors.push(
+              `wbQuestionsLockedUntil upsert: ${lockErr instanceof Error ? lockErr.message : "unknown"}`
+            )
+          }
+          errors.push(`Questions skip=${skip}: ${err.message}`)
+        } else {
+          errors.push(
+            `Questions skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
+          )
+        }
+        break
+      }
+    }
+
+    // Cleanup: при подтверждённом 2xx удаляем lock если он был в БД.
+    // Silent .catch() — защита от race condition (конкурентное удаление OK).
+    if (questionsCallSucceeded && lockRow) {
+      await prisma.appSetting
+        .delete({ where: { key: QUESTIONS_LOCK_KEY } })
+        .catch(() => {})
     }
   }
 
