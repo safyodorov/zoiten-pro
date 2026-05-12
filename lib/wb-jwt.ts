@@ -17,7 +17,7 @@ export const WB_SCOPE_LABELS: Record<number, string> = {
 export interface WbJwtPayload {
   scopeBits: number[] // массив set-битов из `s` (1-based indices)
   scopeBitmask: number // raw `s`
-  issuedAt: Date
+  issuedAt: Date | null // WB JWT часто НЕ содержит `iat` — используем null
   expiresAt: Date
   sellerId: string | null
   organizationId: string | null
@@ -61,17 +61,24 @@ export function decodeWbJwt(token: string): WbJwtPayload {
     throw new Error("Invalid JWT payload — не удалось декодировать base64url JSON")
   }
   const s = typeof payload.s === "number" ? payload.s : NaN
-  const iat = typeof payload.iat === "number" ? payload.iat : NaN
   const exp = typeof payload.exp === "number" ? payload.exp : NaN
-  if (Number.isNaN(s) || Number.isNaN(iat) || Number.isNaN(exp)) {
-    throw new Error("Invalid JWT payload — отсутствуют обязательные поля s/iat/exp")
+  // 2026-05-12: `iat` опционален — WB JWT часто его не выставляют.
+  // `oid` и `sid` приходят как number или string — coerce оба к string.
+  if (Number.isNaN(s) || Number.isNaN(exp)) {
+    throw new Error("Invalid JWT payload — отсутствуют обязательные поля s/exp")
+  }
+  const iat = typeof payload.iat === "number" ? payload.iat : null
+  const coerceId = (v: unknown): string | null => {
+    if (typeof v === "string") return v
+    if (typeof v === "number" && Number.isFinite(v)) return String(v)
+    return null
   }
   return {
     scopeBits: decodeScopeBits(s),
     scopeBitmask: s,
-    issuedAt: new Date(iat * 1000),
+    issuedAt: iat !== null ? new Date(iat * 1000) : null,
     expiresAt: new Date(exp * 1000),
-    sellerId: typeof payload.sid === "string" ? payload.sid : null,
-    organizationId: typeof payload.oid === "string" ? payload.oid : null,
+    sellerId: coerceId(payload.sid),
+    organizationId: coerceId(payload.oid),
   }
 }

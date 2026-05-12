@@ -44,10 +44,25 @@ describe("decodeWbJwt", () => {
     expect(result.scopeBits).toBeInstanceOf(Array)
     expect(result.issuedAt).toBeInstanceOf(Date)
     expect(result.expiresAt).toBeInstanceOf(Date)
-    expect(result.issuedAt.getTime()).toBe(ISSUED_AT_UNIX * 1000)
+    expect(result.issuedAt!.getTime()).toBe(ISSUED_AT_UNIX * 1000)
     expect(result.expiresAt.getTime()).toBe(EXPIRES_AT_UNIX * 1000)
     expect(result.sellerId).toBe("seller-uuid-123")
     expect(result.organizationId).toBe("org-uuid-456")
+  })
+
+  it("Test 1b: WB реальный формат — отсутствие iat и числовой oid → issuedAt=null, oid coerced to string", () => {
+    // Эмпирически: WB JWT не выставляет iat и oid=number (например 879842).
+    const realFormat = makeJwt({
+      s: FULL_API_SCOPE,
+      exp: EXPIRES_AT_UNIX,
+      sid: "real-sid",
+      oid: 879842, // number, не string
+    })
+    const result = decodeWbJwt(realFormat)
+    expect(result.issuedAt).toBeNull()
+    expect(result.organizationId).toBe("879842") // coerced
+    expect(result.sellerId).toBe("real-sid")
+    expect(result.expiresAt.getTime()).toBe(EXPIRES_AT_UNIX * 1000)
   })
 
   it("Test 2: s=170 (0b10101010) → scopeBits=[1, 3, 5, 7]", () => {

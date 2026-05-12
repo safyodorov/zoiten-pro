@@ -984,7 +984,7 @@ model WbApiToken {
   name             String   @id // "WB_API_TOKEN" | "WB_RETURNS_TOKEN" | "WB_CHAT_TOKEN"
   value            String   // Полное значение JWT (нужно для авторизации в WB API)
   scopeBitmask     Int      // `s` из JWT payload (sum 2^bit)
-  issuedAt         DateTime // `iat` из JWT
+  issuedAt         DateTime? // `iat` из JWT — nullable, WB часто не выставляет
   expiresAt        DateTime // `exp` из JWT
   sellerId         String?  // `sid` из JWT (для аудита)
   organizationId   String?  // `oid` из JWT (для аудита)

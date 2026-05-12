@@ -66,7 +66,7 @@ export async function listWbTokens(): Promise<WbTokenListItem[]> {
       hasValue: true,
       maskedTail: mask(r.value),
       scopeBits: decodeScopeBits(r.scopeBitmask),
-      issuedAt: r.issuedAt.toISOString(),
+      issuedAt: r.issuedAt?.toISOString() ?? null,
       expiresAt: r.expiresAt.toISOString(),
       sellerId: r.sellerId,
       organizationId: r.organizationId,
