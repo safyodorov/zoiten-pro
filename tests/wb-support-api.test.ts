@@ -160,6 +160,31 @@ describe("listQuestions", () => {
     expect(call[0]).toContain("isAnswered=false")
     expect(call[0]).toContain("take=10000")
   })
+
+  it(
+    "бросает WbRateLimitError при 429 с X-Ratelimit-Retry=720 (превышает cap 60s)",
+    async () => {
+      const { listQuestions, WbRateLimitError } = await import("@/lib/wb-support-api")
+      const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+      fetchMock.mockResolvedValue(
+        mockResponse({}, 429, { "X-Ratelimit-Retry": "720" })
+      )
+
+      let caught: unknown
+      try {
+        await listQuestions({ take: 1, skip: 0 })
+      } catch (e) {
+        caught = e
+      }
+
+      expect(caught).toBeInstanceOf(WbRateLimitError)
+      expect(caught).toMatchObject({
+        retryAfterSec: 720,
+        endpoint: expect.stringContaining("/api/v1/questions"),
+      })
+    },
+    10000
+  )
 })
 
 describe("replyQuestion", () => {

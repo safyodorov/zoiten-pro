@@ -93,6 +93,23 @@ export interface ListParams {
   dateTo?: number
 }
 
+// ── Типизированная ошибка 429>cap ────────────────────────────
+// Используется в support-sync.ts для персистентного lock через AppSetting.
+// Отличается от generic Error — позволяет ловить instanceof WbRateLimitError
+// только вокруг listQuestions, не затрагивая обработку feedbacks/returns.
+
+export class WbRateLimitError extends Error {
+  constructor(
+    public readonly retryAfterSec: number,
+    public readonly endpoint: string
+  ) {
+    super(
+      `WB API 429: rate-limit требует ожидания ${retryAfterSec}s — превышает cap 60s, повторим на следующий cron tick`
+    )
+    this.name = "WbRateLimitError"
+  }
+}
+
 // ── Внутренний helper с 429 retry (параметризованный) ─────────
 
 async function callApi(
@@ -121,9 +138,7 @@ async function callApi(
     // при таком ожидании service timed out. Лучше throw — cron повторит через 15 мин.
     const MAX_RETRY_WAIT_MS = 60_000
     if (requestedMs > MAX_RETRY_WAIT_MS) {
-      throw new Error(
-        `WB API 429: rate-limit требует ожидания ${Math.round(requestedMs / 1000)}s — превышает cap 60s, повторим на следующий cron tick`
-      )
+      throw new WbRateLimitError(Math.round(requestedMs / 1000), path)
     }
     await new Promise((r) => setTimeout(r, requestedMs))
     return callApi(baseUrl, token, path, init, 1)
