@@ -150,13 +150,31 @@ ssh root@85.198.97.89 "psql -U zoiten zoiten_erp -c \"SELECT * FROM \\\"AppSetti
 # Если снова 429 → lock переписан на новое значение
 ```
 
+## Addendum (2026-05-12, commit 4a50d97): Feedbacks lock тоже добавлен
+
+После первого деплоя обнаружилось, что **Feedbacks теперь тоже ловит 429** (242с retry) — попал в ту же ловушку из-за rate-limit cascade этого дня. Application того же паттерна:
+
+- `FEEDBACKS_LOCK_KEY = "wbFeedbacksLockedUntil"` константа.
+- Pre-check перед feedbacks loop → skip если locked.
+- Persist при `WbRateLimitError` (callApi уже бросает корректно — общий код).
+- Cleanup на 2xx.
+- +2 теста: skip-Feedbacks-locked и persist-Feedbacks-lock-on-429.
+
+**Production verification:** через несколько триггеров cron'а оба ключа записались (`wbQuestionsLockedUntil`, `wbFeedbacksLockedUntil`), и оба endpoint'а корректно пропускаются:
+```
+"errors":[
+  "Feedbacks locked until 12.05.2026, 12:50:31 МСК (skipped, WB rate-limit)",
+  "Questions locked until 12.05.2026, 12:50:31 МСК (skipped, WB rate-limit)"
+]
+```
+
 ## Follow-ups
 
-1. **Аналогичный fix для feedbacks при 429**: если feedbacks тоже зальются 429 с retry>60s — понадобится отдельный `wbFeedbacksLockedUntil` ключ. Механизм идентичен, просто другой ключ и другой loop. Сейчас feedbacks работают нормально.
+1. **Мониторинг**: можно добавить счётчик в AppSetting (`wbQuestionsLockCount` / `wbFeedbacksLockCount`) для алертинга если lock активируется слишком часто — знак что WB rate-limit policy изменилась.
 
-2. **Мониторинг**: можно добавить счётчик в AppSetting (`wbQuestionsLockCount`) для алертинга если lock активируется слишком часто — знак что WB rate-limit policy изменилась.
+2. **Ручной сброс lock**: если нужно сбросить lock досрочно — `DELETE FROM "AppSetting" WHERE key IN ('wbQuestionsLockedUntil', 'wbFeedbacksLockedUntil');` в psql.
 
-3. **Ручной сброс lock**: если нужно сбросить lock досрочно — `DELETE FROM "AppSetting" WHERE key='wbQuestionsLockedUntil';` в psql.
+3. **Generalize pattern**: если ещё один endpoint попадёт под тот же 429>cap (chat-sync, returns-sync) — вытащить lock-логику в helper `withRateLimitLock(key, fetchFn)` чтобы избежать копипасты. Пока 2 endpoint'а — приемлемо.
 
 ## Self-Check: PASSED
 
