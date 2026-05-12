@@ -200,8 +200,8 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
     )
 
     if (!res.ok) {
-      console.error(`Prices API ошибка ${res.status}`)
-      break
+      const text = await res.text()
+      throw new Error(`Prices API ошибка ${res.status}: ${text}`)
     }
 
     const data: PricesResponse = await res.json()
@@ -239,25 +239,21 @@ export async function fetchStocks(): Promise<Map<number, number>> {
   const token = getToken()
   const stockMap = new Map<number, number>()
 
-  try {
-    const res = await retryFetch(
-      "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
-      { headers: { Authorization: token } }
-    )
+  const res = await retryFetch(
+    "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
+    { headers: { Authorization: token } }
+  )
 
-    if (!res.ok) {
-      console.error(`Statistics API stocks ошибка ${res.status}`)
-      return stockMap
-    }
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Statistics API stocks ошибка ${res.status}: ${text}`)
+  }
 
-    const items: Array<{ nmId: number; quantity: number }> = await res.json()
+  const items: Array<{ nmId: number; quantity: number }> = await res.json()
 
-    for (const item of items) {
-      const current = stockMap.get(item.nmId) ?? 0
-      stockMap.set(item.nmId, current + item.quantity)
-    }
-  } catch (e) {
-    console.error("fetchStocks error:", e)
+  for (const item of items) {
+    const current = stockMap.get(item.nmId) ?? 0
+    stockMap.set(item.nmId, current + item.quantity)
   }
 
   return stockMap
@@ -304,8 +300,8 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
     )
 
     if (!createRes.ok) {
-      console.error(`Analytics create report ошибка ${createRes.status}`)
-      return buyoutMap
+      const text = await createRes.text()
+      throw new Error(`Analytics create report ошибка ${createRes.status}: ${text}`)
     }
 
     // 2. Ждём готовности (до 30 сек)
@@ -495,29 +491,25 @@ export async function fetchStandardCommissions(): Promise<Map<number, { fbw: num
   const token = getToken()
   const commMap = new Map<number, { fbw: number; fbs: number }>()
 
-  try {
-    const res = await retryFetch(
-      "https://common-api.wildberries.ru/api/v1/tariffs/commission?locale=ru",
-      { headers: { Authorization: token } }
-    )
+  const res = await retryFetch(
+    "https://common-api.wildberries.ru/api/v1/tariffs/commission?locale=ru",
+    { headers: { Authorization: token } }
+  )
 
-    if (!res.ok) {
-      console.error(`Tariffs API ошибка ${res.status}`)
-      return commMap
-    }
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Tariffs API ошибка ${res.status}: ${text}`)
+  }
 
-    const data = await res.json()
-    const report = data?.report ?? []
+  const data = await res.json()
+  const report = data?.report ?? []
 
-    for (const item of report) {
-      // paidStorageKgvp = FBW, kgvpSupplier = FBS
-      commMap.set(item.subjectID, {
-        fbw: item.paidStorageKgvp ?? 0,
-        fbs: item.kgvpSupplier ?? 0,
-      })
-    }
-  } catch (e) {
-    console.error("fetchStandardCommissions error:", e)
+  for (const item of report) {
+    // paidStorageKgvp = FBW, kgvpSupplier = FBS
+    commMap.set(item.subjectID, {
+      fbw: item.paidStorageKgvp ?? 0,
+      fbs: item.kgvpSupplier ?? 0,
+    })
   }
 
   return commMap
@@ -1020,8 +1012,8 @@ export async function fetchOrdersPerWarehouse(
   const res = await retryFetch(url, { headers: { Authorization: token } })
 
   if (!res.ok) {
-    console.error(`WB Orders API (fetchOrdersPerWarehouse) ${res.status}`)
-    return result
+    const text = await res.text()
+    throw new Error(`WB Orders API (fetchOrdersPerWarehouse) ${res.status}: ${text}`)
   }
 
   const orders = (await res.json()) as Array<{

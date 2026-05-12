@@ -50,22 +50,55 @@ export async function POST(): Promise<NextResponse> {
       return NextResponse.json({ synced: 0, message: "Карточки не найдены в WB API" })
     }
 
+    // Флаги доступности данных от внешних API.
+    // При ошибке API (429, network, etc.) фетчер бросает — мы ловим здесь
+    // и НЕ включаем поле в upsert.update, чтобы не затирать БД нулями.
+    // Prisma игнорирует поля, которые не переданы в update — старые значения сохраняются.
+
     // 2. Цены из Prices API
-    const priceMap = await fetchAllPrices()
+    let priceMap = new Map<number, import("@/lib/wb-api").PriceData>()
+    let pricesOk = false
+    try {
+      priceMap = await fetchAllPrices()
+      pricesOk = true
+    } catch (e) {
+      console.error("[wb-sync] fetchAllPrices failed, пропускаем ценовые поля:", e)
+    }
 
     // 3. Стандартные комиссии из Tariffs API
-    const commMap = await fetchStandardCommissions()
+    let commMap = new Map<number, { fbw: number; fbs: number }>()
+    let commissionsOk = false
+    try {
+      commMap = await fetchStandardCommissions()
+      commissionsOk = true
+    } catch (e) {
+      console.error("[wb-sync] fetchStandardCommissions failed, пропускаем commFbw/commFbs:", e)
+    }
 
     // 4. ИУ комиссии из БД
     const iuList = await prisma.wbCommissionIu.findMany()
     const iuMap = new Map(iuList.map((iu) => [iu.subjectName, { fbw: iu.fbw, fbs: iu.fbs }]))
 
     // 5. Остатки из Statistics API
-    const stockMap = await fetchStocks()
+    let stockMap = new Map<number, number>()
+    let stocksOk = false
+    try {
+      stockMap = await fetchStocks()
+      stocksOk = true
+    } catch (e) {
+      console.error("[wb-sync] fetchStocks failed, пропускаем stockQty:", e)
+    }
 
     // 6. Процент выкупа из Analytics API
     const nmIds = rawCards.map((c) => c.nmID)
-    const buyoutMap = await fetchBuyoutPercent(nmIds)
+    let buyoutMap = new Map<number, number>()
+    let buyoutOk = false
+    try {
+      buyoutMap = await fetchBuyoutPercent(nmIds)
+      buyoutOk = true
+    } catch (e) {
+      console.error("[wb-sync] fetchBuyoutPercent failed, пропускаем buyoutPercent:", e)
+    }
 
     // 6a. Phase 14 (STOCK-07, STOCK-08): per-warehouse остатки из Statistics API
     // DEVIATION: Statistics API вместо Analytics API (base token 403 на Analytics)
@@ -79,116 +112,150 @@ export async function POST(): Promise<NextResponse> {
     }
 
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
+    // fetchWbDiscounts деградирует тихо (curl + fallback), не бросает при 429
     const discountMap = await fetchWbDiscounts(nmIds)
 
     // 8. Phase 7 (D-09) + Phase 15 (ORDERS-02): заказы за 7 дней — per-card avg/yesterday + per-warehouse breakdown.
     // Один запрос к Orders API (rate limit ~1 req/min) покрывает обе задачи.
-    // Degraded mode — если Orders API недоступен, поля останутся null, per-warehouse блок пропускается.
+    // Degraded mode — если Orders API недоступен, поля НЕ включаются в upsert.update.
     let ordersPerWarehouseMap = new Map<number, OrdersWarehouseStats>()
+    let ordersOk = false
     try {
       ordersPerWarehouseMap = await fetchOrdersPerWarehouse(nmIds, 7)
+      ordersOk = true
     } catch (e) {
-      console.error("fetchOrdersPerWarehouse failed:", e)
+      console.error("[wb-sync] fetchOrdersPerWarehouse failed, пропускаем avgSalesSpeed7d/ordersYesterday:", e)
     }
 
     let synced = 0
     const errors: string[] = []
 
-    // 8. Обрабатываем каждую карточку
+    // Обрабатываем каждую карточку
     for (const raw of rawCards) {
       try {
         const card = parseCard(raw)
-        const priceData = priceMap.get(card.nmId)
-        const discountWb = discountMap.get(card.nmId) ?? null
-        const price = priceData?.discountedPrice ?? null
-        const priceBeforeDiscount = priceData?.priceBeforeDiscount ?? null
-        const sellerDiscount = priceData?.sellerDiscount ?? null
-        const clubDiscount = priceData?.clubDiscount ?? null
-        const stockQty = stockMap.get(card.nmId) ?? null
-        const buyoutPct = buyoutMap.get(card.nmId) ?? null
-        const ordersStats = ordersPerWarehouseMap.get(card.nmId)
-        const avgSalesSpeed7d = ordersStats?.avg ?? null
-        const ordersYesterday = ordersStats?.yesterday ?? null
-
-        const stdComm = commMap.get(raw.subjectID)
         const iuComm = card.category ? iuMap.get(card.category) : undefined
+
+        // Базовые поля из Content API — всегда присутствуют (fetchAllCards не упал)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updateData: Record<string, any> = {
+          article: card.article,
+          name: card.name,
+          brand: card.brand,
+          category: card.category,
+          photoUrl: card.photoUrl,
+          photos: card.photos,
+          hasVideo: card.hasVideo,
+          barcode: card.barcode,
+          barcodes: card.barcodes,
+          weightKg: card.weightKg,
+          heightCm: card.heightCm,
+          widthCm: card.widthCm,
+          depthCm: card.depthCm,
+          discountWb: discountMap.get(card.nmId) ?? null,
+          label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
+          rawJson: JSON.parse(JSON.stringify(raw)),
+          // Phase 17: нормализованные characteristics + techSizes из WB Content API
+          characteristics:
+            card.characteristics === null
+              ? Prisma.DbNull
+              : (JSON.parse(JSON.stringify(card.characteristics)) as never),
+          techSizes: card.techSizes,
+          updatedAt: new Date(),
+        }
+
+        // Ценовые поля — только если Prices API ответил успешно
+        if (pricesOk) {
+          const priceData = priceMap.get(card.nmId)
+          updateData.priceBeforeDiscount = priceData?.priceBeforeDiscount ?? null
+          updateData.sellerDiscount = priceData?.sellerDiscount ?? null
+          updateData.price = priceData?.discountedPrice ?? null
+          updateData.clubDiscount = priceData?.clubDiscount ?? null
+        }
+
+        // Остатки — только если Statistics API ответил успешно
+        if (stocksOk) {
+          updateData.stockQty = stockMap.get(card.nmId) ?? null
+        }
+
+        // Процент выкупа — только если Analytics API ответил успешно
+        // (buyoutOk=true включает кейс "дневной cap" — buyoutMap может быть пустым, это норма)
+        if (buyoutOk) {
+          updateData.buyoutPercent = buyoutMap.get(card.nmId) ?? null
+        }
+
+        // Стандартные комиссии — только если Tariffs API ответил успешно
+        if (commissionsOk) {
+          const stdComm = commMap.get(raw.subjectID)
+          updateData.commFbwStd = stdComm?.fbw ?? null
+          updateData.commFbsStd = stdComm?.fbs ?? null
+        }
+
+        // ИУ комиссии всегда берутся из БД (не из внешнего API)
+        updateData.commFbwIu = iuComm?.fbw ?? null
+        updateData.commFbsIu = iuComm?.fbs ?? null
+
+        // Данные заказов — только если Orders API ответил успешно
+        if (ordersOk) {
+          const ordersStats = ordersPerWarehouseMap.get(card.nmId)
+          updateData.avgSalesSpeed7d = ordersStats?.avg ?? null
+          updateData.ordersYesterday = ordersStats?.yesterday ?? null
+        }
+
+        // create объект — те же поля что и update, но без undefined-ов (Prisma create не принимает undefined)
+        // При создании новой карточки недоступные поля останутся NULL (schema default)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const createData: Record<string, any> = {
+          nmId: card.nmId,
+          article: card.article,
+          name: card.name,
+          brand: card.brand,
+          category: card.category,
+          photoUrl: card.photoUrl,
+          photos: card.photos,
+          hasVideo: card.hasVideo,
+          barcode: card.barcode,
+          barcodes: card.barcodes,
+          weightKg: card.weightKg,
+          heightCm: card.heightCm,
+          widthCm: card.widthCm,
+          depthCm: card.depthCm,
+          discountWb: discountMap.get(card.nmId) ?? null,
+          label: card.tags.length > 0 ? card.tags.join(", ") : null,
+          rawJson: JSON.parse(JSON.stringify(raw)),
+          characteristics:
+            card.characteristics === null
+              ? Prisma.DbNull
+              : (JSON.parse(JSON.stringify(card.characteristics)) as never),
+          techSizes: card.techSizes,
+          commFbwIu: iuComm?.fbw ?? null,
+          commFbsIu: iuComm?.fbs ?? null,
+        }
+
+        if (pricesOk) {
+          const priceData = priceMap.get(card.nmId)
+          createData.priceBeforeDiscount = priceData?.priceBeforeDiscount ?? null
+          createData.sellerDiscount = priceData?.sellerDiscount ?? null
+          createData.price = priceData?.discountedPrice ?? null
+          createData.clubDiscount = priceData?.clubDiscount ?? null
+        }
+        if (stocksOk) createData.stockQty = stockMap.get(card.nmId) ?? null
+        if (buyoutOk) createData.buyoutPercent = buyoutMap.get(card.nmId) ?? null
+        if (commissionsOk) {
+          const stdComm = commMap.get(raw.subjectID)
+          createData.commFbwStd = stdComm?.fbw ?? null
+          createData.commFbsStd = stdComm?.fbs ?? null
+        }
+        if (ordersOk) {
+          const ordersStats = ordersPerWarehouseMap.get(card.nmId)
+          createData.avgSalesSpeed7d = ordersStats?.avg ?? null
+          createData.ordersYesterday = ordersStats?.yesterday ?? null
+        }
 
         await prisma.wbCard.upsert({
           where: { nmId: card.nmId },
-          update: {
-            article: card.article,
-            name: card.name,
-            brand: card.brand,
-            category: card.category,
-            photoUrl: card.photoUrl,
-            photos: card.photos,
-            hasVideo: card.hasVideo,
-            barcode: card.barcode,
-            barcodes: card.barcodes,
-            weightKg: card.weightKg,
-            heightCm: card.heightCm,
-            widthCm: card.widthCm,
-            depthCm: card.depthCm,
-            priceBeforeDiscount,
-            sellerDiscount,
-            price,
-            discountWb,
-            clubDiscount,
-            stockQty,
-            buyoutPercent: buyoutPct,
-            avgSalesSpeed7d,
-            ordersYesterday,
-            commFbwStd: stdComm?.fbw ?? null,
-            commFbsStd: stdComm?.fbs ?? null,
-            commFbwIu: iuComm?.fbw ?? null,
-            commFbsIu: iuComm?.fbs ?? null,
-            label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
-            rawJson: JSON.parse(JSON.stringify(raw)),
-            // Phase 17: нормализованные characteristics + techSizes из WB Content API
-            characteristics:
-              card.characteristics === null
-                ? Prisma.DbNull
-                : (JSON.parse(JSON.stringify(card.characteristics)) as never),
-            techSizes: card.techSizes,
-            updatedAt: new Date(),
-          },
-          create: {
-            nmId: card.nmId,
-            article: card.article,
-            name: card.name,
-            brand: card.brand,
-            category: card.category,
-            photoUrl: card.photoUrl,
-            photos: card.photos,
-            hasVideo: card.hasVideo,
-            barcode: card.barcode,
-            barcodes: card.barcodes,
-            weightKg: card.weightKg,
-            heightCm: card.heightCm,
-            widthCm: card.widthCm,
-            depthCm: card.depthCm,
-            priceBeforeDiscount,
-            sellerDiscount,
-            price,
-            discountWb,
-            clubDiscount,
-            stockQty,
-            buyoutPercent: buyoutPct,
-            avgSalesSpeed7d,
-            ordersYesterday,
-            commFbwStd: stdComm?.fbw ?? null,
-            commFbsStd: stdComm?.fbs ?? null,
-            commFbwIu: iuComm?.fbw ?? null,
-            commFbsIu: iuComm?.fbs ?? null,
-            label: card.tags.length > 0 ? card.tags.join(", ") : null,
-            rawJson: JSON.parse(JSON.stringify(raw)),
-            // Phase 17: нормализованные characteristics + techSizes из WB Content API
-            characteristics:
-              card.characteristics === null
-                ? Prisma.DbNull
-                : (JSON.parse(JSON.stringify(card.characteristics)) as never),
-            techSizes: card.techSizes,
-          },
+          update: updateData,
+          create: createData,
         })
 
         synced++
