@@ -5,6 +5,8 @@ import { BrandsTab } from "./BrandsTab"
 import { CategoriesTab } from "./CategoriesTab"
 import { MarketplacesTab } from "./MarketplacesTab"
 import { DirectionsTab } from "./DirectionsTab"
+import { WbTokensTab } from "./WbTokensTab"
+import type { WbTokenListItem } from "@/app/actions/wb-tokens"
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -65,11 +67,18 @@ interface SettingsTabsProps {
   marketplaces: MarketplaceRow[]
   directions: DirectionWithBrands[]
   brandsLite: BrandLite[]
+  wbTokens: WbTokenListItem[] | null // null = не показывать tab (non-superadmin)
 }
 
 // ── SettingsTabs ──────────────────────────────────────────────────
 
-export function SettingsTabs({ brands, marketplaces, directions, brandsLite }: SettingsTabsProps) {
+export function SettingsTabs({
+  brands,
+  marketplaces,
+  directions,
+  brandsLite,
+  wbTokens,
+}: SettingsTabsProps) {
   return (
     <Tabs defaultValue="directions">
       <TabsList>
@@ -77,6 +86,7 @@ export function SettingsTabs({ brands, marketplaces, directions, brandsLite }: S
         <TabsTrigger value="brands">Бренды</TabsTrigger>
         <TabsTrigger value="categories">Категории</TabsTrigger>
         <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
+        {wbTokens && <TabsTrigger value="wb-tokens">WB API токены</TabsTrigger>}
       </TabsList>
       <TabsContent value="directions">
         <DirectionsTab directions={directions} brands={brandsLite} />
@@ -90,6 +100,11 @@ export function SettingsTabs({ brands, marketplaces, directions, brandsLite }: S
       <TabsContent value="marketplaces">
         <MarketplacesTab marketplaces={marketplaces} />
       </TabsContent>
+      {wbTokens && (
+        <TabsContent value="wb-tokens">
+          <WbTokensTab tokens={wbTokens} />
+        </TabsContent>
+      )}
     </Tabs>
   )
 }

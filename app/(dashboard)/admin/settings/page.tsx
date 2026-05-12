@@ -2,11 +2,12 @@
 import { requireSuperadmin } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { SettingsTabs } from "@/components/settings/SettingsTabs"
+import { listWbTokens } from "@/app/actions/wb-tokens"
 
 export default async function SettingsPage() {
   await requireSuperadmin() // SUPERADMIN only (D-03)
 
-  const [brands, marketplaces, directions] = await Promise.all([
+  const [brands, marketplaces, directions, wbTokens] = await Promise.all([
     prisma.brand.findMany({
       orderBy: { sortOrder: "asc" },
       include: {
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
         brands: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true } },
       },
     }),
+    listWbTokens(), // Quick 260512-jxh: page защищён requireSuperadmin → wbTokens всегда загружаются
   ])
 
   const brandsLite = brands.map((b) => ({
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
         marketplaces={marketplaces}
         directions={directions}
         brandsLite={brandsLite}
+        wbTokens={wbTokens}
       />
     </div>
   )
