@@ -273,7 +273,12 @@ export function StockWbTable({
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
-        <table className="w-full caption-bottom text-sm border-separate border-spacing-0 table-fixed">
+        {/* quick 260513-phu hotfix: убрали table-fixed — с multi-row headers (rowSpan=3 +
+            colSpan для кластеров) + динамическими cluster columns table-fixed требует
+            <colgroup> рассчитываемый runtime'ом, что хрупко. Без table-fixed browser
+            использует widths из cells (style={{ width }} на <th>/<td>). Resize всё равно
+            работает — handle обновляет state, widths применяются. */}
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
           <thead className="bg-background">
             {/* Уровень 1 — группы (sticky 3 cols rowSpan=3, Иваново/Всего на WB rowSpan=3, остальные rowSpan=2) */}
             <tr>
