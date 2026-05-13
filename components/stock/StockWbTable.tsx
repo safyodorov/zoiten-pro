@@ -15,6 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
@@ -465,7 +470,19 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
                     >
                       <div className="flex flex-col gap-1">
-                        <div className="text-sm font-medium leading-snug line-clamp-2">{g.productName}</div>
+                        {/* quick 260513-phu: always-on Tooltip с полным названием. */}
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <div className="text-sm font-medium leading-snug line-clamp-2 cursor-default" />
+                            }
+                          >
+                            {g.productName}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="max-w-sm text-sm">{g.productName}</div>
+                          </TooltipContent>
+                        </Tooltip>
                         <div className="text-xs text-muted-foreground">{g.productSku}</div>
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>

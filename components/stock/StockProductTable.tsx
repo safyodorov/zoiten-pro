@@ -25,6 +25,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { updateProductionStock } from "@/app/actions/stock"
 import type { StockProductRow } from "@/lib/stock-data"
@@ -356,9 +361,20 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                     className="sticky left-[80px] z-20 bg-background border-r w-60 align-top p-3"
                   >
                     <div className="flex flex-col gap-1">
-                      <div className="text-sm font-medium leading-snug line-clamp-2">
-                        {p.name}
-                      </div>
+                      {/* quick 260513-phu: always-on Tooltip с полным названием.
+                          base-ui TooltipTrigger через render-prop подменяет <button> на <div>. */}
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <div className="text-sm font-medium leading-snug line-clamp-2 cursor-default" />
+                          }
+                        >
+                          {p.name}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="max-w-sm text-sm">{p.name}</div>
+                        </TooltipContent>
+                      </Tooltip>
                       <div className="text-xs text-muted-foreground">{p.sku}</div>
                       <div className="text-xs text-muted-foreground">{p.brandName}</div>
                       {p.categoryName && (
