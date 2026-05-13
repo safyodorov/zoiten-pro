@@ -255,33 +255,7 @@ export function StockProductTable({
   // ── Table ──────────────────────────────────────────────────────
   return (
     <div className="overflow-auto border rounded h-full">
-      <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
-        {/* quick 260513-phu hotfix: table-fixed с multi-row headers (colSpan=4) требует
-            <colgroup> с явными width для каждой column — иначе шапка едет.
-            Решение: <colgroup> + table-auto (без table-fixed). Browser использует
-            <col> widths как hints + content для финального width. Resize всё равно
-            работает — handle меняет widths, style на <th>/<td> применяется. */}
-        <colgroup>
-          <col style={{ width: widths.photo }} />
-          <col style={{ width: widths.svodka }} />
-          <col style={{ width: widths.yarlyk }} />
-          <col style={{ width: widths.artikul }} />
-          <col style={{ width: widths.production }} />
-          <col style={{ width: widths.rf }} />
-          <col style={{ width: widths.ivanovo }} />
-          <col style={{ width: widths.mpO }} />
-          <col style={{ width: widths.mpZ }} />
-          <col style={{ width: widths.mpOb }} />
-          <col style={{ width: widths.mpD }} />
-          <col style={{ width: widths.wbO }} />
-          <col style={{ width: widths.wbZ }} />
-          <col style={{ width: widths.wbOb }} />
-          <col style={{ width: widths.wbD }} />
-          <col style={{ width: widths.ozonO }} />
-          <col style={{ width: widths.ozonZ }} />
-          <col style={{ width: widths.ozonOb }} />
-          <col style={{ width: widths.ozonD }} />
-        </colgroup>
+      <table className="w-full caption-bottom text-sm border-separate border-spacing-0 table-fixed">
         <thead className="bg-background">
           {/* ── Уровень 1: группы колонок ── */}
           <tr>
