@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import {
   getWbCooldownSecondsRemaining,
   setWbCooldownUntil,
+  type WbCooldownBucket,
 } from "@/lib/wb-cooldown"
 import { getWbToken } from "@/lib/wb-token"
 
@@ -691,21 +692,45 @@ export class WbRateLimitError extends Error {
  * сбрасывало WB-таймер. WB сам знает, сколько ждать — возвращает в заголовке
  * `X-Ratelimit-Retry`. Пробрасываем это число caller'у вместо слепых retry.
  */
+/**
+ * Map английский endpoint label (свободный текст от callers) на WB cooldown bucket.
+ * Возвращает null для неизвестных лейблов → cooldown bus disabled для этого вызова (safe).
+ *
+ * 2026-05-13 (Quick 260513-khv): после перехода на per-bucket cooldown bus.
+ */
+function resolveBucketFromEndpoint(endpoint: string): WbCooldownBucket | null {
+  if (endpoint === "Prices API") return "prices"
+  if (endpoint.startsWith("Statistics API")) {
+    if (endpoint.includes("orders")) return "statistics-orders"
+    if (endpoint.includes("sales")) return "statistics-sales"
+    return "statistics-stocks" // "stocks" или "per-warehouse stocks" → stocks bucket
+  }
+  if (endpoint.startsWith("Analytics API")) return "analytics"
+  if (endpoint === "Tariffs API") return "tariffs"
+  if (endpoint.startsWith("Orders API")) return "statistics-orders"
+  if (endpoint.startsWith("Content API")) return "content"
+  return null
+}
+
 async function wbFetch(endpoint: string, url: string, opts: RequestInit = {}): Promise<Response> {
-  // Backlog 999.1: глобальный WB cooldown bus. Если какой-то соседний WB_API_TOKEN
-  // endpoint уже в 429 — короткозамыкаемся БЕЗ запроса к WB, чтобы не продлевать
-  // anti-abuse penalty для IP.
-  const cooldownSec = await getWbCooldownSecondsRemaining()
-  if (cooldownSec > 0) {
-    throw new WbRateLimitError(`${endpoint} (global cooldown)`, cooldownSec)
+  // Quick 260513-khv: per-endpoint cooldown bus. Если конкретно этот bucket
+  // уже в 429 — короткозамыкаемся БЕЗ запроса к WB. Соседние buckets не задеваем.
+  // bucket=null → неизвестный endpoint, cooldown bus отключён (safe fallback).
+  const bucket = resolveBucketFromEndpoint(endpoint)
+  if (bucket) {
+    const cooldownSec = await getWbCooldownSecondsRemaining(bucket)
+    if (cooldownSec > 0) {
+      throw new WbRateLimitError(`${endpoint} (cooldown ${bucket})`, cooldownSec)
+    }
   }
 
   const res = await fetch(url, opts)
   if (res.status === 429) {
     const retryAfterSec = parseInt(res.headers.get("X-Ratelimit-Retry") ?? "60", 10) || 60
-    // Записываем глобальный cooldown — все остальные WB_API_TOKEN endpoint'ы
-    // увидят его на следующих вызовах и пропустят, не продлевая блок.
-    await setWbCooldownUntil(retryAfterSec).catch(() => {})
+    // Записываем cooldown ТОЛЬКО для resolved bucket — соседние не блокируем.
+    if (bucket) {
+      await setWbCooldownUntil(bucket, retryAfterSec).catch(() => {})
+    }
     throw new WbRateLimitError(endpoint, retryAfterSec)
   }
   return res

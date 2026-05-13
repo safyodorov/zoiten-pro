@@ -8,6 +8,7 @@
 import {
   getWbCooldownSecondsRemaining,
   setWbCooldownUntil,
+  resolveBucketFromUrl,
 } from "@/lib/wb-cooldown"
 import { getWbToken } from "@/lib/wb-token"
 
@@ -127,15 +128,15 @@ async function callApi(
   init: RequestInit,
   attempt = 0
 ): Promise<Response> {
-  // Backlog 999.1: глобальный WB cooldown bus — только для WB_API_TOKEN scope
-  // (FEEDBACKS_API). Другие токены (Returns/Chat) идут мимо. Pre-check только
-  // на первой попытке (attempt=0), чтобы внутренний retry после sleep не упирался
-  // в lock, который сам только что не выставил.
-  const isWbApiToken = baseUrl === FEEDBACKS_API
-  if (isWbApiToken && attempt === 0) {
-    const cooldownSec = await getWbCooldownSecondsRemaining()
+  // Quick 260513-khv: per-endpoint cooldown bus — bucket резолвится из полного URL.
+  // Returns / Chat API возвращают null → bypass bus (их собственные токены, отдельный
+  // бюджет). Pre-check только на первой попытке (attempt=0), чтобы внутренний retry
+  // после sleep не упирался в lock, который сам только что не выставил.
+  const bucket = resolveBucketFromUrl(`${baseUrl}${path}`)
+  if (bucket && attempt === 0) {
+    const cooldownSec = await getWbCooldownSecondsRemaining(bucket)
     if (cooldownSec > 0) {
-      throw new WbRateLimitError(cooldownSec, `${path} (global cooldown)`)
+      throw new WbRateLimitError(cooldownSec, `${path} (cooldown ${bucket})`)
     }
   }
 
@@ -158,10 +159,10 @@ async function callApi(
     // при таком ожидании service timed out. Лучше throw — cron повторит через 15 мин.
     const MAX_RETRY_WAIT_MS = 60_000
     if (requestedMs > MAX_RETRY_WAIT_MS) {
-      // Записываем глобальный cooldown ТОЛЬКО для WB_API_TOKEN scope —
-      // другим токенам не мешаем.
-      if (isWbApiToken) {
-        await setWbCooldownUntil(Math.round(requestedMs / 1000)).catch(() => {})
+      // Quick 260513-khv: пишем cooldown ТОЛЬКО в resolved bucket — Returns/Chat
+      // (bucket=null) идут мимо, их собственные токены/лимиты.
+      if (bucket) {
+        await setWbCooldownUntil(bucket, Math.round(requestedMs / 1000)).catch(() => {})
       }
       throw new WbRateLimitError(Math.round(requestedMs / 1000), path)
     }

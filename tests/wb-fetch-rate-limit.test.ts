@@ -1,6 +1,7 @@
 // tests/wb-fetch-rate-limit.test.ts
 // 2026-05-12: проверка нового wbFetch helper из lib/wb-api.ts
 // (заменил retryFetch — больше никаких слепых ретраев на 429).
+// 2026-05-13 (Quick 260513-khv): per-bucket cooldown isolation.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -32,13 +33,15 @@ vi.mock("@/lib/wb-token", () => ({
 }))
 
 // Используем fetchStocks как proxy к wbFetch (helper не экспортируется)
-describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
+describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry (per-bucket)", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn())
     vi.stubEnv("WB_API_TOKEN", "test-token")
     appSettingFindUnique.mockReset().mockResolvedValue(null)
     appSettingUpsert.mockReset().mockResolvedValue({})
     appSettingDelete.mockReset().mockResolvedValue({})
+    // Сбрасываем module-level legacyMigrationDone flag в wb-cooldown.
+    vi.resetModules()
   })
 
   it("429 + X-Ratelimit-Retry=6249 → WbRateLimitError.retryAfterSec=6249", async () => {
@@ -113,11 +116,14 @@ describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
     expect(result.get(100)).toBe(8) // 5 + 3
   })
 
-  // Backlog 999.1: WB Cooldown Bus integration
+  // Backlog 999.1 + Quick 260513-khv: WB Cooldown Bus integration
 
-  it("активный global cooldown → throws WbRateLimitError БЕЗ обращения к WB", async () => {
+  it("активный statistics-stocks cooldown → throws WbRateLimitError БЕЗ обращения к WB", async () => {
     const future = new Date(Date.now() + 720 * 1000).toISOString()
-    appSettingFindUnique.mockResolvedValue({ value: future })
+    appSettingFindUnique.mockImplementation(({ where: { key } }: { where: { key: string } }) => {
+      if (key === "wbCooldownUntil:statistics-stocks") return Promise.resolve({ value: future })
+      return Promise.resolve(null)
+    })
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
 
@@ -129,12 +135,12 @@ describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
       caught = e
     }
     expect(caught).toBeInstanceOf(WbRateLimitError)
-    expect((caught as { endpoint: string }).endpoint).toContain("global cooldown")
+    expect((caught as { endpoint: string }).endpoint).toContain("cooldown statistics-stocks")
     expect((caught as { retryAfterSec: number }).retryAfterSec).toBeGreaterThan(700)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("429 от WB → пишет global cooldown в AppSetting", async () => {
+  it("429 от Statistics API → пишет cooldown в bucket-key wbCooldownUntil:statistics-stocks", async () => {
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       status: 429,
@@ -148,7 +154,54 @@ describe("wbFetch — 429 → WbRateLimitError с X-Ratelimit-Retry", () => {
     await expect(fetchStocks()).rejects.toThrow()
 
     expect(appSettingUpsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { key: "wbCooldownUntil" } })
+      expect.objectContaining({ where: { key: "wbCooldownUntil:statistics-stocks" } })
     )
+  })
+
+  it("cooldown на statistics-stocks НЕ блокирует Prices endpoint (per-bucket isolation)", async () => {
+    // statistics-stocks заблокирован на 720s, prices свободен
+    const future = new Date(Date.now() + 720 * 1000).toISOString()
+    appSettingFindUnique.mockImplementation(({ where: { key } }: { where: { key: string } }) => {
+      if (key === "wbCooldownUntil:statistics-stocks") return Promise.resolve({ value: future })
+      return Promise.resolve(null)
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ data: { listGoods: [] } }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const { fetchAllPrices } = await import("@/lib/wb-api")
+    // Не должно throw — Prices не в cooldown.
+    const result = await fetchAllPrices()
+    expect(fetchMock).toHaveBeenCalled() // WB запрос реально пошёл
+    expect(result).toBeInstanceOf(Map)
+  })
+
+  it("429 на Prices пишет ТОЛЬКО prices bucket (не statistics-stocks)", async () => {
+    appSettingFindUnique.mockResolvedValue(null)
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: {
+        get: (key: string) => (key === "X-Ratelimit-Retry" ? "1800" : null),
+      },
+    })
+
+    const { fetchAllPrices } = await import("@/lib/wb-api")
+    await expect(fetchAllPrices()).rejects.toThrow()
+
+    // Upsert на prices bucket
+    const upserts = appSettingUpsert.mock.calls
+    const pricesUpsert = upserts.find(
+      ([arg]) => arg?.where?.key === "wbCooldownUntil:prices"
+    )
+    const stocksUpsert = upserts.find(
+      ([arg]) => arg?.where?.key === "wbCooldownUntil:statistics-stocks"
+    )
+    expect(pricesUpsert).toBeDefined()
+    expect(stocksUpsert).toBeUndefined()
   })
 })
