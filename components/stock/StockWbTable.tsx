@@ -3,6 +3,10 @@
 // components/stock/StockWbTable.tsx
 // Phase 14 (STOCK-22, STOCK-25): Client sticky-таблица /stock/wb с 7 кластерными колонками + expand.
 // URL state: ?expandedClusters=ЦФО,ПФО — shareable.
+// Quick 260513-phu: resizable columns + persist + Tooltip + copy nmId.
+//
+// Resize: 12 ключей (3 sticky + Иваново + Всего на WB + 3 «Товар в пути» + 4 «Итого склады WB»).
+// Кластерные колонки — БЕЗ resize (их структура зависит от expand state).
 
 import React, { useCallback, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -12,16 +16,28 @@ import {
   TableBody,
   TableCell,
   TableHead,
-  TableHeader,
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
 import { ClusterTooltip } from "./ClusterTooltip"
 import { WarehouseVisibilityPopover } from "./WarehouseVisibilityPopover"
-import type { ProductWbGroup, StockWbDataResult, WbStockSizeRow } from "@/lib/stock-wb-data"
+import type {
+  ProductWbGroup,
+  StockWbDataResult,
+} from "@/lib/stock-wb-data"
 import { saveStockWbShowSizes } from "@/app/actions/stock-wb"
+import {
+  useResizableColumns,
+  ColumnResizeHandle,
+} from "@/lib/use-resizable-columns"
+import { copyToClipboard } from "@/lib/copy-to-clipboard"
 
 function formatStockValue(n: number): string {
   if (n < 10) return n.toFixed(1)
@@ -33,35 +49,84 @@ function formatInt(n: number): string {
   return Math.trunc(n).toString()
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Resizable columns: keys + defaults (quick 260513-phu)
+// ──────────────────────────────────────────────────────────────────
+
+type StockWbColumnKey =
+  | "photo"
+  | "svodka"
+  | "artikulWb"
+  | "ivanovo"
+  | "totalOnWb"
+  | "inWayTotal"
+  | "inWayFrom"
+  | "inWayTo"
+  | "totalO"
+  | "totalZ"
+  | "totalOb"
+  | "totalD"
+
+const STOCK_WB_DEFAULT_WIDTHS: Record<StockWbColumnKey, number> = {
+  photo: 80,
+  svodka: 240,
+  artikulWb: 96,
+  ivanovo: 80,
+  totalOnWb: 80,
+  inWayTotal: 60,
+  inWayFrom: 60,
+  inWayTo: 60,
+  totalO: 60,
+  totalZ: 60,
+  totalOb: 60,
+  totalD: 60,
+}
+
 interface Props {
   groups: ProductWbGroup[]
   turnoverNormDays: number
   clusterWarehouses: StockWbDataResult["clusterWarehouses"]
   hiddenWarehouseIds: number[] // quick 260422-oy5 — per-user hidden warehouses
-  // Phase 16 (STOCK-36): per-user toggle кнопки «По размерам»
   initialShowSizes: boolean
+  /** quick 260513-phu: persisted column widths from UserPreference. */
+  initialColumnWidths?: Partial<Record<string, number>> | null
 }
 
-function StockCell({ value }: { value: number | null }) {
+function StockCell({ value, width }: { value: number | null; width: number }) {
   return (
-    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
+    <TableCell
+      style={{ width, minWidth: width }}
+      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right"
+    >
       {value !== null ? formatStockValue(value) : <span className="text-muted-foreground">—</span>}
     </TableCell>
   )
 }
 
 /** Ячейка Об — целое с отбрасыванием дробной части. */
-function IntCell({ value }: { value: number | null }) {
+function IntCell({ value, width }: { value: number | null; width: number }) {
   return (
-    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right">
+    <TableCell
+      style={{ width, minWidth: width }}
+      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right"
+    >
       {value !== null ? formatInt(value) : <span className="text-muted-foreground">—</span>}
     </TableCell>
   )
 }
 
-function DeficitCell({ deficit, threshold }: { deficit: number | null; threshold: number | null }) {
+function DeficitCell({
+  deficit,
+  threshold,
+  width,
+}: {
+  deficit: number | null
+  threshold: number | null
+  width: number
+}) {
   return (
     <TableCell
+      style={{ width, minWidth: width }}
       className={cn(
         "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r",
         deficit === null && "text-muted-foreground",
@@ -76,15 +141,34 @@ function DeficitCell({ deficit, threshold }: { deficit: number | null; threshold
 }
 
 // Префикс имени склада, обозначающий сортировочный центр.
-// При hideSc=true эти склады не отображаются при expand, но их остатки и заказы
-// продолжают учитываться в кластерном агрегате (collapsed view).
 function isSortingCenter(name: string): boolean {
   return /^СЦ\s/i.test(name.trim())
 }
 
-export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hiddenWarehouseIds, initialShowSizes }: Props) {
+export function StockWbTable({
+  groups,
+  turnoverNormDays,
+  clusterWarehouses,
+  hiddenWarehouseIds,
+  initialShowSizes,
+  initialColumnWidths,
+}: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  // quick 260513-phu: resizable widths
+  const { widths, startResize, resetColumnWidth } =
+    useResizableColumns<StockWbColumnKey>(
+      "stock.wb.columnWidths",
+      STOCK_WB_DEFAULT_WIDTHS,
+      initialColumnWidths as Partial<Record<StockWbColumnKey, number>> | null,
+    )
+
+  const stickyLefts = {
+    photo: 0,
+    svodka: widths.photo,
+    artikulWb: widths.photo + widths.svodka,
+  }
 
   const expandedSet = new Set<string>(
     (searchParams.get("expandedClusters") ?? "").split(",").filter(Boolean)
@@ -94,8 +178,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
   const hideSc = searchParams.get("hideSc") !== "0"
 
   // Quick 260422-oy5: optimistic локальный state для per-user hidden warehouses.
-  // RSC revalidatePath синхронизирует с БД при следующем render — для optimistic
-  // совпадает с тем что persist отправляет, спец. useEffect-синхронизация не нужна.
   const [hiddenIds, setHiddenIds] = useState<number[]>(hiddenWarehouseIds)
   const hiddenSet = new Set(hiddenIds)
 
@@ -109,21 +191,17 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
     startShowSizesTransition(async () => {
       const res = await saveStockWbShowSizes(next)
       if (!res.ok) {
-        // Не откатываем — следующий revalidate синхронизирует из БД
         console.error("Не удалось сохранить «По размерам»:", res.error)
       }
     })
   }, [showSizes])
 
   // Отфильтрованные карты складов per-cluster для отображения при expand.
-  // Агрегация на уровне кластера (collapsed view) всё равно использует все склады.
   const visibleClusterWarehouses: typeof clusterWarehouses = Object.fromEntries(
     CLUSTER_ORDER.map((c) => [
       c,
       (clusterWarehouses[c] ?? []).filter((w) => {
-        // Фильтр 1: СЦ по кнопке hideSc
         if (hideSc && isSortingCenter(w.warehouseName)) return false
-        // Фильтр 2: per-user hidden (quick 260422-oy5)
         if (hiddenSet.has(w.warehouseId)) return false
         return true
       }),
@@ -195,49 +273,83 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
-        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0 table-fixed">
           <thead className="bg-background">
-            {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
+            {/* Уровень 1 — группы (sticky 3 cols rowSpan=3, Иваново/Всего на WB rowSpan=3, остальные rowSpan=2) */}
             <tr>
               <TableHead
-                className="sticky left-0 top-0 z-30 bg-background w-20 min-w-20 max-w-20 text-xs font-medium text-center border-b border-r"
+                style={{
+                  width: widths.photo,
+                  minWidth: widths.photo,
+                  left: stickyLefts.photo,
+                }}
+                className="sticky top-0 z-30 bg-background text-xs font-medium text-center border-b border-r relative"
                 rowSpan={3}
               >
                 Фото
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "photo")}
+                  onDoubleClick={() => resetColumnWidth("photo")}
+                />
               </TableHead>
               <TableHead
-                className="sticky left-[80px] top-0 z-30 bg-background w-60 min-w-60 max-w-60 text-xs font-medium text-center border-b border-r"
+                style={{
+                  width: widths.svodka,
+                  minWidth: widths.svodka,
+                  left: stickyLefts.svodka,
+                }}
+                className="sticky top-0 z-30 bg-background text-xs font-medium text-center border-b border-r relative"
                 rowSpan={3}
               >
                 Сводка
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "svodka")}
+                  onDoubleClick={() => resetColumnWidth("svodka")}
+                />
               </TableHead>
               <TableHead
-                className="sticky left-[320px] top-0 z-30 bg-background w-24 min-w-24 max-w-24 text-xs font-medium text-center border-b border-r"
+                style={{
+                  width: widths.artikulWb,
+                  minWidth: widths.artikulWb,
+                  left: stickyLefts.artikulWb,
+                }}
+                className="sticky top-0 z-30 bg-background text-xs font-medium text-center border-b border-r relative"
                 rowSpan={3}
               >
                 Артикул WB
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "artikulWb")}
+                  onDoubleClick={() => resetColumnWidth("artikulWb")}
+                />
               </TableHead>
-              {/* Иваново — Product-level остаток (из Excel), rowSpan=3 = одна ячейка на Product group */}
+              {/* Иваново — Product-level, rowSpan=3 */}
               <TableHead
-                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px] w-20 min-w-20 max-w-20"
+                style={{ width: widths.ivanovo, minWidth: widths.ivanovo }}
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px] relative"
                 rowSpan={3}
                 title="Остаток на складе Иваново (из Excel)"
               >
                 Иваново
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "ivanovo")}
+                  onDoubleClick={() => resetColumnWidth("ivanovo")}
+                />
               </TableHead>
-              {/* Всего на WB — 1 колонка, rowSpan=3 (как sticky cols), 92px высота.
-                  Нет sub-cell в row 3 — просто одно число на всю группу. */}
+              {/* Всего на WB — 1 колонка, rowSpan=3 */}
               <TableHead
-                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px]"
+                style={{ width: widths.totalOnWb, minWidth: widths.totalOnWb }}
+                className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[92px] relative"
                 colSpan={1}
                 rowSpan={3}
                 title="Физический остаток по всем складам + Товар в пути (всего)"
               >
                 Всего на WB
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "totalOnWb")}
+                  onDoubleClick={() => resetColumnWidth("totalOnWb")}
+                />
               </TableHead>
-              {/* Товар в пути — 3 колонки: Всего/от/к (агрегат per nmId).
-                  rowSpan=2 — покрывает row 2 (placeholder) чтобы визуально была
-                  единая ячейка как у 'Всего на WB' и collapsed кластеров. */}
+              {/* Товар в пути — 3 cols (rowSpan=2) */}
               <TableHead
                 className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={3}
@@ -246,8 +358,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
               >
                 Товар в пути
               </TableHead>
-              {/* Итого склады WB — 4 колонок О/З/Об/Д по физ. остаткам (без in-way).
-                  rowSpan=2 — покрывает row 2 placeholder. */}
+              {/* Итого склады WB — 4 cols (rowSpan=2) */}
               <TableHead
                 className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={4}
@@ -256,17 +367,14 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
               >
                 Итого склады WB
               </TableHead>
-              {/* 7 кластерных колонок */}
+              {/* 7 кластерных колонок — БЕЗ resize (структура зависит от expand) */}
               {CLUSTER_ORDER.map((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
                 const allWarehouses = clusterWarehouses[cluster] ?? []
                 const visibleWarehouses = visibleClusterWarehouses[cluster] ?? []
-                // collapsed: colSpan=4 (O/З/Об/Д) | expanded: visible × 4 (каждый склад имеет О/З/Об/Д) | empty expanded: colSpan=4 placeholder
                 const colSpan = isExpanded
                   ? (visibleWarehouses.length > 0 ? visibleWarehouses.length * 4 : 4)
                   : 4
-                // Collapsed: rowSpan=2 (cluster cell покрывает level 1 + level 2 = 68px, выглядит цельно)
-                // Expanded: rowSpan=1 (level 2 рендерит имена складов отдельно)
                 const rowSpan = isExpanded ? 1 : 2
                 return (
                   <TableHead
@@ -302,10 +410,8 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 const isExpanded = expandedSet.has(cluster)
                 const warehouses = visibleClusterWarehouses[cluster] ?? []
 
-                // Collapsed: cells покрыты rowSpan=2 из level 1 cluster cell — ничего не рендерим
                 if (!isExpanded) return []
 
-                // Expanded с складами: имя склада colSpan=4 per склад
                 if (warehouses.length > 0) {
                   return warehouses.map((w, idx) => (
                     <TableHead
@@ -328,7 +434,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                   ))
                 }
 
-                // Expanded пустой (нет складов) — placeholder colSpan=4 с подписью «нет складов»
                 return [
                   <TableHead
                     key={`${cluster}-placeholder-lvl2`}
@@ -340,22 +445,91 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 ]
               })}
             </tr>
-            {/* Уровень 3 — О/З/Об/Д всегда (collapsed: 4 per cluster, expanded: 4 × warehouses.length) */}
+            {/* Уровень 3 — О/З/Об/Д */}
             <tr>
-              {/* Товар в пути — 3 cells Всего / от / к под группой */}
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Всего в пути (к + от клиента)">Всего</TableHead>
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="В пути ОТ клиента (возвраты)">от</TableHead>
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="В пути К клиенту">к</TableHead>
-              {/* Итого склады WB — 4 cells O/З/Об/Д под группой */}
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток (физ., без in-way)">О</TableHead>
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Заказы/день">З</TableHead>
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Оборачиваемость">Об</TableHead>
-              <TableHead className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0" title="Дефицит">Д</TableHead>
+              {/* Товар в пути — 3 cells Всего / от / к (с resize) */}
+              <TableHead
+                style={{ width: widths.inWayTotal, minWidth: widths.inWayTotal, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0 relative"
+                title="Всего в пути (к + от клиента)"
+              >
+                Всего
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "inWayTotal")}
+                  onDoubleClick={() => resetColumnWidth("inWayTotal")}
+                />
+              </TableHead>
+              <TableHead
+                style={{ width: widths.inWayFrom, minWidth: widths.inWayFrom, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0 relative"
+                title="В пути ОТ клиента (возвраты)"
+              >
+                от
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "inWayFrom")}
+                  onDoubleClick={() => resetColumnWidth("inWayFrom")}
+                />
+              </TableHead>
+              <TableHead
+                style={{ width: widths.inWayTo, minWidth: widths.inWayTo, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0 relative"
+                title="В пути К клиенту"
+              >
+                к
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "inWayTo")}
+                  onDoubleClick={() => resetColumnWidth("inWayTo")}
+                />
+              </TableHead>
+              {/* Итого склады WB — 4 cells O/З/Об/Д (с resize) */}
+              <TableHead
+                style={{ width: widths.totalO, minWidth: widths.totalO, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0 relative"
+                title="Остаток (физ., без in-way)"
+              >
+                О
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "totalO")}
+                  onDoubleClick={() => resetColumnWidth("totalO")}
+                />
+              </TableHead>
+              <TableHead
+                style={{ width: widths.totalZ, minWidth: widths.totalZ, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0 relative"
+                title="Заказы/день"
+              >
+                З
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "totalZ")}
+                  onDoubleClick={() => resetColumnWidth("totalZ")}
+                />
+              </TableHead>
+              <TableHead
+                style={{ width: widths.totalOb, minWidth: widths.totalOb, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0 relative"
+                title="Оборачиваемость"
+              >
+                Об
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "totalOb")}
+                  onDoubleClick={() => resetColumnWidth("totalOb")}
+                />
+              </TableHead>
+              <TableHead
+                style={{ width: widths.totalD, minWidth: widths.totalD, top: 68 }}
+                className="sticky z-20 bg-background text-xs text-muted-foreground text-center border-b border-r h-6 px-2 py-0 relative"
+                title="Дефицит"
+              >
+                Д
+                <ColumnResizeHandle
+                  onMouseDown={(e) => startResize(e, "totalD")}
+                  onDoubleClick={() => resetColumnWidth("totalD")}
+                />
+              </TableHead>
               {CLUSTER_ORDER.flatMap((cluster) => {
                 const isExpanded = expandedSet.has(cluster)
                 const warehouses = visibleClusterWarehouses[cluster] ?? []
 
-                // Expanded с складами: 4 cells O/З/Об/Д per склад
                 if (isExpanded && warehouses.length > 0) {
                   return warehouses.flatMap((w, idx) => {
                     const lastWarehouse = idx === warehouses.length - 1
@@ -368,7 +542,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                   })
                 }
 
-                // Collapsed или Expanded пустой: 4 cells O/З/Об/Д для кластера
                 return [
                   <TableHead key={`${cluster}-o`} className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Остаток">О</TableHead>,
                   <TableHead key={`${cluster}-z`} className="sticky top-[68px] z-20 bg-background text-xs text-muted-foreground text-center border-b h-6 px-2 py-0" title="Заказы/день">З</TableHead>,
@@ -380,7 +553,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
           </thead>
           <TableBody>
             {groups.map((g, idx) => {
-              // Phase 16 (STOCK-36): rowSpan учитывает размерные строки если showSizes ON
               const totalSizeRows = showSizes
                 ? g.wbCards.reduce(
                     (acc, c) => acc + (c.hasMultipleSizes ? c.sizeBreakdown.length : 0),
@@ -389,7 +561,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 : 0
               const rowSpan = 1 + g.wbCards.length + totalSizeRows
 
-              // Row-level агрегаты по всем wbCards продукта (Сводная)
               const rowTotalStock = g.wbCards.reduce<number | null>(
                 (acc, c) => (c.totalStock === null ? acc : (acc ?? 0) + c.totalStock),
                 null,
@@ -398,7 +569,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 (acc, c) => (c.avgSalesSpeed7d === null ? acc : (acc ?? 0) + c.avgSalesSpeed7d),
                 null,
               )
-              // Phase 15.1: агрегат in-way по всем wbCards (для Сводной строки)
               const rowInWayTo = g.wbCards.reduce<number | null>(
                 (acc, c) => (c.inWayToClient === null ? acc : (acc ?? 0) + c.inWayToClient),
                 null,
@@ -422,7 +592,6 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
               })
               const rowThreshold = deficitThreshold(turnoverNormDays, rowOrdersPerDay)
 
-              // Row-level per-cluster агрегаты (sum по всем wbCards)
               const rowClusterAgg = Object.fromEntries(
                 CLUSTER_ORDER.map((cluster) => {
                   const stockSum = g.wbCards.reduce<number | null>((acc, c) => {
@@ -443,7 +612,12 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                   <TableRow className={cn(idx > 0 && "border-t-4 border-t-border")}>
                     <TableCell
                       rowSpan={rowSpan}
-                      className="sticky left-0 z-20 bg-background border-r w-20 min-w-20 max-w-20 align-top p-2"
+                      style={{
+                        width: widths.photo,
+                        minWidth: widths.photo,
+                        left: stickyLefts.photo,
+                      }}
+                      className="sticky z-20 bg-background border-r align-top p-2"
                     >
                       <div className="flex justify-center">
                         {g.photoUrl ? (
@@ -460,49 +634,88 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                         )}
                       </div>
                     </TableCell>
+                    {/* Сводка — Tooltip на name + copy SKU (quick 260513-phu) */}
                     <TableCell
                       rowSpan={rowSpan}
-                      className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
+                      style={{
+                        width: widths.svodka,
+                        minWidth: widths.svodka,
+                        left: stickyLefts.svodka,
+                      }}
+                      className="sticky z-20 bg-background border-r align-top p-3"
                     >
                       <div className="flex flex-col gap-1">
-                        <div className="text-sm font-medium leading-snug line-clamp-2">{g.productName}</div>
-                        <div className="text-xs text-muted-foreground">{g.productSku}</div>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <div className="text-sm font-medium leading-snug line-clamp-2 cursor-default" />
+                            }
+                          >
+                            {g.productName}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="max-w-sm text-sm">{g.productName}</div>
+                          </TooltipContent>
+                        </Tooltip>
+                        <div
+                          className="text-xs text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void copyToClipboard(g.productSku, "Артикул")
+                          }}
+                          title="Нажмите чтобы скопировать"
+                        >
+                          {g.productSku}
+                        </div>
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>
                     </TableCell>
-                    {/* ОДНА sticky колонка "Артикул WB" = 'Сводная' (совпадает с header rowSpan=3) */}
-                    <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 align-top text-xs font-medium text-center">
+                    {/* Артикул WB — Сводная */}
+                    <TableCell
+                      style={{
+                        width: widths.artikulWb,
+                        minWidth: widths.artikulWb,
+                        left: stickyLefts.artikulWb,
+                      }}
+                      className="sticky z-20 bg-background border-r align-top text-xs font-medium text-center"
+                    >
                       Сводная
                     </TableCell>
-                    {/* Иваново — Product-level остаток (в Сводной строке; в per-nmId строках пусто) */}
-                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r w-20 min-w-20 max-w-20">
+                    {/* Иваново — Product-level */}
+                    <TableCell
+                      style={{ width: widths.ivanovo, minWidth: widths.ivanovo }}
+                      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
+                    >
                       {g.ivanovoStock !== null ? formatInt(g.ivanovoStock) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    {/* Всего на WB — физ. остаток + товар в пути (с border-r для разделения) */}
-                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                    {/* Всего на WB */}
+                    <TableCell
+                      style={{ width: widths.totalOnWb, minWidth: widths.totalOnWb }}
+                      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
+                    >
                       {rowTotalOnWb !== null ? formatInt(rowTotalOnWb) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    {/* Товар в пути — 3 cells Всего/от/к */}
-                    <IntCell value={rowInWayTotal} />
-                    <IntCell value={rowInWayFrom} />
-                    <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                    {/* Товар в пути — Всего/от/к */}
+                    <IntCell value={rowInWayTotal} width={widths.inWayTotal} />
+                    <IntCell value={rowInWayFrom} width={widths.inWayFrom} />
+                    <TableCell
+                      style={{ width: widths.inWayTo, minWidth: widths.inWayTo }}
+                      className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
+                    >
                       {rowInWayTo !== null ? formatInt(rowInWayTo) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    {/* Итого склады WB — О/З/Об/Д (physical stock only) */}
-                    <StockCell value={rowTotalStock} />
-                    <StockCell value={rowOrdersPerDay} />
-                    <IntCell value={rowMetrics.turnoverDays} />
-                    <DeficitCell deficit={rowMetrics.deficit} threshold={rowThreshold} />
-                    {/* Кластеры — row-level агрегат (сумма по wbCards). При expand — plotholder colSpan под 4-cell заголовок склада */}
+                    {/* Итого склады WB — О/З/Об/Д */}
+                    <StockCell value={rowTotalStock} width={widths.totalO} />
+                    <StockCell value={rowOrdersPerDay} width={widths.totalZ} />
+                    <IntCell value={rowMetrics.turnoverDays} width={widths.totalOb} />
+                    <DeficitCell deficit={rowMetrics.deficit} threshold={rowThreshold} width={widths.totalD} />
+                    {/* Кластеры — row-level агрегат */}
                     {CLUSTER_ORDER.flatMap((cluster) => {
                       const isExpanded = expandedSet.has(cluster)
                       const warehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
                       const agg = rowClusterAgg[cluster as ClusterShortName]
 
                       if (isExpanded) {
-                        // Сводная на уровне Product при expanded кластере остаётся пустой для per-warehouse колонок
-                        // (за ordersCount в строке Сводной не виден individual warehouse split).
-                        // Placeholder colSpan=4 на каждый склад (или 4 если нет складов).
                         const groupCount = warehouses.length > 0 ? warehouses.length : 1
                         return Array.from({ length: groupCount }, (_, i) => (
                           <TableCell
@@ -518,18 +731,19 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                         ))
                       }
 
-                      // Collapsed: О/З/Об/Д — сумма по кластеру
                       const aggMetrics = calculateStockMetrics({
                         stock: agg?.stock ?? null,
                         ordersPerDay: agg?.orders ?? null,
                         turnoverNormDays,
                       })
                       const aggThreshold = deficitThreshold(turnoverNormDays, agg?.orders ?? null)
+                      // Кластерные ячейки — без resize, использую дефолтную ширину 60px
+                      const clusterW = 60
                       return [
-                        <StockCell key={`${cluster}-sum-o`} value={agg?.stock ?? null} />,
-                        <StockCell key={`${cluster}-sum-z`} value={agg?.orders ?? null} />,
-                        <IntCell key={`${cluster}-sum-ob`} value={aggMetrics.turnoverDays} />,
-                        <DeficitCell key={`${cluster}-sum-d`} deficit={aggMetrics.deficit} threshold={aggThreshold} />,
+                        <StockCell key={`${cluster}-sum-o`} value={agg?.stock ?? null} width={clusterW} />,
+                        <StockCell key={`${cluster}-sum-z`} value={agg?.orders ?? null} width={clusterW} />,
+                        <IntCell key={`${cluster}-sum-ob`} value={aggMetrics.turnoverDays} width={clusterW} />,
+                        <DeficitCell key={`${cluster}-sum-d`} deficit={aggMetrics.deficit} threshold={aggThreshold} width={clusterW} />,
                       ]
                     })}
                   </TableRow>
@@ -546,173 +760,198 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     return (
                       <React.Fragment key={card.wbCardId}>
                         <TableRow className="border-t border-t-border/60">
-                        <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
-                          {card.nmId}
-                        </TableCell>
-                        {/* Иваново — пустая ячейка в per-nmId строках (значение только в Сводной) */}
-                        <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">
-                          —
-                        </TableCell>
-                        {/* Phase 15.1: card-level in-way агрегат */}
-                        {(() => {
-                          const cardInWayTotal =
-                            card.inWayToClient === null && card.inWayFromClient === null
-                              ? null
-                              : (card.inWayToClient ?? 0) + (card.inWayFromClient ?? 0)
-                          const cardTotalOnWb =
-                            card.totalStock === null && cardInWayTotal === null
-                              ? null
-                              : (card.totalStock ?? 0) + (cardInWayTotal ?? 0)
-                          return (
-                            <>
-                              {/* Всего на WB (border-r для разделения от Товар в пути) */}
-                              <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
-                                {cardTotalOnWb !== null ? formatInt(cardTotalOnWb) : <span className="text-muted-foreground">—</span>}
-                              </TableCell>
-                              {/* Товар в пути — Всего/от/к */}
-                              <IntCell value={cardInWayTotal} />
-                              <IntCell value={card.inWayFromClient} />
-                              <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
-                                {card.inWayToClient !== null ? formatInt(card.inWayToClient) : <span className="text-muted-foreground">—</span>}
-                              </TableCell>
-                            </>
-                          )
-                        })()}
-                        {/* Итого склады WB О/З/Об/Д (physical stock only) */}
-                        <StockCell value={card.totalStock} />
-                        <StockCell value={card.avgSalesSpeed7d} />
-                        <IntCell value={cardMetrics.turnoverDays} />
-                        <DeficitCell deficit={cardMetrics.deficit} threshold={cardThreshold} />
-                        {/* Кластеры */}
-                        {CLUSTER_ORDER.flatMap((cluster) => {
-                          const isExpanded = expandedSet.has(cluster)
-                          const clusterData = card.clusters[cluster as ClusterShortName]
-                          const warehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
-
-                          if (isExpanded) {
-                            if (warehouses.length === 0) {
-                              // placeholder colSpan=4 под single level-2 TableHead
-                              return [
-                                <TableCell key={`${card.wbCardId}-${cluster}-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground border-r">—</TableCell>
-                              ]
-                            }
-                            // Per-warehouse 4 cells (О/З/Об/Д) — такая же структура как в collapsed кластере
-                            return warehouses.flatMap((w, wIdx) => {
-                              const slot = clusterData?.warehouses.find((s) => s.warehouseId === w.warehouseId)
-                              const whStock = slot?.quantity ?? null
-                              const whOrdersPerDay = slot?.ordersPerDay ?? null
-                              const whMetrics = calculateStockMetrics({
-                                stock: whStock,
-                                ordersPerDay: whOrdersPerDay,
-                                turnoverNormDays,
-                              })
-                              const whThreshold = deficitThreshold(turnoverNormDays, whOrdersPerDay)
-                              const lastWarehouse = wIdx === warehouses.length - 1
-                              return [
-                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-o`} value={whStock} />,
-                                <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-z`} value={whOrdersPerDay} />,
-                                <IntCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-ob`} value={whMetrics.turnoverDays} />,
+                          {/* Артикул WB — copy on click (quick 260513-phu) */}
+                          <TableCell
+                            style={{
+                              width: widths.artikulWb,
+                              minWidth: widths.artikulWb,
+                              left: stickyLefts.artikulWb,
+                            }}
+                            className="sticky z-20 bg-background border-r text-xs tabular-nums cursor-pointer hover:text-primary transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void copyToClipboard(String(card.nmId), "Артикул")
+                            }}
+                            title="Нажмите чтобы скопировать"
+                          >
+                            {card.nmId}
+                          </TableCell>
+                          {/* Иваново — placeholder в per-nmId */}
+                          <TableCell
+                            style={{ width: widths.ivanovo, minWidth: widths.ivanovo }}
+                            className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r text-muted-foreground"
+                          >
+                            —
+                          </TableCell>
+                          {/* Card-level Всего на WB + in-way */}
+                          {(() => {
+                            const cardInWayTotal =
+                              card.inWayToClient === null && card.inWayFromClient === null
+                                ? null
+                                : (card.inWayToClient ?? 0) + (card.inWayFromClient ?? 0)
+                            const cardTotalOnWb =
+                              card.totalStock === null && cardInWayTotal === null
+                                ? null
+                                : (card.totalStock ?? 0) + (cardInWayTotal ?? 0)
+                            return (
+                              <>
                                 <TableCell
-                                  key={`${card.wbCardId}-${cluster}-${w.warehouseId}-d`}
-                                  className={cn(
-                                    "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
-                                    lastWarehouse ? "border-r" : "border-r border-r-border/40",
-                                    whMetrics.deficit === null && "text-muted-foreground",
-                                    whMetrics.deficit !== null && whMetrics.deficit <= 0 && "text-green-600 dark:text-green-500",
-                                    whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit > 0 && whMetrics.deficit < whThreshold && "text-yellow-600 dark:text-yellow-400",
-                                    whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit >= whThreshold && "text-red-600 dark:text-red-500 font-medium",
-                                  )}
+                                  style={{ width: widths.totalOnWb, minWidth: widths.totalOnWb }}
+                                  className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
                                 >
-                                  {whMetrics.deficit !== null ? formatInt(whMetrics.deficit) : "—"}
-                                </TableCell>,
-                              ]
-                            })
-                          }
-
-                          // Collapsed: 4 sub-columns О/З/Об/Д (Phase 15: З = per-cluster ordersPerDay, учитывает ВСЕ склады включая СЦ)
-                          const clusterOrdersPerDay = clusterData?.ordersPerDay ?? null
-                          const clusterMetrics = calculateStockMetrics({
-                            stock: clusterData?.totalStock ?? null,
-                            ordersPerDay: clusterOrdersPerDay,
-                            turnoverNormDays,
-                          })
-                          const clusterThreshold = deficitThreshold(turnoverNormDays, clusterOrdersPerDay)
-                          return [
-                            <StockCell key={`${card.wbCardId}-${cluster}-o`} value={clusterData?.totalStock ?? null} />,
-                            <StockCell key={`${card.wbCardId}-${cluster}-z`} value={clusterOrdersPerDay} />,
-                            <IntCell key={`${card.wbCardId}-${cluster}-ob`} value={clusterMetrics.turnoverDays} />,
-                            <DeficitCell key={`${card.wbCardId}-${cluster}-d`} deficit={clusterMetrics.deficit} threshold={clusterThreshold} />,
-                          ]
-                        })}
-                      </TableRow>
-                      {/* Phase 16 (STOCK-36): размерные строки под per-nmId */}
-                      {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
-                        <TableRow
-                          key={`${card.wbCardId}-size-${sizeRow.techSize}`}
-                          className="border-t border-t-border/40 bg-muted"
-                        >
-                          {/* Артикул-колонка: ↳ {techSize}.
-                              bg-muted СПЛОШНОЙ (не /30) — иначе при горизонтальном
-                              scroll non-sticky cells просвечивают через sticky.
-                              Паттерн из CLAUDE.md «Sticky data-таблицы». */}
-                          <TableCell className="sticky left-[320px] z-20 bg-muted border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
-                            <span className="text-muted-foreground pl-3">↳ {sizeRow.techSize || "—"}</span>
-                          </TableCell>
-                          {/* Иваново — placeholder */}
-                          <TableCell className="px-2 py-1 h-8 text-xs text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">—</TableCell>
-                          {/* Всего на WB — sizeRow.totalStock (без in-way) */}
-                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
-                            {sizeRow.totalStock !== null ? formatInt(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
-                          </TableCell>
-                          {/* Товар в пути — placeholder × 3 (per-size in-way не хранится) */}
-                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
-                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
-                          <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>
-                          {/* Итого склады WB О/З/Об/Д — З=null → metrics все null */}
-                          <StockCell value={sizeRow.totalStock} />
-                          <StockCell value={null} />
-                          <IntCell value={null} />
-                          <DeficitCell deficit={null} threshold={null} />
-                          {/* Кластеры — то же flatMap по CLUSTER_ORDER, но через sizeRow.clusters */}
+                                  {cardTotalOnWb !== null ? formatInt(cardTotalOnWb) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                                <IntCell value={cardInWayTotal} width={widths.inWayTotal} />
+                                <IntCell value={card.inWayFromClient} width={widths.inWayFrom} />
+                                <TableCell
+                                  style={{ width: widths.inWayTo, minWidth: widths.inWayTo }}
+                                  className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
+                                >
+                                  {card.inWayToClient !== null ? formatInt(card.inWayToClient) : <span className="text-muted-foreground">—</span>}
+                                </TableCell>
+                              </>
+                            )
+                          })()}
+                          {/* Итого склады WB О/З/Об/Д */}
+                          <StockCell value={card.totalStock} width={widths.totalO} />
+                          <StockCell value={card.avgSalesSpeed7d} width={widths.totalZ} />
+                          <IntCell value={cardMetrics.turnoverDays} width={widths.totalOb} />
+                          <DeficitCell deficit={cardMetrics.deficit} threshold={cardThreshold} width={widths.totalD} />
+                          {/* Кластеры */}
                           {CLUSTER_ORDER.flatMap((cluster) => {
                             const isExpanded = expandedSet.has(cluster)
-                            const visibleWarehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
-                            const sizeClusterAgg = sizeRow.clusters[cluster as ClusterShortName]
+                            const clusterData = card.clusters[cluster as ClusterShortName]
+                            const warehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
+                            const clusterW = 60
+
                             if (isExpanded) {
-                              if (visibleWarehouses.length === 0) {
+                              if (warehouses.length === 0) {
                                 return [
-                                  <TableCell key={`${cluster}-size-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>,
+                                  <TableCell key={`${card.wbCardId}-${cluster}-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground border-r">—</TableCell>
                                 ]
                               }
-                              return visibleWarehouses.flatMap((w, idx) => {
-                                const isLast = idx === visibleWarehouses.length - 1
-                                const borderClass = isLast ? "border-r" : "border-r border-r-border/40"
-                                const slot = sizeClusterAgg.warehouses.find((slotW) => slotW.warehouseId === w.warehouseId)
-                                const slotQty = slot?.quantity ?? 0
+                              return warehouses.flatMap((w, wIdx) => {
+                                const slot = clusterData?.warehouses.find((s) => s.warehouseId === w.warehouseId)
+                                const whStock = slot?.quantity ?? null
+                                const whOrdersPerDay = slot?.ordersPerDay ?? null
+                                const whMetrics = calculateStockMetrics({
+                                  stock: whStock,
+                                  ordersPerDay: whOrdersPerDay,
+                                  turnoverNormDays,
+                                })
+                                const whThreshold = deficitThreshold(turnoverNormDays, whOrdersPerDay)
+                                const lastWarehouse = wIdx === warehouses.length - 1
                                 return [
-                                  <StockCell key={`${cluster}-size-${w.warehouseId}-o`} value={slotQty} />,
-                                  <StockCell key={`${cluster}-size-${w.warehouseId}-z`} value={null} />,
-                                  <IntCell key={`${cluster}-size-${w.warehouseId}-ob`} value={null} />,
+                                  <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-o`} value={whStock} width={clusterW} />,
+                                  <StockCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-z`} value={whOrdersPerDay} width={clusterW} />,
+                                  <IntCell key={`${card.wbCardId}-${cluster}-${w.warehouseId}-ob`} value={whMetrics.turnoverDays} width={clusterW} />,
                                   <TableCell
-                                    key={`${cluster}-size-${w.warehouseId}-d`}
+                                    key={`${card.wbCardId}-${cluster}-${w.warehouseId}-d`}
+                                    style={{ width: clusterW, minWidth: clusterW }}
                                     className={cn(
-                                      "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
-                                      borderClass,
+                                      "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
+                                      lastWarehouse ? "border-r" : "border-r border-r-border/40",
+                                      whMetrics.deficit === null && "text-muted-foreground",
+                                      whMetrics.deficit !== null && whMetrics.deficit <= 0 && "text-green-600 dark:text-green-500",
+                                      whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit > 0 && whMetrics.deficit < whThreshold && "text-yellow-600 dark:text-yellow-400",
+                                      whMetrics.deficit !== null && whThreshold !== null && whMetrics.deficit >= whThreshold && "text-red-600 dark:text-red-500 font-medium",
                                     )}
-                                  >—</TableCell>,
+                                  >
+                                    {whMetrics.deficit !== null ? formatInt(whMetrics.deficit) : "—"}
+                                  </TableCell>,
                                 ]
                               })
                             }
+
+                            const clusterOrdersPerDay = clusterData?.ordersPerDay ?? null
+                            const clusterMetrics = calculateStockMetrics({
+                              stock: clusterData?.totalStock ?? null,
+                              ordersPerDay: clusterOrdersPerDay,
+                              turnoverNormDays,
+                            })
+                            const clusterThreshold = deficitThreshold(turnoverNormDays, clusterOrdersPerDay)
                             return [
-                              <StockCell key={`${cluster}-size-o`} value={sizeClusterAgg.totalStock ?? null} />,
-                              <StockCell key={`${cluster}-size-z`} value={null} />,
-                              <IntCell key={`${cluster}-size-ob`} value={null} />,
-                              <DeficitCell key={`${cluster}-size-d`} deficit={null} threshold={null} />,
+                              <StockCell key={`${card.wbCardId}-${cluster}-o`} value={clusterData?.totalStock ?? null} width={clusterW} />,
+                              <StockCell key={`${card.wbCardId}-${cluster}-z`} value={clusterOrdersPerDay} width={clusterW} />,
+                              <IntCell key={`${card.wbCardId}-${cluster}-ob`} value={clusterMetrics.turnoverDays} width={clusterW} />,
+                              <DeficitCell key={`${card.wbCardId}-${cluster}-d`} deficit={clusterMetrics.deficit} threshold={clusterThreshold} width={clusterW} />,
                             ]
                           })}
                         </TableRow>
-                      ))}
-                    </React.Fragment>
+                        {/* Phase 16 (STOCK-36): размерные строки под per-nmId */}
+                        {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
+                          <TableRow
+                            key={`${card.wbCardId}-size-${sizeRow.techSize}`}
+                            className="border-t border-t-border/40 bg-muted"
+                          >
+                            <TableCell
+                              style={{
+                                width: widths.artikulWb,
+                                minWidth: widths.artikulWb,
+                                left: stickyLefts.artikulWb,
+                              }}
+                              className="sticky z-20 bg-muted border-r text-xs tabular-nums"
+                            >
+                              <span className="text-muted-foreground pl-3">↳ {sizeRow.techSize || "—"}</span>
+                            </TableCell>
+                            <TableCell
+                              style={{ width: widths.ivanovo, minWidth: widths.ivanovo }}
+                              className="px-2 py-1 h-8 text-xs text-right border-r text-muted-foreground"
+                            >—</TableCell>
+                            <TableCell
+                              style={{ width: widths.totalOnWb, minWidth: widths.totalOnWb }}
+                              className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r"
+                            >
+                              {sizeRow.totalStock !== null ? formatInt(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell style={{ width: widths.inWayTotal, minWidth: widths.inWayTotal }} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                            <TableCell style={{ width: widths.inWayFrom, minWidth: widths.inWayFrom }} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
+                            <TableCell style={{ width: widths.inWayTo, minWidth: widths.inWayTo }} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>
+                            <StockCell value={sizeRow.totalStock} width={widths.totalO} />
+                            <StockCell value={null} width={widths.totalZ} />
+                            <IntCell value={null} width={widths.totalOb} />
+                            <DeficitCell deficit={null} threshold={null} width={widths.totalD} />
+                            {CLUSTER_ORDER.flatMap((cluster) => {
+                              const isExpanded = expandedSet.has(cluster)
+                              const visibleWarehouses = visibleClusterWarehouses[cluster as ClusterShortName] ?? []
+                              const sizeClusterAgg = sizeRow.clusters[cluster as ClusterShortName]
+                              const clusterW = 60
+                              if (isExpanded) {
+                                if (visibleWarehouses.length === 0) {
+                                  return [
+                                    <TableCell key={`${cluster}-size-empty`} colSpan={4} className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>,
+                                  ]
+                                }
+                                return visibleWarehouses.flatMap((w, idx) => {
+                                  const isLast = idx === visibleWarehouses.length - 1
+                                  const borderClass = isLast ? "border-r" : "border-r border-r-border/40"
+                                  const slot = sizeClusterAgg.warehouses.find((slotW) => slotW.warehouseId === w.warehouseId)
+                                  const slotQty = slot?.quantity ?? 0
+                                  return [
+                                    <StockCell key={`${cluster}-size-${w.warehouseId}-o`} value={slotQty} width={clusterW} />,
+                                    <StockCell key={`${cluster}-size-${w.warehouseId}-z`} value={null} width={clusterW} />,
+                                    <IntCell key={`${cluster}-size-${w.warehouseId}-ob`} value={null} width={clusterW} />,
+                                    <TableCell
+                                      key={`${cluster}-size-${w.warehouseId}-d`}
+                                      style={{ width: clusterW, minWidth: clusterW }}
+                                      className={cn(
+                                        "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground",
+                                        borderClass,
+                                      )}
+                                    >—</TableCell>,
+                                  ]
+                                })
+                              }
+                              return [
+                                <StockCell key={`${cluster}-size-o`} value={sizeClusterAgg.totalStock ?? null} width={clusterW} />,
+                                <StockCell key={`${cluster}-size-z`} value={null} width={clusterW} />,
+                                <IntCell key={`${cluster}-size-ob`} value={null} width={clusterW} />,
+                                <DeficitCell key={`${cluster}-size-d`} deficit={null} threshold={null} width={clusterW} />,
+                              ]
+                            })}
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
                     )
                   })}
                 </React.Fragment>

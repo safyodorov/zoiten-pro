@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getStockWbData } from "@/lib/stock-wb-data"
 import { getStockFilterOptions } from "@/lib/stock-data"
+import { getUserPreference } from "@/app/actions/user-preferences"
 import { StockWbTable } from "@/components/stock/StockWbTable"
 import { StockWbFilters } from "@/components/stock/StockWbFilters"
 
@@ -35,10 +36,12 @@ export default async function StockWbPage({ searchParams }: PageProps) {
     subcategoryIds: params.subcategories?.split(",").filter(Boolean),
   }
 
-  const [data, filterOptions, session] = await Promise.all([
+  // quick 260513-phu: + persisted ширины колонок (per-user)
+  const [data, filterOptions, session, stockWbColumnWidths] = await Promise.all([
     getStockWbData(filters),
     getStockFilterOptions(),
     auth(),
+    getUserPreference<Record<string, number>>("stock.wb.columnWidths"),
   ])
 
   // Quick 260422-oy5: per-user фильтр скрытых WB-складов
@@ -82,6 +85,7 @@ export default async function StockWbPage({ searchParams }: PageProps) {
             clusterWarehouses={data.clusterWarehouses}
             hiddenWarehouseIds={hiddenWarehouseIds}
             initialShowSizes={initialShowSizes}
+            initialColumnWidths={stockWbColumnWidths}
           />
         </div>
       )}

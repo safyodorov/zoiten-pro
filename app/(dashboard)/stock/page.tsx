@@ -14,6 +14,7 @@ import {
   getStockFilterOptions,
   type StockFilters as StockFiltersType,
 } from "@/lib/stock-data"
+import { getUserPreference } from "@/app/actions/user-preferences"
 import { StockFilters } from "@/components/stock/StockFilters"
 import { StockProductTable } from "@/components/stock/StockProductTable"
 import { TurnoverNormInput } from "@/components/stock/TurnoverNormInput"
@@ -49,9 +50,11 @@ export default async function StockPage({ searchParams }: PageProps) {
   }
 
   // Параллельный fetch данных и опций фильтров
-  const [stockData, filterOptions] = await Promise.all([
+  // quick 260513-phu: + persisted ширины колонок (per-user)
+  const [stockData, filterOptions, stockColumnWidths] = await Promise.all([
     getStockData(filters),
     getStockFilterOptions(),
+    getUserPreference<Record<string, number>>("stock.columnWidths"),
   ])
 
   return (
@@ -80,6 +83,7 @@ export default async function StockPage({ searchParams }: PageProps) {
         <StockProductTable
           products={stockData.products}
           turnoverNormDays={stockData.turnoverNormDays}
+          initialColumnWidths={stockColumnWidths}
         />
       </div>
     </div>
