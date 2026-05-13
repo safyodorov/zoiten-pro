@@ -32,9 +32,19 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
 import { PromoTooltip } from "@/components/prices/PromoTooltip"
 import { EditablePromoName } from "@/components/prices/EditablePromoName"
 import { setUserPreference } from "@/app/actions/user-preferences"
+import {
+  useResizableColumns,
+  ColumnResizeHandle,
+} from "@/lib/use-resizable-columns"
+import { copyToClipboard } from "@/lib/copy-to-clipboard"
 import { ChevronDown, Eye, Trash2 } from "lucide-react"
 
 // ──────────────────────────────────────────────────────────────────
@@ -152,6 +162,9 @@ export interface ProductGroup {
     id: string
     name: string
     photoUrl: string | null
+    /** Бренд для отображения мелким шрифтом под названием товара
+     *  (quick 260513-phu). null если у Product нет связи. */
+    brandName?: string | null
     /** Сумма WbCard.stockQty по всем карточкам Product. */
     totalStock: number
     /** Сумма WbCard.avgSalesSpeed7d по всем карточкам Product. */
@@ -265,9 +278,8 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   roiPct: 80,
 }
 
-const MIN_COLUMN_WIDTH = 60
-const RESIZE_SAVE_DEBOUNCE_MS = 500
-const PREFERENCE_KEY = "prices.wb.columnWidths"
+// quick 260513-phu: resize-механика вынесена в lib/use-resizable-columns.ts.
+// PREFERENCE_KEY теперь передаётся прямо в useResizableColumns(storageKey, ...).
 const HIDDEN_PREFERENCE_KEY = "prices.wb.hiddenColumns"
 
 /** Колонки, которые ПОЛЬЗОВАТЕЛЬ МОЖЕТ СКРЫТЬ через кнопку «Вид».
@@ -472,24 +484,7 @@ function ColumnVisibilityDropdown({
   )
 }
 
-/** Drag handle на правой границе <th>. Захватывает mouse events и
- *  двойным кликом сбрасывает колонку к дефолту. */
-function ColumnResizeHandle({
-  onMouseDown,
-  onDoubleClick,
-}: {
-  onMouseDown: (e: React.MouseEvent) => void
-  onDoubleClick: (e: React.MouseEvent) => void
-}) {
-  return (
-    <div
-      onMouseDown={onMouseDown}
-      onDoubleClick={onDoubleClick}
-      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-50"
-      title="Потяните чтобы изменить ширину. Двойной клик — сброс к дефолту."
-    />
-  )
-}
+// quick 260513-phu: ColumnResizeHandle вынесен в lib/use-resizable-columns.ts.
 
 // ──────────────────────────────────────────────────────────────────
 // Component
@@ -504,13 +499,18 @@ export function PriceCalculatorTable({
   onToggleCalcSelection,
   onDeleteSelected,
 }: PriceCalculatorTableProps) {
-  // ── Column widths state (план 260410-mya) ───────────────────────
-  // Merge: DEFAULT_WIDTHS + сохранённые значения (незнакомые ключи игнорируются)
-  const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(
-    () => ({
-      ...DEFAULT_WIDTHS,
-      ...(initialColumnWidths ?? {}),
-    }),
+  // ── Column widths через shared hook (quick 260513-phu) ──────────
+  // Канонический источник resize-механики: lib/use-resizable-columns.ts.
+  // Сохраняем имя `columnWidths` через destructuring → все 30+ обращений
+  // columnWidths[key] работают без правок.
+  const {
+    widths: columnWidths,
+    startResize,
+    resetColumnWidth,
+  } = useResizableColumns<ColumnKey>(
+    "prices.wb.columnWidths",
+    DEFAULT_WIDTHS,
+    initialColumnWidths,
   )
 
   // ── Hidden columns state (фильтр «Вид») ─────────────────────────
@@ -556,97 +556,14 @@ export function PriceCalculatorTable({
     })
   }, [scheduleHiddenSave])
 
-  // Debounced save таймер
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const scheduleSave = useCallback((widths: Record<ColumnKey, number>) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(async () => {
-      const result = await setUserPreference(PREFERENCE_KEY, widths)
-      if (!result.ok) {
-        toast.error(`Не удалось сохранить ширины: ${result.error}`)
-      }
-    }, RESIZE_SAVE_DEBOUNCE_MS)
-  }, [])
-
-  // Resize drag state — храним в ref чтобы не ре-рендерить на каждое движение
-  const resizeStateRef = useRef<{
-    key: ColumnKey
-    startX: number
-    startWidth: number
-  } | null>(null)
-  const rafIdRef = useRef<number | null>(null)
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    const state = resizeStateRef.current
-    if (!state) return
-    if (rafIdRef.current != null) return // throttle via rAF
-
-    rafIdRef.current = requestAnimationFrame(() => {
-      rafIdRef.current = null
-      const s = resizeStateRef.current
-      if (!s) return
-      const delta = e.clientX - s.startX
-      const newWidth = Math.max(MIN_COLUMN_WIDTH, s.startWidth + delta)
-      setColumnWidths((prev) => ({ ...prev, [s.key]: newWidth }))
-    })
-  }, [])
-
-  const handleMouseUp = useCallback(() => {
-    resizeStateRef.current = null
-    if (rafIdRef.current != null) {
-      cancelAnimationFrame(rafIdRef.current)
-      rafIdRef.current = null
-    }
-    document.removeEventListener("mousemove", handleMouseMove)
-    document.removeEventListener("mouseup", handleMouseUp)
-    document.body.style.cursor = ""
-    document.body.style.userSelect = ""
-    // Сохранить актуальные widths (читаем из функционального setState для гарантии свежего значения)
-    setColumnWidths((current) => {
-      scheduleSave(current)
-      return current
-    })
-  }, [handleMouseMove, scheduleSave])
-
-  const startResize = useCallback(
-    (e: React.MouseEvent, key: ColumnKey) => {
-      e.preventDefault()
-      e.stopPropagation()
-      resizeStateRef.current = {
-        key,
-        startX: e.clientX,
-        startWidth: columnWidths[key],
-      }
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-      document.body.style.cursor = "col-resize"
-      document.body.style.userSelect = "none"
-    },
-    [columnWidths, handleMouseMove, handleMouseUp],
-  )
-
-  const resetColumnWidth = useCallback(
-    (key: ColumnKey) => {
-      setColumnWidths((prev) => {
-        const next = { ...prev, [key]: DEFAULT_WIDTHS[key] }
-        scheduleSave(next)
-        return next
-      })
-    },
-    [scheduleSave],
-  )
-
-  // Cleanup на unmount
+  // quick 260513-phu: resize-state (timers, refs, handlers, cleanup) живёт
+  // внутри useResizableColumns hook. Здесь остаётся только cleanup для
+  // hiddenColumns save timer (специфичен для PriceCalculatorTable).
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       if (hiddenSaveTimerRef.current) clearTimeout(hiddenSaveTimerRef.current)
-      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current)
-      document.removeEventListener("mousemove", handleMouseMove)
-      document.removeEventListener("mouseup", handleMouseUp)
     }
-  }, [handleMouseMove, handleMouseUp])
+  }, [])
 
   // Cumulative sticky left offsets (пересчитываются на каждый render)
   const stickyLefts = {
@@ -872,9 +789,33 @@ export function PriceCalculatorTable({
                           className="sticky z-10 bg-background border-r align-top p-3 cursor-default"
                         >
                           <div className="flex flex-col gap-1">
-                            <div className="text-sm font-medium leading-snug line-clamp-3">
-                              {group.product.name}
-                            </div>
+                            {/* quick 260513-phu: Tooltip (always-on) с полным
+                                названием + line-clamp-2 (раньше было -3).
+                                base-ui TooltipTrigger через render-prop
+                                подменяет <button> на <div> для сохранения
+                                вёрстки Сводной cell. */}
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <div className="text-sm font-medium leading-snug line-clamp-2 cursor-default" />
+                                }
+                              >
+                                {group.product.name}
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <div className="max-w-sm text-sm">
+                                  {group.product.name}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                            {/* quick 260513-phu: brand-line под name. Только
+                                в /prices/wb (в /stock и /stock/wb brandName
+                                уже отображается отдельной строкой). */}
+                            {group.product.brandName && (
+                              <div className="text-xs text-muted-foreground">
+                                {group.product.brandName}
+                              </div>
+                            )}
                             <div className="text-xs text-muted-foreground">
                               Остаток:{" "}
                               <span className="text-foreground tabular-nums">
@@ -980,11 +921,11 @@ export function PriceCalculatorTable({
                           rowSpan={cardGroup.priceRows.length}
                           onClick={(e) => {
                             e.stopPropagation()
-                            const nmId = String(cardGroup.card.nmId)
-                            navigator.clipboard
-                              ?.writeText(nmId)
-                              .then(() => toast.success(`Артикул ${nmId} скопирован`))
-                              .catch(() => toast.error("Не удалось скопировать"))
+                            // quick 260513-phu: shared helper
+                            void copyToClipboard(
+                              String(cardGroup.card.nmId),
+                              "Артикул",
+                            )
                           }}
                           title="Нажмите, чтобы скопировать артикул"
                           style={{
