@@ -16,6 +16,16 @@ import { prisma } from "@/lib/prisma"
 
 const COOLDOWN_KEY = "wbCooldownUntil"
 
+// 2026-05-13 (Quick 260513-dlr): Buffer для TTL persistent rate-limit lock'а.
+// Cron support-sync.timer = 15 мин. Если lock истекает между двумя cron-tick'ами,
+// next tick снова стучит WB → новый 429 → бесконечная эскалация.
+// Формула: unlockAt = now + max(retryAfterSec, CRON_INTERVAL_SEC) + BUFFER_SEC.
+// При retryAfterSec=720s → lock = now + 1020s (17 мин) — переживает T+15м tick.
+// При retryAfterSec=60s → lock = now + 1020s — interval доминирует.
+// При retryAfterSec=3600s → lock = now + 3720s (час + 2 мин).
+export const CRON_INTERVAL_SEC = 900
+export const BUFFER_SEC = 120
+
 /**
  * Возвращает Date момент разблокировки, или null если cooldown не активен.
  * Истёкший lock автоматически удаляется (lazy cleanup).
@@ -44,7 +54,9 @@ export async function setWbCooldownUntil(retryAfterSec: number): Promise<Date> {
     const fallback = await getWbCooldownUntil()
     return fallback ?? new Date()
   }
-  const proposed = new Date(Date.now() + retryAfterSec * 1000)
+  // Lock переживает хотя бы 1 cron tick (15 мин) + 2 мин на drift.
+  const effectiveSec = Math.max(retryAfterSec, CRON_INTERVAL_SEC) + BUFFER_SEC
+  const proposed = new Date(Date.now() + effectiveSec * 1000)
   const current = await prisma.appSetting.findUnique({ where: { key: COOLDOWN_KEY } })
   if (current?.value) {
     const existing = new Date(current.value)
