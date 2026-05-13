@@ -373,7 +373,13 @@ describe("syncSupport", () => {
     expect(listQuestions).toHaveBeenCalled()
   })
 
-  it("записывает wbQuestionsLockedUntil при WbRateLimitError", async () => {
+  // 2026-05-13 (Quick 260513-dlr): buffer formula
+  // unlockAt = now + max(retryAfterSec, CRON_INTERVAL_SEC=900) + BUFFER_SEC=120
+  // retry=720  → max(720, 900) + 120 = 1020s
+  // retry=60   → max(60, 900) + 120  = 1020s (interval доминирует)
+  // retry=3600 → max(3600, 900) + 120 = 3720s
+
+  it("записывает wbQuestionsLockedUntil при WbRateLimitError (buffer formula)", async () => {
     const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
       "@/lib/wb-support-api"
     )) as any
@@ -402,11 +408,15 @@ describe("syncSupport", () => {
     )
     const storedValue = upsertCall?.[0]?.create?.value ?? upsertCall?.[0]?.update?.value
     const storedDate = new Date(storedValue).getTime()
-    expect(Math.abs(storedDate - (before + 720 * 1000))).toBeLessThan(5000)
-    expect(Math.abs(storedDate - (after + 720 * 1000))).toBeLessThan(5000 + (after - before))
+    // max(720, 900) + 120 = 1020s
+    const EXPECTED_SEC = 1020
+    expect(Math.abs(storedDate - (before + EXPECTED_SEC * 1000))).toBeLessThan(5000)
+    expect(Math.abs(storedDate - (after + EXPECTED_SEC * 1000))).toBeLessThan(
+      5000 + (after - before)
+    )
   })
 
-  it("записывает wbFeedbacksLockedUntil при WbRateLimitError на Feedbacks", async () => {
+  it("записывает wbFeedbacksLockedUntil при WbRateLimitError на Feedbacks (buffer formula)", async () => {
     const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
       "@/lib/wb-support-api"
     )) as any
@@ -420,12 +430,88 @@ describe("syncSupport", () => {
     listQuestions.mockResolvedValueOnce([])
 
     const { syncSupport } = await import("@/lib/support-sync")
+    const before = Date.now()
     await syncSupport()
+    const after = Date.now()
 
     expect(prisma.appSetting.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { key: "wbFeedbacksLockedUntil" },
       })
+    )
+
+    const upsertCall = prisma.appSetting.upsert.mock.calls.find(
+      (c: any[]) => c[0]?.where?.key === "wbFeedbacksLockedUntil"
+    )
+    const storedValue = upsertCall?.[0]?.create?.value ?? upsertCall?.[0]?.update?.value
+    const storedDate = new Date(storedValue).getTime()
+    // max(720, 900) + 120 = 1020s
+    const EXPECTED_SEC = 1020
+    expect(Math.abs(storedDate - (before + EXPECTED_SEC * 1000))).toBeLessThan(5000)
+    expect(Math.abs(storedDate - (after + EXPECTED_SEC * 1000))).toBeLessThan(
+      5000 + (after - before)
+    )
+  })
+
+  it("buffer: retryAfterSec=60 (< CRON_INTERVAL_SEC) → lock ≈ now + 1020s (interval доминирует)", async () => {
+    const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    mockLocks(prisma, {})
+
+    listFeedbacks.mockResolvedValueOnce([]).mockResolvedValue([])
+    listQuestions.mockRejectedValueOnce(
+      new WbRateLimitError(60, "/api/v1/questions?take=10000&skip=0")
+    )
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    const before = Date.now()
+    await syncSupport()
+    const after = Date.now()
+
+    const upsertCall = prisma.appSetting.upsert.mock.calls.find(
+      (c: any[]) => c[0]?.where?.key === "wbQuestionsLockedUntil"
+    )
+    const storedValue = upsertCall?.[0]?.create?.value ?? upsertCall?.[0]?.update?.value
+    const storedDate = new Date(storedValue).getTime()
+    // max(60, 900) + 120 = 1020s (interval доминирует)
+    const EXPECTED_SEC = 1020
+    expect(Math.abs(storedDate - (before + EXPECTED_SEC * 1000))).toBeLessThan(5000)
+    expect(Math.abs(storedDate - (after + EXPECTED_SEC * 1000))).toBeLessThan(
+      5000 + (after - before)
+    )
+  })
+
+  it("buffer: retryAfterSec=3600 (>> CRON_INTERVAL_SEC) → lock ≈ now + 3720s (retry+buffer)", async () => {
+    const { listFeedbacks, listQuestions, WbRateLimitError } = (await import(
+      "@/lib/wb-support-api"
+    )) as any
+    const { prisma } = (await import("@/lib/prisma")) as any
+
+    mockLocks(prisma, {})
+
+    listFeedbacks.mockRejectedValueOnce(
+      new WbRateLimitError(3600, "/api/v1/feedbacks?take=5000&skip=0")
+    )
+    listQuestions.mockResolvedValueOnce([])
+
+    const { syncSupport } = await import("@/lib/support-sync")
+    const before = Date.now()
+    await syncSupport()
+    const after = Date.now()
+
+    const upsertCall = prisma.appSetting.upsert.mock.calls.find(
+      (c: any[]) => c[0]?.where?.key === "wbFeedbacksLockedUntil"
+    )
+    const storedValue = upsertCall?.[0]?.create?.value ?? upsertCall?.[0]?.update?.value
+    const storedDate = new Date(storedValue).getTime()
+    // max(3600, 900) + 120 = 3720s
+    const EXPECTED_SEC = 3720
+    expect(Math.abs(storedDate - (before + EXPECTED_SEC * 1000))).toBeLessThan(5000)
+    expect(Math.abs(storedDate - (after + EXPECTED_SEC * 1000))).toBeLessThan(
+      5000 + (after - before)
     )
   })
 

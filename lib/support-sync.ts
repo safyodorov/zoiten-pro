@@ -38,6 +38,13 @@ const LAST_EVENT_NEXT_KEY = "support.chat.lastEventNext"
 // 2026-05-12: Feedbacks тоже стал ловить 429 после rate-limit cascade — тот же паттерн.
 const QUESTIONS_LOCK_KEY = "wbQuestionsLockedUntil"
 const FEEDBACKS_LOCK_KEY = "wbFeedbacksLockedUntil"
+// 2026-05-13 (Quick 260513-dlr): Buffer для TTL персистентного lock'а.
+// Cron support-sync.timer = 15 мин. Если lock истекает между двумя tick'ами,
+// next tick снова стучит WB → новый 429 → бесконечная эскалация.
+// unlockAt = now + max(retryAfterSec, CRON_INTERVAL_SEC) + BUFFER_SEC.
+// KISS: дублируем константы с lib/wb-cooldown.ts (только 2 файла, нет shared helper).
+const CRON_INTERVAL_SEC = 900
+const BUFFER_SEC = 120
 
 export interface SyncResult {
   feedbacksSynced: number
@@ -85,7 +92,9 @@ export async function syncSupport(
         if (batch.length < 5000) break
       } catch (err) {
         if (err instanceof WbRateLimitError) {
-          const unlockAt = new Date(Date.now() + err.retryAfterSec * 1000)
+          // Buffer: lock должен пережить минимум 1 cron tick (15 мин) — иначе T+15м снова стучим WB.
+          const effectiveSec = Math.max(err.retryAfterSec, CRON_INTERVAL_SEC) + BUFFER_SEC
+          const unlockAt = new Date(Date.now() + effectiveSec * 1000)
           const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
           console.warn(
             `[support-sync] WB /feedbacks 429 retry=${err.retryAfterSec}s — locking until ${mskStr} МСК`
@@ -151,7 +160,9 @@ export async function syncSupport(
         if (batch.length < 10000) break
       } catch (err) {
         if (err instanceof WbRateLimitError) {
-          const unlockAt = new Date(Date.now() + err.retryAfterSec * 1000)
+          // Buffer: lock должен пережить минимум 1 cron tick (15 мин) — иначе T+15м снова стучим WB.
+          const effectiveSec = Math.max(err.retryAfterSec, CRON_INTERVAL_SEC) + BUFFER_SEC
+          const unlockAt = new Date(Date.now() + effectiveSec * 1000)
           const mskStr = unlockAt.toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })
           console.warn(
             `[support-sync] WB /questions 429 retry=${err.retryAfterSec}s — locking until ${mskStr} МСК`
