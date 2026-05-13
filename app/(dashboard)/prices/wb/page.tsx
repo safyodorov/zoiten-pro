@@ -640,6 +640,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         id: firstProduct.id,
         name: firstProduct.name,
         photoUrl: firstProduct.photoUrl ?? null,
+        // quick 260513-phu: brand-line под product name в Сводной
+        brandName: firstProduct.brand?.name ?? null,
         totalStock,
         totalAvgSalesSpeed,
         totalOrdersYesterday,
