@@ -479,8 +479,14 @@ export function buildSizeBreakdown(
       // ordersPerDay/totalOrdersCount остаются null
     }
 
-    // Если sizeWarehouses пустой (размер только в techSizes) — totalStock
-    // остаётся null, кластеры остаются с пустыми warehouses[] и totalStock=null.
+    // Quick 260514-kzg: если размер только в techSizes (нет stock-rows в БД) —
+    // это «выпавший» размер. totalStock = 0 (явный ноль, не null), чтобы UI
+    // подсветил его красным consistent'но с размерами, имеющими WbCardWarehouseStock
+    // row с quantity=0. Кластеры остаются null (нет данных по складам) →
+    // в UI «—» muted, что корректно семантически.
+    if (sizeWarehouses.length === 0) {
+      totalStock = 0
+    }
     rows.push({ techSize, totalStock, clusters })
   }
 
