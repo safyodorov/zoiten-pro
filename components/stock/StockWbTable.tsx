@@ -467,28 +467,24 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     </TableCell>
                     <TableCell
                       rowSpan={rowSpan}
-                      style={{ width: 240, minWidth: 240, maxWidth: 240, overflow: "hidden" }}
-                      className="sticky left-[80px] z-20 bg-background border-r align-top p-3"
+                      className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
                     >
-                      <div style={{ width: 216, maxWidth: 216 }} className="flex flex-col gap-1">
-                        {/* DEBUG quick 260514: убрал Tooltip обёртку — все inline CSS
-                            напрямую. Если ЭТО не wrap'ит — проблема в table-layout, не Tooltip. */}
-                        <div
-                          title={g.productName}
-                          style={{
-                            width: 216,
-                            maxWidth: 216,
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                            wordBreak: "break-word",
-                            overflowWrap: "anywhere",
-                          }}
-                          className="text-sm font-medium leading-snug"
-                        >
-                          {g.productName}
-                        </div>
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <div
+                                style={{ width: 216, maxWidth: 216 }}
+                                className="text-sm font-medium leading-snug line-clamp-2 break-all cursor-default text-left"
+                              />
+                            }
+                          >
+                            {g.productName}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="max-w-sm text-sm">{g.productName}</div>
+                          </TooltipContent>
+                        </Tooltip>
                         <div className="text-xs text-muted-foreground">{g.productSku}</div>
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>
