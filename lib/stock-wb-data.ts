@@ -314,8 +314,12 @@ export async function getStockWbData(
         }
       }
 
-      // Phase 16 (STOCK-34): per-size breakdown
+      // Phase 16 (STOCK-34): per-size breakdown.
+      // Quick 260514-kzg: передаём card.techSizes — buildSizeBreakdown
+      // доливает «выпавшие» размеры (есть в WB API, нет в WbCardWarehouseStock)
+      // с пустыми метриками, чтобы UI мог подсветить их красным.
       const cardWarehouses = card?.warehouses ?? []
+      const cardTechSizes = card?.techSizes ?? []
       const sizeBreakdown = buildSizeBreakdown(
         cardWarehouses.map((ws) => ({
           warehouseId: ws.warehouseId,
@@ -329,9 +333,16 @@ export async function getStockWbData(
               }
             : null,
         })),
+        cardTechSizes,
       )
-      const uniqueSizes = new Set<string>(cardWarehouses.map((ws) => ws.techSize ?? ""))
-      const hasMultipleSizes = uniqueSizes.size > 1
+      // Quick 260514-kzg: union(stockSizes, techSizes) — товар, у которого WB API
+      // вернул несколько размеров, должен показывать размерные строки даже если
+      // в БД stock есть только по одному размеру (остальные «выпали» и должны
+      // быть красными).
+      const stockSizes = new Set<string>(cardWarehouses.map((ws) => ws.techSize ?? ""))
+      const cardTechSizesFiltered = cardTechSizes.filter((s) => s && s !== "0")
+      const effectiveSizeCount = new Set<string>([...stockSizes, ...cardTechSizesFiltered]).size
+      const hasMultipleSizes = effectiveSizeCount > 1
 
       return {
         wbCardId: card?.id ?? `missing-${a.article}`,
@@ -367,13 +378,21 @@ export async function getStockWbData(
  * Phase 16 (STOCK-34): построить per-size breakdown для одного nmId по
  * card.warehouses[]. Pure function — можно тестировать без Prisma mock.
  *
+ * Quick 260514-kzg: дополнительно принимает `techSizes` из `WbCard.techSizes`
+ * (Phase 17 — все размеры из WB API). Размеры, которые присутствуют в
+ * `techSizes`, но отсутствуют в `warehouses` (нет stock-rows в БД), всё равно
+ * попадают в результат с пустыми метриками (totalStock=null, кластеры =
+ * пустые) — UI подсвечивает такие «выпавшие» размеры красным.
+ *
  * Контракт:
- *   - Если у nmId один уникальный techSize → возвращает [] (одно-размерные
- *     товары не порождают размерных строк в UI; см. CONTEXT.md «Когда у nmId
- *     1 размер — скрывать»).
- *   - Иначе для каждого уникального techSize формирует WbStockSizeRow с такой
- *     же структурой clusters, как у WbStockRow (Record<ClusterShortName,
- *     ClusterAggregate>).
+ *   - Если effectiveSizes = union(stockSizes, techSizes\{"","0"}) содержит
+ *     <=1 уникальное значение → возвращает [] (одно-размерные товары не
+ *     порождают размерных строк в UI; см. CONTEXT.md «Когда у nmId 1 размер
+ *     — скрывать»).
+ *   - Иначе для каждого размера из effectiveSizes формирует WbStockSizeRow:
+ *     - Если в `warehouses` есть rows на этот размер → обычная aggregation.
+ *     - Если rows нет (размер из techSizes без stock) → totalStock=null,
+ *       все clusters пустые (totalStock=null, warehouses=[]).
  *   - Sort размеров через sortSizes() (числовая ASC / SIZE_ORDER / alpha
  *     fallback / пустые в конец).
  *   - ordersCount/ordersPerDay в каждом WarehouseSlot и ClusterAggregate
@@ -382,6 +401,8 @@ export async function getStockWbData(
  *
  * @param warehouses — записи WbCardWarehouseStock с присоединённой meta
  *   склада (поле techSize присутствует после миграции 16-01).
+ * @param techSizes — полный список размеров из WbCard.techSizes (Phase 17).
+ *   Дефолт `[]` для обратной совместимости с тестами Phase 16.
  * @returns массив WbStockSizeRow, отсортированный через sortSizes().
  */
 export function buildSizeBreakdown(
@@ -395,10 +416,17 @@ export function buildSizeBreakdown(
       needsClusterReview: boolean
     } | null
   }>,
+  techSizes: string[] = [],
 ): WbStockSizeRow[] {
-  // 1. Проверка количества уникальных размеров — одно-размерные товары не дают строк
+  // 1. Сформировать effectiveSizes = union(stockSizes, techSizes\{"","0"}).
+  //    Quick 260514-kzg: размер, попавший только в techSizes, считается
+  //    «выпавшим» — он попадёт в результат, но с пустыми метриками.
   const uniqueSizes = new Set<string>(warehouses.map((w) => w.techSize ?? ""))
-  if (uniqueSizes.size <= 1) return []
+  const extraSizes = techSizes.filter((s) => s && s !== "0")
+  const effectiveSizes = new Set<string>([...uniqueSizes, ...extraSizes])
+
+  // Одно-размерные товары не дают строк (контракт Phase 16 сохраняется).
+  if (effectiveSizes.size <= 1) return []
 
   // 2. Group warehouses по techSize
   const bySize = new Map<string, typeof warehouses>()
@@ -409,9 +437,12 @@ export function buildSizeBreakdown(
     bySize.set(ts, arr)
   }
 
-  // 3. Build WbStockSizeRow per size
+  // 3. Build WbStockSizeRow per size — итерация по effectiveSizes, чтобы
+  //    «выпавшие» размеры (нет stock-rows) тоже формировали пустую строку.
   const rows: WbStockSizeRow[] = []
-  for (const [techSize, sizeWarehouses] of bySize.entries()) {
+  for (const techSize of effectiveSizes) {
+    const sizeWarehouses = bySize.get(techSize) ?? []
+
     // Init clusters — все CLUSTER_ORDER ключи всегда присутствуют
     const clusters = {} as Record<ClusterShortName, ClusterAggregate>
     for (const sc of CLUSTER_ORDER) {
@@ -448,6 +479,8 @@ export function buildSizeBreakdown(
       // ordersPerDay/totalOrdersCount остаются null
     }
 
+    // Если sizeWarehouses пустой (размер только в techSizes) — totalStock
+    // остаётся null, кластеры остаются с пустыми warehouses[] и totalStock=null.
     rows.push({ techSize, totalStock, clusters })
   }
 
