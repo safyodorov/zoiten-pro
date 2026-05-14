@@ -662,8 +662,18 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                           ]
                         })}
                       </TableRow>
-                      {/* Phase 16 (STOCK-36): размерные строки под per-nmId */}
-                      {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => (
+                      {/* Phase 16 (STOCK-36): размерные строки под per-nmId.
+                          Quick 260514-kzg: «выпавший» размер (totalStock===0)
+                          подсвечивается красным в числовых ячейках «О»
+                          (Всего на WB, Итого WB, каждый кластер). Прочерки
+                          (null → "—") остаются muted-foreground, label
+                          «↳ M» и bg-muted не меняются. */}
+                      {showSizes && card.hasMultipleSizes && card.sizeBreakdown.map((sizeRow) => {
+                        // Quick 260514-kzg: ячейку красим только когда есть
+                        // число 0, не null. Прочерки оставляем muted.
+                        const isFallenOut = sizeRow.totalStock === 0
+                        const fallenNumClass = "text-red-600 dark:text-red-500 font-medium"
+                        return (
                         <TableRow
                           key={`${card.wbCardId}-size-${sizeRow.techSize}`}
                           className="border-t border-t-border/40 bg-muted"
@@ -677,19 +687,35 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                           </TableCell>
                           {/* Иваново — placeholder */}
                           <TableCell className="px-2 py-1 h-8 text-xs text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">—</TableCell>
-                          {/* Всего на WB — sizeRow.totalStock (без in-way) */}
-                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r">
+                          {/* Всего на WB — sizeRow.totalStock (без in-way).
+                              Quick 260514-kzg: краснит только если totalStock===0. */}
+                          <TableCell
+                            className={cn(
+                              "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r",
+                              isFallenOut && sizeRow.totalStock !== null && fallenNumClass,
+                            )}
+                          >
                             {sizeRow.totalStock !== null ? formatInt(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
                           </TableCell>
                           {/* Товар в пути — placeholder × 3 (per-size in-way не хранится) */}
                           <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
                           <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground">—</TableCell>
                           <TableCell className="px-2 py-1 h-8 text-xs text-right text-muted-foreground border-r">—</TableCell>
-                          {/* Итого склады WB О/З/Об/Д — З=null → metrics все null */}
-                          <StockCell value={sizeRow.totalStock} />
-                          <StockCell value={null} />
-                          <IntCell value={null} />
-                          <DeficitCell deficit={null} threshold={null} />
+                          {/* Итого склады WB О/З/Об/Д — З=null → metrics все null.
+                              Quick 260514-kzg: «О» inline вместо <StockCell>, чтобы
+                              применить fallenNumClass при totalStock===0. З/Об/Д
+                              остаются muted "—" (null — не число, не красим). */}
+                          <TableCell
+                            className={cn(
+                              "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
+                              isFallenOut && sizeRow.totalStock !== null && fallenNumClass,
+                            )}
+                          >
+                            {sizeRow.totalStock !== null ? formatStockValue(sizeRow.totalStock) : <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>
+                          <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground border-r">—</TableCell>
                           {/* Кластеры — то же flatMap по CLUSTER_ORDER, но через sizeRow.clusters */}
                           {CLUSTER_ORDER.flatMap((cluster) => {
                             const isExpanded = expandedSet.has(cluster)
@@ -706,10 +732,23 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                                 const borderClass = isLast ? "border-r" : "border-r border-r-border/40"
                                 const slot = sizeClusterAgg.warehouses.find((slotW) => slotW.warehouseId === w.warehouseId)
                                 const slotQty = slot?.quantity ?? 0
+                                // Quick 260514-kzg: per-warehouse «О» красная
+                                // когда slotQty===0 (склад без остатка по
+                                // этому размеру). slot=undefined → slotQty=0,
+                                // что и есть «выпавший» сигнал.
+                                const slotIsFallen = slotQty === 0
                                 return [
-                                  <StockCell key={`${cluster}-size-${w.warehouseId}-o`} value={slotQty} />,
-                                  <StockCell key={`${cluster}-size-${w.warehouseId}-z`} value={null} />,
-                                  <IntCell key={`${cluster}-size-${w.warehouseId}-ob`} value={null} />,
+                                  <TableCell
+                                    key={`${cluster}-size-${w.warehouseId}-o`}
+                                    className={cn(
+                                      "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
+                                      slotIsFallen && fallenNumClass,
+                                    )}
+                                  >
+                                    {formatStockValue(slotQty)}
+                                  </TableCell>,
+                                  <TableCell key={`${cluster}-size-${w.warehouseId}-z`} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>,
+                                  <TableCell key={`${cluster}-size-${w.warehouseId}-ob`} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>,
                                   <TableCell
                                     key={`${cluster}-size-${w.warehouseId}-d`}
                                     className={cn(
@@ -720,15 +759,28 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                                 ]
                               })
                             }
+                            // Collapsed: «О» красная при clusterStock===0.
+                            // З/Об/Д null = muted "—" (не красим).
+                            const clusterStock = sizeClusterAgg.totalStock
+                            const clusterIsFallen = clusterStock === 0
                             return [
-                              <StockCell key={`${cluster}-size-o`} value={sizeClusterAgg.totalStock ?? null} />,
-                              <StockCell key={`${cluster}-size-z`} value={null} />,
-                              <IntCell key={`${cluster}-size-ob`} value={null} />,
-                              <DeficitCell key={`${cluster}-size-d`} deficit={null} threshold={null} />,
+                              <TableCell
+                                key={`${cluster}-size-o`}
+                                className={cn(
+                                  "px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right",
+                                  clusterStock !== null && clusterIsFallen && fallenNumClass,
+                                )}
+                              >
+                                {clusterStock !== null ? formatStockValue(clusterStock) : <span className="text-muted-foreground">—</span>}
+                              </TableCell>,
+                              <TableCell key={`${cluster}-size-z`} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>,
+                              <TableCell key={`${cluster}-size-ob`} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground">—</TableCell>,
+                              <TableCell key={`${cluster}-size-d`} className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground border-r">—</TableCell>,
                             ]
                           })}
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </React.Fragment>
                     )
                   })}
