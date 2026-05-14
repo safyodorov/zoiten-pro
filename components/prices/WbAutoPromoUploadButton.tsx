@@ -128,7 +128,7 @@ export function WbAutoPromoUploadButton({
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Загрузка отчёта auto-акции WB</DialogTitle>
             <DialogDescription>
@@ -143,7 +143,7 @@ export function WbAutoPromoUploadButton({
               <Label htmlFor="promotion-select">Auto-акция</Label>
               <select
                 id="promotion-select"
-                className="h-9 rounded border border-input bg-transparent px-2 text-sm"
+                className="h-9 w-full max-w-full truncate rounded border border-input bg-transparent px-2 text-sm"
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
                 disabled={disabled}
