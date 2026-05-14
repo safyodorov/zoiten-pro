@@ -467,14 +467,22 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     </TableCell>
                     <TableCell
                       rowSpan={rowSpan}
-                      className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
+                      style={{ width: 240, minWidth: 240, maxWidth: 240 }}
+                      className="sticky left-[80px] z-20 bg-background border-r align-top p-3"
                     >
-                      <div className="flex flex-col gap-1">
+                      {/* quick 260514: жёсткая ширина 216px через inline style на text-div
+                          (240 cell - 2×12 padding = 216) — table-auto не уважает w-60 на cell,
+                          поэтому ставим max-w на сам text. line-clamp-2 + break-words clamp'ят
+                          текст по 2 строки. */}
+                      <div className="flex flex-col gap-1 min-w-0 max-w-full">
                         {/* quick 260513-phu: always-on Tooltip с полным названием. */}
                         <Tooltip>
                           <TooltipTrigger
                             render={
-                              <div className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default" />
+                              <div
+                                style={{ maxWidth: 216 }}
+                                className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default"
+                              />
                             }
                           >
                             {g.productName}
