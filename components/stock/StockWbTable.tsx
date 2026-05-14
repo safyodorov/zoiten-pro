@@ -474,7 +474,7 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                         <Tooltip>
                           <TooltipTrigger
                             render={
-                              <div className="text-sm font-medium leading-snug line-clamp-2 cursor-default" />
+                              <div className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default" />
                             }
                           >
                             {g.productName}
