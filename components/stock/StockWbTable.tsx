@@ -467,25 +467,25 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     </TableCell>
                     <TableCell
                       rowSpan={rowSpan}
-                      style={{ width: 240, minWidth: 240, maxWidth: 240 }}
+                      style={{ width: 240, minWidth: 240, maxWidth: 240, overflow: "hidden" }}
                       className="sticky left-[80px] z-20 bg-background border-r align-top p-3"
                     >
-                      {/* quick 260514: жёсткая ширина 216px через inline style на text-div
-                          (240 cell - 2×12 padding = 216) — table-auto не уважает w-60 на cell,
-                          поэтому ставим max-w на сам text. line-clamp-2 + break-words clamp'ят
-                          текст по 2 строки. */}
-                      <div className="flex flex-col gap-1 min-w-0 max-w-full">
-                        {/* quick 260513-phu: always-on Tooltip с полным названием. */}
+                      <div style={{ width: 216, maxWidth: 216 }} className="flex flex-col gap-1">
+                        {/* quick 260514: убрали TooltipTrigger render-prop — он
+                            ломал line-clamp. Теперь Tooltip wrap'ит plain div.
+                            Inline width 216px (240 cell - 2×12 padding) гарантирует
+                            clamp по 2 строкам независимо от table-auto layout. */}
                         <Tooltip>
                           <TooltipTrigger
-                            render={
-                              <div
-                                style={{ maxWidth: 216 }}
-                                className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default"
-                              />
-                            }
+                            className="block text-left"
+                            style={{ width: 216, maxWidth: 216 }}
                           >
-                            {g.productName}
+                            <div
+                              style={{ width: 216, maxWidth: 216 }}
+                              className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default"
+                            >
+                              {g.productName}
+                            </div>
                           </TooltipTrigger>
                           <TooltipContent>
                             <div className="max-w-sm text-sm">{g.productName}</div>
