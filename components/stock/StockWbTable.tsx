@@ -471,26 +471,24 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       className="sticky left-[80px] z-20 bg-background border-r align-top p-3"
                     >
                       <div style={{ width: 216, maxWidth: 216 }} className="flex flex-col gap-1">
-                        {/* quick 260514: убрали TooltipTrigger render-prop — он
-                            ломал line-clamp. Теперь Tooltip wrap'ит plain div.
-                            Inline width 216px (240 cell - 2×12 padding) гарантирует
-                            clamp по 2 строкам независимо от table-auto layout. */}
-                        <Tooltip>
-                          <TooltipTrigger
-                            className="block text-left"
-                            style={{ width: 216, maxWidth: 216 }}
-                          >
-                            <div
-                              style={{ width: 216, maxWidth: 216 }}
-                              className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default"
-                            >
-                              {g.productName}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="max-w-sm text-sm">{g.productName}</div>
-                          </TooltipContent>
-                        </Tooltip>
+                        {/* DEBUG quick 260514: убрал Tooltip обёртку — все inline CSS
+                            напрямую. Если ЭТО не wrap'ит — проблема в table-layout, не Tooltip. */}
+                        <div
+                          title={g.productName}
+                          style={{
+                            width: 216,
+                            maxWidth: 216,
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            wordBreak: "break-word",
+                            overflowWrap: "anywhere",
+                          }}
+                          className="text-sm font-medium leading-snug"
+                        >
+                          {g.productName}
+                        </div>
                         <div className="text-xs text-muted-foreground">{g.productSku}</div>
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>
