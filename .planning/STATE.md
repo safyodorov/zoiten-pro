@@ -276,6 +276,7 @@ None yet.
 | 260513-khv | Per-endpoint cooldown locks: refactor wbCooldownUntil → 9 per-bucket keys (statistics-stocks/orders/sales, prices, tariffs, analytics, content, feedbacks, questions) + lazy migration legacy key — ban Statistics не блокирует Prices/Cards/Tariffs | 2026-05-13 | e56156b |  | [260513-khv-per-endpoint-cooldown-locks-refactor-wbc](./quick/260513-khv-per-endpoint-cooldown-locks-refactor-wbc/) |
 | 260513-phu | UX в data-таблицах: shared `useResizableColumns` hook (DB persist) для /prices/wb + /stock + /stock/wb + always-on Tooltip с полным title + click-to-copy артикул + brand-line под product name в /prices/wb | 2026-05-13 | 7d9b1db |  | [260513-phu-ux-data-resizable-columns-persist-stock-](./quick/260513-phu-ux-data-resizable-columns-persist-stock-/) |
 | 260514-kzg | /stock/wb «По размерам»: backfill всех размеров из WbCard.techSizes (не только тех у кого есть stocks/orders) + красная подсветка выпавших размеров (stockQty===0) | 2026-05-14 | ac7b75a |  | [260514-kzg-stock-wb-wb](./quick/260514-kzg-stock-wb-wb/) |
+| 260514-mci | /cards/wb улучшения: рейтинг карточки + рейтинг склейки (sync через Feedbacks API), фильтр по Ярлыку, sort по Остатку — **PLAN READY, execute завтра** | 2026-05-14 | — | Planned | [260514-mci-cards-wb](./quick/260514-mci-cards-wb/) |
 
 ### Blockers/Concerns
 
