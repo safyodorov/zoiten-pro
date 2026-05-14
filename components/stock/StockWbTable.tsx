@@ -200,7 +200,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
-        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+        {/* quick 260514: table-fixed для жёсткого respect widths на cells.
+            line-clamp не работал в table-auto — browser расширял Сводка column
+            под content. С table-fixed widths из row 1 — hard constraint. */}
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0 table-fixed">
           <thead className="bg-background">
             {/* Уровень 1 — группы (sticky и МП rowSpan=3, cluster rowSpan=1/colSpan зависит от expand) */}
             <tr>
@@ -242,8 +245,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
               </TableHead>
               {/* Товар в пути — 3 колонки: Всего/от/к (агрегат per nmId).
                   rowSpan=2 — покрывает row 2 (placeholder) чтобы визуально была
-                  единая ячейка как у 'Всего на WB' и collapsed кластеров. */}
+                  единая ячейка как у 'Всего на WB' и collapsed кластеров.
+                  Quick 260514: inline width = 3 sub × 60 = 180px (для table-fixed). */}
               <TableHead
+                style={{ width: 180 }}
                 className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={3}
                 rowSpan={2}
@@ -252,8 +257,10 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 Товар в пути
               </TableHead>
               {/* Итого склады WB — 4 колонок О/З/Об/Д по физ. остаткам (без in-way).
-                  rowSpan=2 — покрывает row 2 placeholder. */}
+                  rowSpan=2 — покрывает row 2 placeholder.
+                  Quick 260514: inline width = 4 sub × 60 = 240px. */}
               <TableHead
+                style={{ width: 240 }}
                 className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1 h-[68px]"
                 colSpan={4}
                 rowSpan={2}
@@ -273,11 +280,14 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                 // Collapsed: rowSpan=2 (cluster cell покрывает level 1 + level 2 = 68px, выглядит цельно)
                 // Expanded: rowSpan=1 (level 2 рендерит имена складов отдельно)
                 const rowSpan = isExpanded ? 1 : 2
+                // Quick 260514: inline width = colSpan × 60px для table-fixed.
+                const headWidth = colSpan * 60
                 return (
                   <TableHead
                     key={cluster}
                     colSpan={colSpan}
                     rowSpan={rowSpan}
+                    style={{ width: headWidth }}
                     className={cn(
                       "sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 py-1",
                       isExpanded ? "h-10" : "h-[68px]"
@@ -467,28 +477,23 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                     </TableCell>
                     <TableCell
                       rowSpan={rowSpan}
-                      style={{ width: 240, minWidth: 240, maxWidth: 240, overflow: "hidden" }}
-                      className="sticky left-[80px] z-20 bg-background border-r align-top p-3"
+                      className="sticky left-[80px] z-20 bg-background border-r w-60 min-w-60 max-w-60 align-top p-3"
                     >
-                      <div style={{ width: 216, maxWidth: 216 }} className="flex flex-col gap-1">
-                        {/* DEBUG quick 260514: убрал Tooltip обёртку — все inline CSS
-                            напрямую. Если ЭТО не wrap'ит — проблема в table-layout, не Tooltip. */}
-                        <div
-                          title={g.productName}
-                          style={{
-                            width: 216,
-                            maxWidth: 216,
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                            wordBreak: "break-word",
-                            overflowWrap: "anywhere",
-                          }}
-                          className="text-sm font-medium leading-snug"
-                        >
-                          {g.productName}
-                        </div>
+                      <div className="flex flex-col gap-1">
+                        {/* quick 260514: table-fixed восстановлен → cell держит w-60 (240px)
+                            строго → line-clamp-2 + break-words работают естественно. */}
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <div className="text-sm font-medium leading-snug line-clamp-2 break-words cursor-default text-left" />
+                            }
+                          >
+                            {g.productName}
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="max-w-sm text-sm">{g.productName}</div>
+                          </TooltipContent>
+                        </Tooltip>
                         <div className="text-xs text-muted-foreground">{g.productSku}</div>
                         <div className="text-xs text-muted-foreground">{g.brandName}</div>
                       </div>
