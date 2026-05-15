@@ -179,6 +179,8 @@ export async function POST(): Promise<NextResponse> {
         // Базовые поля из Content API — всегда присутствуют (fetchAllCards не упал)
         const updateData: Prisma.WbCardUpdateInput = {
           article: card.article,
+          // Phase 260514-mci: id imt-склейки для агрегации рейтингов
+          imtId: card.imtId,
           name: card.name,
           brand: card.brand,
           category: card.category,
@@ -245,6 +247,8 @@ export async function POST(): Promise<NextResponse> {
         // При создании новой карточки недоступные поля останутся NULL (schema default)
         const createData: Prisma.WbCardCreateInput = {
           nmId: card.nmId,
+          // Phase 260514-mci: id imt-склейки для агрегации рейтингов
+          imtId: card.imtId,
           article: card.article,
           name: card.name,
           brand: card.brand,

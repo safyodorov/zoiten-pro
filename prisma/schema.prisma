@@ -49,37 +49,37 @@ enum Availability {
 // ──────────────────────────────────────────────────────────────────
 
 model User {
-  id               String                @id @default(cuid())
-  email            String                @unique
-  name             String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
-  firstName        String?
-  lastName         String?
-  employeeId       String?               @unique
-  employee         Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  password         String // bcrypt hash — never return to client
-  plainPassword    String? // plain text для просмотра суперадмином (только внутренняя ERP)
-  role             UserRole              @default(VIEWER)
-  allowedSections  ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
-  sectionRoles     UserSectionRole[] // актуальный источник прав per раздел
+  id                      String                @id @default(cuid())
+  email                   String                @unique
+  name                    String // DEPRECATED — legacy поле, для новых пользователей заполняется из firstName + lastName
+  firstName               String?
+  lastName                String?
+  employeeId              String?               @unique
+  employee                Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  password                String // bcrypt hash — never return to client
+  plainPassword           String? // plain text для просмотра суперадмином (только внутренняя ERP)
+  role                    UserRole              @default(VIEWER)
+  allowedSections         ERP_SECTION[] // DEPRECATED — оставлено для отката миграции, см. sectionRoles
+  sectionRoles            UserSectionRole[] // актуальный источник прав per раздел
   // Per-user список скрытых WB-складов на странице /stock/wb (quick 260422-oy5).
   // Чисто визуальный фильтр — НЕ влияет на агрегаты.
   stockWbHiddenWarehouses Int[]                 @default([])
   // Phase 16 (STOCK-31): per-user toggle кнопки «По размерам» в /stock/wb.
   stockWbShowSizes        Boolean               @default(false)
-  preferences      UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
-  assignedTickets  SupportTicket[]       @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
-  authoredMessages SupportMessage[]      @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
-  returnDecisions  ReturnDecision[]      @relation("ReturnDecider") // Phase 9 — audit log решений по возвратам
-  templatesCreated ResponseTemplate[]    @relation("TemplateCreator") // Phase 11 — шаблоны, созданные пользователем
-  templatesUpdated ResponseTemplate[]    @relation("TemplateUpdater") // Phase 11 — шаблоны, последний раз обновлённые пользователем
-  appealsCreated   AppealRecord[]        @relation("AppealCreator") // Phase 11 — обжалования, созданные пользователем
-  appealsResolved  AppealRecord[]        @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
-  autoReplyUpdates AutoReplyConfig[]     @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
-  managerStats     ManagerSupportStats[] @relation("ManagerStats") // Phase 13 — денормализованная статистика менеджеров (SUP-39)
-  wbTokensUpdated  WbApiToken[]          @relation("WbTokenUpdater") // Quick 260512-jxh
-  isActive         Boolean               @default(true)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  preferences             UserPreference[] // персистентные настройки UI per-user (план 260410-mya)
+  assignedTickets         SupportTicket[]       @relation("SupportAssignee") // Phase 8 — назначенные тикеты поддержки
+  authoredMessages        SupportMessage[]      @relation("SupportAuthor") // Phase 8 — OUTBOUND сообщения
+  returnDecisions         ReturnDecision[]      @relation("ReturnDecider") // Phase 9 — audit log решений по возвратам
+  templatesCreated        ResponseTemplate[]    @relation("TemplateCreator") // Phase 11 — шаблоны, созданные пользователем
+  templatesUpdated        ResponseTemplate[]    @relation("TemplateUpdater") // Phase 11 — шаблоны, последний раз обновлённые пользователем
+  appealsCreated          AppealRecord[]        @relation("AppealCreator") // Phase 11 — обжалования, созданные пользователем
+  appealsResolved         AppealRecord[]        @relation("AppealResolver") // Phase 11 — обжалования, резольвенные пользователем
+  autoReplyUpdates        AutoReplyConfig[]     @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
+  managerStats            ManagerSupportStats[] @relation("ManagerStats") // Phase 13 — денормализованная статистика менеджеров (SUP-39)
+  wbTokensUpdated         WbApiToken[]          @relation("WbTokenUpdater") // Quick 260512-jxh
+  isActive                Boolean               @default(true)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 }
 
 enum SectionRole {
@@ -156,11 +156,11 @@ model Brand {
 }
 
 model Category {
-  id            String        @id @default(cuid())
+  id            String             @id @default(cuid())
   name          String
   brandId       String
-  brand         Brand         @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  sortOrder     Int           @default(0)
+  brand         Brand              @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  sortOrder     Int                @default(0)
   subcategories Subcategory[]
   products      Product[]
   // Phase 17 — Свойства определяются на уровне категории
@@ -197,9 +197,9 @@ enum PropertyKind {
 }
 
 model CategoryProperty {
-  id         String                 @id @default(cuid())
-  categoryId String
-  category   Category               @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  id            String                 @id @default(cuid())
+  categoryId    String
+  category      Category               @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   name          String
   kind          PropertyKind           @default(STRING)
   options       String[]               @default([])
@@ -207,9 +207,9 @@ model CategoryProperty {
   // Phase 18: флаг включения value этого свойства в автогенерируемое Product.name
   includeInName Boolean                @default(false)
   sortOrder     Int                    @default(0)
-  values     ProductPropertyValue[]
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
+  values        ProductPropertyValue[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
 
   @@unique([categoryId, name])
 }
@@ -255,8 +255,8 @@ model ProductSize {
 // ──────────────────────────────────────────────────────────────────
 
 model WbCard {
-  id                  String            @id @default(cuid())
-  nmId                Int               @unique // WB nm_id
+  id                  String                  @id @default(cuid())
+  nmId                Int                     @unique // WB nm_id
   article             String // артикул WB
   barcode             String? // основной штрихкод
   barcodes            String[] // все штрихкоды
@@ -265,7 +265,7 @@ model WbCard {
   category            String? // категория WB (не наша)
   photoUrl            String? // главное фото
   photos              String[] // все фото из карточки
-  hasVideo            Boolean           @default(false) // есть ли видео
+  hasVideo            Boolean                 @default(false) // есть ли видео
   weightKg            Float? // вес брутто, кг
   heightCm            Float? // высота, см
   widthCm             Float? // ширина, см
@@ -277,6 +277,10 @@ model WbCard {
   reviews3            Int? // оценок 3
   reviews4            Int? // оценок 4
   reviews5            Int? // оценок 5
+  // Phase 260514-mci: imt-агрегат рейтинга (агрегация feedback'ов всех nmId одной imt-склейки)
+  imtId               Int? // id склейки из WB Content API (характеристика товара)
+  ratingImt           Float? // средний рейтинг склейки
+  reviewsTotalImt     Int? // кол-во оценок склейки
   priceBeforeDiscount Float? // цена продавца до скидки, руб
   sellerDiscount      Int? // скидка продавца, %
   price               Float? // цена продавца со скидкой, руб
@@ -290,14 +294,14 @@ model WbCard {
   commFbsStd          Float? // комиссия стандартная FBS, %
   commFbwIu           Float? // комиссия ИУ FBW, %
   commFbsIu           Float? // комиссия ИУ FBS, %
-  label               String?           @db.VarChar(100) // ярлык (ручной)
-  availability        String            @default("IN_STOCK")
+  label               String?                 @db.VarChar(100) // ярлык (ручной)
+  availability        String                  @default("IN_STOCK")
   rawJson             Json? // полный ответ API
   // Phase 17: парсинг WB Content API в нормализованном виде.
   // characteristics: массив { id, name, value }, value может быть string/number/array.
   // techSizes: ["S","M","L"] из sizes[].techSize (исключая "0" для one-size товаров).
   characteristics     Json?
-  techSizes           String[]          @default([])
+  techSizes           String[]                @default([])
   // Phase 7: Средняя скорость продаж за 7 дней (D-09)
   avgSalesSpeed7d     Float?
   // Заказы минус отмены за вчерашний день (Moscow TZ) — для сравнения с 7д-средней
@@ -308,8 +312,11 @@ model WbCard {
   warehouses          WbCardWarehouseStock[]
   // Phase 15: Per-warehouse orders breakdown (ORDERS-01)
   warehouseOrders     WbCardWarehouseOrders[]
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  // Phase 260514-mci: индекс для быстрой группировки при batch update ratingImt/reviewsTotalImt
+  @@index([imtId])
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -333,55 +340,55 @@ model WbCommissionIu {
 // ──────────────────────────────────────────────────────────────────
 
 model Product {
-  id                      String               @id @default(cuid())
-  sku                     String               @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
+  id                       String                 @id @default(cuid())
+  sku                      String                 @unique // "УКТ-000001" — auto-generated via PostgreSQL sequence
   // Phase 18: name стал автогенерируемым составным, бывший name → article
-  article                 String               @db.VarChar(100)
-  name                    String               @db.VarChar(255) // autogenerated по формуле; ручное редактирование — через nameOverridden
-  nameOverridden          Boolean              @default(false)
-  photoUrl                String?
-  brandId                 String
-  brand                   Brand                @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  categoryId              String?
-  category                Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  subcategoryId           String?
-  subcategory             Subcategory?         @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
-  label                   String?              @db.VarChar(100)
-  abcStatus               AbcStatus?
-  availability            Availability         @default(IN_STOCK)
-  weightKg                Float?
-  heightCm                Float?
-  widthCm                 Float?
-  depthCm                 Float?
+  article                  String                 @db.VarChar(100)
+  name                     String                 @db.VarChar(255) // autogenerated по формуле; ручное редактирование — через nameOverridden
+  nameOverridden           Boolean                @default(false)
+  photoUrl                 String?
+  brandId                  String
+  brand                    Brand                  @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  categoryId               String?
+  category                 Category?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId            String?
+  subcategory              Subcategory?           @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  label                    String?                @db.VarChar(100)
+  abcStatus                AbcStatus?
+  availability             Availability           @default(IN_STOCK)
+  weightKg                 Float?
+  heightCm                 Float?
+  widthCm                  Float?
+  depthCm                  Float?
   // Volume is NOT stored — computed at read time: (heightCm * widthCm * depthCm) / 1000 liters
-  articles                MarketplaceArticle[]
-  cost                    ProductCost? // One-to-one: product → cost record
+  articles                 MarketplaceArticle[]
+  cost                     ProductCost? // One-to-one: product → cost record
   // Phase 17 — Свойства (EAV) и размерная сетка
-  propertyValues          ProductPropertyValue[]
-  sizes                   ProductSize[]
+  propertyValues           ProductPropertyValue[]
+  sizes                    ProductSize[]
   // Phase 14: Stock management fields
-  ivanovoStock              Int?
-  productionStock           Int?
-  ivanovoStockUpdatedAt     DateTime?
-  productionStockUpdatedAt  DateTime?
+  ivanovoStock             Int?
+  productionStock          Int?
+  ivanovoStockUpdatedAt    DateTime?
+  productionStockUpdatedAt DateTime?
   // Phase 7: Pricing overrides (D-01)
   // ── Pricing overrides (Phase 7 + 2026-04-16 extension) ──
-  drrOverridePct          Float?
-  defectRateOverridePct   Float?
-  deliveryCostRub         Float?
+  drrOverridePct           Float?
+  defectRateOverridePct    Float?
+  deliveryCostRub          Float?
   // Per-product overrides, 2026-04-16: перекрывают card.X / rates.X / subcategory/category defaults
-  buyoutOverridePct       Float?
-  clubDiscountOverridePct Float?
-  walletOverridePct       Float?
-  acquiringOverridePct    Float?
-  commissionOverridePct   Float?
-  jemOverridePct          Float?
-  creditOverridePct       Float?
-  overheadOverridePct     Float?
-  taxOverridePct          Float?
-  deletedAt               DateTime? // Soft delete: null = active
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
+  buyoutOverridePct        Float?
+  clubDiscountOverridePct  Float?
+  walletOverridePct        Float?
+  acquiringOverridePct     Float?
+  commissionOverridePct    Float?
+  jemOverridePct           Float?
+  creditOverridePct        Float?
+  overheadOverridePct      Float?
+  taxOverridePct           Float?
+  deletedAt                DateTime? // Soft delete: null = active
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -899,12 +906,12 @@ model AutoReplyConfig {
 // ──────────────────────────────────────────────────────────────────
 
 model WbWarehouse {
-  id                 Int                    @id // warehouseId из WB Analytics API
-  name               String                 // "Коледино", "Казань"
-  cluster            String                 // Полное название, напр. "Центральный федеральный округ"
-  shortCluster       String                 // "ЦФО" | "ЮГ" | "Урал" | "ПФО" | "СЗО" | "СФО" | "Прочие"
-  isActive           Boolean                @default(true)
-  needsClusterReview Boolean                @default(false)
+  id                 Int                     @id // warehouseId из WB Analytics API
+  name               String // "Коледино", "Казань"
+  cluster            String // Полное название, напр. "Центральный федеральный округ"
+  shortCluster       String // "ЦФО" | "ЮГ" | "Урал" | "ПФО" | "СЗО" | "СФО" | "Прочие"
+  isActive           Boolean                 @default(true)
+  needsClusterReview Boolean                 @default(false)
   stocks             WbCardWarehouseStock[]
   orders             WbCardWarehouseOrders[]
 }
@@ -981,15 +988,15 @@ model ManagerSupportStats {
 // ──────────────────────────────────────────────────────────────────
 
 model WbApiToken {
-  name             String   @id // "WB_API_TOKEN" | "WB_RETURNS_TOKEN" | "WB_CHAT_TOKEN"
-  value            String   // Полное значение JWT (нужно для авторизации в WB API)
-  scopeBitmask     Int      // `s` из JWT payload (sum 2^bit)
-  issuedAt         DateTime? // `iat` из JWT — nullable, WB часто не выставляет
-  expiresAt        DateTime // `exp` из JWT
-  sellerId         String?  // `sid` из JWT (для аудита)
-  organizationId   String?  // `oid` из JWT (для аудита)
-  updatedById      String?  // null для bootstrap из env
-  updatedBy        User?    @relation("WbTokenUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  name           String    @id // "WB_API_TOKEN" | "WB_RETURNS_TOKEN" | "WB_CHAT_TOKEN"
+  value          String // Полное значение JWT (нужно для авторизации в WB API)
+  scopeBitmask   Int // `s` из JWT payload (sum 2^bit)
+  issuedAt       DateTime? // `iat` из JWT — nullable, WB часто не выставляет
+  expiresAt      DateTime // `exp` из JWT
+  sellerId       String? // `sid` из JWT (для аудита)
+  organizationId String? // `oid` из JWT (для аудита)
+  updatedById    String? // null для bootstrap из env
+  updatedBy      User?     @relation("WbTokenUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

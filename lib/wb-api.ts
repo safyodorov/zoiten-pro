@@ -75,6 +75,9 @@ export interface WbCharacteristicRaw {
 
 export interface WbCardRaw {
   nmID: number
+  // Phase 260514-mci: id «склейки» (imt) — общий для группы цветов/модификаций одной карточки.
+  // WB Content API возвращает поле uppercase IDs (imtID).
+  imtID?: number
   vendorCode: string
   brand: string
   title: string
@@ -565,6 +568,8 @@ export function parseCard(card: WbCardRaw) {
 
   return {
     nmId: card.nmID,
+    // Phase 260514-mci: imt-склейка для группировки рейтингов
+    imtId: card.imtID ?? null,
     article: card.vendorCode,
     name: card.title || card.vendorCode,
     brand: card.brand || null,
