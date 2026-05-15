@@ -17,10 +17,22 @@ export function WbSyncRatingsButton() {
       const data = await res.json()
 
       if (res.ok) {
+        const diag = data.diagnostics as
+          | {
+              totalFeedbacks: number
+              excludedByState: number
+              excludedByAge: number
+              includedInAggregate: number
+            }
+          | undefined
+        const excludedNote = diag
+          ? ` · исключено ${diag.excludedByState} обнулённых, ${diag.excludedByAge} старее 2 лет`
+          : ""
         toast.success(
-          `Рейтинги обновлены: ${data.updatedNmIds} карточек / ${data.updatedImtGroups} склеек (обработано ${data.totalProcessed} отзывов)`,
-          { duration: 8000 }
+          `Рейтинги: ${data.updatedNmIds} карточек / ${data.updatedImtGroups} склеек (учтено ${diag?.includedInAggregate ?? data.totalProcessed} из ${data.totalProcessed} отзывов${excludedNote})`,
+          { duration: 10000 }
         )
+        console.info("[ratings-sync] diagnostics", diag)
         router.refresh()
       } else if (res.status === 429) {
         toast.warning(data.error || "WB Feedbacks API на cooldown", {

@@ -42,7 +42,7 @@ export async function POST(): Promise<NextResponse> {
 
   try {
     // 2. Sweep + aggregate
-    const { perNmId, perImtId, totalProcessed } = await fetchProductRatings()
+    const { perNmId, perImtId, totalProcessed, diagnostics } = await fetchProductRatings()
 
     // 3. Batch update — карточка: rating + reviewsTotal + (imtId backfill, если null в БД)
     let updatedNmIds = 0
@@ -82,6 +82,7 @@ export async function POST(): Promise<NextResponse> {
       updatedImtGroups, // склеек обновлено
       perNmIdCount: perNmId.size,
       perImtIdCount: perImtId.size,
+      diagnostics, // распределение state'ов + exclusion counts (для UI toast и debug)
     })
   } catch (err) {
     // WbRateLimitError (>60s retry) — переводим в cooldown и возвращаем 429.

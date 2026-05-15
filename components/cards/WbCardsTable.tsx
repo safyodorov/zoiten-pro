@@ -380,11 +380,19 @@ export function WbCardsTable({
                     ? <span className="text-sm">{card.clubDiscount}%</span>
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
-                {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки */}
+                {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки.
+                    2026-05-15: формат «4.8 (4.78)» — WB-витрина до десятых + наш расчёт до сотых в скобках. */}
                 <TableCell className="text-center text-xs border-l">
-                  {card.rating != null
-                    ? <span>{card.rating.toFixed(1)} ★</span>
-                    : <span className="text-muted-foreground">—</span>}
+                  {card.rating != null ? (
+                    <span>
+                      {card.rating.toFixed(1)} ★{" "}
+                      <span className="text-muted-foreground text-[10px]">
+                        ({card.rating.toFixed(2)})
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-center text-xs">
                   {card.reviewsTotal != null
@@ -392,9 +400,16 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-xs border-l">
-                  {card.ratingImt != null
-                    ? <span>{card.ratingImt.toFixed(1)} ★</span>
-                    : <span className="text-muted-foreground">—</span>}
+                  {card.ratingImt != null ? (
+                    <span>
+                      {card.ratingImt.toFixed(1)} ★{" "}
+                      <span className="text-muted-foreground text-[10px]">
+                        ({card.ratingImt.toFixed(2)})
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-center text-xs">
                   {card.reviewsTotalImt != null
