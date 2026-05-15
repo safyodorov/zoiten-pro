@@ -370,12 +370,13 @@ export function WbCardsTable({
                     <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
                   )}
                 </TableCell>
-                {/* 260515-jq6: Tooltip с полным наименованием при hover (truncate режет длинные) */}
+                {/* 260515-jq6: Tooltip с полным наименованием при hover (truncate режет длинные).
+                    Ширина 240px (раньше 160) — название должно читаться без tooltip в типичных случаях. */}
                 <TableCell className="font-medium">
                   <Tooltip>
                     <TooltipTrigger
                       render={
-                        <div className="max-w-[160px] truncate cursor-default" />
+                        <div className="max-w-[240px] truncate cursor-default" />
                       }
                     >
                       {card.name}
