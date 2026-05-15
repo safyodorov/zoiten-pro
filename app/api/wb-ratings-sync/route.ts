@@ -1,44 +1,39 @@
 // app/api/wb-ratings-sync/route.ts
-// Phase 260514-mci: синхронизация рейтингов карточек WB.
+// Синхронизация рейтингов карточек WB.
 //
-// 2026-05-15: объединение в одну кнопку «Рейтинги» по фидбеку пользователя:
-//   Шаг 1 (быстро, ~45с): curl к card.wb.ru v4 → точные WB-витрина значения
-//     wbStoreRating + wbStoreFeedbacks per nmId. Без shared rate-limit с
-//     Feedbacks/Statistics API (v4 — buyer-facing, без seller-token).
-//   Шаг 2 (медленно, минуты): Feedbacks API sweep → наш weighted-average
-//     расчёт по WB-документированной формуле time-decay.
+// 2026-05-15 (v3): новый источник — undocumented buyer-side endpoint
+// `feedbacks1.wb.ru/feedbacks/v1/{imtRoot}`. Возвращает уже отфильтрованные
+// агрегаты (WB NLP-filter applied). Один запрос на склейку даёт точное
+// совпадение с витриной WB.
 //
-// Если Шаг 2 заблокирован cooldown'ом — возвращаем частичный успех (хотя бы
-// WB-витрина обновлена). UX: пользователь всегда получает СВЕЖЕЕ значение
-// что показывает покупатель, даже когда feedbacks bucket залочен support-sync'ом.
+// Шаг 1 (~45с): card.wb.ru v4 batch — fallback источник wbStoreRating
+//   и wbStoreFeedbacks (на случай если feedbacks1.wb.ru недоступен).
+// Шаг 2 (~30с): feedbacks1.wb.ru per imt — основной источник rating/
+//   ratingImt/reviewsTotal/reviewsTotalImt.
+//
+// Source: .planning/quick/260514-mci-cards-wb/260515-rejected-feedbacks-RESEARCH.md
 
 export const runtime = "nodejs"
-// 2026-05-15: per-nmId sweep ~10 мин для 274 карточек, плюс v4 batch ~45с.
-// maxDuration 900 (15 мин) даёт буфер на rate-limit retry внутри callApi.
-export const maxDuration = 900
+export const maxDuration = 300
 
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
 import { execSync } from "node:child_process"
 import { prisma } from "@/lib/prisma"
 import { requireSection } from "@/lib/rbac"
-import { fetchProductRatings } from "@/lib/wb-ratings"
-import {
-  getWbCooldownSecondsRemaining,
-  setWbCooldownUntil,
-} from "@/lib/wb-cooldown"
-import { WbRateLimitError } from "@/lib/wb-support-api"
+import { fetchStorefrontRatings } from "@/lib/wb-storefront-feedbacks"
 
 interface StorefrontUpdate {
-  totalCards: number // карточек в БД
-  v4Batches: number // успешных v4 batches
-  updated: number // карточек обновлено
-  failed: boolean // v4 не отвечает / 403
+  totalCards: number
+  v4Batches: number
+  updated: number
+  failed: boolean
 }
 
-// Шаг 1: v4 batch для wbStoreRating + wbStoreFeedbacks.
+// Шаг 1: card.wb.ru v4 batch — wbStoreRating + wbStoreFeedbacks per nmId.
 // Тот же паттерн что в wb-sync-spp/route.ts и lib/wb-api.ts fetchWbDiscounts.
-async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
+// Использует curl (TLS-fingerprint блок на Node fetch для card.wb.ru).
+async function syncStorefrontV4(): Promise<StorefrontUpdate> {
   const cards = await prisma.wbCard.findMany({ select: { nmId: true } })
   const nmIds = cards.map((c) => c.nmId)
 
@@ -61,13 +56,11 @@ async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
         { timeout: 15000 }
       ).toString()
     } catch {
-      console.warn(`[ratings-sync v4] curl ошибка на батче ${i / 20 + 1}`)
       result.failed = true
       break
     }
 
     if (raw.includes("403 Forbidden") || raw.includes("<html>")) {
-      console.warn(`[ratings-sync v4] 403 на батче ${i / 20 + 1}`)
       result.failed = true
       break
     }
@@ -76,7 +69,6 @@ async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
     try {
       data = JSON.parse(raw)
     } catch {
-      console.warn(`[ratings-sync v4] JSON parse error на батче ${i / 20 + 1}`)
       result.failed = true
       break
     }
@@ -99,7 +91,7 @@ async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
           await prisma.wbCard.update({ where: { nmId }, data: update })
           result.updated += 1
         } catch {
-          // nmId которого нет в WbCard — skip
+          // nmId not in WbCard — skip
         }
       }
     }
@@ -107,7 +99,6 @@ async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
     result.v4Batches += 1
 
     if (i + 20 < nmIds.length) {
-      // 3-секундная пауза между батчами — паттерн SPP sync (избегаем PoW challenge).
       await new Promise((r) => setTimeout(r, 3000))
     }
   }
@@ -117,102 +108,89 @@ async function syncStorefrontRatings(): Promise<StorefrontUpdate> {
 
 export async function POST(): Promise<NextResponse> {
   try {
-    // /cards/wb gated на section "PRODUCTS" (см. app/(dashboard)/cards/layout.tsx).
     await requireSection("PRODUCTS", "MANAGE")
   } catch {
     return NextResponse.json({ error: "Нет доступа" }, { status: 403 })
   }
 
-  // ── Шаг 1: WB-витрина через v4 (всегда, независимо от cooldown) ────
-  const storefront = await syncStorefrontRatings()
+  // ── Шаг 1: card.wb.ru v4 (fallback источник + СПП context) ────────
+  const storefrontV4 = await syncStorefrontV4()
   revalidatePath("/cards/wb")
 
-  // ── Шаг 2: Feedbacks sweep + наш weighted-average расчёт ─────────
-  const cooldownSec = await getWbCooldownSecondsRemaining("feedbacks")
-  if (cooldownSec > 0) {
-    // Bucket заблокирован — возвращаем частичный успех со Шага 1.
-    return NextResponse.json({
-      ok: true,
-      partial: true,
-      storefront,
-      ourAggregate: {
-        skipped: true,
-        reason: `WB Feedbacks API на cooldown ${Math.ceil(cooldownSec / 60)} мин`,
-        retryAfterSec: cooldownSec,
-      },
-    })
-  }
-
+  // ── Шаг 2: feedbacks1.wb.ru per-imt — основной источник рейтингов ──
   let updatedNmIds = 0
-  let updatedImtGroups = 0
-  let totalProcessed = 0
-  let diagnostics
+  let updatedImts = 0
+  let imtsFetched = 0
+  let imtsFailed = 0
+  let totalCountIncluded = 0
+  let totalCountTotal = 0
   try {
-    // 2026-05-15: per-nmId sweep требует список наших nmIds — WB-cap пробивается
-    // только с nmId filter. Шаг 1 (storefront) уже взял nmIds выше — переиспользуем.
-    const dbNmIds = await prisma.wbCard.findMany({ select: { nmId: true } })
-    const ratings = await fetchProductRatings(dbNmIds.map((c) => c.nmId))
-    totalProcessed = ratings.totalProcessed
-    diagnostics = ratings.diagnostics
+    // Берём уникальные imtId из БД (= imtRoot для feedbacks1.wb.ru endpoint).
+    const dbImts = await prisma.wbCard.findMany({
+      select: { imtId: true },
+      where: { imtId: { not: null } },
+      distinct: ["imtId"],
+    })
+    const imtRoots = dbImts
+      .map((c) => c.imtId)
+      .filter((id): id is number => id !== null && id > 0)
 
-    for (const [nmId, agg] of ratings.perNmId.entries()) {
-      try {
-        await prisma.wbCard.update({
-          where: { nmId },
-          data: {
-            rating: agg.rating,
-            reviewsTotal: agg.count,
-            ...(agg.imtId ? { imtId: agg.imtId } : {}),
-          },
-        })
-        updatedNmIds++
-      } catch {
-        // nmId не в БД — skip
-      }
-    }
+    const ratings = await fetchStorefrontRatings(imtRoots)
+    imtsFetched = ratings.size
+    imtsFailed = imtRoots.length - imtsFetched
 
-    for (const [imtId, agg] of ratings.perImtId.entries()) {
-      const result = await prisma.wbCard.updateMany({
-        where: { imtId },
-        data: { ratingImt: agg.rating, reviewsTotalImt: agg.count },
+    for (const [imtRoot, agg] of ratings) {
+      totalCountIncluded += agg.countIncluded
+      totalCountTotal += agg.countTotal
+
+      // Обновить per-imt поля: ratingImt + reviewsTotalImt + wbStoreRating + wbStoreFeedbacks.
+      // wbStoreRating/Feedbacks теперь приходит из достоверного источника (= что покупатель видит).
+      const imtUpdate = await prisma.wbCard.updateMany({
+        where: { imtId: imtRoot },
+        data: {
+          ratingImt: agg.rating,
+          reviewsTotalImt: agg.countIncluded,
+          wbStoreRating: agg.rating,
+          wbStoreFeedbacks: agg.countTotal,
+        },
       })
-      if (result.count > 0) updatedImtGroups++
+      if (imtUpdate.count > 0) updatedImts += 1
+
+      // Per-nmId rating + count из nmValuationDistribution.
+      for (const [nmId, perNm] of agg.perNmId) {
+        try {
+          await prisma.wbCard.update({
+            where: { nmId },
+            data: {
+              rating: perNm.rating,
+              reviewsTotal: perNm.count,
+            },
+          })
+          updatedNmIds += 1
+        } catch {
+          // nmId не в БД — skip
+        }
+      }
     }
 
     revalidatePath("/cards/wb")
     return NextResponse.json({
       ok: true,
-      partial: false,
-      storefront,
-      ourAggregate: {
-        skipped: false,
-        totalProcessed,
+      storefrontV4,
+      storefront: {
+        imtsFetched,
+        imtsFailed,
         updatedNmIds,
-        updatedImtGroups,
-        perNmIdCount: ratings.perNmId.size,
-        perImtIdCount: ratings.perImtId.size,
-        diagnostics,
+        updatedImts,
+        totalFeedbacksIncluded: totalCountIncluded,
+        totalFeedbacksAllTime: totalCountTotal,
       },
     })
   } catch (err) {
-    if (err instanceof WbRateLimitError) {
-      await setWbCooldownUntil("feedbacks", err.retryAfterSec).catch(() => {})
-      // Шаг 1 уже прошёл — возвращаем частичный успех.
-      return NextResponse.json({
-        ok: true,
-        partial: true,
-        storefront,
-        ourAggregate: {
-          skipped: true,
-          reason: `WB Feedbacks API 429: ждите ${Math.ceil(err.retryAfterSec / 60)} мин`,
-          retryAfterSec: err.retryAfterSec,
-        },
-      })
-    }
     return NextResponse.json(
       {
         error: (err as Error).message || "Ошибка sync рейтингов",
-        storefront, // Шаг 1 успешно прошёл
+        storefrontV4,
       },
       { status: 500 }
     )

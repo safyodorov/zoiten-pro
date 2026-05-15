@@ -384,13 +384,12 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки.
-                    2026-05-15: «Рейтинг карт.» = наш per-nmId расчёт. «Рейтинг скл.» = WB-витрина
-                    (card.wb.ru v4) + наш per-imt расчёт в скобках. «Оценок WB» = реальное кол-во
-                    с витрины WB. WB v4 не различает per-nmId и per-imt — для всех карточек
-                    склейки одинаковый reviewRating + feedbacks. */}
+                    2026-05-15 (v3): источник = feedbacks1.wb.ru — то что показывает витрина WB.
+                    NLP-фильтр невалидных отзывов применён WB-стороной. Расчёт у нас и на витрине
+                    идентичен, скобки «(наш)» больше не нужны. */}
                 <TableCell className="text-center text-xs border-l">
                   {card.rating != null ? (
-                    <span>{card.rating.toFixed(2)} ★</span>
+                    <span>{card.rating.toFixed(1)} ★</span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -401,20 +400,8 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-xs border-l">
-                  {card.wbStoreRating != null ? (
-                    <span>
-                      {card.wbStoreRating.toFixed(1)} ★
-                      {card.ratingImt != null && (
-                        <span className="text-muted-foreground text-[10px]">
-                          {" "}({card.ratingImt.toFixed(2)})
-                        </span>
-                      )}
-                    </span>
-                  ) : card.ratingImt != null ? (
-                    <span>
-                      {card.ratingImt.toFixed(2)} ★{" "}
-                      <span className="text-muted-foreground text-[10px]">(наш)</span>
-                    </span>
+                  {card.ratingImt != null ? (
+                    <span>{card.ratingImt.toFixed(1)} ★</span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}

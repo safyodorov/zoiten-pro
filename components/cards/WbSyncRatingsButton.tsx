@@ -6,42 +6,32 @@ import { toast } from "sonner"
 import { Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-// 2026-05-15: после слияния v4 storefront sync в /api/wb-ratings-sync
-// одна кнопка делает 2 шага:
-//   1. v4 batch (~45с) → wbStoreRating + wbStoreFeedbacks (точные WB-витрина значения)
-//   2. Feedbacks API sweep + WB time-decay формула → ratingImt/reviewsTotalImt (наш расчёт)
-// Если Шаг 2 заблокирован (cooldown bucket) — частичный успех со Шага 1.
+// 2026-05-15 (v3): источник рейтингов — buyer-side endpoint feedbacks1.wb.ru.
+// Возвращает уже отфильтрованные WB агрегаты (NLP-filter applied). Точное
+// совпадение с витриной. Sync делает 2 шага:
+//   Шаг 1 (~45с): card.wb.ru v4 — fallback wbStoreRating/Feedbacks per nmId.
+//   Шаг 2 (~30с): feedbacks1.wb.ru per imt — основной источник рейтингов.
 
-interface StorefrontResult {
+interface StorefrontV4Result {
   totalCards: number
   v4Batches: number
   updated: number
   failed: boolean
 }
 
-interface OurAggregateResult {
-  skipped: boolean
-  reason?: string
-  retryAfterSec?: number
-  totalProcessed?: number
-  updatedNmIds?: number
-  updatedImtGroups?: number
-  perNmIdCount?: number
-  perImtIdCount?: number
-  diagnostics?: {
-    totalFeedbacks: number
-    excludedByState: number
-    excludedByAge: number
-    includedInAggregate: number
-    states: Record<string, number>
-  }
+interface StorefrontResult {
+  imtsFetched: number
+  imtsFailed: number
+  updatedNmIds: number
+  updatedImts: number
+  totalFeedbacksIncluded: number
+  totalFeedbacksAllTime: number
 }
 
 interface SyncResponse {
   ok: boolean
-  partial: boolean
+  storefrontV4: StorefrontV4Result
   storefront: StorefrontResult
-  ourAggregate: OurAggregateResult
   error?: string
 }
 
@@ -56,33 +46,16 @@ export function WbSyncRatingsButton() {
       const data = (await res.json()) as SyncResponse
 
       if (res.ok && data.ok) {
+        const v4 = data.storefrontV4
         const sf = data.storefront
-        const our = data.ourAggregate
 
-        // Главная информация — что обновили с витрины WB (быстрый и точный шаг).
-        const sfNote = sf.failed
-          ? `WB-витрина: ОШИБКА (v4 недоступен)`
-          : `WB-витрина: ${sf.updated} из ${sf.totalCards} карточек`
+        const v4Note = v4.failed
+          ? `v4: ошибка (${v4.updated}/${v4.totalCards})`
+          : `v4: ${v4.updated}/${v4.totalCards} карточек`
+        const sfNote = `Витрина: ${sf.updatedImts} склеек, ${sf.updatedNmIds} карточек, ${sf.totalFeedbacksIncluded} учтённых / ${sf.totalFeedbacksAllTime} всего отзывов`
 
-        // Информация по нашему расчёту.
-        let ourNote: string
-        if (our.skipped) {
-          ourNote = `Наш агрегат пропущен — ${our.reason ?? "cooldown"}`
-        } else {
-          const diag = our.diagnostics
-          const exclNote = diag
-            ? `, исключено ${diag.excludedByState} обнулённых + ${diag.excludedByAge} старее 2 лет`
-            : ""
-          ourNote = `Наш агрегат (по WB-формуле): ${our.updatedNmIds} карточек / ${our.updatedImtGroups} склеек${exclNote}`
-        }
-
-        if (data.partial) {
-          toast.warning(`${sfNote}\n${ourNote}`, { duration: 12000 })
-        } else {
-          toast.success(`${sfNote}\n${ourNote}`, { duration: 12000 })
-        }
-
-        console.info("[ratings-sync]", { storefront: sf, ourAggregate: our })
+        toast.success(`${sfNote}\n${v4Note}`, { duration: 10000 })
+        console.info("[ratings-sync]", { storefrontV4: v4, storefront: sf })
         router.refresh()
       } else if (res.status === 403) {
         toast.error("Нет доступа (нужны права MANAGE на «Товары»)")
@@ -102,7 +75,7 @@ export function WbSyncRatingsButton() {
       variant="outline"
       size="sm"
       className="gap-1.5"
-      title="Обновление рейтингов: (1) точные WB-витрина значения через card.wb.ru v4 ~45с, (2) наш расчёт по WB time-decay формуле через Feedbacks API ~минуты"
+      title="Обновление рейтингов с витрины WB через feedbacks1.wb.ru — точное совпадение с тем что видит покупатель (NLP-фильтр невалидных отзывов применён WB-стороной)"
     >
       <Star className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} />
       {isSyncing ? "Рейтинги…" : "Рейтинги"}
