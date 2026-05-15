@@ -405,7 +405,19 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-xs border-l">
-                  {card.ratingImt != null ? (
+                  {/* 2026-05-15 (v3.1): перед скобками — wbStoreRating (= WB-витрина, точное
+                      значение). В скобках — ratingImt (weighted-by-cards: Σ(rating×reviews)/
+                      Σ(reviews) по всем карточкам склейки в БД). */}
+                  {card.wbStoreRating != null ? (
+                    <span>
+                      {card.wbStoreRating.toFixed(1)} ★
+                      {card.ratingImt != null && (
+                        <span className="text-muted-foreground text-[10px]">
+                          {" "}({card.ratingImt.toFixed(2)})
+                        </span>
+                      )}
+                    </span>
+                  ) : card.ratingImt != null ? (
                     <span>
                       {card.ratingImt.toFixed(1)} ★{" "}
                       <span className="text-muted-foreground text-[10px]">

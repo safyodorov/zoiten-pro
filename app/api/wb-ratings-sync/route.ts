@@ -139,24 +139,23 @@ export async function POST(): Promise<NextResponse> {
     imtsFetched = ratings.size
     imtsFailed = imtRoots.length - imtsFetched
 
+    // Pass 1: per-nmId rating + count из nmValuationDistribution, +
+    // wbStoreRating/wbStoreFeedbacks из top-level storefront (= что показывает витрина).
+    // ratingImt + reviewsTotalImt НЕ обновляем здесь — посчитаем weighted-by-cards
+    // в Pass 2 ниже.
     for (const [imtRoot, agg] of ratings) {
       totalCountIncluded += agg.countIncluded
       totalCountTotal += agg.countTotal
 
-      // Обновить per-imt поля: ratingImt + reviewsTotalImt + wbStoreRating + wbStoreFeedbacks.
-      // wbStoreRating/Feedbacks теперь приходит из достоверного источника (= что покупатель видит).
       const imtUpdate = await prisma.wbCard.updateMany({
         where: { imtId: imtRoot },
         data: {
-          ratingImt: agg.rating,
-          reviewsTotalImt: agg.countIncluded,
           wbStoreRating: agg.rating,
           wbStoreFeedbacks: agg.countTotal,
         },
       })
       if (imtUpdate.count > 0) updatedImts += 1
 
-      // Per-nmId rating + count из nmValuationDistribution.
       for (const [nmId, perNm] of agg.perNmId) {
         try {
           await prisma.wbCard.update({
@@ -171,6 +170,38 @@ export async function POST(): Promise<NextResponse> {
           // nmId не в БД — skip
         }
       }
+    }
+
+    // Pass 2: per-imt aggregate из per-nmId данных. Weighted average rating
+    // по reviewsTotal, sum reviewsTotal как count.
+    // Формула: ratingImt = Σ(card.rating × card.reviewsTotal) / Σ(card.reviewsTotal)
+    // Это даёт «правдоподобный» imt-rating вычисленный из тех самых карточек что в БД,
+    // не зависит от storefront imt-level (хотя они совпадают при отсутствии орфанов).
+    const cardsForImtAgg = await prisma.wbCard.findMany({
+      select: { imtId: true, rating: true, reviewsTotal: true },
+      where: {
+        imtId: { not: null },
+        rating: { not: null },
+        reviewsTotal: { gt: 0 },
+      },
+    })
+    const imtAggs = new Map<number, { sum: number; count: number }>()
+    for (const c of cardsForImtAgg) {
+      if (!c.imtId || c.rating === null || !c.reviewsTotal) continue
+      const e = imtAggs.get(c.imtId) ?? { sum: 0, count: 0 }
+      e.sum += c.rating * c.reviewsTotal
+      e.count += c.reviewsTotal
+      imtAggs.set(c.imtId, e)
+    }
+    for (const [imtId, a] of imtAggs) {
+      await prisma.wbCard.updateMany({
+        where: { imtId },
+        data: {
+          ratingImt:
+            a.count > 0 ? Math.round((a.sum / a.count) * 100) / 100 : null,
+          reviewsTotalImt: a.count,
+        },
+      })
     }
 
     revalidatePath("/cards/wb")
