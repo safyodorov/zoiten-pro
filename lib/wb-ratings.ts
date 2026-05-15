@@ -212,76 +212,85 @@ export function aggregateFeedbacks(
 
 const TAKE = 5000 // WB max per docs
 const SLEEP_MS = 1100 // 1 req/sec + 100ms буфер
-const MAX_PAGES = 50 // safety cap (50×5000 = 250k feedbacks)
+const MAX_SUB_PAGES = 5 // на slice — cap (5×5000 = 25k feedbacks за 90 дней — не достижимо)
+
+// 8 slices × 91 день ≈ 728 дней (близко к 730 = 2 года).
+const SLICE_COUNT = 8
+const SLICE_DAYS = Math.ceil(WB_RATING_FORMULA.WINDOW_DAYS / SLICE_COUNT)
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-// 2026-05-15: переход с skip-pagination на dateTo cursor.
-// Bug: WB Feedbacks API имеет скрытый skip-limit (~10000). После него страница
-// возвращает пустоту, и старый sweep останавливался преждевременно. Для nmId
-// с 950 feedback'ами в archive у нас оставалось 430.
+// 2026-05-15: переход с глобального skip/dateTo cursor на **time-slice sweep**.
 //
-// Решение: order=dateDesc + dateTo cursor. Каждый запрос берёт самый старый
-// feedback из предыдущего batch и ставит `dateTo = oldestEpochSec - 1`, тем
-// самым продолжая older. Никакого skip overflow.
+// Bug: WB Feedbacks API имеет скрытый GLOBAL cap (~10000 total returned)
+// независимо от pagination метода. Для seller'а с 30k+ feedback'ами sweep
+// застревал на newest 10k, теряя остальные. Диагностика: для одного nmId
+// 45360121 нативно WB returns 950 feedback'ов, у нас в БД — 430.
 //
-// Защиты:
-//   - `seen` Set по feedback.id — дедупликация если WB возвращает overlap
-//   - `stuckPages` cap — если 2 страницы подряд не добавили ничего нового, stop
-//   - MAX_PAGES=50 — общий safety cap (250k feedbacks)
+// Решение: разрезать 2-летнее окно на N slice'ов по dateFrom/dateTo. Внутри
+// каждого slice — sub-pagination через cursor. Каждый slice независим — cap
+// не накопляется. 8 slice'ов × 91 день ≈ 730 дней покрывают всю формулу WB.
+//
+// 8 slices × 2 buckets × max 5 sub-pages = 80 max requests × 1.1с = ~90 сек.
+// На практике большинство slice'ов = 1 sub-page → 16 запросов = ~20 сек.
 async function sweepFeedbacks(): Promise<Feedback[]> {
   const all: Feedback[] = []
   const seen = new Set<string>()
+  const nowSec = Math.floor(Date.now() / 1000)
+  const sliceDaysSec = SLICE_DAYS * 86_400
 
   for (const isAnswered of [false, true]) {
-    let dateTo: number | undefined = undefined
-    let stuckPages = 0
+    for (let slice = 0; slice < SLICE_COUNT; slice++) {
+      const sliceDateTo = nowSec - slice * sliceDaysSec
+      const sliceDateFrom = nowSec - (slice + 1) * sliceDaysSec
 
-    for (let page = 0; page < MAX_PAGES; page++) {
-      if (page > 0) await sleep(SLEEP_MS)
+      // Sub-pagination внутри slice через cursor dateTo. Если в slice <5000 —
+      // один запрос. Если больше — продолжаем.
+      let cursorDateTo = sliceDateTo
+      let stuckPages = 0
 
-      const batch = await listFeedbacks({
-        isAnswered,
-        take: TAKE,
-        skip: 0, // dateTo cursor вместо skip-pagination
-        ...(dateTo !== undefined ? { dateTo } : {}),
-      })
+      for (let p = 0; p < MAX_SUB_PAGES; p++) {
+        if (all.length > 0 || p > 0) await sleep(SLEEP_MS)
 
-      if (batch.length === 0) break
+        const batch = await listFeedbacks({
+          isAnswered,
+          take: TAKE,
+          skip: 0,
+          dateFrom: sliceDateFrom,
+          dateTo: cursorDateTo,
+        })
 
-      let oldestEpochSec = Infinity
-      let added = 0
-      for (const fb of batch) {
-        if (seen.has(fb.id)) continue
-        seen.add(fb.id)
-        all.push(fb)
-        added++
-        const createdSec = Math.floor(Date.parse(fb.createdDate) / 1000)
-        if (Number.isFinite(createdSec)) {
-          oldestEpochSec = Math.min(oldestEpochSec, createdSec)
+        if (batch.length === 0) break
+
+        let added = 0
+        let oldestSec = Infinity
+        for (const fb of batch) {
+          if (seen.has(fb.id)) continue
+          seen.add(fb.id)
+          all.push(fb)
+          added += 1
+          const createdSec = Math.floor(Date.parse(fb.createdDate) / 1000)
+          if (Number.isFinite(createdSec)) {
+            oldestSec = Math.min(oldestSec, createdSec)
+          }
         }
+
+        if (added === 0) {
+          stuckPages += 1
+          if (stuckPages >= 2) break // всё дубликаты — выход
+        } else {
+          stuckPages = 0
+        }
+
+        if (batch.length < TAKE) break // последняя страница slice
+        if (oldestSec === Infinity) break
+        if (oldestSec <= sliceDateFrom) break // дошли до начала slice
+
+        cursorDateTo = oldestSec - 1
       }
-
-      // Если страница не добавила НИЧЕГО (всё дубликаты) — защита от
-      // зацикливания. После 2 stuck pages подряд — выходим.
-      if (added === 0) {
-        stuckPages += 1
-        if (stuckPages >= 2) break
-      } else {
-        stuckPages = 0
-      }
-
-      // Last page — меньше чем take, значит дотянулись до конца.
-      if (batch.length < TAKE) break
-      // Sanity guard.
-      if (oldestEpochSec === Infinity) break
-
-      // Cursor advance: следующий запрос вернёт feedback'и старее oldest в текущем batch.
-      dateTo = oldestEpochSec - 1
     }
-    await sleep(SLEEP_MS)
   }
 
   return all
