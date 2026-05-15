@@ -22,12 +22,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import {
   createProductFromCards,
   addCardsToProduct,
   searchProducts,
 } from "@/app/actions/wb-cards"
 import { setPageSizePref } from "@/app/actions/user-preferences"
+import { copyToClipboard } from "@/lib/copy-to-clipboard"
 
 // ── Типы ──────────────────────────────────────────────────────────
 
@@ -271,10 +273,10 @@ export function WbCardsTable({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="h-full flex flex-col gap-3">
       {/* Панель действий */}
       {selected.size > 0 && (
-        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+        <div className="flex items-center gap-3 p-3 bg-muted rounded-lg shrink-0">
           <span className="text-sm font-medium">Выбрано: {selected.size}</span>
           <Button size="sm" onClick={handleCreateProduct} disabled={isPending}>
             Новый товар
@@ -286,44 +288,49 @@ export function WbCardsTable({
       )}
 
       {/* Пагинация сверху */}
-      <Pagination {...paginationProps} />
+      <div className="shrink-0">
+        <Pagination {...paginationProps} />
+      </div>
 
-      {/* Таблица */}
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
+      {/* Таблица — sticky header pattern (CLAUDE.md «Sticky data-таблицы»):
+          flex-1 min-h-0 даёт высоту; overflow-auto = единственный scroll-контейнер;
+          native <table> + <thead> вместо shadcn <Table>/<TableHeader>;
+          каждый <TableHead> с sticky top-0 z-20 bg-background. */}
+      <div className="flex-1 min-h-0 rounded-md border overflow-auto">
+        <table className="w-full border-separate border-spacing-0">
+          <thead className="bg-background">
+            <tr>
+              <TableHead className="sticky top-0 z-20 bg-background border-b w-10">
                 <Checkbox
                   checked={cards.length > 0 && selected.size === cards.length}
                   onCheckedChange={toggleAll}
                 />
               </TableHead>
-              <TableHead className="w-16">Фото</TableHead>
-              <TableHead>Наименование</TableHead>
-              <TableHead>Артикул</TableHead>
-              <TableHead>Ярлык</TableHead>
-              <TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b w-16">Фото</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Наименование</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Артикул</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Ярлык</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">
                 <button onClick={() => handleSort("brand")} className="flex items-center gap-1 hover:text-foreground transition-colors">
                   Бренд{sortIndicator("brand")}
                   <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
-              <TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">
                 <button onClick={() => handleSort("category")} className="flex items-center gap-1 hover:text-foreground transition-colors">
                   Категория WB{sortIndicator("category")}
                   <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
-              <TableHead>Цена продавца</TableHead>
-              <TableHead>Скидка WB</TableHead>
-              <TableHead>Клуб</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Цена продавца</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Скидка WB</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">Клуб</TableHead>
               {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки (4 столбца) */}
-              <TableHead className="text-center text-xs border-l">Рейтинг карт.</TableHead>
-              <TableHead className="text-center text-xs">Оценок</TableHead>
-              <TableHead className="text-center text-xs border-l">Рейтинг скл.</TableHead>
-              <TableHead className="text-center text-xs">Оценок</TableHead>
-              <TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b border-l text-center text-xs">Рейтинг карт.</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-center text-xs">Оценок</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b border-l text-center text-xs">Рейтинг скл.</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-center text-xs">Оценок</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b">
                 <button
                   onClick={() => handleSort("stockQty")}
                   className="flex items-center gap-1 hover:text-foreground transition-colors"
@@ -332,12 +339,12 @@ export function WbCardsTable({
                   <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
-              <TableHead className="text-center border-l text-xs">Стд FBW</TableHead>
-              <TableHead className="text-center text-xs">Стд FBS</TableHead>
-              <TableHead className="text-center border-l text-xs">ИУ FBW</TableHead>
-              <TableHead className="w-12">Видео</TableHead>
-            </TableRow>
-          </TableHeader>
+              <TableHead className="sticky top-0 z-20 bg-background border-b border-l text-center text-xs">Стд FBW</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-center text-xs">Стд FBS</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b border-l text-center text-xs">ИУ FBW</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b w-12">Видео</TableHead>
+            </tr>
+          </thead>
           <TableBody>
             {cards.length === 0 && (
               <TableRow>
@@ -363,8 +370,32 @@ export function WbCardsTable({
                     <div className="w-12 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">—</div>
                   )}
                 </TableCell>
-                <TableCell className="font-medium max-w-[160px] truncate">{card.name}</TableCell>
-                <TableCell className="font-mono text-xs">{card.nmId}</TableCell>
+                {/* 260515-jq6: Tooltip с полным наименованием при hover (truncate режет длинные) */}
+                <TableCell className="font-medium">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <div className="max-w-[160px] truncate cursor-default" />
+                      }
+                    >
+                      {card.name}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="max-w-sm text-sm">{card.name}</div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TableCell>
+                {/* 260515-jq6: клик копирует артикул (nmId) в clipboard */}
+                <TableCell
+                  className="font-mono text-xs cursor-copy hover:text-primary"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void copyToClipboard(String(card.nmId), "Артикул")
+                  }}
+                  title="Нажмите, чтобы скопировать артикул"
+                >
+                  {card.nmId}
+                </TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.label ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>{card.brand ?? "—"}</TableCell>
                 <TableCell className="text-xs max-w-[150px] truncate">{card.category ?? "—"}</TableCell>
@@ -455,7 +486,7 @@ export function WbCardsTable({
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+        </table>
       </div>
 
       {/* Пагинация снизу */}
