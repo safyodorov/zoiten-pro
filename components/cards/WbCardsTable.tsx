@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { motion, AnimatePresence } from "motion/react"
 import { Video, ArrowUpDown, CheckCircle2 } from "lucide-react"
 import {
   Table,
@@ -30,6 +31,8 @@ import {
 } from "@/app/actions/wb-cards"
 import { setPageSizePref } from "@/app/actions/user-preferences"
 import { copyToClipboard } from "@/lib/copy-to-clipboard"
+import { cn } from "@/lib/utils"
+import { WbCardOrdersChart } from "@/components/cards/WbCardOrdersChart"
 
 // ── Типы ──────────────────────────────────────────────────────────
 
@@ -77,6 +80,8 @@ interface WbCardsTableProps {
   // Phase 260514-mci: выбранные ярлыки для сохранения в URL при пагинации/сортировке
   selectedLabels: string[]
   linkedNmIds: string[]
+  // Quick 260515-m5o: 28-точечный массив заказов per nmId для bar chart
+  ordersTimeSeries: Record<string, Array<{ date: string; qty: number }>>
 }
 
 const PAGE_SIZES = [20, 50, 100]
@@ -145,6 +150,7 @@ export function WbCardsTable({
   selectedCategories,
   selectedLabels,
   linkedNmIds,
+  ordersTimeSeries,
 }: WbCardsTableProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -156,6 +162,8 @@ export function WbCardsTable({
     Array<{ id: string; name: string; photoUrl: string | null }>
   >([])
   const [searchingProducts, setSearchingProducts] = useState(false)
+  // Quick 260515-m5o: single-open expanded row state (CONTEXT.md §D-05 UI способ раскрытия)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // ── URL builder ─────────────────────────────────────────────────
 
@@ -353,9 +361,21 @@ export function WbCardsTable({
                 </TableCell>
               </TableRow>
             )}
-            {cards.map((card) => (
-              <TableRow key={card.id} className={selected.has(card.id) ? "bg-muted/50" : ""}>
-                <TableCell>
+            {cards.map((card) => {
+              const isExpanded = expandedId === card.id
+              const ts = ordersTimeSeries[String(card.nmId)] ?? []
+              return (
+              <Fragment key={card.id}>
+              <TableRow
+                className={cn(
+                  "cursor-pointer hover:bg-muted/30",
+                  selected.has(card.id) && "bg-muted/50",
+                  isExpanded && "bg-muted/40",
+                )}
+                onClick={() => setExpandedId(isExpanded ? null : card.id)}
+              >
+                {/* stopPropagation на cell с чекбоксом — клик в pad вокруг checkbox не раскрывает row */}
+                <TableCell onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-col items-center gap-1">
                     <Checkbox checked={selected.has(card.id)} onCheckedChange={() => toggleSelect(card.id)} />
                     {linkedSet.has(String(card.nmId)) && (
@@ -486,7 +506,26 @@ export function WbCardsTable({
                   {card.hasVideo && <Video className="h-4 w-4 text-blue-500" />}
                 </TableCell>
               </TableRow>
-            ))}
+              <AnimatePresence initial={false}>
+                {isExpanded && (
+                  <TableRow key={`${card.id}-expand`} className="hover:bg-transparent">
+                    <TableCell colSpan={19} className="bg-muted/10 p-0 border-b">
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="overflow-hidden"
+                      >
+                        <WbCardOrdersChart nmId={card.nmId} timeSeries={ts} />
+                      </motion.div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </AnimatePresence>
+              </Fragment>
+              )
+            })}
           </TableBody>
         </table>
       </div>

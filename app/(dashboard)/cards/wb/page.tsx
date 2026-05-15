@@ -4,9 +4,11 @@ import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbSyncRatingsButton } from "@/components/cards/WbSyncRatingsButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
+import { WbOrdersBackfillButton } from "@/components/cards/WbOrdersBackfillButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
 import { getPageSizePref } from "@/app/actions/user-preferences"
+import { getMskTodayDate, fillTimeSeries } from "@/lib/wb-orders-chart"
 
 const DEFAULT_PAGE_SIZE = 50
 
@@ -117,6 +119,36 @@ export default async function WbCardsPage({
     : []
   const linkedNmIds = new Set(linkedArticles.map((a) => a.article))
 
+  // Quick 260515-m5o: 28-дневное окно [today-28, today-1] для bar chart (MSK).
+  // W-4: используем shared helper getMskTodayDate, не inline MSK math.
+  const todayMsk = getMskTodayDate()
+  const windowStart = new Date(todayMsk.getTime() - 28 * 24 * 3600_000)
+  const windowEnd = new Date(todayMsk.getTime() - 1 * 24 * 3600_000) // today-1 (вчера), включительно
+
+  const visibleNmIds = cards.map((c) => c.nmId)
+  const ordersRows =
+    visibleNmIds.length > 0
+      ? await prisma.wbCardOrdersDaily.findMany({
+          where: {
+            nmId: { in: visibleNmIds },
+            date: { gte: windowStart, lte: windowEnd },
+          },
+          select: { nmId: true, date: true, qty: true },
+        })
+      : []
+
+  const byNm = new Map<number, Array<{ date: Date; qty: number }>>()
+  for (const r of ordersRows) {
+    const arr = byNm.get(r.nmId) ?? []
+    arr.push({ date: r.date, qty: r.qty })
+    byNm.set(r.nmId, arr)
+  }
+  const ordersTimeSeries: Record<string, Array<{ date: string; qty: number }>> =
+    {}
+  for (const nmId of visibleNmIds) {
+    ordersTimeSeries[String(nmId)] = fillTimeSeries(byNm.get(nmId) ?? [])
+  }
+
   return (
     <div className="h-full flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4 shrink-0">
@@ -128,6 +160,7 @@ export default async function WbCardsPage({
           />
         </form>
         <div className="flex gap-2">
+          <WbOrdersBackfillButton />
           <WbUploadIuButton />
           <WbSyncRatingsButton />
           <WbSyncSppButton />
@@ -155,6 +188,7 @@ export default async function WbCardsPage({
           selectedBrands={selectedBrands}
           selectedCategories={selectedCategories}
           selectedLabels={selectedLabels}
+          ordersTimeSeries={ordersTimeSeries}
         />
       </div>
     </div>
