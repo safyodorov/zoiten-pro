@@ -297,7 +297,7 @@ export function WbCardsTable({
           native <table> + <thead> вместо shadcn <Table>/<TableHeader>;
           каждый <TableHead> с sticky top-0 z-20 bg-background. */}
       <div className="flex-1 min-h-0 rounded-md border overflow-auto">
-        <table className="w-full border-separate border-spacing-0">
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
           <thead className="bg-background">
             <tr>
               <TableHead className="sticky top-0 z-20 bg-background border-b w-10">
@@ -376,7 +376,7 @@ export function WbCardsTable({
                   <Tooltip>
                     <TooltipTrigger
                       render={
-                        <div className="max-w-[240px] truncate cursor-default" />
+                        <div className="max-w-[320px] truncate cursor-default" />
                       }
                     >
                       {card.name}
