@@ -58,10 +58,16 @@ export default async function WbCardsPage({
 
   // Сортировка
   // Phase 260514-mci: добавлен stockQty в whitelist
+  // 2026-05-15: для stockQty группируем null рядом с 0 (оба = «нет остатка»).
+  //   ASC  → nulls first  → [null,...,0,0,1,2,...,N]  блок «—» в начале
+  //   DESC → nulls last   → [N,...,2,1,0,0,null,...]   блок «—» в конце
   const sortBy = sort && ["brand", "category", "name", "createdAt", "stockQty"].includes(sort) ? sort : "createdAt"
   const sortDir = dir === "asc" ? "asc" : "desc"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orderBy: any = { [sortBy]: sortDir }
+  const orderBy: any =
+    sortBy === "stockQty"
+      ? { stockQty: { sort: sortDir, nulls: sortDir === "asc" ? "first" : "last" } }
+      : { [sortBy]: sortDir }
 
   // Загружаем данные + уникальные значения для фильтров
   // Находим маркетплейс WB для проверки привязки

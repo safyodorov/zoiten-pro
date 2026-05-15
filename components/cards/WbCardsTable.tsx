@@ -468,7 +468,8 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
-                  {card.stockQty != null
+                  {/* 260515: 0 и null отображаются одинаково (нет остатка) для консистентности с сортировкой */}
+                  {card.stockQty != null && card.stockQty > 0
                     ? <span className="text-sm">{card.stockQty}</span>
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
