@@ -212,83 +212,55 @@ export function aggregateFeedbacks(
 
 const TAKE = 5000 // WB max per docs
 const SLEEP_MS = 1100 // 1 req/sec + 100ms буфер
-const MAX_SUB_PAGES = 5 // на slice — cap (5×5000 = 25k feedbacks за 90 дней — не достижимо)
-
-// 8 slices × 91 день ≈ 728 дней (близко к 730 = 2 года).
-const SLICE_COUNT = 8
-const SLICE_DAYS = Math.ceil(WB_RATING_FORMULA.WINDOW_DAYS / SLICE_COUNT)
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-// 2026-05-15: переход с глобального skip/dateTo cursor на **time-slice sweep**.
+// 2026-05-15: после неудачи time-slice — переход на **per-nmId sweep**.
 //
-// Bug: WB Feedbacks API имеет скрытый GLOBAL cap (~10000 total returned)
-// независимо от pagination метода. Для seller'а с 30k+ feedback'ами sweep
-// застревал на newest 10k, теряя остальные. Диагностика: для одного nmId
-// 45360121 нативно WB returns 950 feedback'ов, у нас в БД — 430.
+// Эволюция диагностик:
+//   1. skip-pagination: WB Feedbacks API имеет скрытый skip-cap ~10000.
+//   2. dateTo cursor: тот же глобальный cap, не пробивается.
+//   3. time-slice (dateFrom+dateTo): тот же cap применяется per-request.
+//   4. nmId filter: ВЕРИФИЦИРОВАН — WB возвращает ВСЕ feedback'и nmId'а
+//      (для 45360121 нативно 950 в одном запросе, без cap).
 //
-// Решение: разрезать 2-летнее окно на N slice'ов по dateFrom/dateTo. Внутри
-// каждого slice — sub-pagination через cursor. Каждый slice независим — cap
-// не накопляется. 8 slice'ов × 91 день ≈ 730 дней покрывают всю формулу WB.
+// Решение: проходим список наших nmIds (из WbCard) и для каждого делаем
+// 2 запроса (isAnswered=false + isAnswered=true).
 //
-// 8 slices × 2 buckets × max 5 sub-pages = 80 max requests × 1.1с = ~90 сек.
-// На практике большинство slice'ов = 1 sub-page → 16 запросов = ~20 сек.
-async function sweepFeedbacks(): Promise<Feedback[]> {
+// Trade-off: orphan nmIds (в feedback'ах WB seller API есть, но у нас в БД
+// нет) — теряются. Но для целей UI они нерелевантны: WbCard.wbStoreRating /
+// wbStoreFeedbacks приходят с витрины WB через v4 (Шаг 1 sync) и учитывают
+// все nmIds склейки включая orphan'ы.
+//
+// Budget: 274 nmIds × 2 buckets × 1.1с = ~10 минут. Долго, но reliable.
+// Кэш WB v4 (Шаг 1) при этом всё равно отрабатывает за ~45с — пользователь
+// сразу видит точные WB-цифры даже до окончания нашего расчёта.
+async function sweepFeedbacks(nmIds: number[]): Promise<Feedback[]> {
   const all: Feedback[] = []
   const seen = new Set<string>()
-  const nowSec = Math.floor(Date.now() / 1000)
-  const sliceDaysSec = SLICE_DAYS * 86_400
 
-  for (const isAnswered of [false, true]) {
-    for (let slice = 0; slice < SLICE_COUNT; slice++) {
-      const sliceDateTo = nowSec - slice * sliceDaysSec
-      const sliceDateFrom = nowSec - (slice + 1) * sliceDaysSec
+  let i = 0
+  for (const nmId of nmIds) {
+    for (const isAnswered of [false, true]) {
+      if (i > 0) await sleep(SLEEP_MS)
+      i += 1
 
-      // Sub-pagination внутри slice через cursor dateTo. Если в slice <5000 —
-      // один запрос. Если больше — продолжаем.
-      let cursorDateTo = sliceDateTo
-      let stuckPages = 0
+      // С nmId filter WB Feedbacks API возвращает ВСЕ feedback'и этого nmId
+      // в одном запросе (≤5000 — для Zoiten нереальный потолок per-nmId).
+      // Без дальнейшей пагинации — нет смысла.
+      const batch = await listFeedbacks({
+        isAnswered,
+        take: TAKE,
+        skip: 0,
+        nmId,
+      })
 
-      for (let p = 0; p < MAX_SUB_PAGES; p++) {
-        if (all.length > 0 || p > 0) await sleep(SLEEP_MS)
-
-        const batch = await listFeedbacks({
-          isAnswered,
-          take: TAKE,
-          skip: 0,
-          dateFrom: sliceDateFrom,
-          dateTo: cursorDateTo,
-        })
-
-        if (batch.length === 0) break
-
-        let added = 0
-        let oldestSec = Infinity
-        for (const fb of batch) {
-          if (seen.has(fb.id)) continue
-          seen.add(fb.id)
-          all.push(fb)
-          added += 1
-          const createdSec = Math.floor(Date.parse(fb.createdDate) / 1000)
-          if (Number.isFinite(createdSec)) {
-            oldestSec = Math.min(oldestSec, createdSec)
-          }
-        }
-
-        if (added === 0) {
-          stuckPages += 1
-          if (stuckPages >= 2) break // всё дубликаты — выход
-        } else {
-          stuckPages = 0
-        }
-
-        if (batch.length < TAKE) break // последняя страница slice
-        if (oldestSec === Infinity) break
-        if (oldestSec <= sliceDateFrom) break // дошли до начала slice
-
-        cursorDateTo = oldestSec - 1
+      for (const fb of batch) {
+        if (seen.has(fb.id)) continue
+        seen.add(fb.id)
+        all.push(fb)
       }
     }
   }
@@ -297,12 +269,14 @@ async function sweepFeedbacks(): Promise<Feedback[]> {
 }
 
 /**
- * Собрать все feedback'и продавца (active + archive) и агрегировать рейтинги
- * per nmId и per imtId через WB-документированную формулу.
+ * Собрать все feedback'и для переданных nmIds через per-nmId sweep и
+ * агрегировать рейтинги per nmId и per imtId через WB-документированную формулу.
  *
  * Кидает WbRateLimitError если WB заблокировал bucket=feedbacks (>60s retry).
  */
-export async function fetchProductRatings(): Promise<ProductRatingsResult> {
-  const feedbacks = await sweepFeedbacks()
+export async function fetchProductRatings(
+  nmIds: number[]
+): Promise<ProductRatingsResult> {
+  const feedbacks = await sweepFeedbacks(nmIds)
   return aggregateFeedbacks(feedbacks)
 }

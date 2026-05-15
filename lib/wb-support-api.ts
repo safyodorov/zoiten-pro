@@ -100,6 +100,10 @@ export interface ListParams {
   skip: number
   dateFrom?: number
   dateTo?: number
+  // 2026-05-15: nmId фильтр. Без него WB Feedbacks API имеет скрытый ~10000
+  // global cap. С nmId — возвращает ВСЕ feedback'и этого nmId (verified: 950
+  // для nmId=45360121 в одном answered=true запросе).
+  nmId?: number
 }
 
 // ── Типизированная ошибка 429>cap ────────────────────────────
@@ -221,6 +225,7 @@ export async function listFeedbacks(p: ListParams): Promise<Feedback[]> {
   qs.set("skip", String(p.skip))
   if (p.dateFrom) qs.set("dateFrom", String(p.dateFrom))
   if (p.dateTo) qs.set("dateTo", String(p.dateTo))
+  if (p.nmId !== undefined) qs.set("nmId", String(p.nmId))
   qs.set("order", "dateDesc")
 
   const res = await callWb(`/api/v1/feedbacks?${qs}`, { method: "GET" })

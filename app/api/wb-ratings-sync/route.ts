@@ -13,7 +13,9 @@
 // что показывает покупатель, даже когда feedbacks bucket залочен support-sync'ом.
 
 export const runtime = "nodejs"
-export const maxDuration = 600
+// 2026-05-15: per-nmId sweep ~10 мин для 274 карточек, плюс v4 batch ~45с.
+// maxDuration 900 (15 мин) даёт буфер на rate-limit retry внутри callApi.
+export const maxDuration = 900
 
 import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
@@ -146,7 +148,10 @@ export async function POST(): Promise<NextResponse> {
   let totalProcessed = 0
   let diagnostics
   try {
-    const ratings = await fetchProductRatings()
+    // 2026-05-15: per-nmId sweep требует список наших nmIds — WB-cap пробивается
+    // только с nmId filter. Шаг 1 (storefront) уже взял nmIds выше — переиспользуем.
+    const dbNmIds = await prisma.wbCard.findMany({ select: { nmId: true } })
+    const ratings = await fetchProductRatings(dbNmIds.map((c) => c.nmId))
     totalProcessed = ratings.totalProcessed
     diagnostics = ratings.diagnostics
 
