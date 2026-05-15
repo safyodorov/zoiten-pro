@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
 status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-15 — Completed quick task 260514-mci: /cards/wb рейтинги + label-фильтр + sort-остаток
+stopped_at: 2026-05-15 — Completed quick 260515-jq6: /cards/wb sticky header + name tooltip + copy nmId
 last_updated: "2026-05-15T07:20:00.000Z"
 progress:
   total_phases: 15
@@ -277,6 +277,7 @@ None yet.
 | 260513-phu | UX в data-таблицах: shared `useResizableColumns` hook (DB persist) для /prices/wb + /stock + /stock/wb + always-on Tooltip с полным title + click-to-copy артикул + brand-line под product name в /prices/wb | 2026-05-13 | 7d9b1db |  | [260513-phu-ux-data-resizable-columns-persist-stock-](./quick/260513-phu-ux-data-resizable-columns-persist-stock-/) |
 | 260514-kzg | /stock/wb «По размерам»: backfill всех размеров из WbCard.techSizes (не только тех у кого есть stocks/orders) + красная подсветка выпавших размеров (stockQty===0) | 2026-05-14 | ac7b75a |  | [260514-kzg-stock-wb-wb](./quick/260514-kzg-stock-wb-wb/) |
 | 260514-mci | /cards/wb улучшения: рейтинг карточки + рейтинг склейки (sync через Feedbacks API), фильтр по Ярлыку, sort по Остатку | 2026-05-15 | 7b40673 |  | [260514-mci-cards-wb](./quick/260514-mci-cards-wb/) |
+| 260515-jq6 | /cards/wb UX: sticky header + name tooltip + click-to-copy артикул | 2026-05-15 | 9d32acf |  | [260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c](./quick/260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c/) |
 
 ### Blockers/Concerns
 
