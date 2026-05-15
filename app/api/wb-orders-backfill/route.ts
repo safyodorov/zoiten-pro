@@ -1,11 +1,13 @@
 // app/api/wb-orders-backfill/route.ts
 // POST /api/wb-orders-backfill — ручной re-run backfill с 2026-04-01.
-// Защищён сессией + requireSection("PRODUCTS", "MANAGE").
+// Защищён dual-gate: x-cron-secret HEADER ИЛИ requireSection("PRODUCTS", "MANAGE").
+// 2026-05-15 (quick 260515-phv): добавлен x-cron-secret гейт — orchestrator curl
+// с VPS shell не имеет браузерной сессии, но знает CRON_SECRET из /etc/zoiten.pro.env.
 // B-1 fix: ERP_SECTION enum НЕ содержит "CARDS" — все /cards/wb actions использует "PRODUCTS"
 // (см. app/actions/wb-cards.ts).
 // W-3 fix: maxDuration=600 (backfill 45 дней может занять до 1-2 мин из-за rate limit).
 
-import { NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { requireSection } from "@/lib/rbac"
 import {
   fetchOrdersForRange,
@@ -18,16 +20,24 @@ export const maxDuration = 600
 
 const BACKFILL_START = new Date("2026-04-01T00:00:00")
 
-export async function POST(): Promise<NextResponse> {
-  try {
-    await requireSection("PRODUCTS", "MANAGE")
-  } catch {
-    return NextResponse.json({ error: "Нет прав" }, { status: 403 })
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Dual-gate: x-cron-secret header (для orchestrator curl) ИЛИ RBAC сессия (для UI button).
+  const cronSecret = req.headers.get("x-cron-secret")
+  const isCronAuth = Boolean(
+    cronSecret && process.env.CRON_SECRET && cronSecret === process.env.CRON_SECRET,
+  )
+
+  if (!isCronAuth) {
+    try {
+      await requireSection("PRODUCTS", "MANAGE")
+    } catch {
+      return NextResponse.json({ error: "Нет прав" }, { status: 403 })
+    }
   }
 
   try {
     console.log(
-      `[wb-orders-backfill] start dateFrom=${BACKFILL_START.toISOString()}`,
+      `[wb-orders-backfill] start dateFrom=${BACKFILL_START.toISOString()} auth=${isCronAuth ? "cron-secret" : "rbac"}`,
     )
     const rows = await fetchOrdersForRange(BACKFILL_START)
     const { upserted } = await upsertOrdersDaily(rows)

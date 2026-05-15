@@ -10,6 +10,8 @@ export interface DayPoint {
   // 2026-05-15 (quick 260515-o4o): финальная цена покупателя (₽) на витрине WB
   // на эту дату — round(v4 sizes[].price.product / 100). null если нет snapshot.
   // recharts connectNulls={false} рвёт линию на null, поэтому используем null (не undefined).
+  // 2026-05-15 (quick 260515-phv): + sellerPrice — цена продавца со скидкой продавца.
+  sellerPrice?: number | null
   buyerPrice?: number | null
 }
 
@@ -52,17 +54,27 @@ export function getLast28DaysMsk(now?: Date): string[] {
 
 /** Складывает 28-точечный массив для bar chart.
  *  raw: записи из WbCardOrdersDaily.
- *  Дни вне окна игнорируются. Дни без записей → qty=0, buyerPrice=null.
+ *  Дни вне окна игнорируются. Дни без записей → qty=0, sellerPrice=null, buyerPrice=null.
  *  2026-05-15 (quick 260515-o4o): теперь принимает + buyerPrice per row, прокидывает в DayPoint.
+ *  2026-05-15 (quick 260515-phv): добавлен sellerPrice support + forward-fill loop —
+ *  дни без заказов наследуют последнюю известную цену из предыдущего дня с заказом.
+ *  Leading nulls (до первой известной цены) остаются null. qty НЕ forward-fill'ится
+ *  (на день без заказов qty=0 — это правда, продаж не было).
  *  `now` — для тестов; в проде не задаётся.
  */
 export function fillTimeSeries(
-  raw: Array<{ date: Date; qty: number; buyerPrice?: number | null }>,
+  raw: Array<{
+    date: Date
+    qty: number
+    sellerPrice?: number | null
+    buyerPrice?: number | null
+  }>,
   now?: Date,
 ): DayPoint[] {
   const window = getLast28DaysMsk(now)
   const qtyByKey = new Map<string, number>()
-  const priceByKey = new Map<string, number | null>()
+  const sellerByKey = new Map<string, number | null>()
+  const buyerByKey = new Map<string, number | null>()
   for (const r of raw) {
     // r.date — JS Date с time=00:00 UTC после Prisma @db.Date чтения.
     // Конвертируем в MSK YYYY-MM-DD ключ.
@@ -72,16 +84,42 @@ export function fillTimeSeries(
     const dd = String(mskDate.getUTCDate()).padStart(2, "0")
     const key = `${yy}-${mm}-${dd}`
     qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + r.qty)
-    // Если buyerPrice задана и > 0 — сохраняем. Если несколько записей за день — берём последнюю не-null.
+    // Если sellerPrice задана и > 0 — сохраняем. Если несколько записей за день — берём последнюю не-null.
+    if (r.sellerPrice != null && r.sellerPrice > 0) {
+      sellerByKey.set(key, r.sellerPrice)
+    } else if (!sellerByKey.has(key)) {
+      sellerByKey.set(key, null)
+    }
+    // Аналогично buyerPrice
     if (r.buyerPrice != null && r.buyerPrice > 0) {
-      priceByKey.set(key, r.buyerPrice)
-    } else if (!priceByKey.has(key)) {
-      priceByKey.set(key, null)
+      buyerByKey.set(key, r.buyerPrice)
+    } else if (!buyerByKey.has(key)) {
+      buyerByKey.set(key, null)
     }
   }
-  return window.map((date) => ({
+  const result: DayPoint[] = window.map((date) => ({
     date,
     qty: qtyByKey.get(date) ?? 0,
-    buyerPrice: priceByKey.get(date) ?? null,
+    sellerPrice: sellerByKey.get(date) ?? null,
+    buyerPrice: buyerByKey.get(date) ?? null,
   }))
+
+  // Forward-fill loop: дни без price наследуют lastKnown от ближайшего предыдущего дня с ценой.
+  // Leading nulls (до первой известной цены) остаются null — нет backward-fill.
+  // qty НЕ трогается — на день без заказов qty=0 это правда.
+  let lastSeller: number | null = null
+  let lastBuyer: number | null = null
+  for (const point of result) {
+    if (point.sellerPrice != null) {
+      lastSeller = point.sellerPrice
+    } else if (lastSeller != null) {
+      point.sellerPrice = lastSeller
+    }
+    if (point.buyerPrice != null) {
+      lastBuyer = point.buyerPrice
+    } else if (lastBuyer != null) {
+      point.buyerPrice = lastBuyer
+    }
+  }
+  return result
 }

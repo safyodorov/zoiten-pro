@@ -1262,18 +1262,37 @@ export interface OrdersDailyRow {
   nmId: number
   date: Date // 00:00 UTC (Prisma @db.Date нормализует к DATE)
   qty: number
+  // 2026-05-15 (quick 260515-phv): реальные исторические цены из Orders API
+  // priceWithDisc → sellerPrice (цена с учётом скидки продавца, ₽)
+  // finishedPrice → buyerPrice (финальная цена с WB-скидками + СПП, ₽)
+  // Math.round(avg) per (nmId, date MSK). null если все значения отсутствуют/0.
+  sellerPrice: number | null
+  buyerPrice: number | null
 }
 
-/** Запросить WB Orders за период [dateFrom, ?] и сгруппировать в (nmId, date MSK) → qty.
+/** Запросить WB Orders за период [dateFrom, ?] и сгруппировать в (nmId, date MSK) → qty + цены.
  *  isCancel=true исключаются. При response.length >= 80_000 — итерируем с lastChangeDate.
  *  Используется в backfill с 2026-04-01 и daily delta (dateFrom = вчера 00:00 MSK).
  *  Возвращает массив строк готовых к upsert (date = JS Date 00:00 UTC).
+ *
+ *  2026-05-15 (quick 260515-phv): дополнительно агрегирует priceWithDisc/finishedPrice
+ *  как Math.round(avg) per (nmId, date MSK). Значения 0 / null / undefined игнорируются
+ *  при подсчёте avg; если все значения отсутствуют для (nmId, date) → null.
  *
  *  Per-iteration logging для backfill diagnostics (W-3 fix): console.log с page=N, rowsReturned, total.
  */
 export async function fetchOrdersForRange(dateFrom: Date): Promise<OrdersDailyRow[]> {
   const token = await getToken()
-  const counts = new Map<string, { nmId: number; date: string; qty: number }>()
+  const counts = new Map<
+    string,
+    {
+      nmId: number
+      date: string
+      qty: number
+      sellerPrices: number[]
+      buyerPrices: number[]
+    }
+  >()
   // ISO без `Z` → MSK интерпретация на WB-стороне (см. CONTEXT.md + fetchAvgSalesSpeed7d)
   let currentDateFrom = dateFrom.toISOString().split(".")[0] // "2026-04-01T00:00:00"
   let safetyIters = 0
@@ -1298,6 +1317,8 @@ export async function fetchOrdersForRange(dateFrom: Date): Promise<OrdersDailyRo
       date?: string
       isCancel?: boolean
       lastChangeDate?: string
+      priceWithDisc?: number
+      finishedPrice?: number
     }>
     const rowsReturned = Array.isArray(orders) ? orders.length : 0
     totalRowsSeen += rowsReturned
@@ -1312,9 +1333,18 @@ export async function fetchOrdersForRange(dateFrom: Date): Promise<OrdersDailyRo
       if (nm == null || !o.date) continue
       const dateKey = o.date.slice(0, 10) // YYYY-MM-DD MSK
       const k = `${nm}::${dateKey}`
-      const existing = counts.get(k)
-      if (existing) existing.qty++
-      else counts.set(k, { nmId: nm, date: dateKey, qty: 1 })
+      let existing = counts.get(k)
+      if (!existing) {
+        existing = { nmId: nm, date: dateKey, qty: 0, sellerPrices: [], buyerPrices: [] }
+        counts.set(k, existing)
+      }
+      existing.qty++
+      if (typeof o.priceWithDisc === "number" && o.priceWithDisc > 0) {
+        existing.sellerPrices.push(o.priceWithDisc)
+      }
+      if (typeof o.finishedPrice === "number" && o.finishedPrice > 0) {
+        existing.buyerPrices.push(o.finishedPrice)
+      }
     }
 
     // 80k soft-limit → продолжаем pagination с lastChangeDate последней записи.
@@ -1333,13 +1363,24 @@ export async function fetchOrdersForRange(dateFrom: Date): Promise<OrdersDailyRo
     nmId: r.nmId,
     date: new Date(r.date), // 00:00 UTC, Prisma @db.Date нормализует к DATE
     qty: r.qty,
+    sellerPrice:
+      r.sellerPrices.length > 0
+        ? Math.round(r.sellerPrices.reduce((a, b) => a + b, 0) / r.sellerPrices.length)
+        : null,
+    buyerPrice:
+      r.buyerPrices.length > 0
+        ? Math.round(r.buyerPrices.reduce((a, b) => a + b, 0) / r.buyerPrices.length)
+        : null,
   }))
 }
 
 /** Idempotent upsert строк OrdersDailyRow в WbCardOrdersDaily.
  *  Используется и в cron, и в manual backfill. Transaction (callback variant) с timeout 90s.
- *  ON CONFLICT (nmId,date) UPDATE qty (overwrite — backfill rerun может вернуть скорректированное число).
+ *  ON CONFLICT (nmId,date) UPDATE qty + sellerPrice + buyerPrice (overwrite — backfill rerun
+ *  может вернуть скорректированные значения).
  *  Per-chunk logging для backfill diagnostics (W-3 fix).
+ *
+ *  2026-05-15 (quick 260515-phv): пишет sellerPrice/buyerPrice в create + update.
  */
 export async function upsertOrdersDaily(rows: OrdersDailyRow[]): Promise<{ upserted: number }> {
   if (rows.length === 0) return { upserted: 0 }
@@ -1356,8 +1397,18 @@ export async function upsertOrdersDaily(rows: OrdersDailyRow[]): Promise<{ upser
         for (const r of chunk) {
           await tx.wbCardOrdersDaily.upsert({
             where: { nmId_date: { nmId: r.nmId, date: r.date } },
-            create: { nmId: r.nmId, date: r.date, qty: r.qty },
-            update: { qty: r.qty },
+            create: {
+              nmId: r.nmId,
+              date: r.date,
+              qty: r.qty,
+              sellerPrice: r.sellerPrice,
+              buyerPrice: r.buyerPrice,
+            },
+            update: {
+              qty: r.qty,
+              sellerPrice: r.sellerPrice,
+              buyerPrice: r.buyerPrice,
+            },
           })
         }
       },
