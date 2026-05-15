@@ -105,15 +105,16 @@ async function fetchOneRoot(root: number): Promise<StorefrontImtRating | null> {
     }
   }
 
-  // Top-level: предпочитаем data.valuation (string), парсим как float.
-  // Если поля нет — fallback на weightedMean из distribution.
-  let rating: number | null = null
-  if (data.valuation) {
+  // Imt-level rating вычисляем САМИ из valuationDistribution до 2 знаков.
+  // WB отдаёт data.valuation как string "4.9" (только 1 знак). Простой mean из
+  // distribution математически даёт ту же 1-знаковую цифру, но с большей точностью.
+  // Это нужно для UI «4.9 (4.90)» — основа + точное число в скобках.
+  const distAgg = weightedMean(data.valuationDistribution)
+  let rating: number | null = distAgg.rating
+  // Sanity fallback: если distribution пустое, читаем валюацию как float (1 знак).
+  if (rating === null && data.valuation) {
     const parsed = parseFloat(data.valuation)
     if (Number.isFinite(parsed) && parsed > 0) rating = parsed
-  }
-  if (rating === null) {
-    rating = weightedMean(data.valuationDistribution).rating
   }
 
   const countIncluded = data.valuationDistribution

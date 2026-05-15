@@ -384,12 +384,17 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки.
-                    2026-05-15 (v3): источник = feedbacks1.wb.ru — то что показывает витрина WB.
-                    NLP-фильтр невалидных отзывов применён WB-стороной. Расчёт у нас и на витрине
-                    идентичен, скобки «(наш)» больше не нужны. */}
+                    2026-05-15 (v3): источник = feedbacks1.wb.ru. NLP-фильтр невалидных применён
+                    WB-стороной. Формат «4.9 (4.93) ★» — WB-витрина до десятых + наш точный
+                    расчёт до сотых в скобках. */}
                 <TableCell className="text-center text-xs border-l">
                   {card.rating != null ? (
-                    <span>{card.rating.toFixed(1)} ★</span>
+                    <span>
+                      {card.rating.toFixed(1)} ★{" "}
+                      <span className="text-muted-foreground text-[10px]">
+                        ({card.rating.toFixed(2)})
+                      </span>
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -401,7 +406,12 @@ export function WbCardsTable({
                 </TableCell>
                 <TableCell className="text-center text-xs border-l">
                   {card.ratingImt != null ? (
-                    <span>{card.ratingImt.toFixed(1)} ★</span>
+                    <span>
+                      {card.ratingImt.toFixed(1)} ★{" "}
+                      <span className="text-muted-foreground text-[10px]">
+                        ({card.ratingImt.toFixed(2)})
+                      </span>
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
