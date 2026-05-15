@@ -11,6 +11,7 @@ import {
   WbRateLimitError,
 } from "@/lib/wb-api"
 import { getMskYesterdayDate } from "@/lib/wb-orders-chart"
+import { getMskTodayString } from "@/lib/wb-cron-schedule"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -46,6 +47,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     console.log(
       `[wb-orders-daily cron] done mode=${mode} fetched=${rows.length} upserted=${upserted}`,
     )
+
+    // 2026-05-15 (quick 260515-o4o): записываем lastRun marker для dispatcher idempotency.
+    // Без этого dispatcher не узнает что orders уже отработал → будет fire дважды.
+    const todayStr = getMskTodayString()
+    await prisma.appSetting.upsert({
+      where: { key: "wbOrdersDailyLastRun" },
+      create: { key: "wbOrdersDailyLastRun", value: todayStr },
+      update: { value: todayStr },
+    })
 
     return NextResponse.json({
       ok: true,

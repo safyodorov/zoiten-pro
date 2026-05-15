@@ -1022,12 +1022,18 @@ model WbApiToken {
 // ──────────────────────────────────────────────────────────────────
 
 model WbCardOrdersDaily {
-  id        Int      @id @default(autoincrement())
-  nmId      Int
-  date      DateTime @db.Date
-  qty       Int
+  id          Int      @id @default(autoincrement())
+  nmId        Int
+  date        DateTime @db.Date
+  qty         Int
+  // 2026-05-15 (quick 260515-o4o): snapshot цены продавца и покупателя на дату.
+  // sellerPrice = WbCard.price (₽, после seller-скидки).
+  // buyerPrice = round(card.wb.ru v4 sizes[].price.product / 100) — финальная витринная цена,
+  //   уже включает SPP + кошелёк + клуб + промо. НЕ умножать дополнительно на (1 - walletPct/100).
+  sellerPrice Int?
+  buyerPrice  Int?
   // Future: sumRub Decimal?, returnsQty Int?, cancelQty Int? — расширение в следующих фазах.
-  createdAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   @@unique([nmId, date])
   @@index([nmId])

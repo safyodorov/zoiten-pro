@@ -1370,3 +1370,70 @@ export async function upsertOrdersDaily(rows: OrdersDailyRow[]): Promise<{ upser
   }
   return { upserted: total }
 }
+
+/**
+ * 2026-05-15 (quick 260515-o4o): finalized buyer price (₽) per nmId через curl card.wb.ru v4 API.
+ * Возвращает Map<nmId, buyerPriceRub> где buyerPriceRub = round(sizes[].price.product / 100).
+ *
+ * КРИТИЧЕСКИ ВАЖНО — это финальная цена на витрине WB:
+ * она УЖЕ включает SPP + кошелёк + клуб + промо.
+ * НЕ умножать дополнительно на (1 - walletPct/100) — будет двойное вычитание кошелька.
+ * Verified empirically на nmId 800750522 (см. 260515-o4o-RESEARCH.md КРИТИЧЕСКИЙ ОТВЕТ).
+ *
+ * Pattern: батчи по 20, пауза 3000ms между ними, execSync curl (TLS fingerprint workaround
+ * — Node.js fetch блокируется WB по 403, curl проходит).
+ *
+ * ВАЖНО: НЕ модифицируем существующий fetchWbDiscounts — Phase 7 pricing flow зависит от
+ * его текущего поведения (вычисление SPP %). Эта функция — независимая копия curl-логики
+ * без SPP-расчёта, только raw buyerPrice в рублях.
+ */
+export async function fetchBuyerPricesViaCurlV4(
+  nmIds: number[],
+): Promise<Map<number, number>> {
+  const result = new Map<number, number>()
+  if (nmIds.length === 0) return result
+  let v4Failed = false
+
+  for (let i = 0; i < nmIds.length; i += 20) {
+    if (v4Failed) break
+    const batch = nmIds.slice(i, i + 20)
+    const nmStr = batch.join(";")
+    try {
+      const raw = execSync(
+        `curl -s -H "Accept: application/json" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36" "https://card.wb.ru/cards/v4/detail?appType=1&curr=rub&dest=-1257786&nm=${nmStr}"`,
+        { timeout: 15000 },
+      ).toString()
+      if (raw.includes("403 Forbidden") || raw.includes("<html>")) {
+        console.warn(
+          `[buyerPrices] v4 curl 403 на батче ${i / 20 + 1} — abort`,
+        )
+        v4Failed = true
+        break
+      }
+      const data = JSON.parse(raw)
+      const products = data?.products ?? []
+      for (const product of products) {
+        const nmId: number = product.id
+        if (!nmId) continue
+        const sizes = product.sizes ?? []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const sizeWithPrice = sizes.find((s: any) => s.price?.product)
+        if (!sizeWithPrice?.price?.product) continue
+        const buyerPriceRub = Math.round(sizeWithPrice.price.product / 100)
+        if (buyerPriceRub > 0) result.set(nmId, buyerPriceRub)
+      }
+    } catch (e) {
+      console.error("[buyerPrices] v4 curl error:", e)
+      v4Failed = true
+      break
+    }
+    if (i + 20 < nmIds.length) {
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+  }
+
+  console.log(
+    `[buyerPrices] resolved ${result.size}/${nmIds.length} (v4Failed=${v4Failed})`,
+  )
+  return result
+}

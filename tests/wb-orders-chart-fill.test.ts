@@ -23,7 +23,8 @@ describe("fillTimeSeries", () => {
 
   it("маппит запись с date=2026-05-14 в последний элемент", () => {
     const ts = fillTimeSeries([{ date: new Date("2026-05-14"), qty: 5 }], now)
-    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 5 })
+    // quick 260515-o4o: DayPoint расширен полем buyerPrice (по умолчанию null).
+    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 5, buyerPrice: null })
     expect(ts.slice(0, 27).every((p) => p.qty === 0)).toBe(true)
   })
 
@@ -37,7 +38,22 @@ describe("fillTimeSeries", () => {
       now,
     )
     expect(ts.length).toBe(28)
-    expect(ts[0]).toEqual({ date: "2026-04-17", qty: 7 })
+    expect(ts[0]).toEqual({ date: "2026-04-17", qty: 7, buyerPrice: null })
     expect(ts.reduce((s, p) => s + p.qty, 0)).toBe(7) // 100 и 50 отброшены
+  })
+
+  it("прокидывает buyerPrice из raw в DayPoint", () => {
+    // quick 260515-o4o: rows с buyerPrice → линия цены в ComposedChart
+    const ts = fillTimeSeries(
+      [
+        { date: new Date("2026-05-14"), qty: 3, buyerPrice: 3817 },
+        { date: new Date("2026-05-13"), qty: 1, buyerPrice: null }, // явный null → остаётся null
+        { date: new Date("2026-05-12"), qty: 2 }, // без buyerPrice → null
+      ],
+      now,
+    )
+    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 3, buyerPrice: 3817 })
+    expect(ts[26]).toEqual({ date: "2026-05-13", qty: 1, buyerPrice: null })
+    expect(ts[25]).toEqual({ date: "2026-05-12", qty: 2, buyerPrice: null })
   })
 })

@@ -7,6 +7,10 @@
 export interface DayPoint {
   date: string // "YYYY-MM-DD"
   qty: number
+  // 2026-05-15 (quick 260515-o4o): финальная цена покупателя (₽) на витрине WB
+  // на эту дату — round(v4 sizes[].price.product / 100). null если нет snapshot.
+  // recharts connectNulls={false} рвёт линию на null, поэтому используем null (не undefined).
+  buyerPrice?: number | null
 }
 
 /** 00:00:00 UTC даты, соответствующей сегодняшнему дню в MSK (UTC+3).
@@ -47,16 +51,18 @@ export function getLast28DaysMsk(now?: Date): string[] {
 }
 
 /** Складывает 28-точечный массив для bar chart.
- *  raw: записи из WbCardOrdersDaily (qty > 0 only — дни без заказов в БД отсутствуют).
- *  Дни вне окна игнорируются. Дни без записей → qty=0.
+ *  raw: записи из WbCardOrdersDaily.
+ *  Дни вне окна игнорируются. Дни без записей → qty=0, buyerPrice=null.
+ *  2026-05-15 (quick 260515-o4o): теперь принимает + buyerPrice per row, прокидывает в DayPoint.
  *  `now` — для тестов; в проде не задаётся.
  */
 export function fillTimeSeries(
-  raw: Array<{ date: Date; qty: number }>,
+  raw: Array<{ date: Date; qty: number; buyerPrice?: number | null }>,
   now?: Date,
 ): DayPoint[] {
   const window = getLast28DaysMsk(now)
-  const byKey = new Map<string, number>()
+  const qtyByKey = new Map<string, number>()
+  const priceByKey = new Map<string, number | null>()
   for (const r of raw) {
     // r.date — JS Date с time=00:00 UTC после Prisma @db.Date чтения.
     // Конвертируем в MSK YYYY-MM-DD ключ.
@@ -65,7 +71,17 @@ export function fillTimeSeries(
     const mm = String(mskDate.getUTCMonth() + 1).padStart(2, "0")
     const dd = String(mskDate.getUTCDate()).padStart(2, "0")
     const key = `${yy}-${mm}-${dd}`
-    byKey.set(key, (byKey.get(key) ?? 0) + r.qty)
+    qtyByKey.set(key, (qtyByKey.get(key) ?? 0) + r.qty)
+    // Если buyerPrice задана и > 0 — сохраняем. Если несколько записей за день — берём последнюю не-null.
+    if (r.buyerPrice != null && r.buyerPrice > 0) {
+      priceByKey.set(key, r.buyerPrice)
+    } else if (!priceByKey.has(key)) {
+      priceByKey.set(key, null)
+    }
   }
-  return window.map((date) => ({ date, qty: byKey.get(date) ?? 0 }))
+  return window.map((date) => ({
+    date,
+    qty: qtyByKey.get(date) ?? 0,
+    buyerPrice: priceByKey.get(date) ?? null,
+  }))
 }
