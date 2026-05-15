@@ -9,9 +9,11 @@ export default async function CardsLayout({
   await requireSection("PRODUCTS")
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col gap-4">
       <CardsTabs />
-      {children}
+      <div className="flex-1 min-h-0 flex flex-col gap-4">
+        {children}
+      </div>
     </div>
   )
 }

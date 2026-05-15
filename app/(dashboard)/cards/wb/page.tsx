@@ -110,8 +110,8 @@ export default async function WbCardsPage({
   const linkedNmIds = new Set(linkedArticles.map((a) => a.article))
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="h-full flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-4 shrink-0">
         <form className="max-w-sm flex-1">
           <Input
             name="q"
@@ -133,20 +133,22 @@ export default async function WbCardsPage({
         labelOptions={labelOptions}
         selectedLabels={selectedLabels}
       />
-      <WbCardsTable
-        cards={cards}
-        linkedNmIds={Array.from(linkedNmIds)}
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalCards={total}
-        searchQuery={q ?? ""}
-        pageSize={pageSize}
-        sortBy={sortBy}
-        sortDir={sortDir}
-        selectedBrands={selectedBrands}
-        selectedCategories={selectedCategories}
-        selectedLabels={selectedLabels}
-      />
+      <div className="flex-1 min-h-0 flex flex-col">
+        <WbCardsTable
+          cards={cards}
+          linkedNmIds={Array.from(linkedNmIds)}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalCards={total}
+          searchQuery={q ?? ""}
+          pageSize={pageSize}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          selectedBrands={selectedBrands}
+          selectedCategories={selectedCategories}
+          selectedLabels={selectedLabels}
+        />
+      </div>
     </div>
   )
 }
