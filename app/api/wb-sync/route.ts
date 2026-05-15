@@ -194,7 +194,9 @@ export async function POST(): Promise<NextResponse> {
           widthCm: card.widthCm,
           depthCm: card.depthCm,
           discountWb: discountMap.get(card.nmId) ?? null,
-          label: card.tags.length > 0 ? card.tags.join(", ") : undefined,
+          // 2026-05-15: было `undefined` → Prisma пропускала поле при пустых tags,
+          // ярлык удалённый в WB cabinet оставался в БД stale. Меняем на null.
+          label: card.tags.length > 0 ? card.tags.join(", ") : null,
           rawJson: JSON.parse(JSON.stringify(raw)),
           // Phase 17: нормализованные characteristics + techSizes из WB Content API
           characteristics:
