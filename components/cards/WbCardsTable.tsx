@@ -307,7 +307,7 @@ export function WbCardsTable({
                 />
               </TableHead>
               <TableHead className="sticky top-0 z-20 bg-background border-b w-16">Фото</TableHead>
-              <TableHead className="sticky top-0 z-20 bg-background border-b">Наименование</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b w-[400px] max-w-[400px]">Наименование</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background border-b">Артикул</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background border-b">Ярлык</TableHead>
               <TableHead className="sticky top-0 z-20 bg-background border-b">
@@ -372,11 +372,11 @@ export function WbCardsTable({
                 </TableCell>
                 {/* 260515-jq6: Tooltip с полным наименованием при hover (truncate режет длинные).
                     Ширина 240px (раньше 160) — название должно читаться без tooltip в типичных случаях. */}
-                <TableCell className="font-medium">
+                <TableCell className="font-medium w-[400px] max-w-[400px]">
                   <Tooltip>
                     <TooltipTrigger
                       render={
-                        <div className="max-w-[500px] truncate cursor-default" />
+                        <div className="truncate cursor-default" />
                       }
                     >
                       {card.name}
