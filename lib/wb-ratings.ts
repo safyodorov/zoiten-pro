@@ -212,28 +212,78 @@ export function aggregateFeedbacks(
 
 const TAKE = 5000 // WB max per docs
 const SLEEP_MS = 1100 // 1 req/sec + 100ms буфер
-const MAX_PAGES = 20 // safety cap (20×5000 = 100k feedbacks)
+const MAX_PAGES = 50 // safety cap (50×5000 = 250k feedbacks)
 
 async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-// Sweep активных + архивных feedbacks через listFeedbacks.
+// 2026-05-15: переход с skip-pagination на dateTo cursor.
+// Bug: WB Feedbacks API имеет скрытый skip-limit (~10000). После него страница
+// возвращает пустоту, и старый sweep останавливался преждевременно. Для nmId
+// с 950 feedback'ами в archive у нас оставалось 430.
+//
+// Решение: order=dateDesc + dateTo cursor. Каждый запрос берёт самый старый
+// feedback из предыдущего batch и ставит `dateTo = oldestEpochSec - 1`, тем
+// самым продолжая older. Никакого skip overflow.
+//
+// Защиты:
+//   - `seen` Set по feedback.id — дедупликация если WB возвращает overlap
+//   - `stuckPages` cap — если 2 страницы подряд не добавили ничего нового, stop
+//   - MAX_PAGES=50 — общий safety cap (250k feedbacks)
 async function sweepFeedbacks(): Promise<Feedback[]> {
   const all: Feedback[] = []
+  const seen = new Set<string>()
+
   for (const isAnswered of [false, true]) {
+    let dateTo: number | undefined = undefined
+    let stuckPages = 0
+
     for (let page = 0; page < MAX_PAGES; page++) {
       if (page > 0) await sleep(SLEEP_MS)
+
       const batch = await listFeedbacks({
         isAnswered,
         take: TAKE,
-        skip: page * TAKE,
+        skip: 0, // dateTo cursor вместо skip-pagination
+        ...(dateTo !== undefined ? { dateTo } : {}),
       })
-      all.push(...batch)
+
+      if (batch.length === 0) break
+
+      let oldestEpochSec = Infinity
+      let added = 0
+      for (const fb of batch) {
+        if (seen.has(fb.id)) continue
+        seen.add(fb.id)
+        all.push(fb)
+        added++
+        const createdSec = Math.floor(Date.parse(fb.createdDate) / 1000)
+        if (Number.isFinite(createdSec)) {
+          oldestEpochSec = Math.min(oldestEpochSec, createdSec)
+        }
+      }
+
+      // Если страница не добавила НИЧЕГО (всё дубликаты) — защита от
+      // зацикливания. После 2 stuck pages подряд — выходим.
+      if (added === 0) {
+        stuckPages += 1
+        if (stuckPages >= 2) break
+      } else {
+        stuckPages = 0
+      }
+
+      // Last page — меньше чем take, значит дотянулись до конца.
       if (batch.length < TAKE) break
+      // Sanity guard.
+      if (oldestEpochSec === Infinity) break
+
+      // Cursor advance: следующий запрос вернёт feedback'и старее oldest в текущем batch.
+      dateTo = oldestEpochSec - 1
     }
     await sleep(SLEEP_MS)
   }
+
   return all
 }
 
