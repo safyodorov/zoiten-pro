@@ -1252,3 +1252,121 @@ export async function fetchAvgSalesSpeed7d(
 
   return result
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260515-m5o: WbCardOrdersDaily snapshot helpers.
+// Используются daily cron (delta за вчера) и backfill с 2026-04-01.
+// ──────────────────────────────────────────────────────────────────
+
+export interface OrdersDailyRow {
+  nmId: number
+  date: Date // 00:00 UTC (Prisma @db.Date нормализует к DATE)
+  qty: number
+}
+
+/** Запросить WB Orders за период [dateFrom, ?] и сгруппировать в (nmId, date MSK) → qty.
+ *  isCancel=true исключаются. При response.length >= 80_000 — итерируем с lastChangeDate.
+ *  Используется в backfill с 2026-04-01 и daily delta (dateFrom = вчера 00:00 MSK).
+ *  Возвращает массив строк готовых к upsert (date = JS Date 00:00 UTC).
+ *
+ *  Per-iteration logging для backfill diagnostics (W-3 fix): console.log с page=N, rowsReturned, total.
+ */
+export async function fetchOrdersForRange(dateFrom: Date): Promise<OrdersDailyRow[]> {
+  const token = await getToken()
+  const counts = new Map<string, { nmId: number; date: string; qty: number }>()
+  // ISO без `Z` → MSK интерпретация на WB-стороне (см. CONTEXT.md + fetchAvgSalesSpeed7d)
+  let currentDateFrom = dateFrom.toISOString().split(".")[0] // "2026-04-01T00:00:00"
+  let safetyIters = 0
+  let totalRowsSeen = 0
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (++safetyIters > 50) {
+      throw new Error("fetchOrdersForRange: 80k pagination loop > 50 iterations, aborting")
+    }
+    const url =
+      `https://statistics-api.wildberries.ru/api/v1/supplier/orders` +
+      `?dateFrom=${encodeURIComponent(currentDateFrom)}&flag=0`
+    const res = await wbFetch("Orders API (range)", url, { headers: { Authorization: token } })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`WB Orders API (fetchOrdersForRange) ${res.status}: ${text}`)
+    }
+    const orders = (await res.json()) as Array<{
+      nmId?: number
+      nm_id?: number
+      date?: string
+      isCancel?: boolean
+      lastChangeDate?: string
+    }>
+    const rowsReturned = Array.isArray(orders) ? orders.length : 0
+    totalRowsSeen += rowsReturned
+    console.log(
+      `[wb-orders backfill] page=${safetyIters} dateFrom=${currentDateFrom} rowsReturned=${rowsReturned} total=${totalRowsSeen}`,
+    )
+    if (!Array.isArray(orders) || orders.length === 0) break
+
+    for (const o of orders) {
+      if (o.isCancel) continue
+      const nm = o.nmId ?? o.nm_id
+      if (nm == null || !o.date) continue
+      const dateKey = o.date.slice(0, 10) // YYYY-MM-DD MSK
+      const k = `${nm}::${dateKey}`
+      const existing = counts.get(k)
+      if (existing) existing.qty++
+      else counts.set(k, { nmId: nm, date: dateKey, qty: 1 })
+    }
+
+    // 80k soft-limit → продолжаем pagination с lastChangeDate последней записи.
+    // NOTE: WB Statistics Orders endpoint redundantly returning srid across pages маловероятен
+    // на Zoiten volume (~45 дней). Если когда-то начнёт двоить — добавить Set<srid> dedup сюда.
+    if (orders.length >= 80_000) {
+      const last = orders[orders.length - 1]
+      if (!last.lastChangeDate || last.lastChangeDate === currentDateFrom) break
+      currentDateFrom = last.lastChangeDate
+      continue
+    }
+    break
+  }
+
+  return Array.from(counts.values()).map((r) => ({
+    nmId: r.nmId,
+    date: new Date(r.date), // 00:00 UTC, Prisma @db.Date нормализует к DATE
+    qty: r.qty,
+  }))
+}
+
+/** Idempotent upsert строк OrdersDailyRow в WbCardOrdersDaily.
+ *  Используется и в cron, и в manual backfill. Transaction (callback variant) с timeout 90s.
+ *  ON CONFLICT (nmId,date) UPDATE qty (overwrite — backfill rerun может вернуть скорректированное число).
+ *  Per-chunk logging для backfill diagnostics (W-3 fix).
+ */
+export async function upsertOrdersDaily(rows: OrdersDailyRow[]): Promise<{ upserted: number }> {
+  if (rows.length === 0) return { upserted: 0 }
+  // Чанками по 500 для безопасности transaction timeout
+  const CHUNK = 500
+  const totalChunks = Math.ceil(rows.length / CHUNK)
+  let total = 0
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK)
+    const chunkIdx = Math.floor(i / CHUNK) + 1
+    // Callback-вариант поддерживает options { timeout }; array-вариант — нет (Prisma 6).
+    await prisma.$transaction(
+      async (tx) => {
+        for (const r of chunk) {
+          await tx.wbCardOrdersDaily.upsert({
+            where: { nmId_date: { nmId: r.nmId, date: r.date } },
+            create: { nmId: r.nmId, date: r.date, qty: r.qty },
+            update: { qty: r.qty },
+          })
+        }
+      },
+      { timeout: 90_000 },
+    )
+    total += chunk.length
+    console.log(
+      `[wb-orders upsert] chunk=${chunkIdx}/${totalChunks} processed=${total}/${rows.length}`,
+    )
+  }
+  return { upserted: total }
+}

@@ -1012,3 +1012,24 @@ model WbApiToken {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260515-m5o: snapshot заказов per nmId per day для bar chart на /cards/wb.
+// Daily cron 05:00 МСК пишет qty за вчерашний день; backfill с 2026-04-01 одноразовый.
+// Только дни с qty > 0 хранятся — fill пустых дней делается на сервере при сборке chart timeSeries.
+// NOTE: nmId хранится как Int без FK на WbCard — WbCard может быть soft/hard-deleted,
+// а исторические orders должны выживать.
+// ──────────────────────────────────────────────────────────────────
+
+model WbCardOrdersDaily {
+  id        Int      @id @default(autoincrement())
+  nmId      Int
+  date      DateTime @db.Date
+  qty       Int
+  // Future: sumRub Decimal?, returnsQty Int?, cancelQty Int? — расширение в следующих фазах.
+  createdAt DateTime @default(now())
+
+  @@unique([nmId, date])
+  @@index([nmId])
+  @@index([date])
+}
