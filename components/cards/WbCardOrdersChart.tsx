@@ -1,7 +1,7 @@
 "use client"
 // components/cards/WbCardOrdersChart.tsx
 // 2026-05-15 (quick 260515-o4o v2): ComposedChart с dual Y-axis (Bar qty + Line buyerPrice).
-// max-w-[640px] mx-auto — панель ~2× уже исходной. Card-shape (border + bg-card).
+// max-w-[640px] — панель ~2× уже исходной, выровнена по левому краю. Card-shape.
 // connectNulls={false} — линия рвётся на null (дни без snapshot цены).
 
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid } from "recharts"
@@ -41,7 +41,7 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
   })()
 
   return (
-    <div className="max-w-[640px] mx-auto py-4 px-2">
+    <div className="max-w-[640px] py-4 px-2">
       <div className="grid grid-cols-[1fr_auto] gap-6 items-center rounded-md border bg-card p-3">
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
