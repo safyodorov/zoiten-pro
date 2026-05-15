@@ -13,6 +13,9 @@ interface WbFiltersProps {
   brandCategoryPairs: Array<{ brand: string; category: string }>
   selectedBrands: string[]
   selectedCategories: string[]
+  // Phase 260514-mci: фильтр по Ярлыку (WbCard.label, отдельное поле, не связано с brand/category)
+  labelOptions: string[]
+  selectedLabels: string[]
 }
 
 // ── Dropdown с чекбоксами ────────────────────────────────────────
@@ -92,6 +95,8 @@ export function WbFilters({
   brandCategoryPairs,
   selectedBrands,
   selectedCategories,
+  labelOptions,
+  selectedLabels,
 }: WbFiltersProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -142,11 +147,18 @@ export function WbFilters({
     router.push(buildUrl({ categories: values.join(",") }))
   }
 
-  function clearAll() {
-    router.push(buildUrl({ brands: "", categories: "" }))
+  function setLabels(values: string[]) {
+    router.push(buildUrl({ labels: values.join(",") }))
   }
 
-  const hasFilters = selectedBrands.length > 0 || selectedCategories.length > 0
+  function clearAll() {
+    router.push(buildUrl({ brands: "", categories: "", labels: "" }))
+  }
+
+  const hasFilters =
+    selectedBrands.length > 0 ||
+    selectedCategories.length > 0 ||
+    selectedLabels.length > 0
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -161,6 +173,12 @@ export function WbFilters({
         options={visibleCategories}
         selected={selectedCategories}
         onChange={setCategories}
+      />
+      <MultiSelectDropdown
+        label="Ярлык"
+        options={labelOptions}
+        selected={selectedLabels}
+        onChange={setLabels}
       />
       {hasFilters && (
         <Button variant="ghost" size="sm" onClick={clearAll} className="gap-1 text-xs">

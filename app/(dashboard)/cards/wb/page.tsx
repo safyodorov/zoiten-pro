@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { WbCardsTable } from "@/components/cards/WbCardsTable"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
+import { WbSyncRatingsButton } from "@/components/cards/WbSyncRatingsButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
@@ -15,10 +16,10 @@ export default async function WbCardsPage({
   searchParams: Promise<{
     q?: string; page?: string; size?: string
     sort?: string; dir?: string
-    brands?: string; categories?: string
+    brands?: string; categories?: string; labels?: string
   }>
 }) {
-  const { q, page: pageParam, size: sizeParam, sort, dir, brands: brandsParam, categories: categoriesParam } = await searchParams
+  const { q, page: pageParam, size: sizeParam, sort, dir, brands: brandsParam, categories: categoriesParam, labels: labelsParam } = await searchParams
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {}
@@ -32,12 +33,17 @@ export default async function WbCardsPage({
   // Фильтры по бренду и категории (множественный выбор через запятую)
   const selectedBrands = brandsParam ? brandsParam.split(",").filter(Boolean) : []
   const selectedCategories = categoriesParam ? categoriesParam.split(",").filter(Boolean) : []
+  // Phase 260514-mci: фильтр по Ярлыку
+  const selectedLabels = labelsParam ? labelsParam.split(",").filter(Boolean) : []
 
   if (selectedBrands.length > 0) {
     where.brand = { in: selectedBrands }
   }
   if (selectedCategories.length > 0) {
     where.category = { in: selectedCategories }
+  }
+  if (selectedLabels.length > 0) {
+    where.label = { in: selectedLabels }
   }
 
   // pageSize: URL ?size приоритетнее, иначе persisted user pref, иначе default
@@ -49,7 +55,8 @@ export default async function WbCardsPage({
   const skip = (currentPage - 1) * pageSize
 
   // Сортировка
-  const sortBy = sort && ["brand", "category", "name", "createdAt"].includes(sort) ? sort : "createdAt"
+  // Phase 260514-mci: добавлен stockQty в whitelist
+  const sortBy = sort && ["brand", "category", "name", "createdAt", "stockQty"].includes(sort) ? sort : "createdAt"
   const sortDir = dir === "asc" ? "asc" : "desc"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderBy: any = { [sortBy]: sortDir }
@@ -58,7 +65,7 @@ export default async function WbCardsPage({
   // Находим маркетплейс WB для проверки привязки
   const wbMarketplace = await prisma.marketplace.findFirst({ where: { slug: "wb" } })
 
-  const [cards, total, allBrandCategoryPairs] = await Promise.all([
+  const [cards, total, allBrandCategoryPairs, allLabels] = await Promise.all([
     prisma.wbCard.findMany({ where, orderBy, skip, take: pageSize }),
     prisma.wbCard.count({ where }),
     // Cascade фильтров: тянем distinct пары (brand, category) — client-side WbFilters
@@ -69,11 +76,22 @@ export default async function WbCardsPage({
       where: { brand: { not: null }, category: { not: null } },
       orderBy: [{ brand: "asc" }, { category: "asc" }],
     }),
+    // Phase 260514-mci: distinct ярлыки для фильтра «Ярлык»
+    prisma.wbCard.findMany({
+      select: { label: true },
+      distinct: ["label"],
+      where: { label: { not: null } },
+      orderBy: { label: "asc" },
+    }),
   ])
 
   const brandCategoryPairs: Array<{ brand: string; category: string }> = allBrandCategoryPairs
     .filter((p) => p.brand && p.category)
     .map((p) => ({ brand: p.brand!, category: p.category! }))
+
+  const labelOptions: string[] = allLabels
+    .map((l) => l.label)
+    .filter((v): v is string => Boolean(v))
 
   const totalPages = Math.ceil(total / pageSize)
 
@@ -103,6 +121,7 @@ export default async function WbCardsPage({
         </form>
         <div className="flex gap-2">
           <WbUploadIuButton />
+          <WbSyncRatingsButton />
           <WbSyncSppButton />
           <WbSyncButton />
         </div>
@@ -111,6 +130,8 @@ export default async function WbCardsPage({
         brandCategoryPairs={brandCategoryPairs}
         selectedBrands={selectedBrands}
         selectedCategories={selectedCategories}
+        labelOptions={labelOptions}
+        selectedLabels={selectedLabels}
       />
       <WbCardsTable
         cards={cards}
@@ -124,6 +145,7 @@ export default async function WbCardsPage({
         sortDir={sortDir}
         selectedBrands={selectedBrands}
         selectedCategories={selectedCategories}
+        selectedLabels={selectedLabels}
       />
     </div>
   )

@@ -41,6 +41,9 @@ interface WbCard {
   photoUrl: string | null
   rating: number | null
   reviewsTotal: number | null
+  // Phase 260514-mci: imt-агрегат рейтинга (склейка)
+  ratingImt: number | null
+  reviewsTotalImt: number | null
   price: number | null
   discountWb: number | null
   clubDiscount: number | null
@@ -66,6 +69,8 @@ interface WbCardsTableProps {
   sortDir: string
   selectedBrands: string[]
   selectedCategories: string[]
+  // Phase 260514-mci: выбранные ярлыки для сохранения в URL при пагинации/сортировке
+  selectedLabels: string[]
   linkedNmIds: string[]
 }
 
@@ -133,6 +138,7 @@ export function WbCardsTable({
   sortDir,
   selectedBrands,
   selectedCategories,
+  selectedLabels,
   linkedNmIds,
 }: WbCardsTableProps) {
   const router = useRouter()
@@ -166,6 +172,8 @@ export function WbCardsTable({
     // Сохраняем активные фильтры
     if (selectedBrands.length > 0) params.set("brands", selectedBrands.join(","))
     if (selectedCategories.length > 0) params.set("categories", selectedCategories.join(","))
+    // Phase 260514-mci: сохраняем фильтр по Ярлыку при пагинации/сортировке
+    if (selectedLabels.length > 0) params.set("labels", selectedLabels.join(","))
     const qs = params.toString()
     return `/cards/wb${qs ? `?${qs}` : ""}`
   }
@@ -307,7 +315,20 @@ export function WbCardsTable({
               <TableHead>Цена продавца</TableHead>
               <TableHead>Скидка WB</TableHead>
               <TableHead>Клуб</TableHead>
-              <TableHead>Остаток</TableHead>
+              {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки (4 столбца) */}
+              <TableHead className="text-center text-xs border-l">Рейтинг карт.</TableHead>
+              <TableHead className="text-center text-xs">Оценок</TableHead>
+              <TableHead className="text-center text-xs border-l">Рейтинг скл.</TableHead>
+              <TableHead className="text-center text-xs">Оценок</TableHead>
+              <TableHead>
+                <button
+                  onClick={() => handleSort("stockQty")}
+                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                >
+                  Остаток{sortIndicator("stockQty")}
+                  <ArrowUpDown className="h-3 w-3" />
+                </button>
+              </TableHead>
               <TableHead className="text-center border-l text-xs">Стд FBW</TableHead>
               <TableHead className="text-center text-xs">Стд FBS</TableHead>
               <TableHead className="text-center border-l text-xs">ИУ FBW</TableHead>
@@ -317,7 +338,7 @@ export function WbCardsTable({
           <TableBody>
             {cards.length === 0 && (
               <TableRow>
-                <TableCell colSpan={15} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={19} className="text-center py-12 text-muted-foreground">
                   Карточки не найдены. Нажмите «Синхронизировать с WB» для загрузки.
                 </TableCell>
               </TableRow>
@@ -357,6 +378,27 @@ export function WbCardsTable({
                 <TableCell>
                   {card.clubDiscount != null && card.clubDiscount > 0
                     ? <span className="text-sm">{card.clubDiscount}%</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки */}
+                <TableCell className="text-center text-xs border-l">
+                  {card.rating != null
+                    ? <span>{card.rating.toFixed(1)} ★</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center text-xs">
+                  {card.reviewsTotal != null
+                    ? card.reviewsTotal
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center text-xs border-l">
+                  {card.ratingImt != null
+                    ? <span>{card.ratingImt.toFixed(1)} ★</span>
+                    : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="text-center text-xs">
+                  {card.reviewsTotalImt != null
+                    ? card.reviewsTotalImt
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
