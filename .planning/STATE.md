@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
 status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-15 — Completed quick 260515-jq6: /cards/wb sticky header + name tooltip + copy nmId
+stopped_at: 2026-05-15 — Completed quick 260515-m5o: /cards/wb expandable row + WbCardOrdersDaily + daily cron
 last_updated: "2026-05-15T07:20:00.000Z"
 progress:
   total_phases: 15
@@ -279,6 +279,7 @@ None yet.
 | 260514-mci | /cards/wb улучшения: рейтинг карточки + рейтинг склейки (sync через Feedbacks API), фильтр по Ярлыку, sort по Остатку | 2026-05-15 | 7b40673 |  | [260514-mci-cards-wb](./quick/260514-mci-cards-wb/) |
 | 260515-jq6 | /cards/wb UX: sticky header + name tooltip + click-to-copy артикул | 2026-05-15 | 9d32acf |  | [260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c](./quick/260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c/) |
 | 260515-kes | Soft-delete WbCard + 30-day grace при пропаже из WB Content API (safety guard 50%) |  |  |  | [260515-kes-soft-delete-wbcard-30-day-grace-wb-conte](./quick/260515-kes-soft-delete-wbcard-30-day-grace-wb-conte/) |
+| 260515-m5o | /cards/wb expandable row: bar chart заказов за 28 дней + средние 7д/30д; WbCardOrdersDaily + daily cron 05:00 МСК + backfill с 2026-04-01 | 2026-05-15 | 90c86a5 | Needs Review | [260515-m5o-cards-wb-expandable-row-4-7-wbcardorders](./quick/260515-m5o-cards-wb-expandable-row-4-7-wbcardorders/) |
 
 ### Blockers/Concerns
 
