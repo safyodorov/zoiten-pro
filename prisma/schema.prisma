@@ -286,6 +286,11 @@ model WbCard {
   // и per-imt — для всех карточек склейки возвращает одинаковую цифру (= рейтинг склейки).
   wbStoreRating       Float? // рейтинг склейки с витрины WB
   wbStoreFeedbacks    Int? // кол-во отзывов склейки с витрины WB
+  // 2026-05-15 (quick 260515-kes): soft-delete для карточек удалённых в WB cabinet.
+  // При sync nmId не пришёл от Content API → deletedAt = now. При повторном появлении —
+  // обнуляется. Через 30 дней после deletedAt — hard-delete (cascade FK на CalculatedPrice,
+  // WbCardWarehouseStock, WbCardWarehouseOrders).
+  deletedAt           DateTime?
   priceBeforeDiscount Float? // цена продавца до скидки, руб
   sellerDiscount      Int? // скидка продавца, %
   price               Float? // цена продавца со скидкой, руб
@@ -322,6 +327,8 @@ model WbCard {
 
   // Phase 260514-mci: индекс для быстрой группировки при batch update ratingImt/reviewsTotalImt
   @@index([imtId])
+  // 2026-05-15 (quick 260515-kes): фильтр-индекс для page queries WHERE deletedAt IS NULL.
+  @@index([deletedAt])
 }
 
 // ──────────────────────────────────────────────────────────────────

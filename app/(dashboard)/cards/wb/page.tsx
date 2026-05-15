@@ -22,7 +22,9 @@ export default async function WbCardsPage({
   const { q, page: pageParam, size: sizeParam, sort, dir, brands: brandsParam, categories: categoriesParam, labels: labelsParam } = await searchParams
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = {}
+  // 2026-05-15 (quick 260515-kes): скрываем soft-deleted карточки.
+  // Они автоматически hard-delete'нутся через 30 дней в /api/wb-sync.
+  const where: any = { deletedAt: null }
   if (q && q.trim()) {
     where.OR = [
       { name: { contains: q.trim(), mode: "insensitive" } },
@@ -73,14 +75,14 @@ export default async function WbCardsPage({
     prisma.wbCard.findMany({
       select: { brand: true, category: true },
       distinct: ["brand", "category"],
-      where: { brand: { not: null }, category: { not: null } },
+      where: { brand: { not: null }, category: { not: null }, deletedAt: null },
       orderBy: [{ brand: "asc" }, { category: "asc" }],
     }),
     // Phase 260514-mci: distinct ярлыки для фильтра «Ярлык»
     prisma.wbCard.findMany({
       select: { label: true },
       distinct: ["label"],
-      where: { label: { not: null } },
+      where: { label: { not: null }, deletedAt: null },
       orderBy: { label: "asc" },
     }),
   ])

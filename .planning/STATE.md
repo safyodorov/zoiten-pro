@@ -278,6 +278,7 @@ None yet.
 | 260514-kzg | /stock/wb «По размерам»: backfill всех размеров из WbCard.techSizes (не только тех у кого есть stocks/orders) + красная подсветка выпавших размеров (stockQty===0) | 2026-05-14 | ac7b75a |  | [260514-kzg-stock-wb-wb](./quick/260514-kzg-stock-wb-wb/) |
 | 260514-mci | /cards/wb улучшения: рейтинг карточки + рейтинг склейки (sync через Feedbacks API), фильтр по Ярлыку, sort по Остатку | 2026-05-15 | 7b40673 |  | [260514-mci-cards-wb](./quick/260514-mci-cards-wb/) |
 | 260515-jq6 | /cards/wb UX: sticky header + name tooltip + click-to-copy артикул | 2026-05-15 | 9d32acf |  | [260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c](./quick/260515-jq6-cards-wb-ux-sticky-header-name-tooltip-c/) |
+| 260515-kes | Soft-delete WbCard + 30-day grace при пропаже из WB Content API (safety guard 50%) |  |  |  | [260515-kes-soft-delete-wbcard-30-day-grace-wb-conte](./quick/260515-kes-soft-delete-wbcard-30-day-grace-wb-conte/) |
 
 ### Blockers/Concerns
 

@@ -250,9 +250,12 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
   const linkedNmIds = Array.from(articleToProduct.keys())
 
   // ── 5. Загрузить WbCards + CalculatedPrice ──────────────────────
+  // 2026-05-15 (quick 260515-kes): не показываем soft-deleted карточки.
   const wbCards =
     linkedNmIds.length > 0
-      ? await prisma.wbCard.findMany({ where: { nmId: { in: linkedNmIds } } })
+      ? await prisma.wbCard.findMany({
+          where: { nmId: { in: linkedNmIds }, deletedAt: null },
+        })
       : []
 
   const wbCardIds = wbCards.map((c) => c.id)

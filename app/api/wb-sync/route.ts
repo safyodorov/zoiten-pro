@@ -316,6 +316,53 @@ export async function POST(): Promise<NextResponse> {
       }
     }
 
+    // ── Quick 260515-kes: soft-delete карточек удалённых в WB cabinet ─────
+    // Карточки которые не пришли от Content API → mark deletedAt = now.
+    // При повторном появлении (revive) — deletedAt очищается выше через upsert
+    // (поле deletedAt не в updateData, поэтому upsert не задевает его —
+    // явный revive нужен отдельным updateMany).
+    // Через 30 дней после deletedAt — hard-delete (cascade FK).
+    //
+    // Safety guard: пропустить mark-deleted если API вернул <50% от текущего
+    // количества карточек в БД (защита от частичного sweep при WB API глитче).
+    const presentNmIds = new Set(rawCards.map((c) => c.nmID))
+    const existingCount = await prisma.wbCard.count({ where: { deletedAt: null } })
+    const safetyOk = existingCount === 0 || presentNmIds.size >= existingCount * 0.5
+
+    if (safetyOk && presentNmIds.size > 0) {
+      const presentArr = Array.from(presentNmIds)
+      // Mark missing as deleted (только тех у кого ещё нет deletedAt)
+      const markedDeleted = await prisma.wbCard.updateMany({
+        where: {
+          nmId: { notIn: presentArr },
+          deletedAt: null,
+        },
+        data: { deletedAt: new Date() },
+      })
+      // Revive cards which reappeared (deletedAt не null, но nmId в response)
+      const revived = await prisma.wbCard.updateMany({
+        where: {
+          nmId: { in: presentArr },
+          deletedAt: { not: null },
+        },
+        data: { deletedAt: null },
+      })
+      // Hard-delete старее 30 дней (cascade на CalculatedPrice/WbCardWarehouse*)
+      const cutoff = new Date(Date.now() - 30 * 86_400_000)
+      const hardDeleted = await prisma.wbCard.deleteMany({
+        where: { deletedAt: { lt: cutoff } },
+      })
+      if (markedDeleted.count + revived.count + hardDeleted.count > 0) {
+        console.log(
+          `[wb-sync soft-delete] marked=${markedDeleted.count} revived=${revived.count} hardDeleted=${hardDeleted.count}`
+        )
+      }
+    } else if (!safetyOk) {
+      console.warn(
+        `[wb-sync soft-delete] SAFETY guard triggered: API returned ${presentNmIds.size} cards but DB has ${existingCount} active. Skipping soft-delete to avoid mass-marking.`
+      )
+    }
+
     // Phase 14 (STOCK-08, STOCK-10): clean-replace per-warehouse stocks
     // Выполняется после основного цикла upsert карточек — все WbCard уже в БД
     if (stocksPerWarehouse.size > 0) {

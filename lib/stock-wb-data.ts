@@ -136,7 +136,8 @@ export async function getStockWbData(
 
   const wbCards = wbNmIds.length > 0
     ? await prisma.wbCard.findMany({
-        where: { nmId: { in: wbNmIds } },
+        // 2026-05-15 (quick 260515-kes): не показываем soft-deleted карточки
+        where: { nmId: { in: wbNmIds }, deletedAt: null },
         include: {
           warehouses: {
             include: { warehouse: true },
