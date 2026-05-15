@@ -5,7 +5,6 @@ import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbSyncRatingsButton } from "@/components/cards/WbSyncRatingsButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
 import { WbOrdersBackfillButton } from "@/components/cards/WbOrdersBackfillButton"
-import { WbPricesRetroactiveBackfillButton } from "@/components/cards/WbPricesRetroactiveBackfillButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
 import { getPageSizePref } from "@/app/actions/user-preferences"
@@ -177,7 +176,6 @@ export default async function WbCardsPage({
         </form>
         <div className="flex gap-2">
           <WbOrdersBackfillButton />
-          <WbPricesRetroactiveBackfillButton />
           <WbUploadIuButton />
           <WbSyncRatingsButton />
           <WbSyncSppButton />

@@ -43,17 +43,3 @@ export function shouldFireCron(args: {
   if (args.lastRunDate === args.today) return false
   return true
 }
-
-/** computeBuyerPriceRetro — формула retroactive backfill.
- *  buyerPrice = round(sellerPrice × (1 - discountWb/100))
- *  - discountWb=null/undefined → возвращаем sellerPrice без скидки
- *  - sellerPrice<=0/null/undefined → null
- */
-export function computeBuyerPriceRetro(args: {
-  sellerPrice: number | null | undefined
-  discountWb: number | null | undefined
-}): number | null {
-  if (!args.sellerPrice || args.sellerPrice <= 0) return null
-  const disc = args.discountWb ?? 0
-  return Math.round(args.sellerPrice * (1 - disc / 100))
-}
