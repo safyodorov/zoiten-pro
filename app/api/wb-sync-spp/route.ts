@@ -60,24 +60,42 @@ export async function POST(): Promise<NextResponse> {
           const nmId: number = product.id
           if (!nmId) continue
 
+          // 2026-05-15: тот же v4 ответ содержит storefront rating + feedbacks.
+          // Собираем для записи одним update'ом (вместе с СПП).
+          const updateFields: {
+            discountWb?: number
+            wbStoreRating?: number
+            wbStoreFeedbacks?: number
+          } = {}
+          if (typeof product.reviewRating === "number" && product.reviewRating > 0) {
+            updateFields.wbStoreRating = product.reviewRating
+          }
+          if (typeof product.feedbacks === "number" && product.feedbacks >= 0) {
+            updateFields.wbStoreFeedbacks = product.feedbacks
+          }
+
           const sizes = product.sizes ?? []
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const sizeWithPrice = sizes.find((s: any) => s.price?.product)
-          if (!sizeWithPrice?.price?.product) continue
+          if (sizeWithPrice?.price?.product) {
+            const buyerPriceRub = sizeWithPrice.price.product / 100
+            const sellerPrice = sellerPrices.get(nmId) ?? 0
+            if (sellerPrice > 0 && buyerPriceRub > 0) {
+              const spp =
+                Math.round((1 - buyerPriceRub / sellerPrice) * 1000) / 10
+              if (spp > 0 && spp < 100) {
+                updateFields.discountWb = spp
+                v4Success++
+              }
+            }
+          }
 
-          const buyerPriceRub = sizeWithPrice.price.product / 100
-          const sellerPrice = sellerPrices.get(nmId) ?? 0
-          if (sellerPrice > 0 && buyerPriceRub > 0) {
-            // Округление до 1 десятичного знака (точность СПП в отображении)
-            const spp =
-              Math.round((1 - buyerPriceRub / sellerPrice) * 1000) / 10
-            if (spp > 0 && spp < 100) {
-              await prisma.wbCard.update({
-                where: { nmId },
-                data: { discountWb: spp },
-              })
+          if (Object.keys(updateFields).length > 0) {
+            try {
+              await prisma.wbCard.update({ where: { nmId }, data: updateFields })
               updated++
-              v4Success++
+            } catch {
+              // nmId которого нет в WbCard (карточка не синхронизирована) — skip
             }
           }
         }

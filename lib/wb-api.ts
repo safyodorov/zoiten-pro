@@ -396,9 +396,19 @@ export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, n
 
 import { execSync } from "node:child_process"
 
+// 2026-05-15: outparam storefrontOut собирает точные WB-витрина значения рейтинга и
+// кол-ва оценок per nmId. v4 batch уже хитим для СПП — добавляем парсинг 2 доп. полей
+// без новых WB-запросов. WB v4 не различает per-nmId vs per-imt: для всех карточек
+// склейки возвращает одинаковый reviewRating + feedbacks (= рейтинг склейки).
+export interface StorefrontRatingsOut {
+  ratings: Map<number, number>
+  feedbacks: Map<number, number>
+}
+
 export async function fetchWbDiscounts(
   nmIds: number[],
-  sellerPriceMap?: Map<number, PriceData>
+  sellerPriceMap?: Map<number, PriceData>,
+  storefrontOut?: StorefrontRatingsOut
 ): Promise<Map<number, number>> {
   const token = await getToken()
   const discountMap = new Map<number, number>()
@@ -431,6 +441,17 @@ export async function fetchWbDiscounts(
       for (const product of products) {
         const nmId: number = product.id
         if (!nmId) continue
+
+        // 2026-05-15: storefront ratings — то что показывает витрина WB покупателю.
+        // reviewRating (number, 0..5, до десятых) + feedbacks (int >=0).
+        if (storefrontOut) {
+          if (typeof product.reviewRating === "number" && product.reviewRating > 0) {
+            storefrontOut.ratings.set(nmId, product.reviewRating)
+          }
+          if (typeof product.feedbacks === "number" && product.feedbacks >= 0) {
+            storefrontOut.feedbacks.set(nmId, product.feedbacks)
+          }
+        }
 
         const sizes = product.sizes ?? []
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

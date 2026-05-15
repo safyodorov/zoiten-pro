@@ -279,8 +279,13 @@ model WbCard {
   reviews5            Int? // оценок 5
   // Phase 260514-mci: imt-агрегат рейтинга (агрегация feedback'ов всех nmId одной imt-склейки)
   imtId               Int? // id склейки из WB Content API (характеристика товара)
-  ratingImt           Float? // средний рейтинг склейки
-  reviewsTotalImt     Int? // кол-во оценок склейки
+  ratingImt           Float? // средний рейтинг склейки (наш расчёт по Feedbacks API)
+  reviewsTotalImt     Int? // кол-во оценок склейки (наш расчёт по Feedbacks API)
+  // 2026-05-15: точные значения с витрины WB (card.wb.ru v4) — то что видит покупатель.
+  // Заполняются в /api/wb-sync и /api/wb-sync-spp через curl. WB v4 не различает per-nmId
+  // и per-imt — для всех карточек склейки возвращает одинаковую цифру (= рейтинг склейки).
+  wbStoreRating       Float? // рейтинг склейки с витрины WB
+  wbStoreFeedbacks    Int? // кол-во отзывов склейки с витрины WB
   priceBeforeDiscount Float? // цена продавца до скидки, руб
   sellerDiscount      Int? // скидка продавца, %
   price               Float? // цена продавца со скидкой, руб

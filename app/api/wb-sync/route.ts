@@ -152,8 +152,10 @@ export async function POST(): Promise<NextResponse> {
     }
 
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
-    // fetchWbDiscounts деградирует тихо (curl + fallback), не бросает при 429
-    const discountMap = await fetchWbDiscounts(nmIds)
+    // fetchWbDiscounts деградирует тихо (curl + fallback), не бросает при 429.
+    // 2026-05-15: тот же v4 batch собирает точные WB-витрина rating + feedbacks per nmId.
+    const storefront = { ratings: new Map<number, number>(), feedbacks: new Map<number, number>() }
+    const discountMap = await fetchWbDiscounts(nmIds, undefined, storefront)
 
     // 8. Phase 7 (D-09) + Phase 15 (ORDERS-02): заказы за 7 дней — per-card avg/yesterday + per-warehouse breakdown.
     // Один запрос к Orders API (rate limit ~1 req/min) покрывает обе задачи.
@@ -194,6 +196,9 @@ export async function POST(): Promise<NextResponse> {
           widthCm: card.widthCm,
           depthCm: card.depthCm,
           discountWb: discountMap.get(card.nmId) ?? null,
+          // 2026-05-15: точные WB-витрина значения (из того же v4 batch что СПП)
+          wbStoreRating: storefront.ratings.get(card.nmId) ?? null,
+          wbStoreFeedbacks: storefront.feedbacks.get(card.nmId) ?? null,
           // 2026-05-15: было `undefined` → Prisma пропускала поле при пустых tags,
           // ярлык удалённый в WB cabinet оставался в БД stale. Меняем на null.
           label: card.tags.length > 0 ? card.tags.join(", ") : null,
@@ -265,6 +270,9 @@ export async function POST(): Promise<NextResponse> {
           widthCm: card.widthCm,
           depthCm: card.depthCm,
           discountWb: discountMap.get(card.nmId) ?? null,
+          // 2026-05-15: точные WB-витрина значения (из v4 batch выше)
+          wbStoreRating: storefront.ratings.get(card.nmId) ?? null,
+          wbStoreFeedbacks: storefront.feedbacks.get(card.nmId) ?? null,
           label: card.tags.length > 0 ? card.tags.join(", ") : null,
           rawJson: JSON.parse(JSON.stringify(raw)),
           characteristics:

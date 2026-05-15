@@ -41,9 +41,12 @@ interface WbCard {
   photoUrl: string | null
   rating: number | null
   reviewsTotal: number | null
-  // Phase 260514-mci: imt-агрегат рейтинга (склейка)
+  // Phase 260514-mci: imt-агрегат рейтинга (склейка) — наш расчёт по Feedbacks API
   ratingImt: number | null
   reviewsTotalImt: number | null
+  // 2026-05-15: точные WB-витрина значения (склейка) — из card.wb.ru v4
+  wbStoreRating: number | null
+  wbStoreFeedbacks: number | null
   price: number | null
   discountWb: number | null
   clubDiscount: number | null
@@ -381,15 +384,13 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 {/* Phase 260514-mci: рейтинг карточки + рейтинг склейки.
-                    2026-05-15: формат «4.8 (4.78)» — WB-витрина до десятых + наш расчёт до сотых в скобках. */}
+                    2026-05-15: «Рейтинг карт.» = наш per-nmId расчёт. «Рейтинг скл.» = WB-витрина
+                    (card.wb.ru v4) + наш per-imt расчёт в скобках. «Оценок WB» = реальное кол-во
+                    с витрины WB. WB v4 не различает per-nmId и per-imt — для всех карточек
+                    склейки одинаковый reviewRating + feedbacks. */}
                 <TableCell className="text-center text-xs border-l">
                   {card.rating != null ? (
-                    <span>
-                      {card.rating.toFixed(1)} ★{" "}
-                      <span className="text-muted-foreground text-[10px]">
-                        ({card.rating.toFixed(2)})
-                      </span>
-                    </span>
+                    <span>{card.rating.toFixed(2)} ★</span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
@@ -400,19 +401,28 @@ export function WbCardsTable({
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-center text-xs border-l">
-                  {card.ratingImt != null ? (
+                  {card.wbStoreRating != null ? (
                     <span>
-                      {card.ratingImt.toFixed(1)} ★{" "}
-                      <span className="text-muted-foreground text-[10px]">
-                        ({card.ratingImt.toFixed(2)})
-                      </span>
+                      {card.wbStoreRating.toFixed(1)} ★
+                      {card.ratingImt != null && (
+                        <span className="text-muted-foreground text-[10px]">
+                          {" "}({card.ratingImt.toFixed(2)})
+                        </span>
+                      )}
+                    </span>
+                  ) : card.ratingImt != null ? (
+                    <span>
+                      {card.ratingImt.toFixed(2)} ★{" "}
+                      <span className="text-muted-foreground text-[10px]">(наш)</span>
                     </span>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-center text-xs">
-                  {card.reviewsTotalImt != null
+                  {card.wbStoreFeedbacks != null
+                    ? card.wbStoreFeedbacks
+                    : card.reviewsTotalImt != null
                     ? card.reviewsTotalImt
                     : <span className="text-muted-foreground">—</span>}
                 </TableCell>
