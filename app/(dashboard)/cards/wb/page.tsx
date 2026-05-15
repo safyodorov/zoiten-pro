@@ -23,9 +23,14 @@ export default async function WbCardsPage({
     q?: string; page?: string; size?: string
     sort?: string; dir?: string
     brands?: string; categories?: string; labels?: string
+    stock?: string
   }>
 }) {
-  const { q, page: pageParam, size: sizeParam, sort, dir, brands: brandsParam, categories: categoriesParam, labels: labelsParam } = await searchParams
+  const { q, page: pageParam, size: sizeParam, sort, dir, brands: brandsParam, categories: categoriesParam, labels: labelsParam, stock: stockParam } = await searchParams
+
+  // 260515: фильтр «Товар с остатком / Все». Default = «in» (только с остатком).
+  // URL ?stock=all = показать все товары; отсутствие параметра или любое другое значение = только с остатком.
+  const stockFilter: "in" | "all" = stockParam === "all" ? "all" : "in"
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // 2026-05-15 (quick 260515-kes): скрываем soft-deleted карточки.
@@ -52,6 +57,11 @@ export default async function WbCardsPage({
   }
   if (selectedLabels.length > 0) {
     where.label = { in: selectedLabels }
+  }
+
+  // 260515: «Товар с остатком» — stockQty > 0 (исключаем 0 И null, т.к. семантически одно и то же)
+  if (stockFilter === "in") {
+    where.stockQty = { gt: 0 }
   }
 
   // pageSize: URL ?size приоритетнее, иначе persisted user pref, иначе default
@@ -188,6 +198,7 @@ export default async function WbCardsPage({
         selectedCategories={selectedCategories}
         labelOptions={labelOptions}
         selectedLabels={selectedLabels}
+        stockFilter={stockFilter}
       />
       <div className="flex-1 min-h-0 flex flex-col">
         <WbCardsTable
