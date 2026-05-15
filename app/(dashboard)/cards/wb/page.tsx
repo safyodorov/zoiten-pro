@@ -5,10 +5,15 @@ import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbSyncRatingsButton } from "@/components/cards/WbSyncRatingsButton"
 import { WbUploadIuButton } from "@/components/cards/WbUploadIuButton"
 import { WbOrdersBackfillButton } from "@/components/cards/WbOrdersBackfillButton"
+import { WbPricesRetroactiveBackfillButton } from "@/components/cards/WbPricesRetroactiveBackfillButton"
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
 import { getPageSizePref } from "@/app/actions/user-preferences"
-import { getMskTodayDate, fillTimeSeries } from "@/lib/wb-orders-chart"
+import {
+  getMskTodayDate,
+  fillTimeSeries,
+  type DayPoint,
+} from "@/lib/wb-orders-chart"
 
 const DEFAULT_PAGE_SIZE = 50
 
@@ -133,18 +138,29 @@ export default async function WbCardsPage({
             nmId: { in: visibleNmIds },
             date: { gte: windowStart, lte: windowEnd },
           },
-          select: { nmId: true, date: true, qty: true },
+          // 2026-05-15 (quick 260515-o4o): добавлен buyerPrice для линии цены в ComposedChart.
+          // sellerPrice не нужен на клиенте — Line использует только buyerPrice.
+          select: {
+            nmId: true,
+            date: true,
+            qty: true,
+            buyerPrice: true,
+          },
         })
       : []
 
-  const byNm = new Map<number, Array<{ date: Date; qty: number }>>()
+  const byNm = new Map<
+    number,
+    Array<{ date: Date; qty: number; buyerPrice: number | null }>
+  >()
   for (const r of ordersRows) {
     const arr = byNm.get(r.nmId) ?? []
-    arr.push({ date: r.date, qty: r.qty })
+    arr.push({ date: r.date, qty: r.qty, buyerPrice: r.buyerPrice })
     byNm.set(r.nmId, arr)
   }
-  const ordersTimeSeries: Record<string, Array<{ date: string; qty: number }>> =
-    {}
+  // CRITICAL (B-2): explicit DayPoint[] тип, не {date, qty}[] — иначе structural subtyping
+  // потеряет buyerPrice через RSC→client boundary и линия цены не отрендерится.
+  const ordersTimeSeries: Record<string, DayPoint[]> = {}
   for (const nmId of visibleNmIds) {
     ordersTimeSeries[String(nmId)] = fillTimeSeries(byNm.get(nmId) ?? [])
   }
@@ -161,6 +177,7 @@ export default async function WbCardsPage({
         </form>
         <div className="flex gap-2">
           <WbOrdersBackfillButton />
+          <WbPricesRetroactiveBackfillButton />
           <WbUploadIuButton />
           <WbSyncRatingsButton />
           <WbSyncSppButton />

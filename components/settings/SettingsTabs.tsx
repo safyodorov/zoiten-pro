@@ -6,7 +6,9 @@ import { CategoriesTab } from "./CategoriesTab"
 import { MarketplacesTab } from "./MarketplacesTab"
 import { DirectionsTab } from "./DirectionsTab"
 import { WbTokensTab } from "./WbTokensTab"
+import { CronScheduleTab } from "./CronScheduleTab"
 import type { WbTokenListItem } from "@/app/actions/wb-tokens"
+import type { CronSchedule } from "@/app/actions/cron-schedule"
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -68,6 +70,8 @@ interface SettingsTabsProps {
   directions: DirectionWithBrands[]
   brandsLite: BrandLite[]
   wbTokens: WbTokenListItem[] | null // null = не показывать tab (non-superadmin)
+  // 2026-05-15 (quick 260515-o4o): null = не показывать таб (non-superadmin)
+  schedule: CronSchedule | null
 }
 
 // ── SettingsTabs ──────────────────────────────────────────────────
@@ -78,6 +82,7 @@ export function SettingsTabs({
   directions,
   brandsLite,
   wbTokens,
+  schedule,
 }: SettingsTabsProps) {
   return (
     <Tabs defaultValue="directions">
@@ -87,6 +92,9 @@ export function SettingsTabs({
         <TabsTrigger value="categories">Категории</TabsTrigger>
         <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
         {wbTokens && <TabsTrigger value="wb-tokens">WB API токены</TabsTrigger>}
+        {schedule && (
+          <TabsTrigger value="cron-schedule">Расписание</TabsTrigger>
+        )}
       </TabsList>
       <TabsContent value="directions">
         <DirectionsTab directions={directions} brands={brandsLite} />
@@ -103,6 +111,11 @@ export function SettingsTabs({
       {wbTokens && (
         <TabsContent value="wb-tokens">
           <WbTokensTab tokens={wbTokens} />
+        </TabsContent>
+      )}
+      {schedule && (
+        <TabsContent value="cron-schedule">
+          <CronScheduleTab schedule={schedule} />
         </TabsContent>
       )}
     </Tabs>

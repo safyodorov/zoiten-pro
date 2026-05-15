@@ -3,32 +3,38 @@ import { requireSuperadmin } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { SettingsTabs } from "@/components/settings/SettingsTabs"
 import { listWbTokens } from "@/app/actions/wb-tokens"
+import { getCronSchedule } from "@/app/actions/cron-schedule"
 
 export default async function SettingsPage() {
   await requireSuperadmin() // SUPERADMIN only (D-03)
 
-  const [brands, marketplaces, directions, wbTokens] = await Promise.all([
-    prisma.brand.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: {
-        categories: {
-          orderBy: { sortOrder: "asc" },
-          include: {
-            subcategories: { orderBy: { sortOrder: "asc" } },
-            properties: { orderBy: { sortOrder: "asc" } }, // Phase 17
+  const [brands, marketplaces, directions, wbTokens, schedule] =
+    await Promise.all([
+      prisma.brand.findMany({
+        orderBy: { sortOrder: "asc" },
+        include: {
+          categories: {
+            orderBy: { sortOrder: "asc" },
+            include: {
+              subcategories: { orderBy: { sortOrder: "asc" } },
+              properties: { orderBy: { sortOrder: "asc" } }, // Phase 17
+            },
           },
         },
-      },
-    }),
-    prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.productDirection.findMany({
-      orderBy: { sortOrder: "asc" },
-      include: {
-        brands: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true } },
-      },
-    }),
-    listWbTokens(), // Quick 260512-jxh: page защищён requireSuperadmin → wbTokens всегда загружаются
-  ])
+      }),
+      prisma.marketplace.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.productDirection.findMany({
+        orderBy: { sortOrder: "asc" },
+        include: {
+          brands: {
+            orderBy: { sortOrder: "asc" },
+            select: { id: true, name: true },
+          },
+        },
+      }),
+      listWbTokens(), // Quick 260512-jxh
+      getCronSchedule(), // Quick 260515-o4o
+    ])
 
   const brandsLite = brands.map((b) => ({
     id: b.id,
@@ -44,6 +50,7 @@ export default async function SettingsPage() {
         directions={directions}
         brandsLite={brandsLite}
         wbTokens={wbTokens}
+        schedule={schedule}
       />
     </div>
   )

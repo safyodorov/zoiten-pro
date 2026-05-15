@@ -80,8 +80,12 @@ interface WbCardsTableProps {
   // Phase 260514-mci: выбранные ярлыки для сохранения в URL при пагинации/сортировке
   selectedLabels: string[]
   linkedNmIds: string[]
-  // Quick 260515-m5o: 28-точечный массив заказов per nmId для bar chart
-  ordersTimeSeries: Record<string, Array<{ date: string; qty: number }>>
+  // Quick 260515-m5o: 28-точечный массив заказов per nmId для bar chart.
+  // Quick 260515-o4o: расширен полем buyerPrice (₽, null если нет snapshot цены).
+  ordersTimeSeries: Record<
+    string,
+    Array<{ date: string; qty: number; buyerPrice?: number | null }>
+  >
 }
 
 const PAGE_SIZES = [20, 50, 100]
