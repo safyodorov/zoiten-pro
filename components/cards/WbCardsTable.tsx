@@ -376,7 +376,7 @@ export function WbCardsTable({
                   <Tooltip>
                     <TooltipTrigger
                       render={
-                        <div className="max-w-[320px] truncate cursor-default" />
+                        <div className="max-w-[500px] truncate cursor-default" />
                       }
                     >
                       {card.name}
