@@ -26,6 +26,7 @@ import {
 } from "@/components/prices/PriceCalculatorTable"
 import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculatorTableWrapper"
 import { getUserPreference } from "@/app/actions/user-preferences"
+import { getMskTodayDate, fillTimeSeries, type DayPoint } from "@/lib/wb-orders-chart"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
@@ -289,6 +290,52 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       productToCards.set(a.product.id, [])
     }
     productToCards.get(a.product.id)!.push({ card, product: a.product })
+  }
+
+  // ── 6.5. Загрузить orders history per nmId (для expand-панели графиков) ──
+  // Окно [today-28, today-1] MSK — совпадает с /cards/wb chart.
+  // Используется только для рендера графиков в раскрываемой панели Сводки.
+  const todayMsk = getMskTodayDate()
+  const windowStart = new Date(todayMsk.getTime() - 28 * 24 * 3600_000)
+  const windowEnd = new Date(todayMsk.getTime() - 1 * 24 * 3600_000)
+
+  // Visible nmId — те, что прошли фильтр cardsInStockOnly выше (т.е. остались
+  // в productToCards). Если фильтр отключён — это все nmId.
+  const visibleNmIds = Array.from(productToCards.values())
+    .flat()
+    .map(({ card }) => card.nmId)
+
+  const ordersRows =
+    visibleNmIds.length > 0
+      ? await prisma.wbCardOrdersDaily.findMany({
+          where: {
+            nmId: { in: visibleNmIds },
+            date: { gte: windowStart, lte: windowEnd },
+          },
+          select: {
+            nmId: true,
+            date: true,
+            qty: true,
+            sellerPrice: true,
+            buyerPrice: true,
+          },
+        })
+      : []
+
+  // Группируем raw orders rows by nmId для fillTimeSeries
+  const ordersByNmId = new Map<
+    number,
+    Array<{ date: Date; qty: number; sellerPrice: number | null; buyerPrice: number | null }>
+  >()
+  for (const r of ordersRows) {
+    const arr = ordersByNmId.get(r.nmId) ?? []
+    arr.push({
+      date: r.date,
+      qty: r.qty,
+      sellerPrice: r.sellerPrice,
+      buyerPrice: r.buyerPrice,
+    })
+    ordersByNmId.set(r.nmId, arr)
   }
 
   // ── 7. Построить ProductGroup[] ─────────────────────────────────
@@ -638,6 +685,20 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       0,
     )
 
+    // Per-product: список nmId+timeSeries, прошедших фильтр
+    // (stock>0 OR sales>0 за 28д). Используется в expand-панели Сводки.
+    const productNmIdsWithCharts: Array<{ nmId: number; timeSeries: DayPoint[] }> = []
+    for (const { card } of cardRefs) {
+      const rawRows = ordersByNmId.get(card.nmId) ?? []
+      const hasStock = (card.stockQty ?? 0) > 0
+      const hasSales = rawRows.some((r) => r.qty > 0)
+      if (!hasStock && !hasSales) continue
+      productNmIdsWithCharts.push({
+        nmId: card.nmId,
+        timeSeries: fillTimeSeries(rawRows),
+      })
+    }
+
     groups.push({
       product: {
         id: firstProduct.id,
@@ -651,6 +712,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       },
       cards: cardGroups,
       totalRowsInProduct,
+      ordersCharts: productNmIdsWithCharts,
     })
   }
 
