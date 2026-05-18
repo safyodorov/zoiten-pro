@@ -6,6 +6,11 @@
 // B-1 fix: ERP_SECTION enum НЕ содержит "CARDS" — все /cards/wb actions использует "PRODUCTS"
 // (см. app/actions/wb-cards.ts).
 // W-3 fix: maxDuration=600 (backfill 45 дней может занять до 1-2 мин из-за rate limit).
+//
+// quick 260518-igw: добавлен query param ?days=N для targeted backfill последних N дней.
+// Без параметра — backfill с BACKFILL_START (2026-04-01). С ?days=N — dateFrom = today MSK - N days.
+// Используется после fix orders sync bug (rolling 7-day daily cron) чтобы быстро
+// довосстановить последние дни без длинного full re-sweep.
 
 import { NextResponse, type NextRequest } from "next/server"
 import { requireSection } from "@/lib/rbac"
@@ -14,11 +19,13 @@ import {
   upsertOrdersDaily,
   WbRateLimitError,
 } from "@/lib/wb-api"
+import { getMskTodayDate } from "@/lib/wb-orders-chart"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
 
 const BACKFILL_START = new Date("2026-04-01T00:00:00")
+const MAX_DAYS = 365
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // Dual-gate: x-cron-secret header (для orchestrator curl) ИЛИ RBAC сессия (для UI button).
@@ -35,18 +42,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // quick 260518-igw: parse ?days=N (1..365). NaN / out-of-range → ignore, fallback на BACKFILL_START.
+  const url = new URL(req.url)
+  const daysParam = url.searchParams.get("days")
+  const daysParsed = daysParam != null ? parseInt(daysParam, 10) : NaN
+  const days =
+    Number.isFinite(daysParsed) && daysParsed >= 1 && daysParsed <= MAX_DAYS
+      ? daysParsed
+      : null
+
+  let dateFrom: Date
+  if (days != null) {
+    const today = getMskTodayDate()
+    dateFrom = new Date(today.getTime() - days * 24 * 3600_000)
+  } else {
+    dateFrom = BACKFILL_START
+  }
+
   try {
     console.log(
-      `[wb-orders-backfill] start dateFrom=${BACKFILL_START.toISOString()} auth=${isCronAuth ? "cron-secret" : "rbac"}`,
+      `[wb-orders-backfill] start dateFrom=${dateFrom.toISOString()} days=${days ?? "all"} auth=${isCronAuth ? "cron-secret" : "rbac"}`,
     )
-    const rows = await fetchOrdersForRange(BACKFILL_START)
+    const rows = await fetchOrdersForRange(dateFrom)
     const { upserted } = await upsertOrdersDaily(rows)
     console.log(
       `[wb-orders-backfill] done fetched=${rows.length} upserted=${upserted}`,
     )
     return NextResponse.json({
       ok: true,
-      dateFrom: BACKFILL_START.toISOString(),
+      dateFrom: dateFrom.toISOString(),
+      days,
       rowsFetched: rows.length,
       upserted,
     })
