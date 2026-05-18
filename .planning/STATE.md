@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
 status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-18 — Completed quick 260518-hz7: feedbacks pros/cons fix — formatFeedbackBody + self-heal sync + one-shot backfill endpoint
-last_updated: "2026-05-18T09:56:39.461Z"
+stopped_at: 2026-05-18 — Completed quick 260518-igw: vertical reviews lanes + orders sync rolling 7d window (WB flag=0 фильтрует по lastChangeDate)
+last_updated: "2026-05-18T10:17:52.477Z"
 progress:
   total_phases: 15
   completed_phases: 15
@@ -286,6 +286,7 @@ None yet.
 | 260518-gg3 | Доработки графиков: single-expand /prices/wb (string\|null toggle); chart polish — dot.r=1.5, header «арт.» вместо «nm», ru-RU тысячи в tooltip и «Цена сейчас»; per-nmId легенда в expand-панели — Остаток/Дни/Рейтинг связки/Кол-во оценок + горизонтальная лента 10 последних FEEDBACK-тикетов (звёзды + цветовая шкала + hover tooltip с текстом) | 2026-05-18 | 760085a |  | [260518-gg3-cards-wb-prices-wb-1-single-expand-price](./quick/260518-gg3-cards-wb-prices-wb-1-single-expand-price/) |
 | 260518-h6p | Лента отзывов в expand-панели /prices/wb — две строки per nmId: «По связке (imtId)» сверху + «По товару (nmId)» снизу; топ-10 в каждой; пустые строки скрываются; один SupportTicket.findMany по объединённому nmId списку всех связок | 2026-05-18 | b250b8f |  | [260518-h6p-prices-wb-expand-per-nmid-imtid-nmid-nmi](./quick/260518-h6p-prices-wb-expand-per-nmid-imtid-nmid-nmi/) |
 | 260518-hz7 | Фикс WB feedbacks sync: формат «Достоинства/Недостатки» теряется — добавлен helper formatFeedbackBody (text + pros + cons с метками), syncFeedbacks использует helper + self-heal для существующих INBOUND-message, one-shot backfill endpoint /api/cron/feedbacks-backfill-pros-cons (x-cron-secret, idempotent, days param) | 2026-05-18 | dbc43ba |  | [260518-hz7-wb-feedbacks-sync-lib-support-sync-ts-su](./quick/260518-hz7-wb-feedbacks-sync-lib-support-sync-ts-su/) |
+| 260518-igw | Три доработки: (1) pinned-отзывы WB — diagnostic raw API подтвердил отсутствие поля → feature deferred с TODO; (2) UI rework /prices/wb expand — вертикальные lanes отзывов справа от графика (chart + metadata + связка + товар); (3) BUG FIX orders sync — WB Statistics Orders flag=0 фильтрует по lastChangeDate (не date) → daily cron теперь rolling 7-day re-sweep вместо yesterday-only, `/api/wb-orders-backfill?days=N` для targeted backfill | 2026-05-18 | fc38275 |  | [260518-igw-pinned-wb-ui-rework-prices-wb-vertical-b](./quick/260518-igw-pinned-wb-ui-rework-prices-wb-vertical-b/) |
 
 ### Blockers/Concerns
 
@@ -301,6 +302,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T09:56:39.461Z
-Stopped at: Completed quick 260518-hz7 — feedbacks pros/cons fix + backfill endpoint
+Last session: 2026-05-18T10:17:52.477Z
+Stopped at: Completed quick 260518-igw — vertical reviews lanes + orders sync rolling 7d window fix
 Resume file: None
