@@ -178,8 +178,17 @@ export interface ProductGroup {
   /** Сумма priceRows.length по всем cards — нужно для rowSpan Фото+Сводка. */
   totalRowsInProduct: number
   /** Список nmId с time series заказов, прошедших фильтр (stock>0 OR sales>0 за 28д).
-   *  Если массив пуст или undefined — раскрытие panel недоступно, чевнон в Сводке скрыт. */
-  ordersCharts?: Array<{ nmId: number; timeSeries: DayPoint[] }>
+   *  Если массив пуст или undefined — раскрытие panel недоступно, чевнон в Сводке скрыт.
+   *  quick 260518-gg3: per-nmId метаданные (stock/rating/reviews) для legend + лента отзывов. */
+  ordersCharts?: Array<{
+    nmId: number
+    timeSeries: DayPoint[]
+    stockQty: number | null
+    avgSalesSpeed7d: number | null
+    rating: number | null
+    reviewsTotal: number | null
+    reviews: Array<{ id: string; rating: number; text: string; createdAt: string }>
+  }>
 }
 
 interface PriceCalculatorTableProps {

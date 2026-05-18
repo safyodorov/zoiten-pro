@@ -338,6 +338,57 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     ordersByNmId.set(r.nmId, arr)
   }
 
+  // ── 6.6. Загрузить последние отзывы per nmId (для ленты в expand-панели) ──
+  // quick 260518-gg3: SupportTicket channel=FEEDBACK, rating IS NOT NULL,
+  // top-10 desc per nmId. Текст отзыва — из первого INBOUND SupportMessage;
+  // fallback на previewText.
+  type FeedbackItem = {
+    id: string
+    rating: number
+    text: string
+    createdAt: string // ISO string для RSC→client serialization
+  }
+
+  const reviewsRaw =
+    visibleNmIds.length > 0
+      ? await prisma.supportTicket.findMany({
+          where: {
+            channel: "FEEDBACK",
+            nmId: { in: visibleNmIds },
+            rating: { not: null },
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            nmId: true,
+            rating: true,
+            previewText: true,
+            createdAt: true,
+            messages: {
+              where: { direction: "INBOUND" },
+              orderBy: { sentAt: "asc" },
+              take: 1,
+              select: { text: true },
+            },
+          },
+        })
+      : []
+
+  const reviewsByNmId: Record<number, FeedbackItem[]> = {}
+  for (const t of reviewsRaw) {
+    if (t.nmId == null || t.rating == null) continue
+    const arr = reviewsByNmId[t.nmId] ?? []
+    if (arr.length >= 10) continue
+    const text = t.messages[0]?.text ?? t.previewText ?? ""
+    arr.push({
+      id: t.id,
+      rating: t.rating,
+      text,
+      createdAt: t.createdAt.toISOString(),
+    })
+    reviewsByNmId[t.nmId] = arr
+  }
+
   // ── 7. Построить ProductGroup[] ─────────────────────────────────
   const groups: ProductGroup[] = []
 
@@ -687,7 +738,16 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
 
     // Per-product: список nmId+timeSeries, прошедших фильтр
     // (stock>0 OR sales>0 за 28д). Используется в expand-панели Сводки.
-    const productNmIdsWithCharts: Array<{ nmId: number; timeSeries: DayPoint[] }> = []
+    // quick 260518-gg3: расширено per-nmId метаданными для legend + лента отзывов.
+    const productNmIdsWithCharts: Array<{
+      nmId: number
+      timeSeries: DayPoint[]
+      stockQty: number | null
+      avgSalesSpeed7d: number | null
+      rating: number | null
+      reviewsTotal: number | null
+      reviews: FeedbackItem[]
+    }> = []
     for (const { card } of cardRefs) {
       const rawRows = ordersByNmId.get(card.nmId) ?? []
       const hasStock = (card.stockQty ?? 0) > 0
@@ -696,6 +756,12 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       productNmIdsWithCharts.push({
         nmId: card.nmId,
         timeSeries: fillTimeSeries(rawRows),
+        stockQty: card.stockQty ?? null,
+        avgSalesSpeed7d: card.avgSalesSpeed7d ?? null,
+        rating: card.wbStoreRating ?? card.ratingImt ?? card.rating ?? null,
+        reviewsTotal:
+          card.wbStoreFeedbacks ?? card.reviewsTotalImt ?? card.reviewsTotal ?? null,
+        reviews: reviewsByNmId[card.nmId] ?? [],
       })
     }
 
