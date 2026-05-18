@@ -1271,7 +1271,7 @@ export function PriceCalculatorTable({
                       colSpan={expandColSpan}
                       className="bg-muted/10 p-0 border-b"
                     >
-                      <div className="flex flex-col gap-3 items-stretch p-3">
+                      <div className="grid grid-cols-2 gap-3 p-3">
                         {charts.map((c) => {
                           // quick 260518-gg3: per-nmId блок Chart+Legend.
                           // quick 260518-igw: переход с flex-col (legend под chart)
