@@ -13,6 +13,7 @@ import {
   getChatEvents,
   downloadChatAttachment,
   WbRateLimitError,
+  formatFeedbackBody,
   type Feedback,
   type Question,
   type Claim,
@@ -230,13 +231,15 @@ export async function syncSupport(
 
         const inbound = await tx.supportMessage.findFirst({
           where: { ticketId: ticket.id, direction: "INBOUND" },
+          select: { id: true, text: true },
         })
         if (!inbound) {
+          const formatted = formatFeedbackBody(fb)
           const msg = await tx.supportMessage.create({
             data: {
               ticketId: ticket.id,
               direction: "INBOUND",
-              text: fb.text,
+              text: formatted || null,
               authorId: null,
               wbSentAt: wbCreatedAt,
             },
@@ -273,6 +276,18 @@ export async function syncSupport(
               ticketId: ticket.id,
               messageId: msg.id,
               mediaType: "VIDEO",
+            })
+          }
+        } else {
+          // Self-heal: если existing INBOUND text не содержит pros/cons из текущего fb,
+          // перегенерируем (idempotent). Защищает от регрессии раньше синканутых feedback'ов
+          // без необходимости запускать backfill endpoint. Idempotent skip — если новый текст
+          // совпадает с current, update не вызывается.
+          const formatted = formatFeedbackBody(fb)
+          if (formatted && formatted !== inbound.text) {
+            await tx.supportMessage.update({
+              where: { id: inbound.id },
+              data: { text: formatted },
             })
           }
         }

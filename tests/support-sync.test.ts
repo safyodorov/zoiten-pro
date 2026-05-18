@@ -36,6 +36,11 @@ vi.mock("@/lib/prisma", () => ({
             prismaState.messages.push(m)
             return m
           },
+          update: async ({ where, data }: any) => {
+            const m = prismaState.messages.find((x) => x.id === where.id)
+            if (m) Object.assign(m, data)
+            return m
+          },
         },
         supportMedia: {
           create: async ({ data }: any) => {
@@ -59,6 +64,18 @@ vi.mock("@/lib/prisma", () => ({
 vi.mock("@/lib/wb-support-api", () => ({
   listFeedbacks: vi.fn(),
   listQuestions: vi.fn(),
+  // Helper из quick 260518-hz7 — pure function, можно мокать inline без importOriginal.
+  // Воспроизводит логику lib/wb-support-api.ts:formatFeedbackBody.
+  formatFeedbackBody: (fb: { text?: string | null; pros?: string | null; cons?: string | null }) => {
+    const parts: string[] = []
+    const text = fb.text?.trim()
+    const pros = fb.pros?.trim()
+    const cons = fb.cons?.trim()
+    if (text) parts.push(text)
+    if (pros) parts.push(`Достоинства: ${pros}`)
+    if (cons) parts.push(`Недостатки: ${cons}`)
+    return parts.join("\n\n")
+  },
   WbRateLimitError: class WbRateLimitError extends Error {
     retryAfterSec: number
     endpoint: string
