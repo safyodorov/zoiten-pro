@@ -3,7 +3,7 @@
 //
 // Логика:
 //   1. Дёргаем WB Feedbacks API за окно `days` (default 180, query ?days=N, max 365)
-//      isAnswered=undefined (без фильтра — и отвеченные, и нет)
+//      Итерируем по isAnswered=[false, true] — WB требует обязательный параметр.
 //   2. Для каждого fb с непустым pros||cons:
 //      - находим SupportTicket по channel=FEEDBACK + wbExternalId=fb.id
 //      - находим первый INBOUND SupportMessage (orderBy sentAt asc, take 1)
@@ -50,69 +50,73 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const errors: string[] = []
 
   try {
-    // Пагинация: take=5000 (max WB), skip += 5000 до empty page.
-    for (let skip = 0; ; skip += 5000) {
-      let batch: Awaited<ReturnType<typeof listFeedbacks>>
-      try {
-        batch = await listFeedbacks({ take: 5000, skip, dateFrom, dateTo })
-      } catch (err) {
-        if (err instanceof WbRateLimitError) {
-          errors.push(`WB rate-limit на skip=${skip}: ${err.message}`)
-        } else {
-          errors.push(
-            `listFeedbacks skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
-          )
-        }
-        break
-      }
-      if (batch.length === 0) break
-
-      for (const fb of batch) {
-        scanned++
-        const hasPros = !!fb.pros?.trim()
-        const hasCons = !!fb.cons?.trim()
-        if (!hasPros && !hasCons) {
-          skipped++
-          continue
-        }
+    // WB Feedbacks API требует isAnswered явно — иначе 400 "Плохой формат isAnswered".
+    // Идём по обоим: сначала un-answered, потом answered.
+    for (const isAnswered of [false, true]) {
+      // Пагинация: take=5000 (max WB), skip += 5000 до empty page.
+      for (let skip = 0; ; skip += 5000) {
+        let batch: Awaited<ReturnType<typeof listFeedbacks>>
         try {
-          const ticket = await prisma.supportTicket.findUnique({
-            where: {
-              channel_wbExternalId: { channel: "FEEDBACK", wbExternalId: fb.id },
-            },
-            select: { id: true },
-          })
-          if (!ticket) {
-            skipped++
-            continue
-          }
-          const inbound = await prisma.supportMessage.findFirst({
-            where: { ticketId: ticket.id, direction: "INBOUND" },
-            orderBy: { sentAt: "asc" },
-            select: { id: true, text: true },
-          })
-          if (!inbound) {
-            skipped++
-            continue
-          }
-          const newText = formatFeedbackBody(fb)
-          if (!newText || newText === inbound.text) {
-            skipped++
-            continue
-          }
-          await prisma.supportMessage.update({
-            where: { id: inbound.id },
-            data: { text: newText },
-          })
-          updated++
+          batch = await listFeedbacks({ isAnswered, take: 5000, skip, dateFrom, dateTo })
         } catch (err) {
-          errors.push(
-            `fb ${fb.id}: ${err instanceof Error ? err.message : "unknown"}`
-          )
+          if (err instanceof WbRateLimitError) {
+            errors.push(`WB rate-limit на isAnswered=${isAnswered} skip=${skip}: ${err.message}`)
+          } else {
+            errors.push(
+              `listFeedbacks isAnswered=${isAnswered} skip=${skip}: ${err instanceof Error ? err.message : "unknown"}`
+            )
+          }
+          break
         }
-      }
+        if (batch.length === 0) break
 
-      if (batch.length < 5000) break
+        for (const fb of batch) {
+          scanned++
+          const hasPros = !!fb.pros?.trim()
+          const hasCons = !!fb.cons?.trim()
+          if (!hasPros && !hasCons) {
+            skipped++
+            continue
+          }
+          try {
+            const ticket = await prisma.supportTicket.findUnique({
+              where: {
+                channel_wbExternalId: { channel: "FEEDBACK", wbExternalId: fb.id },
+              },
+              select: { id: true },
+            })
+            if (!ticket) {
+              skipped++
+              continue
+            }
+            const inbound = await prisma.supportMessage.findFirst({
+              where: { ticketId: ticket.id, direction: "INBOUND" },
+              orderBy: { sentAt: "asc" },
+              select: { id: true, text: true },
+            })
+            if (!inbound) {
+              skipped++
+              continue
+            }
+            const newText = formatFeedbackBody(fb)
+            if (!newText || newText === inbound.text) {
+              skipped++
+              continue
+            }
+            await prisma.supportMessage.update({
+              where: { id: inbound.id },
+              data: { text: newText },
+            })
+            updated++
+          } catch (err) {
+            errors.push(
+              `fb ${fb.id}: ${err instanceof Error ? err.message : "unknown"}`
+            )
+          }
+        }
+
+        if (batch.length < 5000) break
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Ошибка backfill"
