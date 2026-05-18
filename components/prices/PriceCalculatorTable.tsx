@@ -45,7 +45,9 @@ import {
   ColumnResizeHandle,
 } from "@/lib/use-resizable-columns"
 import { copyToClipboard } from "@/lib/copy-to-clipboard"
-import { ChevronDown, Eye, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Eye, Trash2 } from "lucide-react"
+import { WbCardOrdersChart } from "@/components/cards/WbCardOrdersChart"
+import type { DayPoint } from "@/lib/wb-orders-chart"
 
 // ──────────────────────────────────────────────────────────────────
 // Types (exported для использования в плане 07-08 + плане 07-09)
@@ -175,6 +177,9 @@ export interface ProductGroup {
   cards: WbCardRowGroup[]
   /** Сумма priceRows.length по всем cards — нужно для rowSpan Фото+Сводка. */
   totalRowsInProduct: number
+  /** Список nmId с time series заказов, прошедших фильтр (stock>0 OR sales>0 за 28д).
+   *  Если массив пуст или undefined — раскрытие panel недоступно, чевнон в Сводке скрыт. */
+  ordersCharts?: Array<{ nmId: number; timeSeries: DayPoint[] }>
 }
 
 interface PriceCalculatorTableProps {
@@ -556,6 +561,29 @@ export function PriceCalculatorTable({
     })
   }, [scheduleHiddenSave])
 
+  // ── Expanded Product rows (раскрываемые панели графиков заказов) ──
+  // Используется Set, чтобы можно было раскрыть несколько товаров одновременно
+  // (UX: пользователь сравнивает динамику между товарами).
+  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+
+  const toggleProductExpand = useCallback((productId: string) => {
+    setExpandedProductIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(productId)) next.delete(productId)
+      else next.add(productId)
+      return next
+    })
+  }, [])
+
+  // Количество видимых "scroll" колонок (включая status) — для colSpan
+  // expanded row. SCROLL_COLUMNS уже содержит status первой записью.
+  const visibleScrollCount = SCROLL_COLUMNS.filter(
+    ({ key }) => !hiddenColumns.has(key),
+  ).length
+  const expandColSpan = 4 + visibleScrollCount
+
   // quick 260513-phu: resize-state (timers, refs, handlers, cleanup) живёт
   // внутри useResizableColumns hook. Здесь остаётся только cleanup для
   // hiddenColumns save timer (специфичен для PriceCalculatorTable).
@@ -713,7 +741,7 @@ export function PriceCalculatorTable({
               // Плоский индекс строки внутри Product (для rowSpan якорей)
               let productRowIdx = 0
 
-              return group.cards.flatMap((cardGroup, cardIdx) =>
+              const rowTrs = group.cards.flatMap((cardGroup, cardIdx) =>
                 cardGroup.priceRows.map((row, rowIdx) => {
                   const isFirstRowOfProduct = productRowIdx === 0
                   const isFirstRowOfCard = rowIdx === 0
@@ -776,19 +804,46 @@ export function PriceCalculatorTable({
                         </td>
                       )}
 
-                      {/* Sticky 2: Сводка (rowSpan всего Product) */}
+                      {/* Sticky 2: Сводка (rowSpan всего Product).
+                          quick 260518-fg5: клик раскрывает панель графиков заказов
+                          (если есть nmId, прошедшие фильтр stock>0 OR sales>0 за 28д). */}
                       {isFirstRowOfProduct && (
                         <td
                           rowSpan={group.totalRowsInProduct}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            // stopPropagation — иначе всплывёт в <tr onClick> и откроет модалку
+                            e.stopPropagation()
+                            if ((group.ordersCharts?.length ?? 0) > 0) {
+                              toggleProductExpand(group.product.id)
+                            }
+                          }}
                           style={{
                             width: columnWidths.svodka,
                             minWidth: columnWidths.svodka,
                             left: stickyLefts.svodka,
                           }}
-                          className="sticky z-10 bg-background border-r align-top p-3 cursor-default"
+                          className={cn(
+                            "sticky z-10 bg-background border-r align-top p-3",
+                            (group.ordersCharts?.length ?? 0) > 0
+                              ? "cursor-pointer hover:bg-muted/40"
+                              : "cursor-default",
+                            expandedProductIds.has(group.product.id) && "bg-muted/30",
+                          )}
                         >
-                          <div className="flex flex-col gap-1">
+                          <div className="flex flex-col gap-1 relative">
+                            {/* Chevron-индикатор раскрытия в правом верхнем углу */}
+                            {(group.ordersCharts?.length ?? 0) > 0 && (
+                              <span
+                                className="absolute top-0 right-0 text-muted-foreground"
+                                aria-hidden="true"
+                              >
+                                {expandedProductIds.has(group.product.id) ? (
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                )}
+                              </span>
+                            )}
                             {/* quick 260513-phu: Tooltip (always-on) с полным
                                 названием + line-clamp-2 (раньше было -3).
                                 base-ui TooltipTrigger через render-prop
@@ -1055,6 +1110,41 @@ export function PriceCalculatorTable({
                     </tr>
                   )
                 }),
+              )
+
+              // quick 260518-fg5: раскрываемая панель с графиками заказов per nmId.
+              // Рендерим после последней ценовой строки Product-группы.
+              // colSpan = 4 sticky + visibleScrollCount (status уже в SCROLL_COLUMNS).
+              const isExpanded = expandedProductIds.has(group.product.id)
+              const charts = group.ordersCharts ?? []
+              const expandedTr =
+                isExpanded && charts.length > 0 ? (
+                  <tr
+                    key={`${group.product.id}-expand`}
+                    className="hover:bg-transparent"
+                  >
+                    <td
+                      colSpan={expandColSpan}
+                      className="bg-muted/10 p-0 border-b"
+                    >
+                      <div className="flex flex-row flex-wrap gap-3 justify-start items-start p-3">
+                        {charts.map(({ nmId, timeSeries }) => (
+                          <WbCardOrdersChart
+                            key={nmId}
+                            nmId={nmId}
+                            timeSeries={timeSeries}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ) : null
+
+              return (
+                <React.Fragment key={group.product.id}>
+                  {rowTrs}
+                  {expandedTr}
+                </React.Fragment>
               )
             })}
           </tbody>
