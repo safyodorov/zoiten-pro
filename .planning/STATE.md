@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
 status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-18 — Completed quick 260518-h6p: лента отзывов в две строки «По связке / По товару» в /prices/wb
-last_updated: "2026-05-18T09:22:27.943Z"
+stopped_at: 2026-05-18 — Completed quick 260518-hz7: feedbacks pros/cons fix — formatFeedbackBody + self-heal sync + one-shot backfill endpoint
+last_updated: "2026-05-18T09:56:39.461Z"
 progress:
   total_phases: 15
   completed_phases: 15
@@ -285,6 +285,7 @@ None yet.
 | 260518-fg5 | /prices/wb expandable row с графиками заказов per-nmId (как в /cards/wb): клик по Сводке раскрывает панель с WbCardOrdersChart per артикул, фильтр nmId по stock>0 OR sales>0 за 28д, переиспользование chart-компонента из /cards/wb | 2026-05-18 | db4128c |  | [260518-fg5-prices-wb-expandable-row-cards-wb-per-nm](./quick/260518-fg5-prices-wb-expandable-row-cards-wb-per-nm/) |
 | 260518-gg3 | Доработки графиков: single-expand /prices/wb (string\|null toggle); chart polish — dot.r=1.5, header «арт.» вместо «nm», ru-RU тысячи в tooltip и «Цена сейчас»; per-nmId легенда в expand-панели — Остаток/Дни/Рейтинг связки/Кол-во оценок + горизонтальная лента 10 последних FEEDBACK-тикетов (звёзды + цветовая шкала + hover tooltip с текстом) | 2026-05-18 | 760085a |  | [260518-gg3-cards-wb-prices-wb-1-single-expand-price](./quick/260518-gg3-cards-wb-prices-wb-1-single-expand-price/) |
 | 260518-h6p | Лента отзывов в expand-панели /prices/wb — две строки per nmId: «По связке (imtId)» сверху + «По товару (nmId)» снизу; топ-10 в каждой; пустые строки скрываются; один SupportTicket.findMany по объединённому nmId списку всех связок | 2026-05-18 | b250b8f |  | [260518-h6p-prices-wb-expand-per-nmid-imtid-nmid-nmi](./quick/260518-h6p-prices-wb-expand-per-nmid-imtid-nmid-nmi/) |
+| 260518-hz7 | Фикс WB feedbacks sync: формат «Достоинства/Недостатки» теряется — добавлен helper formatFeedbackBody (text + pros + cons с метками), syncFeedbacks использует helper + self-heal для существующих INBOUND-message, one-shot backfill endpoint /api/cron/feedbacks-backfill-pros-cons (x-cron-secret, idempotent, days param) | 2026-05-18 | dbc43ba |  | [260518-hz7-wb-feedbacks-sync-lib-support-sync-ts-su](./quick/260518-hz7-wb-feedbacks-sync-lib-support-sync-ts-su/) |
 
 ### Blockers/Concerns
 
@@ -300,6 +301,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T09:22:27.943Z
-Stopped at: Completed quick 260518-h6p — лента отзывов в две строки «По связке / По товару» в /prices/wb
+Last session: 2026-05-18T09:56:39.461Z
+Stopped at: Completed quick 260518-hz7 — feedbacks pros/cons fix + backfill endpoint
 Resume file: None
