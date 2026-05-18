@@ -589,8 +589,10 @@ function NmIdLegend({
   // потом лента «По связке», потом «По товару»). Пустая лента (вместе с подписью)
   // не рендерится. ReviewChip стэкается вертикально в каждой ленте.
   return (
-    <div className="flex flex-row gap-3 items-start text-xs">
-      {/* Метаданные — vertical column, каждая строка label/value горизонтально */}
+    <div className="flex flex-row gap-3 items-center text-xs">
+      {/* Метаданные — vertical column, каждая строка label/value горизонтально.
+          items-center на родителе центрирует metadata-блок по вертикали относительно
+          review lanes (которые обычно выше). */}
       <div className="flex flex-col gap-1 min-w-[140px]">
         <LegendItem
           label="Остаток"
@@ -1285,7 +1287,7 @@ export function PriceCalculatorTable({
                           return (
                             <div
                               key={c.nmId}
-                              className="flex flex-row gap-3 items-start flex-wrap"
+                              className="flex flex-row gap-3 items-center flex-wrap"
                             >
                               <WbCardOrdersChart
                                 nmId={c.nmId}
