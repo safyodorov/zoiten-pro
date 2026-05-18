@@ -518,8 +518,11 @@ const RATING_BG: Record<number, string> = {
 }
 
 function LegendItem({ label, value }: { label: string; value: string }) {
+  // quick 260518-igw: горизонтальная строка label/value для vertical metadata column.
+  // Раньше был flex-col (label сверху, value снизу) — сейчас единая строка ради компактности
+  // справа от графика.
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-row justify-between gap-2 whitespace-nowrap">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value}</span>
     </div>
@@ -581,47 +584,51 @@ function NmIdLegend({
     byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
   }
 }) {
+  // quick 260518-igw: vertical layout — metadata column + 2 vertical review lanes
+  // (По связке / По товару) справа от графика. Outer flex-row (метаданные слева,
+  // потом лента «По связке», потом «По товару»). Пустая лента (вместе с подписью)
+  // не рендерится. ReviewChip стэкается вертикально в каждой ленте.
   return (
-    <div className="max-w-[640px] px-2 pb-2 flex flex-col gap-2">
-      {/* Метаданные — без изменений */}
-      <div className="flex flex-row gap-4 text-xs">
+    <div className="flex flex-row gap-3 items-start text-xs">
+      {/* Метаданные — vertical column, каждая строка label/value горизонтально */}
+      <div className="flex flex-col gap-1 min-w-[140px]">
         <LegendItem
           label="Остаток"
           value={stockQty != null ? `${stockQty} шт` : "—"}
         />
         <LegendItem
-          label="Остаток в днях"
+          label="Дни"
           value={daysLeft != null ? `${daysLeft} дн` : "—"}
         />
         <LegendItem
-          label="Рейтинг связки"
+          label="Рейтинг"
           value={rating != null ? rating.toFixed(1) : "—"}
         />
         <LegendItem
-          label="Кол-во оценок"
+          label="Оценок"
           value={reviewsTotal != null ? `${reviewsTotal}` : "—"}
         />
       </div>
-      {/* quick 260518-h6p: две строки отзывов — по связке и по товару.
-          Пустые ленты НЕ рендерятся (вместе с подписью). */}
+      {/* Лента «По связке» — vertical stack, рендерится только если есть отзывы */}
       {reviews.byImt.length > 0 && (
-        <div className="flex flex-row items-center gap-2">
+        <div className="flex flex-col gap-1">
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
             По связке ({reviews.byImt.length})
           </span>
-          <div className="flex flex-row gap-1 flex-wrap">
+          <div className="flex flex-col gap-1">
             {reviews.byImt.map((r) => (
               <ReviewChip key={`imt-${r.id}`} review={r} />
             ))}
           </div>
         </div>
       )}
+      {/* Лента «По товару» — vertical stack */}
       {reviews.byNmId.length > 0 && (
-        <div className="flex flex-row items-center gap-2">
+        <div className="flex flex-col gap-1">
           <span className="text-[10px] text-muted-foreground whitespace-nowrap">
             По товару ({reviews.byNmId.length})
           </span>
-          <div className="flex flex-row gap-1 flex-wrap">
+          <div className="flex flex-col gap-1">
             {reviews.byNmId.map((r) => (
               <ReviewChip key={`nm-${r.id}`} review={r} />
             ))}
@@ -1262,9 +1269,13 @@ export function PriceCalculatorTable({
                       colSpan={expandColSpan}
                       className="bg-muted/10 p-0 border-b"
                     >
-                      <div className="flex flex-row flex-wrap gap-3 justify-start items-start p-3">
+                      <div className="flex flex-col gap-3 items-stretch p-3">
                         {charts.map((c) => {
                           // quick 260518-gg3: per-nmId блок Chart+Legend.
+                          // quick 260518-igw: переход с flex-col (legend под chart)
+                          // на flex-row (chart слева + metadata + 2 review lanes справа).
+                          // Outer flex-col укладывает per-nmId блоки вертикально друг под другом —
+                          // потому что строка теперь шире (640px chart + ~250px legend).
                           const daysLeft =
                             c.avgSalesSpeed7d != null &&
                             c.avgSalesSpeed7d > 0 &&
@@ -1272,7 +1283,10 @@ export function PriceCalculatorTable({
                               ? Math.floor(c.stockQty / c.avgSalesSpeed7d)
                               : null
                           return (
-                            <div key={c.nmId} className="flex flex-col gap-2">
+                            <div
+                              key={c.nmId}
+                              className="flex flex-row gap-3 items-start flex-wrap"
+                            >
                               <WbCardOrdersChart
                                 nmId={c.nmId}
                                 timeSeries={c.timeSeries}
