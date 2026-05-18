@@ -85,6 +85,26 @@ export interface Feedback {
   video: FeedbackVideo | null
 }
 
+/**
+ * Склеивает text + Достоинства + Недостатки в единый body для SupportMessage.text.
+ * Пустые/null/whitespace части пропускаются. Все пустые → "".
+ * Используется при создании INBOUND message из WB Feedback (sync + backfill).
+ */
+export function formatFeedbackBody(fb: {
+  text?: string | null
+  pros?: string | null
+  cons?: string | null
+}): string {
+  const parts: string[] = []
+  const text = fb.text?.trim()
+  const pros = fb.pros?.trim()
+  const cons = fb.cons?.trim()
+  if (text) parts.push(text)
+  if (pros) parts.push(`Достоинства: ${pros}`)
+  if (cons) parts.push(`Недостатки: ${cons}`)
+  return parts.join("\n\n")
+}
+
 export interface Question {
   id: string
   text: string
