@@ -342,6 +342,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
   // quick 260518-gg3: SupportTicket channel=FEEDBACK, rating IS NOT NULL,
   // top-10 desc per nmId. Текст отзыва — из первого INBOUND SupportMessage;
   // fallback на previewText.
+  // quick 260518-h6p: расширение — две ленты per nmId-блок:
+  //   byImt  = top-10 desc по ВСЕМ nmId той же склейки (imtId)
+  //   byNmId = top-10 desc по конкретному nmId
   type FeedbackItem = {
     id: string
     rating: number
@@ -349,12 +352,51 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     createdAt: string // ISO string для RSC→client serialization
   }
 
+  // quick 260518-h6p: индексы для группировки отзывов по imtId.
+  // imtIdsByNmId: для каждого visible nmId → его imtId (или null).
+  // nmIdsByImtId: для каждой imtId → ВСЕ nmId этой склейки (включая невидимые!).
+  //   Нам нужны feedbacks с любого nmId склейки — даже если конкретный вариант
+  //   отфильтрован (cardsInStockOnly), его отзывы должны попасть в byImt.
+  const imtIdsByNmId = new Map<number, number | null>()
+  for (const c of wbCards) {
+    if (visibleNmIds.includes(c.nmId)) imtIdsByNmId.set(c.nmId, c.imtId ?? null)
+  }
+  const relevantImtIds = Array.from(
+    new Set(Array.from(imtIdsByNmId.values()).filter((v): v is number => v != null)),
+  )
+
+  // Подтянуть ВСЕ WbCard с этими imtId (нам нужны их nmId для расширения запроса
+  // SupportTicket). Используем lightweight select, soft-deleted тоже включаем —
+  // удалённая карточка может содержать релевантные исторические отзывы.
+  const cardsInImts = relevantImtIds.length > 0
+    ? await prisma.wbCard.findMany({
+        where: { imtId: { in: relevantImtIds } },
+        select: { nmId: true, imtId: true },
+      })
+    : []
+
+  const nmIdsByImtId = new Map<number, number[]>()
+  for (const c of cardsInImts) {
+    if (c.imtId == null) continue
+    const arr = nmIdsByImtId.get(c.imtId) ?? []
+    arr.push(c.nmId)
+    nmIdsByImtId.set(c.imtId, arr)
+  }
+
+  // allRelatedNmIds = union(visibleNmIds, всех nmId всех relevant imtId)
+  const allRelatedNmIds = Array.from(
+    new Set([
+      ...visibleNmIds,
+      ...cardsInImts.map((c) => c.nmId),
+    ]),
+  )
+
   const reviewsRaw =
     visibleNmIds.length > 0
       ? await prisma.supportTicket.findMany({
           where: {
             channel: "FEEDBACK",
-            nmId: { in: visibleNmIds },
+            nmId: { in: allRelatedNmIds },
             rating: { not: null },
           },
           orderBy: { createdAt: "desc" },
@@ -374,11 +416,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         })
       : []
 
-  const reviewsByNmId: Record<number, FeedbackItem[]> = {}
+  // Группируем feedbacks один раз по nmId.
+  const allByNmId = new Map<number, FeedbackItem[]>()
   for (const t of reviewsRaw) {
     if (t.nmId == null || t.rating == null) continue
-    const arr = reviewsByNmId[t.nmId] ?? []
-    if (arr.length >= 10) continue
+    const arr = allByNmId.get(t.nmId) ?? []
     const text = t.messages[0]?.text ?? t.previewText ?? ""
     arr.push({
       id: t.id,
@@ -386,7 +428,33 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       text,
       createdAt: t.createdAt.toISOString(),
     })
-    reviewsByNmId[t.nmId] = arr
+    allByNmId.set(t.nmId, arr)
+  }
+
+  // Per visibleNmId формируем два feed:
+  //  - byNmId: top-10 desc только по этому nmId
+  //  - byImt: top-10 desc по ВСЕМ nmId той же склейки (если imtId есть)
+  // reviewsRaw уже отсортирован orderBy createdAt desc → slice(0,10) даст top-10.
+  const reviewsByNmId: Record<
+    number,
+    { byImt: FeedbackItem[]; byNmId: FeedbackItem[] }
+  > = {}
+  for (const nmId of visibleNmIds) {
+    const imtId = imtIdsByNmId.get(nmId) ?? null
+    const byNmIdArr = (allByNmId.get(nmId) ?? []).slice(0, 10)
+    let byImtArr: FeedbackItem[] = []
+    if (imtId != null) {
+      const siblingNmIds = nmIdsByImtId.get(imtId) ?? []
+      // Собираем feedbacks всех nmId склейки, сортировка по createdAt desc.
+      const merged: FeedbackItem[] = []
+      for (const s of siblingNmIds) {
+        const arr = allByNmId.get(s)
+        if (arr) merged.push(...arr)
+      }
+      merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      byImtArr = merged.slice(0, 10)
+    }
+    reviewsByNmId[nmId] = { byImt: byImtArr, byNmId: byNmIdArr }
   }
 
   // ── 7. Построить ProductGroup[] ─────────────────────────────────
@@ -746,7 +814,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       avgSalesSpeed7d: number | null
       rating: number | null
       reviewsTotal: number | null
-      reviews: FeedbackItem[]
+      reviews: { byImt: FeedbackItem[]; byNmId: FeedbackItem[] }
     }> = []
     for (const { card } of cardRefs) {
       const rawRows = ordersByNmId.get(card.nmId) ?? []
@@ -761,7 +829,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         rating: card.wbStoreRating ?? card.ratingImt ?? card.rating ?? null,
         reviewsTotal:
           card.wbStoreFeedbacks ?? card.reviewsTotalImt ?? card.reviewsTotal ?? null,
-        reviews: reviewsByNmId[card.nmId] ?? [],
+        reviews: reviewsByNmId[card.nmId] ?? { byImt: [], byNmId: [] },
       })
     }
 
