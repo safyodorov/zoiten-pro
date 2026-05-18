@@ -45,7 +45,7 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
       <div className="grid grid-cols-[1fr_auto] gap-6 items-center rounded-md border bg-card p-3">
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
-            nm {nmId} · заказы и цена покупателя · 28 дней
+            арт. {nmId} · заказы и цена покупателя · 28 дней
           </div>
           <ChartContainer config={chartConfig} className="h-40 w-full">
             <ComposedChart
@@ -88,6 +88,43 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
                 content={
                   <ChartTooltipContent
                     labelFormatter={(label) => `Дата: ${label}`}
+                    formatter={(value, name, item) => {
+                      // quick 260518-gg3: ru-RU тысячи с пробелом + пробел
+                      // между label и value (mimicking default ChartTooltipContent layout).
+                      const numValue =
+                        typeof value === "number" ? value : Number(value)
+                      const formatted = Number.isFinite(numValue)
+                        ? numValue.toLocaleString("ru-RU")
+                        : String(value)
+                      const label =
+                        name === "qty"
+                          ? "Заказы"
+                          : name === "buyerPrice"
+                            ? "Цена покупателя (₽)"
+                            : String(name)
+                      const indicatorColor =
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (item as any)?.payload?.fill ?? (item as any)?.color
+                      return (
+                        <>
+                          <div
+                            className="shrink-0 rounded-[2px] h-2.5 w-2.5"
+                            style={{
+                              backgroundColor: indicatorColor,
+                              borderColor: indicatorColor,
+                            }}
+                          />
+                          <div className="flex flex-1 justify-between items-center leading-none gap-2">
+                            <span className="text-muted-foreground">
+                              {label}
+                            </span>
+                            <span className="font-mono font-medium text-foreground tabular-nums">
+                              {formatted}
+                            </span>
+                          </div>
+                        </>
+                      )
+                    }}
                   />
                 }
               />
@@ -104,7 +141,7 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
                 dataKey="buyerPrice"
                 stroke="var(--color-buyerPrice)"
                 strokeWidth={2}
-                dot={{ r: 3, fill: "var(--color-buyerPrice)" }}
+                dot={{ r: 1.5, fill: "var(--color-buyerPrice)" }}
                 connectNulls={false}
                 isAnimationActive={false}
               />
@@ -139,7 +176,7 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
                 className="text-xl font-semibold tabular-nums"
                 style={{ color: "var(--chart-2)" }}
               >
-                {lastBuyerPrice}
+                {lastBuyerPrice.toLocaleString("ru-RU")}
                 <span className="text-xs text-muted-foreground font-normal">
                   {" "}
                   ₽

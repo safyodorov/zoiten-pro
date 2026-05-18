@@ -561,20 +561,14 @@ export function PriceCalculatorTable({
     })
   }, [scheduleHiddenSave])
 
-  // ── Expanded Product rows (раскрываемые панели графиков заказов) ──
-  // Используется Set, чтобы можно было раскрыть несколько товаров одновременно
-  // (UX: пользователь сравнивает динамику между товарами).
-  const [expandedProductIds, setExpandedProductIds] = useState<Set<string>>(
-    () => new Set(),
-  )
+  // ── Expanded Product row (раскрываемая панель графиков заказов) ──
+  // quick 260518-gg3: single-expand (UX consistency с /cards/wb).
+  // Только один товар раскрыт одновременно — клик по другой Сводке закрывает
+  // предыдущую и открывает новую.
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
 
   const toggleProductExpand = useCallback((productId: string) => {
-    setExpandedProductIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(productId)) next.delete(productId)
-      else next.add(productId)
-      return next
-    })
+    setExpandedProductId((prev) => (prev === productId ? null : productId))
   }, [])
 
   // Количество видимых "scroll" колонок (включая status) — для colSpan
@@ -827,7 +821,7 @@ export function PriceCalculatorTable({
                             (group.ordersCharts?.length ?? 0) > 0
                               ? "cursor-pointer hover:bg-muted/40"
                               : "cursor-default",
-                            expandedProductIds.has(group.product.id) && "bg-muted/30",
+                            expandedProductId === group.product.id && "bg-muted/30",
                           )}
                         >
                           <div className="flex flex-col gap-1 relative">
@@ -837,7 +831,7 @@ export function PriceCalculatorTable({
                                 className="absolute top-0 right-0 text-muted-foreground"
                                 aria-hidden="true"
                               >
-                                {expandedProductIds.has(group.product.id) ? (
+                                {expandedProductId === group.product.id ? (
                                   <ChevronUp className="h-3.5 w-3.5" />
                                 ) : (
                                   <ChevronDown className="h-3.5 w-3.5" />
@@ -1115,7 +1109,7 @@ export function PriceCalculatorTable({
               // quick 260518-fg5: раскрываемая панель с графиками заказов per nmId.
               // Рендерим после последней ценовой строки Product-группы.
               // colSpan = 4 sticky + visibleScrollCount (status уже в SCROLL_COLUMNS).
-              const isExpanded = expandedProductIds.has(group.product.id)
+              const isExpanded = expandedProductId === group.product.id
               const charts = group.ordersCharts ?? []
               const expandedTr =
                 isExpanded && charts.length > 0 ? (
