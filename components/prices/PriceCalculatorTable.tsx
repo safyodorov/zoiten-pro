@@ -179,7 +179,8 @@ export interface ProductGroup {
   totalRowsInProduct: number
   /** Список nmId с time series заказов, прошедших фильтр (stock>0 OR sales>0 за 28д).
    *  Если массив пуст или undefined — раскрытие panel недоступно, чевнон в Сводке скрыт.
-   *  quick 260518-gg3: per-nmId метаданные (stock/rating/reviews) для legend + лента отзывов. */
+   *  quick 260518-gg3: per-nmId метаданные (stock/rating/reviews) для legend + лента отзывов.
+   *  quick 260518-h6p: reviews расширены до { byImt, byNmId } — две ленты в expand-панели. */
   ordersCharts?: Array<{
     nmId: number
     timeSeries: DayPoint[]
@@ -187,7 +188,10 @@ export interface ProductGroup {
     avgSalesSpeed7d: number | null
     rating: number | null
     reviewsTotal: number | null
-    reviews: Array<{ id: string; rating: number; text: string; createdAt: string }>
+    reviews: {
+      byImt: Array<{ id: string; rating: number; text: string; createdAt: string }>
+      byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
+    }
   }>
 }
 
@@ -572,11 +576,14 @@ function NmIdLegend({
   daysLeft: number | null
   rating: number | null
   reviewsTotal: number | null
-  reviews: Array<{ id: string; rating: number; text: string; createdAt: string }>
+  reviews: {
+    byImt: Array<{ id: string; rating: number; text: string; createdAt: string }>
+    byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
+  }
 }) {
   return (
     <div className="max-w-[640px] px-2 pb-2 flex flex-col gap-2">
-      {/* Метаданные */}
+      {/* Метаданные — без изменений */}
       <div className="flex flex-row gap-4 text-xs">
         <LegendItem
           label="Остаток"
@@ -595,12 +602,30 @@ function NmIdLegend({
           value={reviewsTotal != null ? `${reviewsTotal}` : "—"}
         />
       </div>
-      {/* Лента отзывов */}
-      {reviews.length > 0 && (
-        <div className="flex flex-row gap-1 flex-wrap">
-          {reviews.map((r) => (
-            <ReviewChip key={r.id} review={r} />
-          ))}
+      {/* quick 260518-h6p: две строки отзывов — по связке и по товару.
+          Пустые ленты НЕ рендерятся (вместе с подписью). */}
+      {reviews.byImt.length > 0 && (
+        <div className="flex flex-row items-center gap-2">
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+            По связке ({reviews.byImt.length})
+          </span>
+          <div className="flex flex-row gap-1 flex-wrap">
+            {reviews.byImt.map((r) => (
+              <ReviewChip key={`imt-${r.id}`} review={r} />
+            ))}
+          </div>
+        </div>
+      )}
+      {reviews.byNmId.length > 0 && (
+        <div className="flex flex-row items-center gap-2">
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+            По товару ({reviews.byNmId.length})
+          </span>
+          <div className="flex flex-row gap-1 flex-wrap">
+            {reviews.byNmId.map((r) => (
+              <ReviewChip key={`nm-${r.id}`} review={r} />
+            ))}
+          </div>
         </div>
       )}
     </div>
