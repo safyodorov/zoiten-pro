@@ -501,6 +501,113 @@ function ColumnVisibilityDropdown({
 // quick 260513-phu: ColumnResizeHandle вынесен в lib/use-resizable-columns.ts.
 
 // ──────────────────────────────────────────────────────────────────
+// quick 260518-gg3: Per-nmId легенда + лента отзывов
+// ──────────────────────────────────────────────────────────────────
+
+/** Цветовая шкала фона чипа отзыва по рейтингу: 5★ зелёный → 1★ красный. */
+const RATING_BG: Record<number, string> = {
+  5: "bg-emerald-500/80 text-white",
+  4: "bg-emerald-400/70 text-white",
+  3: "bg-yellow-400/80 text-foreground",
+  2: "bg-orange-500/80 text-white",
+  1: "bg-red-500/85 text-white",
+}
+
+function LegendItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums">{value}</span>
+    </div>
+  )
+}
+
+function ReviewChip({
+  review,
+}: {
+  review: { id: string; rating: number; text: string; createdAt: string }
+}) {
+  const r = Math.max(1, Math.min(5, review.rating))
+  const bg = RATING_BG[r] ?? "bg-muted text-foreground"
+  const dateStr = (() => {
+    try {
+      return new Date(review.createdAt).toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    } catch {
+      return ""
+    }
+  })()
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <span
+            className={`inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium cursor-default ${bg}`}
+          >
+            {"★".repeat(r)}
+          </span>
+        }
+      />
+      <TooltipContent className="max-w-[320px] text-xs whitespace-pre-wrap">
+        <div className="text-muted-foreground mb-1">
+          {r}★ · {dateStr}
+        </div>
+        <div>{review.text || "(пустой отзыв)"}</div>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function NmIdLegend({
+  stockQty,
+  daysLeft,
+  rating,
+  reviewsTotal,
+  reviews,
+}: {
+  stockQty: number | null
+  daysLeft: number | null
+  rating: number | null
+  reviewsTotal: number | null
+  reviews: Array<{ id: string; rating: number; text: string; createdAt: string }>
+}) {
+  return (
+    <div className="max-w-[640px] px-2 pb-2 flex flex-col gap-2">
+      {/* Метаданные */}
+      <div className="flex flex-row gap-4 text-xs">
+        <LegendItem
+          label="Остаток"
+          value={stockQty != null ? `${stockQty} шт` : "—"}
+        />
+        <LegendItem
+          label="Остаток в днях"
+          value={daysLeft != null ? `${daysLeft} дн` : "—"}
+        />
+        <LegendItem
+          label="Рейтинг связки"
+          value={rating != null ? rating.toFixed(1) : "—"}
+        />
+        <LegendItem
+          label="Кол-во оценок"
+          value={reviewsTotal != null ? `${reviewsTotal}` : "—"}
+        />
+      </div>
+      {/* Лента отзывов */}
+      {reviews.length > 0 && (
+        <div className="flex flex-row gap-1 flex-wrap">
+          {reviews.map((r) => (
+            <ReviewChip key={r.id} review={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Component
 // ──────────────────────────────────────────────────────────────────
 
@@ -1131,13 +1238,30 @@ export function PriceCalculatorTable({
                       className="bg-muted/10 p-0 border-b"
                     >
                       <div className="flex flex-row flex-wrap gap-3 justify-start items-start p-3">
-                        {charts.map(({ nmId, timeSeries }) => (
-                          <WbCardOrdersChart
-                            key={nmId}
-                            nmId={nmId}
-                            timeSeries={timeSeries}
-                          />
-                        ))}
+                        {charts.map((c) => {
+                          // quick 260518-gg3: per-nmId блок Chart+Legend.
+                          const daysLeft =
+                            c.avgSalesSpeed7d != null &&
+                            c.avgSalesSpeed7d > 0 &&
+                            c.stockQty != null
+                              ? Math.floor(c.stockQty / c.avgSalesSpeed7d)
+                              : null
+                          return (
+                            <div key={c.nmId} className="flex flex-col gap-2">
+                              <WbCardOrdersChart
+                                nmId={c.nmId}
+                                timeSeries={c.timeSeries}
+                              />
+                              <NmIdLegend
+                                stockQty={c.stockQty}
+                                daysLeft={daysLeft}
+                                rating={c.rating}
+                                reviewsTotal={c.reviewsTotal}
+                                reviews={c.reviews}
+                              />
+                            </div>
+                          )
+                        })}
                       </div>
                     </td>
                   </tr>
