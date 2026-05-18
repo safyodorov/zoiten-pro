@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: post-v1.1 maintenance
 milestone_name: Post-release UX iterations
 status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-18 — Completed quick 260518-fg5: /prices/wb expandable row с графиками заказов per-nmId
-last_updated: "2026-05-18T08:07:23.161Z"
+stopped_at: 2026-05-18 — Completed quick 260518-gg3: chart polish + per-nmId легенда + лента отзывов в /prices/wb
+last_updated: "2026-05-18T08:50:31.082Z"
 progress:
   total_phases: 15
   completed_phases: 15
@@ -283,6 +283,7 @@ None yet.
 | 260515-o4o | /cards/wb expand v2: ComposedChart bar+line, sellerPrice/buyerPrice в WbCardOrdersDaily, retroactive backfill, dispatcher cron 05:00+05:10 МСК (настраиваемый), Settings таб «Расписание», dark-aware orange/cyan palette | 2026-05-15 | 63dc576 | Needs Review | [260515-o4o-cards-wb-expand-v2-2x-narrower-design-po](./quick/260515-o4o-cards-wb-expand-v2-2x-narrower-design-po/) |
 | 260515-phv | /cards/wb fix: реальные исторические цены через Statistics Orders priceWithDisc+finishedPrice (avg per nmId/date) + forward-fill на дни без заказов (plateau вместо gap) + dual-gate /api/wb-orders-backfill + cleanup retroactive button/endpoint/helper | 2026-05-15 | 6e25b4a | Needs Review | [260515-phv-cards-wb-fix-real-historical-prices-via-](./quick/260515-phv-cards-wb-fix-real-historical-prices-via-/) |
 | 260518-fg5 | /prices/wb expandable row с графиками заказов per-nmId (как в /cards/wb): клик по Сводке раскрывает панель с WbCardOrdersChart per артикул, фильтр nmId по stock>0 OR sales>0 за 28д, переиспользование chart-компонента из /cards/wb | 2026-05-18 | db4128c |  | [260518-fg5-prices-wb-expandable-row-cards-wb-per-nm](./quick/260518-fg5-prices-wb-expandable-row-cards-wb-per-nm/) |
+| 260518-gg3 | Доработки графиков: single-expand /prices/wb (string\|null toggle); chart polish — dot.r=1.5, header «арт.» вместо «nm», ru-RU тысячи в tooltip и «Цена сейчас»; per-nmId легенда в expand-панели — Остаток/Дни/Рейтинг связки/Кол-во оценок + горизонтальная лента 10 последних FEEDBACK-тикетов (звёзды + цветовая шкала + hover tooltip с текстом) | 2026-05-18 | 760085a |  | [260518-gg3-cards-wb-prices-wb-1-single-expand-price](./quick/260518-gg3-cards-wb-prices-wb-1-single-expand-price/) |
 
 ### Blockers/Concerns
 
@@ -298,6 +299,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T08:07:23.161Z
-Stopped at: Completed quick 260518-fg5 — /prices/wb expandable row с графиками заказов per-nmId
+Last session: 2026-05-18T08:50:31.082Z
+Stopped at: Completed quick 260518-gg3 — chart polish + per-nmId легенда + лента отзывов в /prices/wb
 Resume file: None
