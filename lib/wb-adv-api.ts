@@ -16,7 +16,9 @@ import {
 import { WbRateLimitError } from "@/lib/wb-api"
 
 const BASE_URL = "https://advert-api.wildberries.ru"
-const FULLSTATS_BATCH_SIZE = 100
+// W0 (2026-05-19 prod): WB вернул 400 "number of advert cannot be more than 50"
+// на батч 100. Реальный лимит — 50 (несмотря на доки которые говорят 100).
+const FULLSTATS_BATCH_SIZE = 50
 const PROMOTION_RATE_SLEEP_MS = 200      // 5 req/sec
 const FULLSTATS_RATE_SLEEP_MS = 1100     // 1 req/sec + 100ms буфер от per-seller limiter
 

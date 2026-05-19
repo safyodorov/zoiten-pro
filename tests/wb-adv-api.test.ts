@@ -57,8 +57,8 @@ describe("WB Advert API client", () => {
     expect(setWbCooldownUntil).toHaveBeenCalledWith("advert", 60)
   })
 
-  // Test 3 — fullstats GET with query params, batching ≤100
-  it("fetchFullStats sends GET batches of 100 with query params + sleep", async () => {
+  // Test 3 — fullstats GET with query params, batching ≤50 (WB limit, W0 verified)
+  it("fetchFullStats sends GET batches of 50 with query params + sleep", async () => {
     vi.useFakeTimers()
     const advertIds = Array.from({ length: 250 }, (_, i) => i + 1)
     // Factory: каждый call возвращает СВЕЖИЙ Response — body нельзя читать дважды
@@ -66,7 +66,7 @@ describe("WB Advert API client", () => {
     const promise = fetchFullStats(advertIds, { beginDate: "2026-05-12", endDate: "2026-05-19" })
     await vi.runAllTimersAsync()
     await promise
-    expect(fetchMock).toHaveBeenCalledTimes(3) // 100, 100, 50
+    expect(fetchMock).toHaveBeenCalledTimes(5) // 50, 50, 50, 50, 50
     // Должен быть GET (без method или method: "GET")
     const firstInit = fetchMock.mock.calls[0][1] as RequestInit | undefined
     expect(firstInit?.method ?? "GET").toBe("GET")
@@ -76,8 +76,8 @@ describe("WB Advert API client", () => {
     expect(firstUrl).toContain("beginDate=2026-05-12")
     expect(firstUrl).toContain("endDate=2026-05-19")
     expect(firstUrl).toContain("ids=1%2C2") // URL-encoded comma
-    // Последний батч — 50 ids
-    const lastUrl = fetchMock.mock.calls[2][0] as string
+    // Последний (5-й) батч — 50 ids
+    const lastUrl = fetchMock.mock.calls[4][0] as string
     const lastIds = new URL(lastUrl).searchParams.get("ids")!.split(",")
     expect(lastIds).toHaveLength(50)
     vi.useRealTimers()
