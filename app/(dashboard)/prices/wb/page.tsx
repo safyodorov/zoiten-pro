@@ -790,14 +790,29 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       (s, { card }) => s + (card.stockQty ?? 0),
       0,
     )
-    const totalAvgSalesSpeed = cardRefs.reduce(
-      (s, { card }) => s + (card.avgSalesSpeed7d ?? 0),
-      0,
-    )
-    const totalOrdersYesterday = cardRefs.reduce(
-      (s, { card }) => s + (card.ordersYesterday ?? 0),
-      0,
-    )
+    // Quick 260519-funnel: totalAvgSalesSpeed / totalOrdersYesterday теперь
+    // считаются из merged orders (Funnel приоритет, fallback на Statistics qty),
+    // а не из WbCard.avgSalesSpeed7d/ordersYesterday (которые пишутся в /api/wb-sync
+    // из Statistics). Цифры теперь cabinet-matched.
+    // sevenDaysBackStart / yesterdayStart — границы окна для агрегации.
+    const yesterdayMsk = new Date(todayMsk.getTime() - 1 * 24 * 3600_000)
+    const sevenDaysBackStart = new Date(todayMsk.getTime() - 7 * 24 * 3600_000)
+    const yesterdayKey = yesterdayMsk.toISOString().slice(0, 10)
+    const totalAvgSalesSpeed = cardRefs.reduce((s, { card }) => {
+      const rows = ordersByNmId.get(card.nmId) ?? []
+      const sum7d = rows
+        .filter(r => r.date >= sevenDaysBackStart && r.date <= yesterdayMsk)
+        .reduce((acc, r) => acc + r.qty, 0)
+      // Если merged пусто — fallback на legacy WbCard.avgSalesSpeed7d
+      if (rows.length === 0) return s + (card.avgSalesSpeed7d ?? 0)
+      return s + sum7d / 7
+    }, 0)
+    const totalOrdersYesterday = cardRefs.reduce((s, { card }) => {
+      const rows = ordersByNmId.get(card.nmId) ?? []
+      const yest = rows.find(r => r.date.toISOString().slice(0, 10) === yesterdayKey)
+      if (!yest && rows.length === 0) return s + (card.ordersYesterday ?? 0)
+      return s + (yest?.qty ?? 0)
+    }, 0)
     const totalRowsInProduct = cardGroups.reduce(
       (s, cg) => s + cg.priceRows.length,
       0,
