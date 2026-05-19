@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Прогноз выручки WB до 1 июля 2026 — Zoiten</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,400;1,9..144,500&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f1e7;
+    --ink:#1a1814;
+    --ink-2:#3d3a34;
+    --ink-mute:#6b6660;
+    --rule:#1a1814;
+    --rule-soft:rgba(26,24,20,.12);
+    --paper:#fbf7ed;
+    --accent:#8a1f1f;
+    --accent-2:#b9651b;
+    --good:#3a5f2a;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+
+  @page{ size: A4 portrait; margin: 0; }
+
+  html,body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Manrope',sans-serif;
+    font-feature-settings:'tnum' 1,'ss01' 1;
+    font-size:9.5pt;
+    line-height:1.5;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  /* PAGE — A4 portrait */
+  .page{
+    width:210mm;
+    height:297mm;
+    padding:18mm 20mm;
+    page-break-after:always;
+    position:relative;
+    overflow:hidden;
+    background:var(--bg);
+  }
+  .page:last-child{page-break-after:auto;}
+
+  /* TYPOGRAPHY */
+  h1,h2,h3,h4{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    letter-spacing:-0.02em;
+    color:var(--ink);
+  }
+  h1{ font-size:42pt; line-height:0.95; font-weight:300; font-variation-settings:'opsz' 100; }
+  h2{ font-size:24pt; line-height:1.05; font-weight:400; font-variation-settings:'opsz' 96; }
+  h3{ font-size:14pt; line-height:1.2; font-weight:500; font-variation-settings:'opsz' 36; }
+  h4{ font-size:10pt; line-height:1.3; font-weight:600; font-variation-settings:'opsz' 24; }
+
+  .display{
+    font-family:'Fraunces',serif;
+    font-variation-settings:'opsz' 144;
+    font-weight:300;
+  }
+
+  .eyebrow{
+    font-family:'Manrope',sans-serif;
+    font-size:7.5pt;
+    font-weight:700;
+    letter-spacing:0.2em;
+    text-transform:uppercase;
+    color:var(--accent);
+  }
+  .eyebrow-muted{ color:var(--ink-mute); }
+
+  .num{
+    font-feature-settings:'tnum' 1;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .mono{
+    font-family:'JetBrains Mono',monospace;
+    font-feature-settings:'tnum' 1;
+  }
+
+  /* COVER */
+  .cover{
+    display:flex;
+    flex-direction:column;
+    height:100%;
+  }
+  .cover-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    padding-bottom:8mm;
+    border-bottom:1px solid var(--rule);
+  }
+  .brandmark{
+    font-family:'Fraunces',serif;
+    font-weight:600;
+    font-size:11pt;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+  }
+  .brandmark::before{
+    content:"";
+    display:inline-block;
+    width:10pt;
+    height:10pt;
+    background:var(--accent);
+    border-radius:50%;
+    margin-right:6pt;
+    vertical-align:-1pt;
+  }
+  .cover-meta{
+    font-size:7.5pt;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    text-align:right;
+  }
+  .cover-meta div{margin-bottom:2pt;}
+
+  .cover-title{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    margin:6mm 0;
+  }
+  .cover-title h1{
+    margin-bottom:5mm;
+  }
+  .cover-title h1 em{
+    font-style:italic;
+    color:var(--accent);
+    font-weight:300;
+  }
+  .cover-sub{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:13pt;
+    color:var(--ink-2);
+    max-width:140mm;
+    font-weight:400;
+  }
+
+  .hero-stat{
+    margin-top:8mm;
+    padding:6mm 0;
+    border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8mm;
+  }
+  .hero-stat .label{
+    font-size:7.5pt;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    margin-bottom:3mm;
+  }
+  .hero-stat .value{
+    font-family:'Fraunces',serif;
+    font-weight:300;
+    font-size:32pt;
+    line-height:1;
+    font-variation-settings:'opsz' 144;
+  }
+  .hero-stat .value-accent{ color:var(--accent); }
+  .hero-stat .unit{
+    font-size:11pt;
+    color:var(--ink-mute);
+    font-family:'Manrope',sans-serif;
+    font-weight:400;
+  }
+  .hero-stat .delta{
+    margin-top:1mm;
+    font-size:8pt;
+    color:var(--ink-mute);
+  }
+
+  .cover-foot{
+    margin-top:auto;
+    border-top:1px solid var(--rule);
+    padding-top:5mm;
+  }
+  .cover-foot-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding-bottom:4mm;
+    border-bottom:1px solid var(--rule-soft);
+    margin-bottom:3mm;
+  }
+  .cover-foot-bot{
+    display:flex;
+    justify-content:space-between;
+    font-size:7pt;
+    color:var(--ink-mute);
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+  }
+  .cover-foot .toc{
+    display:flex;
+    gap:6mm;
+    text-transform:none;
+    font-size:8.5pt;
+    color:var(--ink-2);
+    letter-spacing:0;
+  }
+  .cover-foot .toc div{display:flex;gap:3mm;align-items:baseline;}
+  .cover-foot .toc .n{
+    font-family:'Fraunces',serif;
+    color:var(--accent);
+    font-weight:500;
+  }
+  .cover-foot .source{
+    font-size:7pt;
+    color:var(--ink-mute);
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    text-align:right;
+  }
+
+  /* PAGE HEADER */
+  .ph{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    border-bottom:1px solid var(--rule);
+    padding-bottom:4mm;
+    margin-bottom:8mm;
+  }
+  .ph-left{display:flex;align-items:baseline;gap:6mm;}
+  .ph-num{
+    font-family:'Fraunces',serif;
+    font-weight:300;
+    font-size:32pt;
+    color:var(--accent);
+    line-height:1;
+    font-variation-settings:'opsz' 144;
+  }
+  .ph-meta{font-size:7.5pt;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-mute);}
+
+  /* CONTENT BLOCKS */
+  .lead{
+    font-family:'Fraunces',serif;
+    font-style:italic;
+    font-size:13pt;
+    line-height:1.4;
+    color:var(--ink-2);
+    margin-bottom:6mm;
+    max-width:140mm;
+  }
+  p{margin-bottom:3mm;}
+  p.tight{margin-bottom:2mm;}
+
+  /* PARAMETER GRID */
+  .params{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:0;
+    margin-top:4mm;
+  }
+  .param{
+    padding:5mm 4mm;
+    border-bottom:1px solid var(--rule-soft);
+    border-right:1px solid var(--rule-soft);
+  }
+  .param:nth-child(2n){ border-right:none; }
+  .param-label{
+    font-size:7.5pt;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    margin-bottom:2mm;
+  }
+  .param-value{
+    font-family:'Fraunces',serif;
+    font-size:16pt;
+    font-weight:400;
+    line-height:1.1;
+    font-variation-settings:'opsz' 36;
+  }
+  .param-value .small{font-size:10pt;color:var(--ink-mute);}
+  .param-note{
+    font-size:8pt;
+    color:var(--ink-mute);
+    margin-top:1mm;
+  }
+
+  /* FORMULA */
+  .formula{
+    margin-top:6mm;
+    padding:5mm 6mm;
+    background:var(--paper);
+    border-left:3px solid var(--accent);
+    font-family:'JetBrains Mono',monospace;
+    font-size:8pt;
+    line-height:1.7;
+    color:var(--ink-2);
+  }
+  .formula .var{color:var(--accent);font-weight:500;}
+  .formula .c{color:var(--ink-mute);}
+
+  /* SUMMARY BLOCK */
+  .summary{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:0;
+    margin:5mm 0;
+    border-top:1px solid var(--rule);
+    border-bottom:1px solid var(--rule);
+  }
+  .summary > div{
+    padding:5mm 4mm 5mm 0;
+    border-right:1px solid var(--rule-soft);
+  }
+  .summary > div:last-child{border-right:none;padding-right:0;}
+  .summary > div:not(:first-child){padding-left:4mm;}
+  .summary .lbl{
+    font-size:7pt;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    margin-bottom:2mm;
+  }
+  .summary .val{
+    font-family:'Fraunces',serif;
+    font-weight:400;
+    font-size:20pt;
+    line-height:1;
+    font-variation-settings:'opsz' 96;
+  }
+  .summary .val .u{font-size:9pt;color:var(--ink-mute);font-family:'Manrope';}
+  .summary .val.accent{color:var(--accent);}
+  .summary .val.good{color:var(--good);}
+
+  /* TABLE */
+  table.data{
+    width:100%;
+    border-collapse:collapse;
+    font-size:8.5pt;
+    margin-top:4mm;
+  }
+  table.data thead th{
+    text-align:left;
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    font-size:7pt;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    padding:3mm 2mm;
+    border-bottom:1.5px solid var(--rule);
+    vertical-align:bottom;
+  }
+  table.data thead th.right{text-align:right;}
+  table.data tbody td{
+    padding:2.2mm 2mm;
+    border-bottom:1px solid var(--rule-soft);
+    vertical-align:baseline;
+  }
+  table.data tbody td.right{text-align:right;font-variant-numeric:tabular-nums;}
+  table.data tbody td.sku{
+    font-family:'JetBrains Mono',monospace;
+    font-size:7.5pt;
+    color:var(--ink-mute);
+  }
+  table.data tbody td.name{font-weight:500;}
+  table.data tbody td.revenue{
+    font-family:'Fraunces',serif;
+    font-size:11pt;
+    font-weight:500;
+    color:var(--ink);
+  }
+  table.data tbody tr:nth-child(odd){background:rgba(26,24,20,.015);}
+  table.data tfoot td{
+    padding:3mm 2mm;
+    font-weight:700;
+    border-top:1.5px solid var(--rule);
+    border-bottom:none;
+  }
+  table.data tfoot td.right{font-variant-numeric:tabular-nums;}
+  table.data tfoot td.revenue{
+    font-family:'Fraunces',serif;
+    font-size:13pt;
+    font-weight:500;
+    color:var(--accent);
+  }
+
+  /* PILL */
+  .pill{
+    display:inline-block;
+    padding:1mm 2.5mm;
+    border-radius:99px;
+    font-size:7pt;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    font-weight:600;
+  }
+  .pill-accent{background:var(--accent);color:var(--paper);}
+  .pill-good{background:var(--good);color:var(--paper);}
+  .pill-warm{background:var(--accent-2);color:var(--paper);}
+  .pill-outline{background:transparent;border:1px solid var(--rule);color:var(--ink-2);}
+
+  /* CONCLUSION CARDS */
+  .insights{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:5mm;
+    margin-top:6mm;
+  }
+  .insight{
+    padding:6mm 5mm;
+    background:var(--paper);
+    border-top:3px solid var(--accent);
+    page-break-inside:avoid;
+  }
+  .insight.good{border-top-color:var(--good);}
+  .insight.warn{border-top-color:var(--accent-2);}
+  .insight h4{
+    margin-bottom:3mm;
+    font-family:'Fraunces',serif;
+    font-size:13pt;
+    font-weight:500;
+    line-height:1.2;
+  }
+  .insight p{font-size:9pt;color:var(--ink-2);margin-bottom:2mm;}
+  .insight .stat{
+    margin-top:3mm;
+    font-family:'Fraunces',serif;
+    font-size:18pt;
+    font-weight:400;
+    color:var(--accent);
+    line-height:1;
+  }
+  .insight.good .stat{color:var(--good);}
+
+  /* COMPARE TABLE */
+  .compare{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:4mm;
+    font-size:10pt;
+  }
+  .compare th, .compare td{padding:3mm 4mm;}
+  .compare thead th{
+    text-align:left;
+    font-family:'Manrope',sans-serif;
+    font-weight:700;
+    font-size:7.5pt;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    color:var(--ink-mute);
+    border-bottom:1.5px solid var(--rule);
+  }
+  .compare thead th.right{text-align:right;}
+  .compare tbody td{border-bottom:1px solid var(--rule-soft);}
+  .compare tbody td.right{text-align:right;font-variant-numeric:tabular-nums;}
+  .compare tbody td.dir{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:12pt;
+  }
+  .compare tbody td.big{
+    font-family:'Fraunces',serif;
+    font-size:14pt;
+    font-weight:500;
+    color:var(--accent);
+  }
+  .compare tfoot td{
+    padding:4mm;
+    border-top:2px solid var(--rule);
+    font-weight:700;
+  }
+  .compare tfoot td.big{
+    font-family:'Fraunces',serif;
+    font-size:16pt;
+    color:var(--accent);
+  }
+
+  .footnote{
+    margin-top:auto;
+    padding-top:5mm;
+    border-top:1px solid var(--rule-soft);
+    font-size:7pt;
+    color:var(--ink-mute);
+    letter-spacing:0.05em;
+  }
+
+  /* INDEX FOOTER */
+  .index{
+    position:absolute;
+    bottom:8mm;
+    left:20mm;
+    right:20mm;
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    font-size:7pt;
+    color:var(--ink-mute);
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+  }
+  .index .pgnum{
+    font-family:'Fraunces',serif;
+    font-size:10pt;
+    font-style:italic;
+    color:var(--accent);
+  }
+
+  /* DECORATIVE */
+  .rule-thick{height:1px;background:var(--rule);margin:6mm 0;}
+  .accent-line{
+    width:30mm;
+    height:2px;
+    background:var(--accent);
+    margin-bottom:5mm;
+  }
+
+  /* TWO-COL */
+  .two-col{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8mm;
+    margin-top:5mm;
+  }
+
+  /* Container for content under page header — keeps page height predictable */
+  .body{ display:flex; flex-direction:column; height: calc(297mm - 36mm); }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ COVER ═══════════════════ -->
+<section class="page">
+  <div class="cover">
+    <div class="cover-head">
+      <div class="brandmark">Zoiten · Analytics</div>
+      <div class="cover-meta">
+        <div>Internal Report · Confidential</div>
+        <div>Подготовлено · 18 мая 2026</div>
+      </div>
+    </div>
+
+    <div class="cover-title">
+      <div class="eyebrow">Прогноз выручки · WB</div>
+      <div style="height:6mm"></div>
+      <h1 class="display">Сколько ещё <em>осталось</em><br>продать до 1 июля</h1>
+      <div style="height:8mm"></div>
+      <div class="cover-sub">
+        Полная картина по двум направлениям — бытовая техника и одежда — с учётом текущих остатков, заказов в пути,
+        возвратов в пути и темпа продаж последней недели.
+      </div>
+    </div>
+
+    <div class="hero-stat">
+      <div>
+        <div class="label">Прогноз к 1 июля</div>
+        <div class="value value-accent num">41.71<span class="unit"> M&thinsp;₽</span></div>
+        <div class="delta">из 77.17 M&thinsp;₽ полной распродажи</div>
+      </div>
+      <div>
+        <div class="label">Использование склада</div>
+        <div class="value num">54<span class="unit">%</span></div>
+        <div class="delta">оставшийся резерв ≈ 35.5 M&thinsp;₽</div>
+      </div>
+      <div>
+        <div class="label">До 1 июля</div>
+        <div class="value num">44<span class="unit"> дн.</span></div>
+        <div class="delta">окно для оптимизации темпа</div>
+      </div>
+    </div>
+
+    <div class="cover-foot">
+      <div class="cover-foot-top">
+        <div class="toc">
+          <div><span class="n">I.</span> Вводные</div>
+          <div><span class="n">II.</span> Бытовая техника</div>
+          <div><span class="n">III.</span> Одежда</div>
+          <div><span class="n">IV.</span> Выводы</div>
+        </div>
+      </div>
+      <div class="cover-foot-bot">
+        <div>Zoiten ERP · Аналитический отдел</div>
+        <div>Источник · WbCard · WbCardOrdersDaily · Pipeline 15.1</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ I. ВВОДНЫЕ ═══════════════════ -->
+<section class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-num">I</div>
+      <div>
+        <div class="eyebrow">Раздел первый</div>
+        <h3 style="margin-top:1mm;">Вводные и методология</h3>
+      </div>
+    </div>
+    <div class="ph-meta">2026-05-18</div>
+  </div>
+
+  <div class="lead">
+    Прогноз строится на пяти параметрах. Цены продавца и текущие остатки берутся из <span style="color:var(--accent);">WbCard</span>,
+    темп заказов — из <span style="color:var(--accent);">WbCardOrdersDaily</span> (среднее за прошедшие 7 дней),
+    pipeline и циклы возвратов моделируются аналитически.
+  </div>
+
+  <div class="params">
+    <div class="param">
+      <div class="param-label">Период расчёта</div>
+      <div class="param-value">44 <span class="small">дн.</span></div>
+      <div class="param-note">с 18 мая по 1 июля 2026</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Источник темпа</div>
+      <div class="param-value">7 <span class="small">дн.</span></div>
+      <div class="param-note">avg per nmId, WbCardOrdersDaily, исключая текущий день</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Buyout · Бытовая техника</div>
+      <div class="param-value" style="color:var(--good);">87 <span class="small">%</span></div>
+      <div class="param-note">13% возвращается → круговорот</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Buyout · Одежда</div>
+      <div class="param-value" style="color:var(--accent);">17 <span class="small">%</span></div>
+      <div class="param-note">83% возвращается → большой круговорот</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Доставка к покупателю</div>
+      <div class="param-value">3 <span class="small">дн.</span></div>
+      <div class="param-note">средний lead-time от заказа до решения</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Возврат от покупателя</div>
+      <div class="param-value">3 <span class="small">дн.</span></div>
+      <div class="param-note">путь back-to-stock после отказа</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Pipeline учитывается</div>
+      <div class="param-value">Да</div>
+      <div class="param-note">stockQty + inWayToClient + inWayFromClient</div>
+    </div>
+    <div class="param">
+      <div class="param-label">Цена</div>
+      <div class="param-value">Продавца</div>
+      <div class="param-note">WbCard.price — со скидкой продавца, до СПП</div>
+    </div>
+  </div>
+
+  <div class="formula">
+    <div><span class="c">// Модель оборачиваемости</span></div>
+    <div><span class="var">cycle_factor</span> = 1 − 0.83<sup>d/6</sup> &nbsp;<span class="c">// для одежды (83% возвр., цикл 6 дн.)</span></div>
+    <div><span class="var">cycle_factor</span> = 1 − 0.13<sup>d/6</sup> &nbsp;<span class="c">// для бытовой техники (13% возвр.)</span></div>
+    <br>
+    <div><span class="c">// Per-nmId прогноз</span></div>
+    <div><span class="var">pipeline_kept</span>   = inWayToClient × buyout</div>
+    <div><span class="var">stock_budget</span>    = stockQty + inWayFromClient + inWayToClient × (1 − buyout)</div>
+    <div><span class="var">new_orders_kept</span> = avg_per_day × 44 × buyout</div>
+    <div><span class="var">final_sold</span>     = pipeline_kept + min(new_orders_kept, stock_budget × cycle_factor)</div>
+    <div><span class="var">revenue</span>        = final_sold × price</div>
+  </div>
+
+  <div style="margin-top:auto;"></div>
+
+  <div class="two-col" style="margin-top:8mm;">
+    <div>
+      <div class="eyebrow eyebrow-muted">Pipeline</div>
+      <div class="accent-line"></div>
+      <p style="font-size:9pt;color:var(--ink-2);">
+        В прогнозе учитываются не только остатки на складах, но и единицы в дороге.
+        <strong>inWayToClient</strong> — это уже отгруженные заказы, по ним решение «выкупить или вернуть» состоится в ближайшие 3 дня;
+        выкуп даёт гарантированную часть выручки. <strong>inWayFromClient</strong> — возвраты, которые вернутся в pool отгрузок через 3 дня и снова могут быть отправлены покупателю.
+      </p>
+    </div>
+    <div>
+      <div class="eyebrow eyebrow-muted">Цикл возвратов</div>
+      <div class="accent-line"></div>
+      <p style="font-size:9pt;color:var(--ink-2);">
+        Каждый возврат через 6 дней (3 туда + 3 обратно) вновь доступен для отгрузки.
+        За 44 дня единица из склада может пройти ≈ 7 циклов. Для одежды это означает,
+        что один SKU фактически может быть продан со ставкой <span class="num">1 − 0.83<sup>7.3</sup> ≈ 75 %</span> своего номинала;
+        для бытовой техники — практически 100 % (возвратность 13 %).
+      </p>
+    </div>
+  </div>
+
+  <div class="index">
+    <div>Zoiten Analytics · Forecast 2026-07-01</div>
+    <div class="pgnum">02</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ II. БЫТОВАЯ ТЕХНИКА ═══════════════════ -->
+<section class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-num">II</div>
+      <div>
+        <div class="eyebrow">Раздел второй</div>
+        <h3 style="margin-top:1mm;">Бытовая техника · 56 SKU</h3>
+      </div>
+    </div>
+    <div class="ph-meta">Buyout 87 % · <span style="color:var(--good);">stock-driven</span></div>
+  </div>
+
+  <div class="lead">
+    Высокий buyout превращает почти каждый заказ в продажу. Узкое место смещается на склад:
+    одни SKU вычерпываются полностью, другие выкупаются медленно из-за низкого темпа заказов.
+  </div>
+
+  <div class="summary">
+    <div>
+      <div class="lbl">Pipeline всего</div>
+      <div class="val num">7&thinsp;550<span class="u"> ед</span></div>
+    </div>
+    <div>
+      <div class="lbl">Темп заказов</div>
+      <div class="val num">171.7<span class="u"> /дн.</span></div>
+    </div>
+    <div>
+      <div class="lbl">Прогноз продано</div>
+      <div class="val num">4&thinsp;204<span class="u"> ед</span></div>
+    </div>
+    <div>
+      <div class="lbl">Прогноз выручки</div>
+      <div class="val accent num">21.32<span class="u"> M&thinsp;₽</span></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr; gap:5mm;margin-top:2mm;font-size:8.5pt;color:var(--ink-2);">
+    <div><strong style="color:var(--accent);">stock</strong> · 6 471 ед</div>
+    <div><strong style="color:var(--accent);">→к клиенту</strong> · 849 ед</div>
+    <div><strong style="color:var(--accent);">←от клиента</strong> · 230 ед</div>
+  </div>
+
+  <table class="data" style="margin-top:6mm;">
+    <thead>
+      <tr>
+        <th style="width:14mm;">SKU</th>
+        <th>Товар</th>
+        <th class="right" style="width:14mm;">Stock</th>
+        <th class="right" style="width:10mm;">→к</th>
+        <th class="right" style="width:10mm;">←от</th>
+        <th class="right" style="width:14mm;">Зак/день</th>
+        <th class="right" style="width:14mm;">Pipe</th>
+        <th class="right" style="width:14mm;">Новые</th>
+        <th class="right" style="width:16mm;">Итого</th>
+        <th class="right" style="width:24mm;">Выручка ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="sku">УКТ-000002</td><td class="name">Паровая швабра 450</td><td class="right">432</td><td class="right">97</td><td class="right">22</td><td class="right">24.3</td><td class="right">84</td><td class="right">314</td><td class="right"><strong>398</strong></td><td class="right revenue">3 376 511</td></tr>
+      <tr><td class="sku">УКТ-000004</td><td class="name">Вакууматор 150</td><td class="right">760</td><td class="right">113</td><td class="right">18</td><td class="right">26.7</td><td class="right">98</td><td class="right">731</td><td class="right">829</td><td class="right revenue">1 715 610</td></tr>
+      <tr><td class="sku">УКТ-000052</td><td class="name">Пылесос VC-3 Orange</td><td class="right">69</td><td class="right">30</td><td class="right">2</td><td class="right">5.6</td><td class="right">26</td><td class="right">75</td><td class="right">101</td><td class="right revenue">1 442 583</td></tr>
+      <tr><td class="sku">УКТ-000012</td><td class="name">Чайник 700</td><td class="right">311</td><td class="right">35</td><td class="right">12</td><td class="right">7.4</td><td class="right">30</td><td class="right">284</td><td class="right">315</td><td class="right revenue">1 287 281</td></tr>
+      <tr><td class="sku">УКТ-000022</td><td class="name">Чайник 650</td><td class="right">273</td><td class="right">53</td><td class="right">16</td><td class="right">12.1</td><td class="right">46</td><td class="right">296</td><td class="right">342</td><td class="right revenue">1 210 680</td></tr>
+      <tr><td class="sku">УКТ-000009</td><td class="name">Кофемашина GM-500</td><td class="right">161</td><td class="right">16</td><td class="right">4</td><td class="right">1.7</td><td class="right">14</td><td class="right">66</td><td class="right">80</td><td class="right revenue">1 137 463</td></tr>
+      <tr><td class="sku">УКТ-000023</td><td class="name">Чайник 800</td><td class="right">254</td><td class="right">48</td><td class="right">10</td><td class="right">11.7</td><td class="right">42</td><td class="right">270</td><td class="right">312</td><td class="right revenue">1 126 320</td></tr>
+      <tr><td class="sku">УКТ-000025</td><td class="name">Паровая швабра 800</td><td class="right">47</td><td class="right">32</td><td class="right">51</td><td class="right">5.3</td><td class="right">28</td><td class="right">102</td><td class="right">130</td><td class="right revenue">1 114 100</td></tr>
+      <tr><td class="sku">УКТ-000001</td><td class="name">Аэрогриль GR-500</td><td class="right">59</td><td class="right">112</td><td class="right">7</td><td class="right">22.0</td><td class="right">97</td><td class="right">81</td><td class="right">178</td><td class="right revenue">945 180</td></tr>
+      <tr><td class="sku">УКТ-000005</td><td class="name">Аэрогриль GR-600</td><td class="right">65</td><td class="right">57</td><td class="right">13</td><td class="right">15.3</td><td class="right">50</td><td class="right">85</td><td class="right">135</td><td class="right revenue">918 000</td></tr>
+      <tr><td class="sku">УКТ-000049</td><td class="name">Пылесос WIND</td><td class="right">115</td><td class="right">12</td><td class="right">0</td><td class="right">1.6</td><td class="right">10</td><td class="right">60</td><td class="right">71</td><td class="right revenue">877 487</td></tr>
+      <tr><td class="sku">УКТ-000047</td><td class="name">Пылесос ZAUBER</td><td class="right">51</td><td class="right">11</td><td class="right">0</td><td class="right">2.0</td><td class="right">10</td><td class="right">52</td><td class="right">62</td><td class="right revenue">776 860</td></tr>
+      <tr><td class="sku">УКТ-000006</td><td class="name">Массажёр 250</td><td class="right">203</td><td class="right">8</td><td class="right">0</td><td class="right">1.4</td><td class="right">7</td><td class="right">55</td><td class="right">62</td><td class="right revenue">699 679</td></tr>
+      <tr><td class="sku">УКТ-000040</td><td class="name">Выпрямитель белый паровой</td><td class="right">334</td><td class="right">16</td><td class="right">4</td><td class="right">3.1</td><td class="right">14</td><td class="right">120</td><td class="right">134</td><td class="right revenue">671 143</td></tr>
+      <tr><td class="sku">УКТ-000016</td><td class="name">Пароочиститель пистолет</td><td class="right">118</td><td class="right">33</td><td class="right">9</td><td class="right">4.9</td><td class="right">29</td><td class="right">62</td><td class="right">90</td><td class="right revenue">403 522</td></tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6" style="color:var(--ink-mute);font-size:7.5pt;letter-spacing:0.15em;text-transform:uppercase;">Топ-14 · 87 % выручки направления</td>
+        <td class="right">585</td>
+        <td class="right">2 653</td>
+        <td class="right">3 238</td>
+        <td class="right revenue">17 702 419</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="footnote">
+    Хвост направления — ещё 42 SKU с прогнозом &lt; 400 K ₽ каждый — суммарно даёт ≈ 3.62 M ₽.
+    Темп ниже среднего: pipeline закрывает значительную часть выручки гарантированно.
+  </div>
+
+  <div class="index">
+    <div>Zoiten Analytics · Forecast 2026-07-01</div>
+    <div class="pgnum">03</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ III. ОДЕЖДА ═══════════════════ -->
+<section class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-num">III</div>
+      <div>
+        <div class="eyebrow">Раздел третий</div>
+        <h3 style="margin-top:1mm;">Одежда · 18 SKU</h3>
+      </div>
+    </div>
+    <div class="ph-meta">Buyout 17 % · <span style="color:var(--accent);">orders-driven</span></div>
+  </div>
+
+  <div class="lead">
+    Каждый шестой заказ становится продажей; остальные пять идут на полный круг возврата и могут быть отгружены повторно.
+    Большой stock с запасом, но темп заказов — узкое место всего направления.
+  </div>
+
+  <div class="summary">
+    <div>
+      <div class="lbl">Pipeline всего</div>
+      <div class="val num">7&thinsp;607<span class="u"> ед</span></div>
+    </div>
+    <div>
+      <div class="lbl">Темп заказов</div>
+      <div class="val num">237.4<span class="u"> /дн.</span></div>
+    </div>
+    <div>
+      <div class="lbl">Прогноз продано</div>
+      <div class="val num">2&thinsp;104<span class="u"> ед</span></div>
+    </div>
+    <div>
+      <div class="lbl">Прогноз выручки</div>
+      <div class="val accent num">20.38<span class="u"> M&thinsp;₽</span></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr; gap:5mm;margin-top:2mm;font-size:8.5pt;color:var(--ink-2);">
+    <div><strong style="color:var(--accent);">stock</strong> · 4 606 ед</div>
+    <div><strong style="color:var(--accent);">→к клиенту</strong> · 1 931 ед</div>
+    <div><strong style="color:var(--accent);">←от клиента</strong> · 1 070 ед</div>
+  </div>
+
+  <table class="data" style="margin-top:6mm;">
+    <thead>
+      <tr>
+        <th style="width:14mm;">SKU</th>
+        <th>Товар</th>
+        <th class="right" style="width:14mm;">Stock</th>
+        <th class="right" style="width:10mm;">→к</th>
+        <th class="right" style="width:10mm;">←от</th>
+        <th class="right" style="width:14mm;">Зак/день</th>
+        <th class="right" style="width:14mm;">Pipe</th>
+        <th class="right" style="width:14mm;">Новые</th>
+        <th class="right" style="width:16mm;">Итого</th>
+        <th class="right" style="width:24mm;">Выручка ₽</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="sku">УКТ-000059</td><td class="name">Костюм 2-ка регуляр Black30</td><td class="right">285</td><td class="right">242</td><td class="right">139</td><td class="right">26.0</td><td class="right">41</td><td class="right">194</td><td class="right"><strong>236</strong></td><td class="right revenue">3 357 585</td></tr>
+      <tr><td class="sku">УКТ-000060</td><td class="name">Костюм 2-ка регуляр Navy45</td><td class="right">547</td><td class="right">158</td><td class="right">65</td><td class="right">20.6</td><td class="right">27</td><td class="right">154</td><td class="right">181</td><td class="right revenue">2 584 500</td></tr>
+      <tr><td class="sku">УКТ-000063</td><td class="name">Костюм 2-ка регуляр Navy30</td><td class="right">452</td><td class="right">168</td><td class="right">81</td><td class="right">19.6</td><td class="right">29</td><td class="right">146</td><td class="right">175</td><td class="right revenue">2 501 846</td></tr>
+      <tr><td class="sku">УКТ-000036</td><td class="name">Брюки классические Black30</td><td class="right">850</td><td class="right">305</td><td class="right">203</td><td class="right">38.4</td><td class="right">52</td><td class="right">287</td><td class="right">339</td><td class="right revenue">1 652 370</td></tr>
+      <tr><td class="sku">УКТ-000030</td><td class="name">Костюм 2-ка Black30</td><td class="right">149</td><td class="right">104</td><td class="right">70</td><td class="right">11.4</td><td class="right">18</td><td class="right">85</td><td class="right">103</td><td class="right revenue">1 464 953</td></tr>
+      <tr><td class="sku">УКТ-000065</td><td class="name">Костюм 2-ка Navy30</td><td class="right">155</td><td class="right">106</td><td class="right">83</td><td class="right">10.1</td><td class="right">18</td><td class="right">76</td><td class="right">94</td><td class="right revenue">1 309 746</td></tr>
+      <tr><td class="sku">УКТ-000032</td><td class="name">Костюм 3-ка регуляр Black30</td><td class="right">48</td><td class="right">47</td><td class="right">23</td><td class="right">6.6</td><td class="right">8</td><td class="right">49</td><td class="right">57</td><td class="right revenue">1 085 741</td></tr>
+      <tr><td class="sku">УКТ-000062</td><td class="name">Костюм 3-ка регуляр Navy45</td><td class="right">213</td><td class="right">51</td><td class="right">32</td><td class="right">5.9</td><td class="right">9</td><td class="right">44</td><td class="right">52</td><td class="right revenue">1 062 749</td></tr>
+      <tr><td class="sku">УКТ-000035</td><td class="name">Брюки классические Navy30</td><td class="right">759</td><td class="right">172</td><td class="right">87</td><td class="right">23.9</td><td class="right">29</td><td class="right">178</td><td class="right">208</td><td class="right revenue">965 765</td></tr>
+      <tr><td class="sku">УКТ-000034</td><td class="name">Брюки классические Navy45</td><td class="right">190</td><td class="right">123</td><td class="right">48</td><td class="right">17.1</td><td class="right">21</td><td class="right">128</td><td class="right">149</td><td class="right revenue">818 771</td></tr>
+      <tr><td class="sku">УКТ-000029</td><td class="name">Брюки Navy30</td><td class="right">316</td><td class="right">165</td><td class="right">92</td><td class="right">21.3</td><td class="right">28</td><td class="right">159</td><td class="right">187</td><td class="right revenue">818 357</td></tr>
+      <tr><td class="sku">УКТ-000064</td><td class="name">Брюки Black30</td><td class="right">405</td><td class="right">151</td><td class="right">71</td><td class="right">20.1</td><td class="right">26</td><td class="right">151</td><td class="right">176</td><td class="right revenue">770 600</td></tr>
+      <tr><td class="sku">УКТ-000057</td><td class="name">Костюм 2-ка слим Grey30</td><td class="right">65</td><td class="right">29</td><td class="right">15</td><td class="right">5.1</td><td class="right">5</td><td class="right">38</td><td class="right">43</td><td class="right revenue">529 463</td></tr>
+      <tr><td class="sku">УКТ-000061</td><td class="name">Костюм 3-ка регуляр Navy30</td><td class="right">114</td><td class="right">26</td><td class="right">8</td><td class="right">2.3</td><td class="right">4</td><td class="right">17</td><td class="right">22</td><td class="right revenue">408 826</td></tr>
+      <tr><td class="sku">УКТ-000056</td><td class="name">Костюм 2-ка слим Navy45</td><td class="right">1</td><td class="right">28</td><td class="right">20</td><td class="right">3.1</td><td class="right">5</td><td class="right">24</td><td class="right">28</td><td class="right revenue">373 145</td></tr>
+      <tr><td class="sku">УКТ-000054</td><td class="name">Костюм 2-ка слим Grey30</td><td class="right">48</td><td class="right">25</td><td class="right">12</td><td class="right">2.9</td><td class="right">4</td><td class="right">21</td><td class="right">26</td><td class="right revenue">312 581</td></tr>
+      <tr><td class="sku">УКТ-000058</td><td class="name">Костюм 2-ка слим Navy30</td><td class="right">9</td><td class="right">21</td><td class="right">17</td><td class="right">2.3</td><td class="right">4</td><td class="right">17</td><td class="right">21</td><td class="right revenue">272 806</td></tr>
+      <tr><td class="sku">УКТ-000055</td><td class="name">Костюм 2-ка слим Black30</td><td class="right">0</td><td class="right">10</td><td class="right">4</td><td class="right">0.7</td><td class="right">2</td><td class="right">5</td><td class="right">7</td><td class="right revenue">92 966</td></tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="6" style="color:var(--ink-mute);font-size:7.5pt;letter-spacing:0.15em;text-transform:uppercase;">Все 18 SKU направления</td>
+        <td class="right">330</td>
+        <td class="right">1 774</td>
+        <td class="right">2 104</td>
+        <td class="right revenue">20 382 770</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="footnote">
+    Стоит обратить внимание на УКТ-000055 / УКТ-000056 / УКТ-000058 — почти всё в pipeline, физического остатка нет.
+    Прогноз держится исключительно на in-way и оборачиваемости.
+  </div>
+
+  <div class="index">
+    <div>Zoiten Analytics · Forecast 2026-07-01</div>
+    <div class="pgnum">04</div>
+  </div>
+</section>
+
+<!-- ═══════════════════ IV. ВЫВОДЫ ═══════════════════ -->
+<section class="page">
+  <div class="ph">
+    <div class="ph-left">
+      <div class="ph-num">IV</div>
+      <div>
+        <div class="eyebrow">Раздел четвёртый</div>
+        <h3 style="margin-top:1mm;">Выводы и сценарии</h3>
+      </div>
+    </div>
+    <div class="ph-meta">До 1 июля · 44 дн.</div>
+  </div>
+
+  <div class="lead">
+    Суммарно за 44 дня модель ожидает выручку 41.71 M ₽ — это 54 % от полной распродажи всех остатков и pipeline.
+    Бутылочные горлышки у двух направлений принципиально разные, и это диктует разные действия.
+  </div>
+
+  <table class="compare">
+    <thead>
+      <tr>
+        <th>Направление</th>
+        <th class="right">Stock max</th>
+        <th class="right">Прогноз</th>
+        <th class="right">% использования</th>
+        <th>Бутылочное горло</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="dir">Бытовая техника</td>
+        <td class="right num">33.78 M ₽</td>
+        <td class="right big num">21.32 M ₽</td>
+        <td class="right num">63 %</td>
+        <td><span class="pill pill-good">Stock / темп per-SKU</span></td>
+      </tr>
+      <tr>
+        <td class="dir">Одежда</td>
+        <td class="right num">43.39 M ₽</td>
+        <td class="right big num">20.38 M ₽</td>
+        <td class="right num">47 %</td>
+        <td><span class="pill pill-warm">Темп заказов · нужен ×2.2</span></td>
+      </tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <td>Итого</td>
+        <td class="right num">77.17 M ₽</td>
+        <td class="right big num">41.71 M ₽</td>
+        <td class="right num">54 %</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="insights">
+    <div class="insight">
+      <h4>Одежда — темп заказов узкое горло</h4>
+      <p>Чтобы вычерпать весь склад одежды до 1 июля, темп должен вырасти до ≈ 525 заказов/день
+      (×2.2 к текущим 237/день). Каждый дополнительный +30 заказов/день при сохранении 17 % buyout
+      добавляет ≈ <strong>3.1 M ₽</strong> к прогнозу.</p>
+      <div class="stat">525 /дн.</div>
+      <p style="margin-top:2mm;font-size:8pt;color:var(--ink-mute);">требуется для clearance · реклама / акции</p>
+    </div>
+    <div class="insight good">
+      <h4>Бытовая техника — pipeline даёт +739 ед.</h4>
+      <p>Высокий buyout 87 % превращает 849 ед., уже находящихся в пути к клиенту, в почти гарантированные
+      продажи на ≈ <strong>3.7 M ₽</strong>. Без них прогноз был бы ≈ 17.6 M вместо 21.3 M.</p>
+      <div class="stat">+739 ед.</div>
+      <p style="margin-top:2mm;font-size:8pt;color:var(--ink-mute);">гарантированный выкуп · in-way to client × 87 %</p>
+    </div>
+    <div class="insight warn">
+      <h4>SKU с пустым stock держатся на pipeline</h4>
+      <p>УКТ-000055 (stock 0), УКТ-000056 (stock 1), УКТ-000058 (stock 9) — итого ≈ 0.74 M ₽
+      прогноза держатся на in-way pipeline и возвратах. Без поступлений после 1 июля эти SKU
+      исчерпают себя за 2-3 цикла.</p>
+      <div class="stat">3 SKU</div>
+      <p style="margin-top:2mm;font-size:8pt;color:var(--ink-mute);">требуют пополнения · одежда</p>
+    </div>
+    <div class="insight">
+      <h4>Дисциплина модели — что может сместить прогноз</h4>
+      <p>Темп заказов взят по 7 дням; буст сезонности или прошедшая акция исказят оценку.
+      Buyout 87 % для бытовой техники — внешний параметр (фактический может варьироваться по SKU 70–95 %).
+      Pipeline в БД свежий — синхронизация WB inWay* идёт ежедневным cron.</p>
+      <div class="stat">±15 %</div>
+      <p style="margin-top:2mm;font-size:8pt;color:var(--ink-mute);">ожидаемый коридор отклонения</p>
+    </div>
+  </div>
+
+  <div class="index">
+    <div>Zoiten Analytics · Forecast 2026-07-01 · Confidential</div>
+    <div class="pgnum">05</div>
+  </div>
+</section>
+
+</body>
+</html>
