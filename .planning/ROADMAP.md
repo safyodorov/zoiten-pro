@@ -431,7 +431,15 @@ Plans:
 - НЕ импортировать исторические CSV из листа АПИ_РК — отложено в отдельный quick task (по запросу пользователя).
 
 **Depends on:** Phase 7 (общая инфраструктура /prices), Phase 13 (паттерн analytics-tab), quick 260512-jxh (WbApiToken)
-**Plans:** TBD (run /gsd:plan-phase 19 — ожидается 4-5 wave plans, ~1500 строк)
+**Plans:** 9 plans (W0 smoke + 8 implementation waves)
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 19 to break down)
+- [ ] 19-W0-PLAN.md — Curl smoke check WB Advert API + JWT scope decode (Wave 1, checkpoint)
+- [ ] 19-01-PLAN.md — Prisma schema: 4 модели (Campaign, Target, StatDaily, BalanceSnapshot) + ENUM ADS + manual migration (Wave 2)
+- [ ] 19-02-PLAN.md — WB_ADS_TOKEN: расширить WB_TOKEN_NAMES + REQUIRED_SCOPE_BITS + UI карточка «WB Реклама» (Wave 2)
+- [ ] 19-03-PLAN.md — lib/wb-adv-api.ts: type-safe client (4 функции) + cooldown bus bucket 'advert' + tests (Wave 3, TDD)
+- [ ] 19-04-PLAN.md — Daily cron /api/cron/wb-adv-sync + manual backfill /api/wb-adv-backfill + dispatcher integration (Wave 4)
+- [ ] 19-05-PLAN.md — RBAC ADS + /ads/wb RSC page + AdsTabs/AdsFilters/AdvertCampaignsTable + lib/wb-advert-aggregations (Wave 5)
+- [ ] 19-06-PLAN.md — Expandable row + WbAdvertOrdersChart (ComposedChart bars+orders+drr per nmId) + fillAdvertTimeSeries helper (Wave 6)
+- [ ] 19-07-PLAN.md — Глубокие unit-тесты: rate-limit/batch boundaries/date math MSK/aggregation edge cases (Wave 7, TDD)
+- [ ] 19-08-PLAN.md — Landing/dashboard карточки + DEPLOY.md + UAT checklist (Wave 7, checkpoint deploy)
