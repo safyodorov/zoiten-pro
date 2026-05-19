@@ -31,6 +31,7 @@ export const WB_COOLDOWN_BUCKETS = [
   "content",
   "feedbacks",
   "questions",
+  "advert", // Phase 19 — WB Advert API (advert-api.wildberries.ru, WB_ADS_TOKEN scope bit 30)
 ] as const
 export type WbCooldownBucket = (typeof WB_COOLDOWN_BUCKETS)[number]
 
@@ -73,6 +74,9 @@ export function resolveBucketFromUrl(url: string): WbCooldownBucket | null {
     if (url.includes("/api/v1/feedbacks")) return "feedbacks"
     return null
   }
+  // Phase 19 — WB Advert API (отдельный bucket для изоляции от WB_API_TOKEN scope).
+  // Все /adv/v1/* и /adv/v3/* (promotion/count, fullstats, balance) попадают сюда.
+  if (url.includes("advert-api.wildberries.ru")) return "advert"
   // returns-api, buyer-chat-api, dp-calendar-api → не наш bus, отдельные токены
   return null
 }

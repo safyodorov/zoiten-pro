@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 describe("WB_COOLDOWN_BUCKETS / WbCooldownBucket", () => {
-  it("экспортирует 9 bucket-слагов", async () => {
+  it("экспортирует 10 bucket-слагов (включая 'advert' для Phase 19)", async () => {
     const { WB_COOLDOWN_BUCKETS } = await import("@/lib/wb-cooldown")
     expect(WB_COOLDOWN_BUCKETS).toEqual([
       "statistics-stocks",
@@ -43,7 +43,14 @@ describe("WB_COOLDOWN_BUCKETS / WbCooldownBucket", () => {
       "content",
       "feedbacks",
       "questions",
+      "advert",
     ])
+  })
+
+  it("содержит 'advert' и длина = 10", async () => {
+    const { WB_COOLDOWN_BUCKETS } = await import("@/lib/wb-cooldown")
+    expect(WB_COOLDOWN_BUCKETS).toContain("advert")
+    expect(WB_COOLDOWN_BUCKETS.length).toBe(10)
   })
 })
 
@@ -215,7 +222,7 @@ describe("Per-bucket isolation", () => {
 })
 
 describe("Lazy legacy key migration", () => {
-  it("FUTURE legacy value: COPY в 9 bucket-keys + DELETE legacy", async () => {
+  it("FUTURE legacy value: COPY во все bucket-keys + DELETE legacy", async () => {
     const future = new Date(Date.now() + 1800 * 1000).toISOString()
     findUniqueMock.mockImplementation(({ where: { key } }: { where: { key: string } }) => {
       if (key === "wbCooldownUntil") return Promise.resolve({ value: future })
@@ -224,7 +231,7 @@ describe("Lazy legacy key migration", () => {
     const { setWbCooldownUntil, WB_COOLDOWN_BUCKETS } = await import("@/lib/wb-cooldown")
     await setWbCooldownUntil("prices", 60)
 
-    // Все 9 bucket-keys получили COPY of future value через upsert
+    // Все bucket-keys (включая 'advert') получили COPY of future value через upsert
     for (const bucket of WB_COOLDOWN_BUCKETS) {
       const bucketUpsert = upsertMock.mock.calls.find(
         ([arg]) =>
@@ -293,6 +300,9 @@ describe("resolveBucketFromUrl", () => {
     ["https://content-api.wildberries.ru/content/v2/get/cards/list", "content"],
     ["https://feedbacks-api.wildberries.ru/api/v1/feedbacks?take=10", "feedbacks"],
     ["https://feedbacks-api.wildberries.ru/api/v1/questions?take=10", "questions"],
+    ["https://advert-api.wildberries.ru/adv/v1/promotion/count", "advert"],
+    ["https://advert-api.wildberries.ru/adv/v3/fullstats?ids=1&beginDate=2026-05-12&endDate=2026-05-19", "advert"],
+    ["https://advert-api.wildberries.ru/adv/v1/balance", "advert"],
   ])("url=%s → %s", async (url, expected) => {
     const { resolveBucketFromUrl } = await import("@/lib/wb-cooldown")
     expect(resolveBucketFromUrl(url)).toBe(expected)
