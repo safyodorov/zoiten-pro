@@ -31,9 +31,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbOrdersDailyCronTime",
           "wbPricesDailyCronTime",
           "wbFunnelDailyCronTime",
+          "wbAdvSyncCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
+          "wbAdvSyncLastRun",
         ],
       },
     },
@@ -42,11 +44,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const ordersTime = settings.wbOrdersDailyCronTime ?? "05:00"
   const pricesTime = settings.wbPricesDailyCronTime ?? "05:10"
   const funnelTime = settings.wbFunnelDailyCronTime ?? "04:00"
+  const advSyncTime = settings.wbAdvSyncCronTime ?? "03:00"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
+  const advSyncLastRun = settings.wbAdvSyncLastRun ?? null
 
   const fired: string[] = []
+
+  // Phase 19 Wave 4: WB Advert sync. По умолчанию 03:00 МСК — самый ранний
+  // в цепочке (Advert + Statistics + Analytics — РАЗНЫЕ buckets per-seller,
+  // но всё равно разносим по времени чтобы не складывать нагрузку).
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: advSyncTime,
+      lastRunDate: advSyncLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: advHandler } = await import("../wb-adv-sync/route")
+      const res = await advHandler(req)
+      fired.push(`adv:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] adv error:", e)
+      fired.push("adv:error")
+    }
+  }
 
   if (
     shouldFireCron({
