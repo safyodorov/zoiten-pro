@@ -3,7 +3,7 @@
 // x-cron-secret guard. POST-only (никакого GET alias — backfill пишет в БД).
 
 import { NextRequest, NextResponse } from "next/server"
-import { runAdvSync } from "@/app/api/cron/wb-adv-sync/route"
+import { runAdvSync } from "@/lib/wb-adv-sync"
 import { WbRateLimitError } from "@/lib/wb-api"
 
 export const runtime = "nodejs"
