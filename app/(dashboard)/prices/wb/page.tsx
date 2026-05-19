@@ -27,6 +27,7 @@ import {
 import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculatorTableWrapper"
 import { getUserPreference } from "@/app/actions/user-preferences"
 import { getMskTodayDate, fillTimeSeries, type DayPoint } from "@/lib/wb-orders-chart"
+import { mergeOrdersAndFunnel } from "@/lib/wb-funnel-merge"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
@@ -305,38 +306,36 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     .flat()
     .map(({ card }) => card.nmId)
 
-  const ordersRows =
+  // Quick 260519-funnel: orders data merged из 2 источников —
+  // WbCardOrdersDaily (Statistics, для цен) + WbCardFunnelDaily (Analytics,
+  // cabinet-matched ordersCount). funnel.ordersCount > orders.qty в приоритете.
+  const [ordersRows, funnelRows] =
     visibleNmIds.length > 0
-      ? await prisma.wbCardOrdersDaily.findMany({
-          where: {
-            nmId: { in: visibleNmIds },
-            date: { gte: windowStart, lte: windowEnd },
-          },
-          select: {
-            nmId: true,
-            date: true,
-            qty: true,
-            sellerPrice: true,
-            buyerPrice: true,
-          },
-        })
-      : []
+      ? await Promise.all([
+          prisma.wbCardOrdersDaily.findMany({
+            where: {
+              nmId: { in: visibleNmIds },
+              date: { gte: windowStart, lte: windowEnd },
+            },
+            select: {
+              nmId: true,
+              date: true,
+              qty: true,
+              sellerPrice: true,
+              buyerPrice: true,
+            },
+          }),
+          prisma.wbCardFunnelDaily.findMany({
+            where: {
+              nmId: { in: visibleNmIds },
+              date: { gte: windowStart, lte: windowEnd },
+            },
+            select: { nmId: true, date: true, ordersCount: true },
+          }),
+        ])
+      : [[], []]
 
-  // Группируем raw orders rows by nmId для fillTimeSeries
-  const ordersByNmId = new Map<
-    number,
-    Array<{ date: Date; qty: number; sellerPrice: number | null; buyerPrice: number | null }>
-  >()
-  for (const r of ordersRows) {
-    const arr = ordersByNmId.get(r.nmId) ?? []
-    arr.push({
-      date: r.date,
-      qty: r.qty,
-      sellerPrice: r.sellerPrice,
-      buyerPrice: r.buyerPrice,
-    })
-    ordersByNmId.set(r.nmId, arr)
-  }
+  const ordersByNmId = mergeOrdersAndFunnel(ordersRows, funnelRows)
 
   // ── 6.6. Загрузить последние отзывы per nmId (для ленты в expand-панели) ──
   // quick 260518-gg3: SupportTicket channel=FEEDBACK, rating IS NOT NULL,

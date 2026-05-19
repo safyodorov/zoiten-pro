@@ -8,6 +8,7 @@ import { WbOrdersBackfillButton } from "@/components/cards/WbOrdersBackfillButto
 import { WbFilters } from "@/components/cards/WbFilters"
 import { Input } from "@/components/ui/input"
 import { getPageSizePref } from "@/app/actions/user-preferences"
+import { mergeOrdersAndFunnel } from "@/lib/wb-funnel-merge"
 import {
   getMskTodayDate,
   fillTimeSeries,
@@ -140,33 +141,31 @@ export default async function WbCardsPage({
   const windowEnd = new Date(todayMsk.getTime() - 1 * 24 * 3600_000) // today-1 (вчера), включительно
 
   const visibleNmIds = cards.map((c) => c.nmId)
-  const ordersRows =
+  // Quick 260519-funnel: orders data merged из 2 источников —
+  // WbCardOrdersDaily (Statistics, для цен) + WbCardFunnelDaily (Analytics,
+  // cabinet-matched ordersCount). funnel.ordersCount > orders.qty в приоритете.
+  const [ordersRows, funnelRows] =
     visibleNmIds.length > 0
-      ? await prisma.wbCardOrdersDaily.findMany({
-          where: {
-            nmId: { in: visibleNmIds },
-            date: { gte: windowStart, lte: windowEnd },
-          },
-          // 2026-05-15 (quick 260515-o4o): добавлен buyerPrice для линии цены в ComposedChart.
-          // sellerPrice не нужен на клиенте — Line использует только buyerPrice.
-          select: {
-            nmId: true,
-            date: true,
-            qty: true,
-            buyerPrice: true,
-          },
-        })
-      : []
+      ? await Promise.all([
+          prisma.wbCardOrdersDaily.findMany({
+            where: {
+              nmId: { in: visibleNmIds },
+              date: { gte: windowStart, lte: windowEnd },
+            },
+            select: { nmId: true, date: true, qty: true, buyerPrice: true },
+          }),
+          prisma.wbCardFunnelDaily.findMany({
+            where: {
+              nmId: { in: visibleNmIds },
+              date: { gte: windowStart, lte: windowEnd },
+            },
+            select: { nmId: true, date: true, ordersCount: true },
+          }),
+        ])
+      : [[], []]
 
-  const byNm = new Map<
-    number,
-    Array<{ date: Date; qty: number; buyerPrice: number | null }>
-  >()
-  for (const r of ordersRows) {
-    const arr = byNm.get(r.nmId) ?? []
-    arr.push({ date: r.date, qty: r.qty, buyerPrice: r.buyerPrice })
-    byNm.set(r.nmId, arr)
-  }
+  const byNm = mergeOrdersAndFunnel(ordersRows, funnelRows)
+
   // CRITICAL (B-2): explicit DayPoint[] тип, не {date, qty}[] — иначе structural subtyping
   // потеряет buyerPrice через RSC→client boundary и линия цены не отрендерится.
   const ordersTimeSeries: Record<string, DayPoint[]> = {}
