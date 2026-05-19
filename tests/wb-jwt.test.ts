@@ -90,6 +90,13 @@ describe("decodeWbJwt", () => {
     expect(WB_SCOPE_LABELS[11]).toBe("Возвраты")
   })
 
+  it("Test 5b: WB_SCOPE_LABELS содержит метку для scope «Реклама/Продвижение» (Phase 19, bit 30)", () => {
+    // Phase 19 W0: bit 30 эмпирически верифицирован — WB_API_TOKEN со scopeBits [1,2,3,5,6,7,30]
+    // проходит /adv/v1/promotion/count 200; старая метка `4: "Продвижение"` была ошибочной.
+    expect(WB_SCOPE_LABELS[30]).toBeDefined()
+    expect(WB_SCOPE_LABELS[30]).toMatch(/Реклам|Продвижен/)
+  })
+
   it("Test 6: decodeScopeBits(170) === [1, 3, 5, 7]", () => {
     expect(decodeScopeBits(170)).toEqual([1, 3, 5, 7])
   })

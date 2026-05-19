@@ -11,6 +11,9 @@ export const REQUIRED_SCOPE_BITS: Record<WbTokenName, number[]> = {
   WB_API_TOKEN: [1, 2, 3, 5, 6, 7],
   WB_RETURNS_TOKEN: [11],
   WB_CHAT_TOKEN: [9],
+  // Phase 19: bit 30 «Продвижение» эмпирически верифицирован в W0 —
+  // WB_API_TOKEN c scopeBits=[1,2,3,5,6,7,30] успешно проходит /adv/v1/promotion/count.
+  WB_ADS_TOKEN: [30],
 }
 
 const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
@@ -19,6 +22,9 @@ const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
     "https://returns-api.wildberries.ru/api/v1/claims?is_archive=false&limit=1",
   WB_CHAT_TOKEN:
     "https://buyer-chat-api.wildberries.ru/api/v1/seller/events?next=0",
+  // Phase 19: /promotion/count — лёгкий GET, верифицирован живым в W0 smoke check.
+  // При scope mismatch → 401/403 (валидация поймает).
+  WB_ADS_TOKEN: "https://advert-api.wildberries.ru/adv/v1/promotion/count",
 }
 
 const PROBE_TIMEOUT_MS = 5000

@@ -45,7 +45,13 @@ vi.mock("@/lib/wb-token-validate", () => ({
 
 vi.mock("@/lib/wb-token", () => ({
   invalidateWbTokenCache: invalidateCacheMock,
-  WB_TOKEN_NAMES: ["WB_API_TOKEN", "WB_RETURNS_TOKEN", "WB_CHAT_TOKEN"],
+  // Phase 19: добавлен WB_ADS_TOKEN
+  WB_TOKEN_NAMES: [
+    "WB_API_TOKEN",
+    "WB_RETURNS_TOKEN",
+    "WB_CHAT_TOKEN",
+    "WB_ADS_TOKEN",
+  ],
   getWbToken: vi.fn(),
 }))
 
@@ -132,15 +138,17 @@ describe("replaceWbToken", () => {
 })
 
 describe("listWbTokens", () => {
-  it("Test 4: возвращает массив длины 3 — для отсутствующих в БД токенов hasValue=false", async () => {
+  it("Test 4: возвращает массив длины 4 — для отсутствующих в БД токенов hasValue=false", async () => {
     prismaMock.wbApiToken.findMany.mockResolvedValueOnce([])
     const result = await listWbTokens()
-    expect(result).toHaveLength(3)
+    // Phase 19: 4 токена включая WB_ADS_TOKEN
+    expect(result).toHaveLength(4)
     expect(result.every((r) => !r.hasValue)).toBe(true)
     expect(result.map((r) => r.name)).toEqual([
       "WB_API_TOKEN",
       "WB_RETURNS_TOKEN",
       "WB_CHAT_TOKEN",
+      "WB_ADS_TOKEN",
     ])
   })
 

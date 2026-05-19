@@ -31,6 +31,7 @@ const DISPLAY_NAMES: Record<WbTokenName, string> = {
   WB_API_TOKEN: "WB Основной",
   WB_RETURNS_TOKEN: "WB Возвраты",
   WB_CHAT_TOKEN: "WB Чат",
+  WB_ADS_TOKEN: "WB Реклама", // Phase 19
 }
 
 function mask(value: string): string {

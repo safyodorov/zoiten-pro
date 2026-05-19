@@ -149,11 +149,12 @@ describe("getWbToken", () => {
     )
   })
 
-  it("Test 6: WB_TOKEN_NAMES = ['WB_API_TOKEN', 'WB_RETURNS_TOKEN', 'WB_CHAT_TOKEN']", () => {
+  it("Test 6: WB_TOKEN_NAMES = ['WB_API_TOKEN', 'WB_RETURNS_TOKEN', 'WB_CHAT_TOKEN', 'WB_ADS_TOKEN']", () => {
     expect(WB_TOKEN_NAMES).toEqual([
       "WB_API_TOKEN",
       "WB_RETURNS_TOKEN",
       "WB_CHAT_TOKEN",
+      "WB_ADS_TOKEN", // Phase 19
     ])
   })
 })

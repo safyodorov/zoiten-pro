@@ -28,6 +28,7 @@ enum ERP_SECTION {
   SALES
   SUPPORT
   EMPLOYEES
+  ADS
   USER_MANAGEMENT
 }
 
@@ -1038,4 +1039,91 @@ model WbCardOrdersDaily {
   @@unique([nmId, date])
   @@index([nmId])
   @@index([date])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 19: Управление рекламой WB. Источник данных — WB Advert API
+// (advert-api.wildberries.ru). Связь с нашими товарами через nmId БЕЗ FK
+// (паттерн проекта — WbCard может быть soft-delete, исторические данные выживают).
+// Daily cron /api/cron/wb-adv-sync в ~3:00 МСК + manual backfill.
+// ──────────────────────────────────────────────────────────────────
+
+model WbAdvertCampaign {
+  advertId    Int                 @id // Primary key из WB (advertId)
+  name        String? // Название кампании (часто пустое в WB)
+  type        Int // Тип РК (4..9, актуальные см. 19-RESEARCH.md секция 2)
+  status      Int // -1, 4, 7, 8, 9, 11 — справочник WB
+  cpm         Int? // Текущая ставка ₽
+  dailyBudget Int? // Дневной бюджет ₽
+  startDate   DateTime?
+  endDate     DateTime?
+  changeTime  DateTime // Из API (момент последнего изменения)
+  raw         Json? // Полный ответ /promotion/adverts для аудита
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  targets     WbAdvertTarget[]
+  stats       WbAdvertStatDaily[]
+
+  @@index([status])
+  @@index([type])
+}
+
+// M:N campaign ↔ nmId (один advertId может бить по нескольким товарам)
+// Phase 19 W0 update: /promotion/adverts (404) deprecated → targets деривируются
+// из fullstats.days[].apps[].nms[].nmId как union по всем дням ответа.
+// Заполняется в Plan 19-04 (cron) после fullstats sweep.
+model WbAdvertTarget {
+  id        Int              @id @default(autoincrement())
+  advertId  Int
+  nmId      Int // ссылка на WbCard.nmId БЕЗ FK
+  active    Boolean          @default(true)
+  campaign  WbAdvertCampaign @relation(fields: [advertId], references: [advertId], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([advertId, nmId])
+  @@index([nmId])
+}
+
+// Дневная статистика per (campaign, date, nmId, platform).
+// appType: 32=наблюдалось эмпирически (web?). Точное соответствие platform ↔ appType
+// нужно подтвердить через несколько кампаний с разными платформами (Phase 19 follow-up).
+// Source: fullstats.days[].apps[].nms[].* (см. project_wb_advert_api memory).
+model WbAdvertStatDaily {
+  id        Int              @id @default(autoincrement())
+  advertId  Int
+  date      DateTime         @db.Date // MSK day
+  nmId      Int
+  appType   Int // platform id из WB API
+  views     Int              @default(0)
+  clicks    Int              @default(0)
+  ctr       Float? // %
+  cpc       Float? // ₽
+  sum       Float            @default(0) // потрачено ₽
+  atbs      Int              @default(0) // add-to-basket
+  orders    Int              @default(0) // заказы из РК
+  cr        Float? // конверсия в заказ %
+  shks      Int              @default(0) // штук заказано
+  sumPrice  Float            @default(0) // ₽ оборот по заказам РК
+  canceled  Int              @default(0) // Phase 19 W0: technical cancels (товар недоступен/доставка failed). НЕ buyer refusals.
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  campaign  WbAdvertCampaign @relation(fields: [advertId], references: [advertId], onDelete: Cascade)
+
+  @@unique([advertId, date, nmId, appType])
+  @@index([date])
+  @@index([nmId, date])
+}
+
+// Snapshot баланса рекламного счёта
+// Phase 19 W0 update: response — {balance: int, net: int, currency: "RUB"}, поле `bonus` ОТСУТСТВУЕТ в текущей версии API.
+// Если WB вернёт bonus в будущем — добавить `bonus Int?` отдельной миграцией.
+model WbAdvertBalanceSnapshot {
+  id         Int      @id @default(autoincrement())
+  capturedAt DateTime @default(now())
+  balance    Int // основные средства ₽ (целое в API)
+  net        Int // нетто ₽ (целое в API)
+  currency   String   @default("RUB") // Phase 19 W0: API возвращает "RUB"
+
+  @@index([capturedAt])
 }

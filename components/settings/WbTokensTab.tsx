@@ -47,7 +47,7 @@ function formatDate(iso: string | null): string {
 
 export function WbTokensTab({ tokens }: { tokens: WbTokenListItem[] }) {
   return (
-    <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-4">
       {tokens.map((t) => (
         <WbTokenCard key={t.name} token={t} />
       ))}

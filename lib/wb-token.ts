@@ -9,6 +9,7 @@ export const WB_TOKEN_NAMES = [
   "WB_API_TOKEN",
   "WB_RETURNS_TOKEN",
   "WB_CHAT_TOKEN",
+  "WB_ADS_TOKEN", // Phase 19 — WB Advert API (scope bit 30 «Продвижение»)
 ] as const
 export type WbTokenName = (typeof WB_TOKEN_NAMES)[number]
 
