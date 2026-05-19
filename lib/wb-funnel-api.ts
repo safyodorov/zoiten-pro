@@ -152,17 +152,20 @@ export async function fetchFunnelDaily(
   }
 
   const buf = await fileRes.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-  const raw = new TextDecoder("utf-8").decode(bytes)
+  const bytes = Buffer.from(buf)
 
-  // WB иногда возвращает plain CSV, иногда ZIP-обёртку. Ищем CSV-заголовок.
-  const headerMark = "nmID,dt,"
-  const csvStart = raw.indexOf(headerMark)
-  if (csvStart === -1) {
-    throw new Error("Funnel CSV header not found in response (corrupted ZIP?)")
+  // Diagnostic: сохраняем raw bytes для пост-mortem если парсинг сломается
+  try {
+    const fs = await import("node:fs/promises")
+    await fs.writeFile("/tmp/funnel_raw_last.bin", bytes)
+  } catch {}
+
+  const csvBody = extractCsvFromResponse(bytes)
+  if (!csvBody) {
+    throw new Error(
+      `Funnel CSV not found. Response head: ${bytes.subarray(0, 16).toString("hex")} size=${bytes.length}`,
+    )
   }
-  // Отрезаем мусор после CSV (ZIP footer + null bytes)
-  const csvBody = raw.slice(csvStart).split(/\x00|\x50\x4b\x01\x02/)[0]
 
   // ── Парсим CSV ──────────────────────────────────────────────────
   // ВАЖНО: WB CSV содержит quoted fields с запятой как decimal separator
@@ -197,6 +200,52 @@ export async function fetchFunnelDaily(
     })
   }
   return rows
+}
+
+/** Извлекает CSV из ответа WB download endpoint.
+ *  Поддерживает 3 случая:
+ *   1) Plain text CSV (начинается с "nmID,dt,")
+ *   2) ZIP с STORED (method=0) entry — CSV bytes лежат в открытую внутри
+ *   3) ZIP с DEFLATE (method=8) entry — нужен inflate
+ *  Возвращает CSV-текст или null если ничего не нашли.
+ *
+ *  ZIP local file header layout (PKZIP spec, 30 bytes fixed + variable):
+ *    offset 0-3   : "PK\x03\x04" magic
+ *    offset 8-9   : compression method (LE16): 0=STORED, 8=DEFLATE
+ *    offset 18-21 : compressed size (LE32)
+ *    offset 22-25 : uncompressed size (LE32)
+ *    offset 26-27 : filename length (LE16)
+ *    offset 28-29 : extra field length (LE16)
+ *    offset 30..  : filename, extra field, compressed data
+ */
+export function extractCsvFromResponse(bytes: Buffer): string | null {
+  // Сценарий 1: plain CSV
+  const head = bytes.subarray(0, 10).toString("utf-8")
+  if (head.startsWith("nmID,dt,") || head.startsWith('"nmID')) {
+    return bytes.toString("utf-8")
+  }
+  // Сценарий 2/3: ZIP — проверяем magic "PK\x03\x04" (0x50,0x4B,0x03,0x04)
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 0x03 || bytes[3] !== 0x04) {
+    return null
+  }
+  const method = bytes.readUInt16LE(8)
+  const compressedSize = bytes.readUInt32LE(18)
+  const nameLen = bytes.readUInt16LE(26)
+  const extraLen = bytes.readUInt16LE(28)
+  const dataStart = 30 + nameLen + extraLen
+  const compressedData = bytes.subarray(dataStart, dataStart + compressedSize)
+  if (method === 0) {
+    // STORED — данные as-is
+    return compressedData.toString("utf-8")
+  }
+  if (method === 8) {
+    // DEFLATE — inflate raw
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { inflateRawSync } = require("node:zlib") as typeof import("node:zlib")
+    const decompressed = inflateRawSync(compressedData)
+    return decompressed.toString("utf-8")
+  }
+  return null // unsupported method (BZIP2, LZMA — не должны встречаться в WB)
 }
 
 /** Mini-CSV-parser: разбивает строку с поддержкой "..." quoting (двойные кавычки экранируются "").
