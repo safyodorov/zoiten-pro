@@ -251,6 +251,7 @@ Recent decisions affecting current work:
 - Milestone v1.2 added (2026-04-21): +29 requirements (STOCK-01..STOCK-29), +1 phase (Phase 14 = 7 plans) — Управление остатками (schema + WB per-warehouse + Excel Иваново + Производство + /stock + /stock/wb с кластерами)
 - Phase 15 added (2026-04-22): Per-warehouse и per-cluster скорость заказов для /stock/wb — расширение Phase 14: Orders API per-warehouse + WbCardWarehouseOrders таблица + реальные З/Об/Д per-кластер вместо единого avgSalesSpeed7d
 - Phase 16 added (2026-04-22): Размерная разбивка остатков WB в /stock/wb + фикс sync bug — расширение схемы WbCardWarehouseStock с techSize, кнопка «По размерам» в UI с per-size строками, расследование расхождения API vs БД (например nmId 859398279 «Брюки» Котовск API ~70 шт vs БД 8)
+- Phase 19 added (2026-05-19): Управление рекламой WB — собственная БД рекламных расходов (WbAdvertCampaign, WbAdvertTarget, WbAdvertStatDaily, WbAdvertBalanceSnapshot), отдельный WB_ADS_TOKEN, daily cron в 3:00 МСК, view-only UI /ads/wb с per-product таблицей + expandable charts + каскадные фильтры. Контекст: .planning/research/ads-sheets/FINDINGS.md
 
 ### Pending Todos
 

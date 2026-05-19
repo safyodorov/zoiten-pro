@@ -414,3 +414,24 @@ Plans:
 **Тесты:** `tests/wb-cooldown.test.ts` — 13 тестов get/set/cleanup + max-логика. Расширены `wb-fetch-rate-limit.test.ts` и `wb-support-api.test.ts`.
 
 **Plans:** 0 plans (выполнено inline без формального плана).
+
+### Phase 19: Управление рекламой WB
+
+**Goal:** Собственная БД рекламных расходов WB с разбивкой по типу кампании / nmId / связке (imt) + view-only аналитический раздел `/ads/wb`, который заменяет ручную аналитику в Google Sheets ([выгрузка зойтен](https://docs.google.com/spreadsheets/d/1LDbAZCls2wwE_xNnNmadR2LMuP24BCikxHeLa9m2dUM/) + [автомат зойтен](https://docs.google.com/spreadsheets/d/1H2AKRYDS6FUr7DKCVpraoG-VZPd4HGAKYoHr8fY0md8/)).
+
+**Requirements:**
+- Новые Prisma-модели: `WbAdvertCampaign` (advertId PK, type, status, cpm, dailyBudget, changeTime, raw JSON), `WbAdvertTarget` (M:N campaign↔nmId), `WbAdvertStatDaily` (per advertId/date/nmId/appType — views, clicks, ctr, cpc, sum, atbs, orders, cr, shks, sumPrice), `WbAdvertBalanceSnapshot` (баланс счёта).
+- Отдельный `WB_ADS_TOKEN` в существующей таблице `WbApiToken` (scope ≥ Реклама). Bootstrap из `/etc/zoiten.pro.env`, редактируется через `/admin/settings` (как WB_RETURNS_TOKEN / WB_CHAT_TOKEN из quick 260512-jxh).
+- Daily cron `/api/cron/wb-adv-sync` в ~3:00 МСК (через существующий dispatcher): GET `/adv/v1/promotion/count` → upsert campaigns → GET targets для новых advertId → POST `/adv/v2/fullstats` rolling 7 дней (батчами по 100, sleep 1с между батчами) → upsert WbAdvertStatDaily; в конце GET `/adv/v1/balance` → upsert snapshot.
+- Manual backfill `/api/wb-adv-backfill?days=N` (1..30, `x-cron-secret` auth, idempotent UPSERT).
+- UI `/ads/wb`: таблица per Product (rowSpan по строкам кампаний) с колонками — тип РК, advertId/name, потрачено 7д, заказов РК 7д, оборот РК 7д, ДРР 7д, CPC, CTR, CR. Каскадные фильтры направление/бренд/категория/подкатегория + multi-select по типу кампании + статус (active/paused/all) + период (7/14/28д). Expandable Сводка с per-nmId chart (28 дней): bar = расходы ₽/день, line = orders + ДРР %/день. Реиспользуем паттерн из /prices/wb (PriceCalculatorTable + WbCardOrdersChart).
+- Rate-limit защиты: `retryFetch` (429 backoff) + AppSetting cooldown lock (паттерн quick 260513-khv per-endpoint lock).
+- Strict-typed WB Advert API клиент `lib/wb-adv-api.ts` (по образцу `lib/wb-support-api.ts`).
+- НЕ интегрировать с `/prices/wb` калькулятором юнит-экономики — отдельный модуль. Глобальный ДРР в калькуляторе остаётся fallback'ом.
+- НЕ импортировать исторические CSV из листа АПИ_РК — отложено в отдельный quick task (по запросу пользователя).
+
+**Depends on:** Phase 7 (общая инфраструктура /prices), Phase 13 (паттерн analytics-tab), quick 260512-jxh (WbApiToken)
+**Plans:** TBD (run /gsd:plan-phase 19 — ожидается 4-5 wave plans, ~1500 строк)
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 19 to break down)
