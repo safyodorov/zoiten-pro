@@ -1042,6 +1042,39 @@ model WbCardOrdersDaily {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// Quick 260519-funnel: WB Analytics Funnel daily per nmId per day.
+// Источник — POST /api/v2/nm-report/detail/history (seller-analytics-api),
+// async через /downloads если sync недоступен.
+// Это business-aggregated метрики (cabinet "Аналитика → По дням" использует
+// именно эти числа), параллельно к WbCardOrdersDaily (Statistics event log).
+// nmId БЕЗ FK — исторические данные выживают при soft/hard delete карточки.
+// ──────────────────────────────────────────────────────────────────
+
+model WbCardFunnelDaily {
+  id                    Int      @id @default(autoincrement())
+  nmId                  Int // ссылка на WbCard.nmId БЕЗ FK
+  date                  DateTime @db.Date // MSK day
+  openCardCount         Int      @default(0) // переходы в карточку
+  addToCartCount        Int      @default(0) // положили в корзину, шт
+  ordersCount           Int      @default(0) // заказали товаров, шт  ← business orders count
+  ordersSumRub          Float    @default(0) // оборот по заказам ₽
+  buyoutsCount          Int      @default(0) // выкупили товаров, шт
+  buyoutsSumRub         Float    @default(0) // выкупили на сумму ₽
+  cancelCount           Int      @default(0) // отменили товаров, шт
+  cancelSumRub          Float    @default(0) // отменили на сумму ₽
+  // Derived metrics — храним то что WB вернул (их округление может отличаться от пересчёта)
+  addToCartConversion   Float? // % posetiteley → корзина
+  cartToOrderConversion Float? // % корзина → заказ
+  buyoutPercent         Float? // % выкупа
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([nmId, date])
+  @@index([nmId])
+  @@index([date])
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Phase 19: Управление рекламой WB. Источник данных — WB Advert API
 // (advert-api.wildberries.ru). Связь с нашими товарами через nmId БЕЗ FK
 // (паттерн проекта — WbCard может быть soft-delete, исторические данные выживают).

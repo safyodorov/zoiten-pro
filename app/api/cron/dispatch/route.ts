@@ -30,8 +30,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         in: [
           "wbOrdersDailyCronTime",
           "wbPricesDailyCronTime",
+          "wbFunnelDailyCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
+          "wbFunnelDailyLastRun",
         ],
       },
     },
@@ -39,10 +41,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const settings = Object.fromEntries(rows.map((r) => [r.key, r.value]))
   const ordersTime = settings.wbOrdersDailyCronTime ?? "05:00"
   const pricesTime = settings.wbPricesDailyCronTime ?? "05:10"
+  const funnelTime = settings.wbFunnelDailyCronTime ?? "04:00"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
+  const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
 
   const fired: string[] = []
+
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: funnelTime,
+      lastRunDate: funnelLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: funnelHandler } = await import("../wb-funnel-daily/route")
+      const res = await funnelHandler(req)
+      fired.push(`funnel:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] funnel error:", e)
+      fired.push("funnel:error")
+    }
+  }
 
   if (
     shouldFireCron({
