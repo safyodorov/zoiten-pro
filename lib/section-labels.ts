@@ -11,6 +11,7 @@ export interface SectionOption {
 export const SECTION_OPTIONS: SectionOption[] = [
   { value: "PRODUCTS",        label: "Товары" },
   { value: "PRICES",          label: "Управление ценами" },
+  { value: "ADS",             label: "Управление рекламой" },
   { value: "WEEKLY_CARDS",    label: "Недельные карточки" },
   { value: "STOCK",           label: "Управление остатками" },
   { value: "COST",            label: "Себестоимость партий" },
