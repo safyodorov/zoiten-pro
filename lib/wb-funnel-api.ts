@@ -203,49 +203,102 @@ export async function fetchFunnelDaily(
 }
 
 /** Извлекает CSV из ответа WB download endpoint.
- *  Поддерживает 3 случая:
- *   1) Plain text CSV (начинается с "nmID,dt,")
- *   2) ZIP с STORED (method=0) entry — CSV bytes лежат в открытую внутри
- *   3) ZIP с DEFLATE (method=8) entry — нужен inflate
- *  Возвращает CSV-текст или null если ничего не нашли.
+ *  WB возвращает ZIP в streaming-format (flag bit 3 — sizes в data descriptor
+ *  ПОСЛЕ compressed data, не в local file header). Поэтому парсим через
+ *  Central Directory record в конце файла — там надёжные размеры.
  *
- *  ZIP local file header layout (PKZIP spec, 30 bytes fixed + variable):
- *    offset 0-3   : "PK\x03\x04" magic
- *    offset 8-9   : compression method (LE16): 0=STORED, 8=DEFLATE
- *    offset 18-21 : compressed size (LE32)
- *    offset 22-25 : uncompressed size (LE32)
- *    offset 26-27 : filename length (LE16)
- *    offset 28-29 : extra field length (LE16)
- *    offset 30..  : filename, extra field, compressed data
+ *  Sequence:
+ *   1) Если bytes начинаются с CSV-заголовка → plain text, отдаём.
+ *   2) Иначе ищем End-of-Central-Directory (EOCD, magic PK\x05\x06) от конца.
+ *   3) EOCD даёт offset Central Directory.
+ *   4) Central Directory File Header (PK\x01\x02) даёт:
+ *      - compressed size (offset 20)
+ *      - method (offset 10)
+ *      - local header offset (offset 42)
+ *   5) Skip local header (30 + nameLen + extraLen) → compressed data.
+ *   6) Inflate если method=8, иначе bytes as-is.
  */
 export function extractCsvFromResponse(bytes: Buffer): string | null {
+  if (bytes.length < 30) return null
+
   // Сценарий 1: plain CSV
   const head = bytes.subarray(0, 10).toString("utf-8")
   if (head.startsWith("nmID,dt,") || head.startsWith('"nmID')) {
     return bytes.toString("utf-8")
   }
-  // Сценарий 2/3: ZIP — проверяем magic "PK\x03\x04" (0x50,0x4B,0x03,0x04)
+
+  // Сценарий 2: ZIP. Проверяем magic PK\x03\x04
   if (bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 0x03 || bytes[3] !== 0x04) {
     return null
   }
-  const method = bytes.readUInt16LE(8)
-  const compressedSize = bytes.readUInt32LE(18)
-  const nameLen = bytes.readUInt16LE(26)
-  const extraLen = bytes.readUInt16LE(28)
-  const dataStart = 30 + nameLen + extraLen
+
+  // Ищем End-of-Central-Directory (EOCD) record — magic PK\x05\x06, обычно в last 22 bytes.
+  // Сканируем с конца файла (EOCD может иметь optional comment, поэтому не на фиксированном offset).
+  const EOCD_SIG = Buffer.from([0x50, 0x4b, 0x05, 0x06])
+  let eocdOffset = -1
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) {
+    if (
+      bytes[i] === EOCD_SIG[0] &&
+      bytes[i + 1] === EOCD_SIG[1] &&
+      bytes[i + 2] === EOCD_SIG[2] &&
+      bytes[i + 3] === EOCD_SIG[3]
+    ) {
+      eocdOffset = i
+      break
+    }
+  }
+  if (eocdOffset === -1) return null
+
+  // EOCD: offset 16 = Central Directory start offset (LE32)
+  const cdOffset = bytes.readUInt32LE(eocdOffset + 16)
+  if (cdOffset >= bytes.length - 46) return null
+
+  // Central Directory File Header — magic PK\x01\x02
+  if (
+    bytes[cdOffset] !== 0x50 ||
+    bytes[cdOffset + 1] !== 0x4b ||
+    bytes[cdOffset + 2] !== 0x01 ||
+    bytes[cdOffset + 3] !== 0x02
+  ) {
+    return null
+  }
+
+  // CD header layout (relevant fields):
+  //   offset 10 : compression method (LE16)
+  //   offset 20 : compressed size (LE32)
+  //   offset 24 : uncompressed size (LE32)
+  //   offset 28 : filename length (LE16)
+  //   offset 30 : extra field length (LE16)
+  //   offset 32 : comment length (LE16)
+  //   offset 42 : local header offset (LE32)
+  const method = bytes.readUInt16LE(cdOffset + 10)
+  const compressedSize = bytes.readUInt32LE(cdOffset + 20)
+  const localHeaderOffset = bytes.readUInt32LE(cdOffset + 42)
+
+  // Парсим local file header чтобы пропустить filename+extra и найти data start
+  if (
+    bytes[localHeaderOffset] !== 0x50 ||
+    bytes[localHeaderOffset + 1] !== 0x4b ||
+    bytes[localHeaderOffset + 2] !== 0x03 ||
+    bytes[localHeaderOffset + 3] !== 0x04
+  ) {
+    return null
+  }
+  const lfhNameLen = bytes.readUInt16LE(localHeaderOffset + 26)
+  const lfhExtraLen = bytes.readUInt16LE(localHeaderOffset + 28)
+  const dataStart = localHeaderOffset + 30 + lfhNameLen + lfhExtraLen
   const compressedData = bytes.subarray(dataStart, dataStart + compressedSize)
+
   if (method === 0) {
-    // STORED — данные as-is
     return compressedData.toString("utf-8")
   }
   if (method === 8) {
-    // DEFLATE — inflate raw
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { inflateRawSync } = require("node:zlib") as typeof import("node:zlib")
     const decompressed = inflateRawSync(compressedData)
     return decompressed.toString("utf-8")
   }
-  return null // unsupported method (BZIP2, LZMA — не должны встречаться в WB)
+  return null
 }
 
 /** Mini-CSV-parser: разбивает строку с поддержкой "..." quoting (двойные кавычки экранируются "").
