@@ -10,10 +10,10 @@
 // Все 5 dimensions агрегаций считаются в lib/wb-advert-aggregations.ts (pure).
 // View shape выбирается по ?groupBy (product / imt / campaign / type).
 //
-// W0/Wave 4 corrections:
-//   - status codes: 4=Running (active), 7=Paused (раньше 9/11 — это completed/draft)
-//   - WbAdvertCampaign.name is null для всех 427 → UI gracefully displays "—"
-//   - WbAdvertStatDaily пуста сегодня → empty state в таблице, безопасные null
+// Status mapping (per WB official docs, 2026-05-20):
+//   4 = Готова к запуску (Ready), 7 = Завершена (Completed),
+//   9 = Активна (Running), 11 = На паузе (Paused), -1 = Удалена, 8 = Отменена.
+//   (раньше было 4=Running, 7=Paused — это была неверная интерпретация W0).
 
 import { prisma } from "@/lib/prisma"
 import { requireSection } from "@/lib/rbac"
@@ -37,6 +37,14 @@ import {
   AdvertCampaignsTable,
   type TableView,
 } from "@/components/ads/AdvertCampaignsTable"
+import { SpendSummary } from "@/components/ads/SpendSummary"
+import { SpendDailyChart } from "@/components/ads/SpendDailyChart"
+import { TopSpendingCampaigns } from "@/components/ads/TopSpendingCampaigns"
+import {
+  getDailySpend,
+  getSpendSummary,
+  getTopCampaigns,
+} from "@/lib/wb-advert-spend-data"
 
 export const dynamic = "force-dynamic"
 
@@ -112,6 +120,13 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
   const beginDate = new Date(begin + "T00:00:00Z")
   const endDate = new Date(end + "T23:59:59Z")
 
+  // ── 1.5. Spend data (из WbAdvertSpendRow / /adv/v1/upd) ─────────
+  const [spendSummary, dailySpend, topCampaigns] = await Promise.all([
+    getSpendSummary(periodDays),
+    getDailySpend(periodDays),
+    getTopCampaigns(periodDays, 10),
+  ])
+
   // ── 2. Stats за период ──────────────────────────────────────────
   const statsRaw = await prisma.wbAdvertStatDaily.findMany({
     where: { date: { gte: beginDate, lte: endDate } },
@@ -119,11 +134,10 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
   const stats: StatRow[] = statsRaw.map(toStatRow)
 
   // ── 3. Кампании (с targets для построения allNmIds) ────────────
-  // W0 correction: status 4 = Running (active), status 7 = Paused.
-  // status 9 = Completed, status 11 = Draft — не выбираются как "active".
+  // Per WB docs: 9 = Активна, 11 = На паузе.
   const campaignWhere: Record<string, unknown> = {}
-  if (statusFilter === "active") campaignWhere.status = 4
-  else if (statusFilter === "paused") campaignWhere.status = 7
+  if (statusFilter === "active") campaignWhere.status = 9
+  else if (statusFilter === "paused") campaignWhere.status = 11
   // "all" → no status filter
 
   if (typeFilter.length > 0) campaignWhere.type = { in: typeFilter }
@@ -417,7 +431,7 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
     ])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-auto">
       <AdsTabs />
       <div className="flex items-center gap-3 px-4 py-2 flex-wrap">
         <AdsFilters
@@ -438,6 +452,9 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
           <AdsGroupByToggle />
         </div>
       </div>
+      <SpendSummary summary={spendSummary} />
+      <SpendDailyChart data={dailySpend} periodDays={periodDays} />
+      <TopSpendingCampaigns rows={topCampaigns} periodDays={periodDays} />
       <div className="flex-1 min-h-0">
         <AdvertCampaignsTable view={view} />
       </div>
