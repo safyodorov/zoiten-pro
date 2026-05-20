@@ -10,6 +10,7 @@ export const WB_TOKEN_NAMES = [
   "WB_RETURNS_TOKEN",
   "WB_CHAT_TOKEN",
   "WB_ADS_TOKEN", // Phase 19 — WB Advert API (scope bit 30 «Продвижение»)
+  "WB_ADS_TOKEN_2", // 2026-05-20 — второй токен для ротации /fullstats (1 req/hour лимит)
 ] as const
 export type WbTokenName = (typeof WB_TOKEN_NAMES)[number]
 

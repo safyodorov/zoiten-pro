@@ -9,6 +9,7 @@ import {
   fetchPromotionCount,
   fetchFullStats,
   fetchBalance,
+  resetAdvTokenForRun,
   type WbAdvertStat,
 } from "@/lib/wb-adv-api"
 import { getMskTodayDate } from "@/lib/wb-orders-chart"
@@ -38,6 +39,9 @@ function formatDate(d: Date): string {
  *  Throws WbRateLimitError при 429 — caller должен поймать и вернуть HTTP 429.
  */
 export async function runAdvSync(daysWindow: number = DAILY_DELTA_DAYS) {
+  // Token rotation: один run = один токен. Следующий run возьмёт следующий из ROTATING_ADV_TOKENS.
+  resetAdvTokenForRun()
+
   // 1. Список кампаний
   const campaigns = await fetchPromotionCount()
   console.log(`[wb-adv-sync] fetched ${campaigns.length} campaigns`)

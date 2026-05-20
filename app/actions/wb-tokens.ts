@@ -32,6 +32,7 @@ const DISPLAY_NAMES: Record<WbTokenName, string> = {
   WB_RETURNS_TOKEN: "WB Возвраты",
   WB_CHAT_TOKEN: "WB Чат",
   WB_ADS_TOKEN: "WB Реклама", // Phase 19
+  WB_ADS_TOKEN_2: "WB Реклама #2", // 2026-05-20 — ротация /fullstats
 }
 
 function mask(value: string): string {

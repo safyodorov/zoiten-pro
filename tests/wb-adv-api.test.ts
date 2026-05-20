@@ -11,6 +11,16 @@ vi.mock("@/lib/wb-cooldown", () => ({
   getWbCooldownSecondsRemaining: vi.fn(async () => 0),
   setWbCooldownUntil: vi.fn(async () => {}),
 }))
+// 2026-05-20: rotation logic читает/пишет appSetting wbAdvTokenRotateIndex.
+// Mock prisma чтобы тесты не зависели от БД.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appSetting: {
+      findUnique: vi.fn(async () => null),
+      upsert: vi.fn(async () => ({})),
+    },
+  },
+}))
 
 const fetchMock = vi.fn()
 vi.stubGlobal("fetch", fetchMock)
@@ -19,6 +29,7 @@ import {
   fetchPromotionCount,
   fetchFullStats,
   fetchBalance,
+  resetAdvTokenForRun,
 } from "@/lib/wb-adv-api"
 import { WbRateLimitError } from "@/lib/wb-api"
 import { setWbCooldownUntil, getWbCooldownSecondsRemaining } from "@/lib/wb-cooldown"
@@ -26,6 +37,7 @@ import { setWbCooldownUntil, getWbCooldownSecondsRemaining } from "@/lib/wb-cool
 beforeEach(() => {
   vi.useRealTimers()
   fetchMock.mockReset()
+  resetAdvTokenForRun() // сбрасываем module-level cache токена
   vi.mocked(setWbCooldownUntil).mockClear()
   vi.mocked(getWbCooldownSecondsRemaining).mockReset()
   vi.mocked(getWbCooldownSecondsRemaining).mockResolvedValue(0)

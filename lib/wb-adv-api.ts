@@ -8,12 +8,65 @@
 // Cooldown bus: bucket 'advert' (изолирован от WB_API_TOKEN scope).
 // Token: WB_ADS_TOKEN scope bit 30 (W0 verified).
 
-import { getWbToken } from "@/lib/wb-token"
+import { prisma } from "@/lib/prisma"
+import { getWbToken, type WbTokenName } from "@/lib/wb-token"
 import {
   getWbCooldownSecondsRemaining,
   setWbCooldownUntil,
 } from "@/lib/wb-cooldown"
 import { WbRateLimitError } from "@/lib/wb-api"
+
+// ── Token rotation для /fullstats ──────────────────────────────────
+// WB Advert API `/adv/v3/fullstats` имеет лимит 1 запрос в ЧАС.
+// Гипотеза (подтверждается эмпирически): hourly bucket per-token, не per-seller.
+// 2 токена → 2 req/hour эффективно для backfill paused кампаний.
+// Per-run rotation: один runAdvSync использует ОДИН токен (cached); следующий
+// runAdvSync — другой. Index хранится в AppSetting wbAdvTokenRotateIndex.
+
+const ROTATING_ADV_TOKENS: WbTokenName[] = ["WB_ADS_TOKEN", "WB_ADS_TOKEN_2"]
+let _runTokenCache: { token: string; name: WbTokenName } | null = null
+
+/** Сброс кэша токена перед каждым runAdvSync — гарантирует что внутри одного run
+ *  все callAdvert используют ОДИН токен, а следующий run возьмёт другой. */
+export function resetAdvTokenForRun(): void {
+  _runTokenCache = null
+}
+
+/** Возвращает текущий токен для run. При первом вызове в run — выбирает
+ *  следующий по rotation, кэширует. Последующие вызовы возвращают кэш. */
+async function getAdvTokenForCurrentRun(): Promise<string> {
+  if (_runTokenCache !== null) return _runTokenCache.token
+  const setting = await prisma.appSetting.findUnique({
+    where: { key: "wbAdvTokenRotateIndex" },
+  })
+  const currentIdx = parseInt(setting?.value ?? "0", 10) % ROTATING_ADV_TOKENS.length
+  const safeIdx = Number.isFinite(currentIdx) && currentIdx >= 0
+    ? currentIdx
+    : 0
+  const nextIdx = (safeIdx + 1) % ROTATING_ADV_TOKENS.length
+  await prisma.appSetting.upsert({
+    where: { key: "wbAdvTokenRotateIndex" },
+    create: { key: "wbAdvTokenRotateIndex", value: String(nextIdx) },
+    update: { value: String(nextIdx) },
+  })
+  const name = ROTATING_ADV_TOKENS[safeIdx]
+  // Если WB_ADS_TOKEN_2 ещё не настроен — graceful fallback на основной токен.
+  let token: string
+  try {
+    token = await getWbToken(name)
+  } catch (e) {
+    if (name === "WB_ADS_TOKEN_2") {
+      console.warn(`[wb-adv-api] ${name} not configured, falling back to WB_ADS_TOKEN`)
+      token = await getWbToken("WB_ADS_TOKEN")
+      _runTokenCache = { token, name: "WB_ADS_TOKEN" }
+      return token
+    }
+    throw e
+  }
+  console.log(`[wb-adv-api] rotated to ${name} for this run`)
+  _runTokenCache = { token, name }
+  return token
+}
 
 const BASE_URL = "https://advert-api.wildberries.ru"
 // W0 (2026-05-19 prod): WB вернул 400 "number of advert cannot be more than 50"
@@ -81,7 +134,7 @@ async function callAdvert(
   if (cooldown > 0) {
     throw new WbRateLimitError(`Advert API ${url}`, cooldown)
   }
-  const token = await getWbToken("WB_ADS_TOKEN")
+  const token = await getAdvTokenForCurrentRun()
   const res = await fetch(url, {
     ...init,
     headers: {

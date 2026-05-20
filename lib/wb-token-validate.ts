@@ -14,6 +14,8 @@ export const REQUIRED_SCOPE_BITS: Record<WbTokenName, number[]> = {
   // Phase 19: bit 30 «Продвижение» эмпирически верифицирован в W0 —
   // WB_API_TOKEN c scopeBits=[1,2,3,5,6,7,30] успешно проходит /adv/v1/promotion/count.
   WB_ADS_TOKEN: [30],
+  // 2026-05-20: второй токен для ротации /fullstats (1 req/hour лимит). Тот же scope.
+  WB_ADS_TOKEN_2: [30],
 }
 
 const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
@@ -25,6 +27,8 @@ const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
   // Phase 19: /promotion/count — лёгкий GET, верифицирован живым в W0 smoke check.
   // При scope mismatch → 401/403 (валидация поймает).
   WB_ADS_TOKEN: "https://advert-api.wildberries.ru/adv/v1/promotion/count",
+  // Тот же probe endpoint для второго токена (same scope, same семантика валидации).
+  WB_ADS_TOKEN_2: "https://advert-api.wildberries.ru/adv/v1/promotion/count",
 }
 
 const PROBE_TIMEOUT_MS = 5000
