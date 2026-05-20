@@ -1160,3 +1160,28 @@ model WbAdvertBalanceSnapshot {
 
   @@index([capturedAt])
 }
+
+// Phase 19 (продолжение 2026-05-20): История списаний с рекламного счёта
+// (GET /adv/v1/upd). Один запрос за период (max 31 день) возвращает ВСЕ
+// списания — ground-truth spend, не привязан к batches /fullstats.
+//
+// Идемпотентность: при backfill за уже sync'нутый период строки за этот
+// период удаляются и пишутся заново (DELETE+INSERT в транзакции). updTime
+// от WB может быть null — в этом случае effectiveDate=createdAt для
+// корректного попадания в DELETE по диапазону.
+model WbAdvertSpendRow {
+  id            Int      @id @default(autoincrement())
+  updTime       DateTime? // ISO от WB (с TZ), может быть null
+  effectiveDate DateTime  // updTime ?? now() — для DELETE по периоду
+  updSum        Decimal  @db.Decimal(12, 2) // ₽ списано (число с дробной)
+  advertId      Int
+  campName      String
+  advertType    Int // 5/6/8/9/etc.
+  paymentType   String // "Баланс" | "Счет" | "Бонусы" | etc.
+  advertStatus  Int
+  syncedAt      DateTime @default(now())
+
+  @@index([advertId])
+  @@index([effectiveDate])
+  @@index([syncedAt])
+}

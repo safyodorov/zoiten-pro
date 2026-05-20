@@ -109,6 +109,19 @@ export interface WbAdvertBalance {
   currency: string               // обычно "RUB"
 }
 
+/** Phase 19+ 2026-05-20: одна строка истории затрат из GET /adv/v1/upd.
+ *  updTime может быть null (по нашему опыту с docs). updSum — ₽ с дробной. */
+export interface WbAdvertSpendRow {
+  updNum: number                 // 0/1/.. — порядковый в текущем ответе (не unique глобально)
+  updTime: string | null         // ISO с TZ или null
+  updSum: number                 // ₽
+  advertId: number
+  campName: string
+  advertType: number
+  paymentType: string            // "Баланс" | "Счет" | "Бонусы"
+  advertStatus: number
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {
@@ -258,6 +271,24 @@ export async function fetchFullStats(
     }
   }
   return all
+}
+
+/** GET /adv/v1/upd?from=YYYY-MM-DD&to=YYYY-MM-DD — история списаний за период.
+ *  Min 1 день, max 31 день. Lim Basic: 1 запрос в час per token.
+ *  Не привязан к advertId batches — один запрос = все списания за период.
+ *  Response: array of rows; пустой массив если списаний не было. */
+export async function fetchSpendHistory(
+  range: { from: string; to: string }, // 'YYYY-MM-DD'
+): Promise<WbAdvertSpendRow[]> {
+  // PROMOTION_RATE_SLEEP_MS — короткая пауза до запроса (good citizenship).
+  // Per-endpoint hourly bucket защищает от излишних запросов.
+  await sleep(PROMOTION_RATE_SLEEP_MS)
+  const url = new URL(`${BASE_URL}/adv/v1/upd`)
+  url.searchParams.set("from", range.from)
+  url.searchParams.set("to", range.to)
+  const res = await callAdvert(url.toString())
+  const raw = await res.json() as WbAdvertSpendRow[] | null
+  return raw ?? []
 }
 
 /** GET /adv/v1/balance → текущий баланс рекламного счёта.

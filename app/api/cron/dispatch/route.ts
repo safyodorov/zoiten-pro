@@ -32,10 +32,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbPricesDailyCronTime",
           "wbFunnelDailyCronTime",
           "wbAdvSyncCronTime",
+          "wbAdvUpdSyncCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
           "wbAdvSyncLastRun",
+          "wbAdvUpdSyncLastRun",
         ],
       },
     },
@@ -45,10 +47,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const pricesTime = settings.wbPricesDailyCronTime ?? "05:10"
   const funnelTime = settings.wbFunnelDailyCronTime ?? "04:00"
   const advSyncTime = settings.wbAdvSyncCronTime ?? "03:00"
+  const advUpdSyncTime = settings.wbAdvUpdSyncCronTime ?? "03:30"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
   const advSyncLastRun = settings.wbAdvSyncLastRun ?? null
+  const advUpdSyncLastRun = settings.wbAdvUpdSyncLastRun ?? null
 
   const fired: string[] = []
 
@@ -70,6 +74,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] adv error:", e)
       fired.push("adv:error")
+    }
+  }
+
+  // Phase 19+ 2026-05-20: /adv/v1/upd history. По умолч. 03:30 МСК — за 30 мин
+  // после wb-adv-sync (03:00). Hourly bucket per-token независим от /fullstats.
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: advUpdSyncTime,
+      lastRunDate: advUpdSyncLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: advUpdHandler } = await import("../wb-adv-upd-sync/route")
+      const res = await advUpdHandler(req)
+      fired.push(`adv-upd:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] adv-upd error:", e)
+      fired.push("adv-upd:error")
     }
   }
 
