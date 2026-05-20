@@ -73,18 +73,9 @@ function parseRetryAfter(res: Response): number {
   return 60
 }
 
-/** Порог retry-after, ниже которого callAdvert делает 1 retry с respect-buffer.
- *  Эмпирически: WB Advert /fullstats регулярно возвращает 429 retry-after=19s в
- *  начале burst (per-endpoint 1 req/sec bucket «свежий»). После ожидания
- *  retry+30 sec следующий запрос проходит. Большие retry-after (>= 60) — это
- *  per-seller global limiter, его retry не лечит, propagate как WbRateLimitError. */
-const RETRY_SMALL_BAN_THRESHOLD_SEC = 60
-const RETRY_BUFFER_SEC = 30
-
 async function callAdvert(
   url: string,
   init: RequestInit = {},
-  attempt: number = 1,
 ): Promise<Response> {
   const cooldown = await getWbCooldownSecondsRemaining("advert")
   if (cooldown > 0) {
@@ -103,16 +94,6 @@ async function callAdvert(
   })
   if (res.status === 429) {
     const retryAfter = parseRetryAfter(res)
-    // Retry-with-respect: при transient burst-limit (retry-after < 60s) — ОДИН retry с
-    // ожиданием retry-after + 30s буфер. Это устраняет паттерн фейла на первом
-    // /fullstats батче после долгого простоя. Sustained ban (>= 60s) propagate как раньше.
-    if (attempt === 1 && retryAfter < RETRY_SMALL_BAN_THRESHOLD_SEC) {
-      console.warn(
-        `[wb-adv-api] 429 retry-after=${retryAfter}s, waiting ${retryAfter + RETRY_BUFFER_SEC}s for ONE retry: ${url}`,
-      )
-      await sleep((retryAfter + RETRY_BUFFER_SEC) * 1000)
-      return callAdvert(url, init, attempt + 1)
-    }
     await setWbCooldownUntil("advert", retryAfter)
     throw new WbRateLimitError(`Advert API ${url}`, retryAfter)
   }
