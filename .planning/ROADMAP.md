@@ -443,3 +443,20 @@ Plans:
 - [ ] 19-06-PLAN.md — Expandable row + WbAdvertOrdersChart (ComposedChart bars+orders+drr per nmId) + fillAdvertTimeSeries helper (Wave 6)
 - [ ] 19-07-PLAN.md — Глубокие unit-тесты: rate-limit/batch boundaries/date math MSK/aggregation edge cases (Wave 7, TDD)
 - [ ] 19-08-PLAN.md — Landing/dashboard карточки + DEPLOY.md + UAT checklist (Wave 7, checkpoint deploy)
+
+### Phase 20: Управление закупками — Поставщики, Закупки, План закупок
+
+**Goal:** Закрыть цикл управления закупками: учёт поставщиков с контактами и переговорами, размещение и tracking закупок (планируемые/текущие/завершённые) с автоматическим расчётом депозитов/балансовых платежей по курсам ЦБ РФ и параметрам из БД Поставщики.
+
+**Подразделы:**
+1. **Поставщики** — новая БД `Supplier` со связкой к Product, контактами (менеджеры/боссы с основными), переговорами, и per-product параметрами (срок готовности, цена, эксклюзивность, платёжные условия, адрес инспекции/отгрузки)
+2. **Закупки** — список закупок со статусами (планируемые / текущие / завершённые), мультивалютные суммы с курсами ЦБ РФ, автоматически рассчитанные депозиты/балансы по параметрам из БД Поставщики, multi-payment схемы (Депозит 1/2/..., Баланс 1/2/...)
+3. **План закупок** — текущая заглушка превращается в работающий раздел (детали TBD в discuss-phase)
+
+**Requirements:** TBD (будут сформулированы в /gsd:plan-phase)
+
+**Depends on:** Phase 4 (Products), Phase 2 (User Management — Employee и связка с Закупщиком)
+
+**Plans:** 0 plans (run `/gsd:plan-phase 20` to break down)
+
+**Контекст из original prompt пользователя 2026-05-20** (хранится в `.planning/phases/20-procurement/20-CONTEXT.md`)

@@ -252,6 +252,7 @@ Recent decisions affecting current work:
 - Phase 15 added (2026-04-22): Per-warehouse и per-cluster скорость заказов для /stock/wb — расширение Phase 14: Orders API per-warehouse + WbCardWarehouseOrders таблица + реальные З/Об/Д per-кластер вместо единого avgSalesSpeed7d
 - Phase 16 added (2026-04-22): Размерная разбивка остатков WB в /stock/wb + фикс sync bug — расширение схемы WbCardWarehouseStock с techSize, кнопка «По размерам» в UI с per-size строками, расследование расхождения API vs БД (например nmId 859398279 «Брюки» Котовск API ~70 шт vs БД 8)
 - Phase 19 added (2026-05-19): Управление рекламой WB — собственная БД рекламных расходов (WbAdvertCampaign, WbAdvertTarget, WbAdvertStatDaily, WbAdvertBalanceSnapshot), отдельный WB_ADS_TOKEN, daily cron в 3:00 МСК, view-only UI /ads/wb с per-product таблицей + expandable charts + каскадные фильтры. Контекст: .planning/research/ads-sheets/FINDINGS.md
+- Phase 20 added (2026-05-20): Управление закупками — Поставщики (БД с контактами/переговорами/per-product параметрами), Закупки (статусы планируемые/текущие/завершённые, multi-payment депозит/баланс с курсами ЦБ РФ), План закупок (детали TBD). Контекст: .planning/phases/20-procurement/20-CONTEXT.md. Планирование запущено 2026-05-20 параллельно с активной Phase 19 (реклама), реализация после Phase 19.
 
 ### Pending Todos
 
