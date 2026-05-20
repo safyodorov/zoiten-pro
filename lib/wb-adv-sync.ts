@@ -75,10 +75,13 @@ export async function runAdvSync(daysWindow: number = DAILY_DELTA_DAYS) {
   const today = getMskTodayDate()
   const begin = new Date(today.getTime() - daysWindow * 24 * 3600_000)
   const end = new Date(today.getTime() - 24 * 3600_000) // вчера включительно
+  // Sort: status DESC (paused=11, active=9 → first), advertId ASC внутри статуса.
+  // Active+paused кампании имеют реальный spend → попадают в первые батчи.
+  // Completed (7) и Ready (4) — в последние батчи, sync'аются реже как history.
   const allRelevantIds = campaigns
     .filter(c => STATS_RELEVANT_STATUSES.has(c.status))
+    .sort((a, b) => b.status - a.status || a.advertId - b.advertId)
     .map(c => c.advertId)
-    .sort((a, b) => a - b) // стабильный порядок для batch offset
   // Batch offset rotation: AppSetting wbAdvSyncBatchOffset (0..N-1) cycles через
   // батчи по MAX_ADVERT_IDS_PER_RUN. Каждый run берёт ОДИН батч и продвигает offset.
   const totalBatches = Math.ceil(allRelevantIds.length / MAX_ADVERT_IDS_PER_RUN)
