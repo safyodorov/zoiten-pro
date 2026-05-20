@@ -15,9 +15,19 @@ import { getMskTodayDate } from "@/lib/wb-orders-chart"
 
 export const DAILY_DELTA_DAYS = 7
 
-/** Активные статусы кампаний для fullstats запроса.
- *  4 = Running, 7 = Paused. 9 = Completed (нет свежих stats), 11 = Draft (никогда не запускалась). */
-const STATS_RELEVANT_STATUSES = new Set([4, 7])
+/** Статусы кампаний для fullstats запроса.
+ *
+ *  КРИТИЧЕСКИЙ ЛИМИТ: GET /adv/v3/fullstats — **1 запрос в ЧАС** на seller (per WB
+ *  docs «Маркетинг и продвижение»). max 50 advertId per request. Это значит:
+ *    - 196 paused + 1 running = 197 advertIds → 4 батча → 4 ЧАСА на полный sweep
+ *  Поэтому здесь фильтруем только status=4 (Running) — у нас обычно <50 running
+ *  campaigns, помещаются в 1 батч = 1 запрос = укладывается в hourly limit.
+ *
+ *  Для sweep paused (status=7) нужен отдельный механизм (batch offset через
+ *  AppSetting + cron runs в разные часы). См. memory/project_wb_advert_api.md.
+ *
+ *  status 4 = Running, 7 = Paused, 9 = Completed (archived), 11 = Draft. */
+const STATS_RELEVANT_STATUSES = new Set([4])
 
 function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10) // YYYY-MM-DD
