@@ -18,18 +18,17 @@ export const DAILY_DELTA_DAYS = 7
 
 /** Статусы кампаний для fullstats запроса.
  *
- *  КРИТИЧЕСКИЙ ЛИМИТ: GET /adv/v3/fullstats — **1 запрос в ЧАС** на seller (per WB
- *  docs «Маркетинг и продвижение»). max 50 advertId per request.
+ *  КРИТИЧЕСКИЙ ЛИМИТ: GET /adv/v3/fullstats — **1 запрос в ЧАС** на seller (Basic
+ *  token). max 50 advertId per request.
  *
- *  Правильный status mapping (по official WB docs, 2026-05-20):
- *  4 — готова к запуску (Ready), 7 — завершена, 9 — активна, 11 — на паузе.
- *  -1 (удалена) и 8 (отменена) — исключены. Все остальные включены: активные
- *  имеют текущий spend, на паузе — недавний spend, завершённые — историю,
- *  ready — нулевой spend но fixture для интеграции.
+ *  Per WB official docs (2026-05-20): /fullstats возвращает данные ТОЛЬКО для
+ *  статусов 7 (Завершена), 9 (Активна), 11 (На паузе). Status 4 (Ready) — без
+ *  данных, исключаем чтобы не тратить slot в батче. Status -1/8 — удалена/
+ *  отменена, исключены.
  *
  *  Для sweep большего чем 50 advertIds — runAdvSync(opts) принимает
  *  batchOffset/batchSize чтобы cron мог чередовать батчи в часовых окнах. */
-const STATS_RELEVANT_STATUSES = new Set([4, 7, 9, 11])
+const STATS_RELEVANT_STATUSES = new Set([7, 9, 11])
 
 /** Жёсткий cap на 50 advertId per run — соответствует hourly limit /fullstats
  *  (1 batch = 1 request). Большие сборы — через batchOffset rotation. */
