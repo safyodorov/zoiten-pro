@@ -1,12 +1,14 @@
 // Phase 19+ 2026-05-20: data helpers для UI визуализации spend из /adv/v1/upd.
 // Все запросы — pure server-side, results возвращаются в plain shapes для RSC.
 //
-// 2026-05-21: ДРР учитывает процент выкупа per-nmId.
-// Раньше: ДРР = spend / SUM(WbCardFunnelDaily.ordersSumRub) — оборот по заказам.
-// Это завышенное «знаменательное» — выкупается не 100% заказов, а ~85-92% для
-// одежды. Сейчас: revenue_adjusted = SUM(ordersSumRub × buyoutPct(nmId) / 100),
-// где buyoutPct берётся из WbCard.buyoutPercent (monthly avg per nmId из Analytics
-// API). Если поле null — используется global avg по карточкам у которых есть данные.
+// 2026-05-21 (v2): процент выкупа применяется per-(nmId, day) как взвешенное
+// среднее rolling 30d. Раньше брался один pct per nmId за всё окно — в сезон
+// одежды текущий выкуп выше старого, поэтому натягивать одно среднее на все
+// дни периода искажало выручку (старые дни завышались, свежие занижались).
+// Теперь для каждого (nmId, date) считаем взвешенный buyoutPercent по окну
+// [date-30d ; date] из WbCardFunnelDaily, и применяем его к ordersSumRub
+// именно этого дня. Двойной fallback chain: per-(nmId,date) → per-date global
+// (rolling 30d) → final global (всё окно).
 
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -60,75 +62,157 @@ export interface TopCampaign {
   count: number
 }
 
-/** Загрузить взвешенный buyoutPct per-nmId + global fallback.
+/** YYYY-MM-DD из Date (UTC). Используется как ключ Map'ов. */
+function dateKey(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+/** Резолвер выкупа per-(nmId, day). Возвращает % с гарантированным fallback'ом. */
+export interface BuyoutResolver {
+  resolve(nmId: number, dateKey: string): number
+}
+
+/** Rolling 30d weighted buyout% per (nmId, date) + per-date global + final global.
  *
- *  Источник: WbCardFunnelDaily.buyoutPercent — per-day % выкупа от WB Funnel API
- *  (WB сам учитывает лаг между заказом и выкупом). Взвешиваем по ordersCount
- *  чтобы дни с малым объёмом не искажали среднее.
+ *  Берём WbCardFunnelDaily.buyoutPercent (что показано в кабинете WB
+ *  «Аналитика → По дням» за конкретный день), но к ordersSumRub дня применяем
+ *  не сам raw per-day процент (шумно при малых объёмах: 1 заказ → 0% или 100%),
+ *  а взвешенное среднее за окно [date-30d ; date] для данного nmId. Это даёт:
+ *   • устойчивость к шуму малых выборок,
+ *   • реакцию на сезонные сдвиги (в сезон одежды свежее окно отражает рост выкупа),
+ *   • независимость от единого «среднемесячного» pct, который раньше натягивался
+ *     на весь 28-дневный период отчёта.
  *
- *  Окно — последние 30 дней. «Процент выкупа за месяц» — стабильная per-nmId
- *  характеристика, рабочее число для юнит-экономики (соответствует тому что
- *  показывает кабинет WB Аналитика → Воронка продаж).
+ *  Fallback chain в resolve():
+ *    1) per-(nmId, date) — основной источник
+ *    2) per-date global rolling 30d — для (nmId, date) у которых нет funnel-данных
+ *       в окне (например, новый артикул)
+ *    3) finalGlobal — взвешенное среднее по всему [from-30d ; to) окну (для дней
+ *       у которых вообще не оказалось funnel-данных в БД)
+ *    4) 90% — hard fallback, только если БД совсем пустая
  *
- *  WbCard.buyoutPercent (Analytics API monthly avg) НЕ используется — на 226
- *  карточках 0 заполнено (Analytics cap 3/сутки + ошибки парсинга CSV).
- *
- *  @returns
- *    - buyoutByNmId: per-nmId взвешенный % (только для nmId с заказами)
- *    - globalAvgBuyout: глобальный взвешенный % по всем funnel rows за окно
- *      (fallback для nmId без funnel-данных, должен быть редким случаем)
+ *  @param from начало отчётного окна (включительно, UTC midnight)
+ *  @param to конец отчётного окна (exclusive, UTC midnight)
+ *  @param nmIdsFilter ограничить выборку перечисленными nmId
  */
-async function loadBuyoutPctMap(nmIdsFilter?: number[]): Promise<{
-  buyoutByNmId: Map<number, number>
-  globalAvgBuyout: number
-}> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600_000)
-  // SQL fragment для фильтра по nmId — если не задан, передаём NO-OP условие.
+async function loadBuyoutPctRolling30dMap(
+  from: Date,
+  to: Date,
+  nmIdsFilter?: number[],
+): Promise<BuyoutResolver> {
+  // Чтобы для самой ранней даты окна было доступно «прошлое 30 дней»,
+  // расширяем загрузку на 30 дней назад.
+  const lookbackFrom = new Date(from.getTime() - 30 * 24 * 3600_000)
   const nmFilterSql =
     nmIdsFilter && nmIdsFilter.length > 0
       ? Prisma.sql`AND "nmId" IN (${Prisma.join(nmIdsFilter)})`
       : Prisma.sql``
 
-  const [perNmId, globalRow] = await Promise.all([
-    prisma.$queryRaw<Array<{ nmId: number; weighted: number | null }>>`
-      SELECT
-        "nmId",
-        (SUM("buyoutPercent" * "ordersCount") / NULLIF(SUM("ordersCount"), 0))::float AS weighted
-      FROM "WbCardFunnelDaily"
-      WHERE "buyoutPercent" IS NOT NULL
-        AND "ordersCount" > 0
-        AND "date" >= ${thirtyDaysAgo}
-        ${nmFilterSql}
-      GROUP BY "nmId"
+  // 1) Per-(nmId, date) rolling 30d weighted. Window function поверх
+  // отфильтрованной выборки (только строки с buyoutPercent IS NOT NULL и
+  // ordersCount > 0 — иначе в weighting нет смысла).
+  // RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW = 30 календарных
+  // дней включая текущий, устойчиво к пропускам строк.
+  // 2) Per-date global rolling 30d — для fallback по дате (когда у nmId нет
+  // данных в окне). Считаем через CTE: daily totals → rolling sum через window.
+  // 3) Final global — одно число по всему [lookbackFrom; to) окну.
+  const [perNmDate, perDate, finalGlobalRow] = await Promise.all([
+    prisma.$queryRaw<Array<{ nmId: number; date: Date; weighted: number | null }>>`
+      WITH base AS (
+        SELECT "nmId", "date", "buyoutPercent", "ordersCount"
+        FROM "WbCardFunnelDaily"
+        WHERE "date" >= ${lookbackFrom} AND "date" < ${to}
+          AND "buyoutPercent" IS NOT NULL
+          AND "ordersCount" > 0
+          ${nmFilterSql}
+      )
+      SELECT "nmId", "date",
+        (
+          SUM("buyoutPercent" * "ordersCount") OVER (
+            PARTITION BY "nmId" ORDER BY "date"
+            RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+          )
+          / NULLIF(
+              SUM("ordersCount") OVER (
+                PARTITION BY "nmId" ORDER BY "date"
+                RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+              ), 0
+            )
+        )::float AS weighted
+      FROM base
+      WHERE "date" >= ${from}
+    `,
+    prisma.$queryRaw<Array<{ date: Date; weighted: number | null }>>`
+      WITH base AS (
+        SELECT "date", "buyoutPercent", "ordersCount"
+        FROM "WbCardFunnelDaily"
+        WHERE "date" >= ${lookbackFrom} AND "date" < ${to}
+          AND "buyoutPercent" IS NOT NULL
+          AND "ordersCount" > 0
+          ${nmFilterSql}
+      ),
+      daily AS (
+        SELECT "date",
+          SUM("buyoutPercent" * "ordersCount") AS num,
+          SUM("ordersCount") AS den
+        FROM base
+        GROUP BY "date"
+      )
+      SELECT "date",
+        (
+          SUM(num) OVER (
+            ORDER BY "date"
+            RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+          )
+          / NULLIF(
+              SUM(den) OVER (
+                ORDER BY "date"
+                RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+              ), 0
+            )
+        )::float AS weighted
+      FROM daily
+      WHERE "date" >= ${from}
     `,
     prisma.$queryRaw<Array<{ weighted: number | null }>>`
       SELECT
         (SUM("buyoutPercent" * "ordersCount") / NULLIF(SUM("ordersCount"), 0))::float AS weighted
       FROM "WbCardFunnelDaily"
-      WHERE "buyoutPercent" IS NOT NULL
+      WHERE "date" >= ${lookbackFrom} AND "date" < ${to}
+        AND "buyoutPercent" IS NOT NULL
         AND "ordersCount" > 0
-        AND "date" >= ${thirtyDaysAgo}
         ${nmFilterSql}
     `,
   ])
 
-  const buyoutByNmId = new Map<number, number>()
-  for (const r of perNmId) {
+  const byNmDate = new Map<string, number>()
+  for (const r of perNmDate) {
     if (r.weighted != null && r.weighted > 0) {
-      buyoutByNmId.set(r.nmId, r.weighted)
+      byNmDate.set(`${r.nmId}_${dateKey(r.date)}`, r.weighted)
     }
   }
-  // Fallback 90% если в БД нет funnel-данных вообще (первый запуск, до cron-backfill).
-  const globalAvgBuyout = globalRow[0]?.weighted ?? 90
-  return { buyoutByNmId, globalAvgBuyout }
+  const byDate = new Map<string, number>()
+  for (const r of perDate) {
+    if (r.weighted != null && r.weighted > 0) {
+      byDate.set(dateKey(r.date), r.weighted)
+    }
+  }
+  const finalGlobal = finalGlobalRow[0]?.weighted ?? 90
+
+  return {
+    resolve(nmId: number, dKey: string): number {
+      return byNmDate.get(`${nmId}_${dKey}`) ?? byDate.get(dKey) ?? finalGlobal
+    },
+  }
 }
 
 /** Daily spend + revenue + DRR chart data за период.
  *  Spend из WbAdvertSpendRow (по effectiveDate).
  *  Revenue (оборот) — SUM(WbCardFunnelDaily.ordersSumRub).
- *  RevenueAdjusted — Σ_per_nmId(ordersSumRub × buyoutPct(nmId)/100), buyoutPct
- *  per-nmId стабильный из WbCard.buyoutPercent (Analytics monthly avg), null →
- *  global avg по карточкам с данными.
+ *  RevenueAdjusted — Σ_per_(nmId,day)(ordersSumRub × buyoutPct/100), где
+ *  buyoutPct — rolling 30d weighted на день этой строки funnel (см.
+ *  loadBuyoutPctRolling30dMap). Это устраняет искажение в сезон: свежие дни
+ *  получают свежее окно выкупа.
  *  ДРР = spend / revenueAdjusted × 100%; null если revenueAdjusted = 0. */
 export async function getDailySpend(
   periodDays: number,
@@ -143,7 +227,7 @@ export async function getDailySpend(
   const to = today // exclusive (= вчера 23:59:59 включительно)
   const from = new Date(today.getTime() - periodDays * 24 * 3600_000)
 
-  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
+  const buyout = await loadBuyoutPctRolling30dMap(from, to, filter?.nmIds)
 
   // Динамические фильтры для $queryRaw. Если списка нет — NO-OP fragment.
   const spendAdvertFilter =
@@ -183,12 +267,14 @@ export async function getDailySpend(
     spendByDate.set(key, { spend: Number(r.spend), count: Number(r.cnt) })
   }
 
-  // Per-day агрегация: revenue (оборот) + revenueAdjusted (с выкупом per-nmId).
+  // Per-day агрегация: revenue (оборот) + revenueAdjusted (с rolling-30d
+  // выкупом, посчитанным на дату каждой строки funnel — а не одной константой
+  // на весь период).
   type DayAgg = { revenue: number; revenueAdjusted: number }
   const aggByDate = new Map<string, DayAgg>()
   for (const r of revenueRows) {
-    const key = r.date.toISOString().slice(0, 10)
-    const buyoutPct = buyoutByNmId.get(r.nmId) ?? globalAvgBuyout
+    const key = dateKey(r.date)
+    const buyoutPct = buyout.resolve(r.nmId, key)
     const a = aggByDate.get(key) ?? { revenue: 0, revenueAdjusted: 0 }
     a.revenue += r.ordersSumRub
     a.revenueAdjusted += r.ordersSumRub * (buyoutPct / 100)
@@ -219,9 +305,9 @@ export async function getDailySpend(
 /** Summary за период: total spend, total revenue (оборот + с учётом выкупа),
  *  ДРР с коррекцией на выкуп, breakdown по paymentType.
  *
- *  Выкуп применяется per-nmId (стабильное значение из WbCard.buyoutPercent —
- *  monthly avg из Analytics API). Per-day buyoutPercent НЕ используется —
- *  на свежих днях он 0 (выкупы ещё не вернулись), это искажает ДРР. */
+ *  Выкуп применяется per-(nmId, day) как rolling 30d weighted из
+ *  WbCardFunnelDaily.buyoutPercent (см. loadBuyoutPctRolling30dMap). Сезонные
+ *  сдвиги выкупа теперь отражаются — старые дни не «подтягивают» свежие. */
 export async function getSpendSummary(
   periodDays: number,
   filter?: SpendFilter,
@@ -235,7 +321,7 @@ export async function getSpendSummary(
   const to = today // exclusive (= вчера 23:59:59 включительно)
   const from = new Date(today.getTime() - periodDays * 24 * 3600_000)
 
-  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
+  const buyout = await loadBuyoutPctRolling30dMap(from, to, filter?.nmIds)
 
   // Prisma where фильтры для spend / revenue.
   const spendWhere: Prisma.WbAdvertSpendRowWhereInput = {
@@ -264,10 +350,11 @@ export async function getSpendSummary(
       _count: { _all: true },
       orderBy: { _sum: { updSum: "desc" } },
     }),
-    // Per-nmId агрегация оборота за период (sum через JS чтобы применить
-    // buyoutPct per-nmId).
+    // Per-(nmId, date) агрегация оборота: pct выкупа варьируется по дням,
+    // поэтому суммирование per-nmId за весь период неверно — надо применять
+    // pct к каждому дню отдельно.
     prisma.wbCardFunnelDaily.groupBy({
-      by: ["nmId"],
+      by: ["nmId", "date"],
       where: revenueWhere,
       _sum: { ordersSumRub: true },
     }),
@@ -280,7 +367,7 @@ export async function getSpendSummary(
   let totalRevenueAdjusted = 0
   for (const r of revenueRows) {
     const oborot = Number(r._sum.ordersSumRub ?? 0)
-    const buyoutPct = buyoutByNmId.get(r.nmId) ?? globalAvgBuyout
+    const buyoutPct = buyout.resolve(r.nmId, dateKey(r.date))
     totalRevenue += oborot
     totalRevenueAdjusted += oborot * (buyoutPct / 100)
   }
