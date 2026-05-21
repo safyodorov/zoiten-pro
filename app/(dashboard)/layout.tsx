@@ -20,14 +20,22 @@ export default async function DashboardLayout({
   }
 
   const isSuperadmin = session.user.role === "SUPERADMIN"
+  // Источник прав в сессии — оба поля: sectionRoles (гранулярный, актуальный)
+  // и allowedSections (legacy, fallback). Объединяем — так sidebar показывает
+  // раздел, даже если синхронизация одного из полей пропущена (защита от
+  // регрессии после миграции 20260409_section_roles).
   const allowedSections = session.user.allowedSections ?? []
+  const sectionRoles = session.user.sectionRoles ?? {}
+  const grantedSections = new Set<string>([
+    ...allowedSections,
+    ...Object.keys(sectionRoles),
+  ])
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => isSuperadmin || allowedSections.includes(item.section)
+    (item) => isSuperadmin || grantedSections.has(item.section)
   )
 
-  const hasSupportAccess =
-    isSuperadmin || allowedSections.includes("SUPPORT")
+  const hasSupportAccess = isSuperadmin || grantedSections.has("SUPPORT")
   const badgeCounts = await getSidebarBadgeCounts(hasSupportAccess)
 
   return (

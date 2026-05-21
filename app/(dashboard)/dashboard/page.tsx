@@ -23,10 +23,16 @@ export default async function DashboardPage() {
   if (!session?.user) redirect("/login")
 
   const isSuperadmin = session.user.role === "SUPERADMIN"
+  // Union allowedSections (legacy) + sectionRoles (актуальный) — см. layout.tsx.
   const allowedSections = session.user.allowedSections ?? []
+  const sectionRoles = session.user.sectionRoles ?? {}
+  const grantedSections = new Set<string>([
+    ...allowedSections,
+    ...Object.keys(sectionRoles),
+  ])
 
   const visibleSections = ALL_SECTIONS.filter(
-    (s) => isSuperadmin || allowedSections.includes(s.section)
+    (s) => isSuperadmin || grantedSections.has(s.section)
   )
 
   return (
