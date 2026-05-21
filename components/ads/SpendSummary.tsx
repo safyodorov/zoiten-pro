@@ -31,8 +31,10 @@ export function SpendSummary({ summary }: Props) {
   const {
     totalSpend,
     totalRevenue,
+    totalRevenueAdjusted,
+    appliedBuyoutPct,
     avgDaily,
-    avgDailyRevenue,
+    avgDailyRevenueAdjusted,
     drrPct,
     byPaymentType,
     periodDays,
@@ -57,17 +59,39 @@ export function SpendSummary({ summary }: Props) {
         </div>
       </div>
 
-      {/* Card 2: Выручка (WB Funnel) */}
-      <div className="rounded-md border bg-card p-3">
+      {/* Card 2: Выручка (с учётом выкупа per-nmId) */}
+      <div
+        className="rounded-md border bg-card p-3"
+        title={`Выручка = Σ(оборот заказов nmId × % выкупа nmId/100).\n% выкупа — стабильный monthly avg из Analytics API per nmId.\nПрименённый средневзвешенный % выкупа: ${
+          appliedBuyoutPct != null ? appliedBuyoutPct.toFixed(1) + "%" : "—"
+        }.`}
+      >
         <div className="text-xs text-muted-foreground">
-          Выручка за {periodDays} дн.
+          Выручка за {periodDays} дн.{" "}
+          <span className="text-[10px]">(с выкупом)</span>
         </div>
         <div className="text-2xl font-semibold tabular-nums mt-1 text-emerald-700 dark:text-emerald-400">
-          {formatRub(totalRevenue)}
+          {formatRub(totalRevenueAdjusted)}
           <span className="text-sm text-muted-foreground font-normal"> ₽</span>
         </div>
-        <div className="text-xs text-muted-foreground mt-1">
-          {formatRub(avgDailyRevenue)} ₽/день · по данным Funnel
+        <div className="text-xs text-muted-foreground mt-1 flex flex-wrap gap-x-2">
+          <span>{formatRub(avgDailyRevenueAdjusted)} ₽/день</span>
+          <span>·</span>
+          <span>
+            оборот:{" "}
+            <span className="tabular-nums">{formatRub(totalRevenue)} ₽</span>
+          </span>
+          {appliedBuyoutPct != null && (
+            <>
+              <span>·</span>
+              <span title="Применённый средневзвешенный процент выкупа">
+                выкуп:{" "}
+                <span className="tabular-nums text-foreground">
+                  {appliedBuyoutPct.toFixed(1)}%
+                </span>
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -86,8 +110,11 @@ export function SpendSummary({ summary }: Props) {
         <div className={`text-3xl font-semibold tabular-nums mt-1 ${drrInfo.color}`}>
           {formatPct(drrPct)}
         </div>
-        <div className="text-xs text-muted-foreground mt-1">
-          доля рекламных расходов в выручке
+        <div
+          className="text-xs text-muted-foreground mt-1"
+          title="ДРР = расходы / (оборот × % выкупа). Учёт выкупа per-nmId."
+        >
+          расходы / выручку с учётом выкупа
         </div>
       </div>
 

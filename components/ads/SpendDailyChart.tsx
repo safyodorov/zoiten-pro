@@ -24,7 +24,7 @@ import type { DailySpendPoint } from "@/lib/wb-advert-spend-data"
 
 const chartConfig = {
   spend: { label: "Расход (₽)", color: "var(--chart-1)" }, // brand orange (как раньше)
-  revenue: { label: "Выручка (₽)", color: "oklch(0.65 0.16 155)" }, // emerald
+  revenueAdjusted: { label: "Выручка с выкупом (₽)", color: "oklch(0.65 0.16 155)" }, // emerald
   drrPct: { label: "ДРР %", color: "oklch(0.7 0.18 70)" }, // amber
 } satisfies ChartConfig
 
@@ -46,15 +46,20 @@ function formatThousands(v: number): string {
 
 export function SpendDailyChart({ data, periodDays }: Props) {
   const maxSpend = Math.max(...data.map(d => d.spend), 1)
-  const maxRevenue = Math.max(...data.map(d => d.revenue), 1)
+  const maxRevenue = Math.max(...data.map(d => d.revenueAdjusted), 1)
+  const totalRevenueAdjusted = data.reduce((s, d) => s + d.revenueAdjusted, 0)
   const totalRevenue = data.reduce((s, d) => s + d.revenue, 0)
   const totalSpend = data.reduce((s, d) => s + d.spend, 0)
-  const avgDrr = totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : null
+  const avgDrr =
+    totalRevenueAdjusted > 0 ? (totalSpend / totalRevenueAdjusted) * 100 : null
+  // Применённый средневзвешенный % выкупа за период (для подписи в шапке)
+  const appliedBuyoutPct =
+    totalRevenue > 0 ? (totalRevenueAdjusted / totalRevenue) * 100 : null
   const maxDrr = Math.max(...data.map(d => d.drrPct ?? 0), 1)
   const drrUpper = Math.max(Math.ceil(maxDrr / 10) * 10, 10) // округление до десятков, минимум 10
 
   const hasSpend = data.some(d => d.spend > 0)
-  const hasRevenue = data.some(d => d.revenue > 0)
+  const hasRevenue = data.some(d => d.revenueAdjusted > 0)
   const hasData = hasSpend || hasRevenue
 
   // Тики X: меньше для длинных периодов.
@@ -67,12 +72,21 @@ export function SpendDailyChart({ data, periodDays }: Props) {
           <div>
             <div className="text-sm font-medium">Расходы, выручка и ДРР по дням</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              Столбцы — расходы (₽), линия — выручка (свой масштаб), пунктир — ДРР % (правая ось)
+              Столбцы — расходы (₽), линия — выручка с учётом выкупа (свой масштаб),
+              пунктир — ДРР % (правая ось)
+              {appliedBuyoutPct != null && (
+                <>
+                  {" · "}применён % выкупа{" "}
+                  <span className="font-medium text-foreground tabular-nums">
+                    {appliedBuyoutPct.toFixed(1)}%
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <LegendDot color="var(--color-spend)" label="Расход" />
-            <LegendDot color="var(--color-revenue)" label="Выручка" line />
+            <LegendDot color="var(--color-revenueAdjusted)" label="Выручка (выкуп)" line />
             <LegendDot color="var(--color-drrPct)" label="ДРР %" line dashed />
             {avgDrr != null && (
               <span className="text-muted-foreground">
@@ -94,8 +108,8 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                   <stop offset="100%" stopColor="var(--color-spend)" stopOpacity={0.65} />
                 </linearGradient>
                 <linearGradient id="revenueAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-revenue)" stopOpacity={0.18} />
-                  <stop offset="100%" stopColor="var(--color-revenue)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="var(--color-revenueAdjusted)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--color-revenueAdjusted)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid
@@ -162,17 +176,21 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                       let label = String(name)
                       let formatted = ""
                       let suffix = ""
+                      let subtitle: string | null = null
 
                       if (name === "spend") {
                         color = "var(--color-spend)"
                         label = "Расход"
                         formatted = Number.isFinite(num) ? formatRub(num) : String(value)
                         suffix = " ₽"
-                      } else if (name === "revenue") {
-                        color = "var(--color-revenue)"
-                        label = "Выручка"
+                      } else if (name === "revenueAdjusted") {
+                        color = "var(--color-revenueAdjusted)"
+                        label = "Выручка (выкуп)"
                         formatted = Number.isFinite(num) ? formatRub(num) : String(value)
                         suffix = " ₽"
+                        if (payload?.revenue != null && payload.revenue > 0) {
+                          subtitle = `оборот ${formatRub(payload.revenue)} ₽`
+                        }
                       } else if (name === "drrPct") {
                         color = "var(--color-drrPct)"
                         label = "ДРР"
@@ -195,6 +213,11 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                                   ({cnt})
                                 </span>
                               )}
+                              {subtitle && (
+                                <span className="text-muted-foreground text-[10px] font-normal ml-2">
+                                  {subtitle}
+                                </span>
+                              )}
                             </span>
                           </div>
                         </>
@@ -214,7 +237,7 @@ export function SpendDailyChart({ data, periodDays }: Props) {
               <Area
                 yAxisId="revenue"
                 type="monotone"
-                dataKey="revenue"
+                dataKey="revenueAdjusted"
                 stroke="none"
                 fill="url(#revenueAreaGradient)"
                 isAnimationActive={false}
@@ -224,11 +247,11 @@ export function SpendDailyChart({ data, periodDays }: Props) {
               <Line
                 yAxisId="revenue"
                 type="monotone"
-                dataKey="revenue"
-                stroke="var(--color-revenue)"
+                dataKey="revenueAdjusted"
+                stroke="var(--color-revenueAdjusted)"
                 strokeWidth={2.25}
-                dot={{ r: 2.5, fill: "var(--color-revenue)", strokeWidth: 0 }}
-                activeDot={{ r: 4, fill: "var(--color-revenue)", strokeWidth: 2, stroke: "var(--background)" }}
+                dot={{ r: 2.5, fill: "var(--color-revenueAdjusted)", strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: "var(--color-revenueAdjusted)", strokeWidth: 2, stroke: "var(--background)" }}
                 connectNulls={false}
                 isAnimationActive={false}
               />

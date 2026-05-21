@@ -1,5 +1,12 @@
 // Phase 19+ 2026-05-20: data helpers для UI визуализации spend из /adv/v1/upd.
 // Все запросы — pure server-side, results возвращаются в plain shapes для RSC.
+//
+// 2026-05-21: ДРР учитывает процент выкупа per-nmId.
+// Раньше: ДРР = spend / SUM(WbCardFunnelDaily.ordersSumRub) — оборот по заказам.
+// Это завышенное «знаменательное» — выкупается не 100% заказов, а ~85-92% для
+// одежды. Сейчас: revenue_adjusted = SUM(ordersSumRub × buyoutPct(nmId) / 100),
+// где buyoutPct берётся из WbCard.buyoutPercent (monthly avg per nmId из Analytics
+// API). Если поле null — используется global avg по карточкам у которых есть данные.
 
 import { prisma } from "@/lib/prisma"
 
@@ -7,17 +14,28 @@ export interface DailySpendPoint {
   date: string // YYYY-MM-DD
   spend: number // ₽ сумма за день
   count: number // количество списаний
-  revenue: number // ₽ выручка по заказам (WbCardFunnelDaily.ordersSumRub суммарно)
-  drrPct: number | null // ДРР = (spend / revenue) × 100%; null если revenue = 0
+  /** ₽ оборот по заказам за день (WbCardFunnelDaily.ordersSumRub суммарно). */
+  revenue: number
+  /** ₽ выручка с учётом выкупа = Σ(ordersSumRub × buyoutPct(nmId)/100). */
+  revenueAdjusted: number
+  /** ДРР = spend / revenueAdjusted × 100%; null если revenueAdjusted = 0. */
+  drrPct: number | null
 }
 
 export interface SpendSummaryData {
   totalSpend: number // ₽ за период
   totalCount: number // строк списаний
-  totalRevenue: number // ₽ выручка за период
+  /** ₽ оборот по заказам за период. */
+  totalRevenue: number
+  /** ₽ выручка с учётом выкупа per-nmId. */
+  totalRevenueAdjusted: number
   avgDaily: number // ₽/день spend
-  avgDailyRevenue: number // ₽/день revenue
-  drrPct: number | null // overall ДРР = total spend / total revenue × 100%
+  avgDailyRevenue: number // ₽/день revenue (оборот)
+  avgDailyRevenueAdjusted: number // ₽/день выручка с учётом выкупа
+  /** Средневзвешенный применённый процент выкупа: totalRevenueAdjusted / totalRevenue × 100%. */
+  appliedBuyoutPct: number | null
+  /** ДРР с учётом выкупа = total spend / total revenueAdjusted × 100%. */
+  drrPct: number | null
   byPaymentType: Array<{ paymentType: string; spend: number; count: number }>
   periodDays: number
 }
@@ -31,15 +49,52 @@ export interface TopCampaign {
   count: number
 }
 
+/** Загрузить средневзвешенный buyoutPct per-nmId + global fallback.
+ *
+ *  Источник: WbCard.buyoutPercent — monthly avg per nmId из Analytics API
+ *  (стабильная характеристика товара, не дёргается per-day).
+ *
+ *  @returns
+ *    - buyoutByNmId: per-nmId буфер %, только для тех где значение не null
+ *    - globalAvgBuyout: средневзвешенный % по карточкам где значение есть
+ *      (используется как fallback для nmId без данных)
+ */
+async function loadBuyoutPctMap(): Promise<{
+  buyoutByNmId: Map<number, number>
+  globalAvgBuyout: number
+}> {
+  const rows = await prisma.wbCard.findMany({
+    where: { deletedAt: null, buyoutPercent: { not: null } },
+    select: { nmId: true, buyoutPercent: true },
+  })
+  const buyoutByNmId = new Map<number, number>()
+  let sum = 0
+  let cnt = 0
+  for (const r of rows) {
+    if (r.buyoutPercent == null) continue
+    buyoutByNmId.set(r.nmId, r.buyoutPercent)
+    sum += r.buyoutPercent
+    cnt++
+  }
+  // Fallback 90% если в БД вообще нет данных по выкупу (ранний этап / Analytics cap).
+  const globalAvgBuyout = cnt > 0 ? sum / cnt : 90
+  return { buyoutByNmId, globalAvgBuyout }
+}
+
 /** Daily spend + revenue + DRR chart data за период.
- *  Spend из WbAdvertSpendRow (по effectiveDate), revenue из WbCardFunnelDaily
- *  (ordersSumRub, агрегированно по всем nmId за день).
- *  ДРР = spend / revenue × 100%; null если revenue=0 (нет данных WB Funnel за день). */
+ *  Spend из WbAdvertSpendRow (по effectiveDate).
+ *  Revenue (оборот) — SUM(WbCardFunnelDaily.ordersSumRub).
+ *  RevenueAdjusted — Σ_per_nmId(ordersSumRub × buyoutPct(nmId)/100), buyoutPct
+ *  per-nmId стабильный из WbCard.buyoutPercent (Analytics monthly avg), null →
+ *  global avg по карточкам с данными.
+ *  ДРР = spend / revenueAdjusted × 100%; null если revenueAdjusted = 0. */
 export async function getDailySpend(periodDays: number): Promise<DailySpendPoint[]> {
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
   const to = new Date(today.getTime() + 24 * 3600_000)
+
+  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap()
 
   const [spendRows, revenueRows] = await Promise.all([
     prisma.$queryRaw<Array<{ day: Date; spend: number; cnt: bigint }>>`
@@ -52,15 +107,13 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
       GROUP BY day
       ORDER BY day ASC
     `,
-    prisma.$queryRaw<Array<{ day: Date; revenue: number }>>`
-      SELECT
-        "date" AS day,
-        SUM("ordersSumRub")::float AS revenue
-      FROM "WbCardFunnelDaily"
-      WHERE "date" >= ${from} AND "date" < ${to}
-      GROUP BY "date"
-      ORDER BY "date" ASC
-    `,
+    // Per-(nmId, day) — JS код применит buyoutPct и сгруппирует. Это даёт
+    // правильную per-nmId коррекцию и при этом избегает JOIN'а с WbCard в SQL
+    // (Prisma $queryRaw не любит дин. JOIN, плюс buyoutByNmId уже в памяти).
+    prisma.wbCardFunnelDaily.findMany({
+      where: { date: { gte: from, lt: to } },
+      select: { nmId: true, date: true, ordersSumRub: true },
+    }),
   ])
 
   const spendByDate = new Map<string, { spend: number; count: number }>()
@@ -68,10 +121,17 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
     const key = r.day.toISOString().slice(0, 10)
     spendByDate.set(key, { spend: Number(r.spend), count: Number(r.cnt) })
   }
-  const revenueByDate = new Map<string, number>()
+
+  // Per-day агрегация: revenue (оборот) + revenueAdjusted (с выкупом per-nmId).
+  type DayAgg = { revenue: number; revenueAdjusted: number }
+  const aggByDate = new Map<string, DayAgg>()
   for (const r of revenueRows) {
-    const key = r.day.toISOString().slice(0, 10)
-    revenueByDate.set(key, Number(r.revenue))
+    const key = r.date.toISOString().slice(0, 10)
+    const buyoutPct = buyoutByNmId.get(r.nmId) ?? globalAvgBuyout
+    const a = aggByDate.get(key) ?? { revenue: 0, revenueAdjusted: 0 }
+    a.revenue += r.ordersSumRub
+    a.revenueAdjusted += r.ordersSumRub * (buyoutPct / 100)
+    aggByDate.set(key, a)
   }
 
   const out: DailySpendPoint[] = []
@@ -79,28 +139,37 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
     const d = new Date(from.getTime() + i * 24 * 3600_000)
     const key = d.toISOString().slice(0, 10)
     const s = spendByDate.get(key)
-    const revenue = revenueByDate.get(key) ?? 0
+    const agg = aggByDate.get(key) ?? { revenue: 0, revenueAdjusted: 0 }
     const spend = s?.spend ?? 0
-    const drrPct = revenue > 0 ? (spend / revenue) * 100 : null
+    const drrPct =
+      agg.revenueAdjusted > 0 ? (spend / agg.revenueAdjusted) * 100 : null
     out.push({
       date: key,
       spend,
       count: s?.count ?? 0,
-      revenue,
+      revenue: agg.revenue,
+      revenueAdjusted: agg.revenueAdjusted,
       drrPct,
     })
   }
   return out
 }
 
-/** Summary за период: total spend, total revenue, ДРР, breakdown по paymentType. */
+/** Summary за период: total spend, total revenue (оборот + с учётом выкупа),
+ *  ДРР с коррекцией на выкуп, breakdown по paymentType.
+ *
+ *  Выкуп применяется per-nmId (стабильное значение из WbCard.buyoutPercent —
+ *  monthly avg из Analytics API). Per-day buyoutPercent НЕ используется —
+ *  на свежих днях он 0 (выкупы ещё не вернулись), это искажает ДРР. */
 export async function getSpendSummary(periodDays: number): Promise<SpendSummaryData> {
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
   const to = new Date(today.getTime() + 24 * 3600_000)
 
-  const [totals, byType, revenueAgg] = await Promise.all([
+  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap()
+
+  const [totals, byType, revenueRows] = await Promise.all([
     prisma.wbAdvertSpendRow.aggregate({
       where: { effectiveDate: { gte: from, lt: to } },
       _sum: { updSum: true },
@@ -113,7 +182,10 @@ export async function getSpendSummary(periodDays: number): Promise<SpendSummaryD
       _count: { _all: true },
       orderBy: { _sum: { updSum: "desc" } },
     }),
-    prisma.wbCardFunnelDaily.aggregate({
+    // Per-nmId агрегация оборота за период (sum через JS чтобы применить
+    // buyoutPct per-nmId).
+    prisma.wbCardFunnelDaily.groupBy({
+      by: ["nmId"],
       where: { date: { gte: from, lt: to } },
       _sum: { ordersSumRub: true },
     }),
@@ -121,15 +193,31 @@ export async function getSpendSummary(periodDays: number): Promise<SpendSummaryD
 
   const totalSpend = Number(totals._sum.updSum ?? 0)
   const totalCount = totals._count._all
-  const totalRevenue = Number(revenueAgg._sum.ordersSumRub ?? 0)
-  const drrPct = totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : null
+
+  let totalRevenue = 0
+  let totalRevenueAdjusted = 0
+  for (const r of revenueRows) {
+    const oborot = Number(r._sum.ordersSumRub ?? 0)
+    const buyoutPct = buyoutByNmId.get(r.nmId) ?? globalAvgBuyout
+    totalRevenue += oborot
+    totalRevenueAdjusted += oborot * (buyoutPct / 100)
+  }
+
+  const drrPct =
+    totalRevenueAdjusted > 0 ? (totalSpend / totalRevenueAdjusted) * 100 : null
+  const appliedBuyoutPct =
+    totalRevenue > 0 ? (totalRevenueAdjusted / totalRevenue) * 100 : null
 
   return {
     totalSpend,
     totalCount,
     totalRevenue,
+    totalRevenueAdjusted,
     avgDaily: periodDays > 0 ? totalSpend / periodDays : 0,
     avgDailyRevenue: periodDays > 0 ? totalRevenue / periodDays : 0,
+    avgDailyRevenueAdjusted:
+      periodDays > 0 ? totalRevenueAdjusted / periodDays : 0,
+    appliedBuyoutPct,
     drrPct,
     byPaymentType: byType.map(r => ({
       paymentType: r.paymentType,
