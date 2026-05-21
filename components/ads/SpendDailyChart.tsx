@@ -1,12 +1,14 @@
 "use client"
 // Phase 19+ 2026-05-21: Composed daily chart для /ads/wb.
-// Bars: расходы (brand orange — как было до revenue/ДРР).
-// Lines: выручка (emerald) на левой оси денег + ДРР % (amber) на правой оси.
+// Bars: расходы (brand orange) — широкие столбцы на левой оси.
+// Lines: выручка (emerald) на собственной скрытой оси — масштаб независимый,
+// чтобы пик выручки визуально совпадал с пиком расходов; ДРР % (amber) на правой оси.
 
 import {
   ComposedChart,
   Bar,
   Line,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -43,7 +45,8 @@ function formatThousands(v: number): string {
 }
 
 export function SpendDailyChart({ data, periodDays }: Props) {
-  const maxMoney = Math.max(...data.map(d => Math.max(d.spend, d.revenue)), 1)
+  const maxSpend = Math.max(...data.map(d => d.spend), 1)
+  const maxRevenue = Math.max(...data.map(d => d.revenue), 1)
   const totalRevenue = data.reduce((s, d) => s + d.revenue, 0)
   const totalSpend = data.reduce((s, d) => s + d.spend, 0)
   const avgDrr = totalRevenue > 0 ? (totalSpend / totalRevenue) * 100 : null
@@ -61,11 +64,16 @@ export function SpendDailyChart({ data, periodDays }: Props) {
     <div className="px-4 py-2">
       <div className="rounded-md border bg-card p-3">
         <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-          <div className="text-sm font-medium">Расходы, выручка и ДРР по дням</div>
+          <div>
+            <div className="text-sm font-medium">Расходы, выручка и ДРР по дням</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              Столбцы — расходы (₽), линия — выручка (свой масштаб), пунктир — ДРР % (правая ось)
+            </div>
+          </div>
           <div className="flex items-center gap-3 text-xs">
             <LegendDot color="var(--color-spend)" label="Расход" />
             <LegendDot color="var(--color-revenue)" label="Выручка" line />
-            <LegendDot color="var(--color-drrPct)" label="ДРР %" line />
+            <LegendDot color="var(--color-drrPct)" label="ДРР %" line dashed />
             {avgDrr != null && (
               <span className="text-muted-foreground">
                 ср. ДРР: <span className="font-medium tabular-nums text-foreground">{avgDrr.toFixed(1)}%</span>
@@ -74,11 +82,22 @@ export function SpendDailyChart({ data, periodDays }: Props) {
           </div>
         </div>
         {hasData ? (
-          <ChartContainer config={chartConfig} className="h-64 w-full">
+          <ChartContainer config={chartConfig} className="h-72 w-full">
             <ComposedChart
               data={data}
               margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+              barCategoryGap="12%"
             >
+              <defs>
+                <linearGradient id="spendBarGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--color-spend)" stopOpacity={0.95} />
+                  <stop offset="100%" stopColor="var(--color-spend)" stopOpacity={0.65} />
+                </linearGradient>
+                <linearGradient id="revenueAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--color-revenue)" stopOpacity={0.18} />
+                  <stop offset="100%" stopColor="var(--color-revenue)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid
                 vertical={false}
                 strokeDasharray="2 2"
@@ -93,14 +112,22 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                 interval={interval}
               />
               <YAxis
-                yAxisId="money"
+                yAxisId="spend"
                 orientation="left"
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
                 width={56}
                 tickFormatter={formatThousands}
-                domain={[0, Math.ceil(maxMoney * 1.05)]}
+                domain={[0, Math.ceil(maxSpend * 1.15)]}
+              />
+              {/* Скрытая ось выручки — собственный масштаб, чтобы линия выручки
+                  визуально совпадала со столбцами расходов (форма, а не абсолют). */}
+              <YAxis
+                yAxisId="revenue"
+                orientation="right"
+                hide
+                domain={[0, Math.ceil(maxRevenue * 1.15)]}
               />
               <YAxis
                 yAxisId="drr"
@@ -177,20 +204,31 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                 }
               />
               <Bar
-                yAxisId="money"
+                yAxisId="spend"
                 dataKey="spend"
-                fill="var(--color-spend)"
-                radius={[2, 2, 0, 0]}
+                fill="url(#spendBarGradient)"
+                radius={[3, 3, 0, 0]}
                 isAnimationActive={false}
-                maxBarSize={28}
+                maxBarSize={64}
+              />
+              <Area
+                yAxisId="revenue"
+                type="monotone"
+                dataKey="revenue"
+                stroke="none"
+                fill="url(#revenueAreaGradient)"
+                isAnimationActive={false}
+                activeDot={false}
+                legendType="none"
               />
               <Line
-                yAxisId="money"
+                yAxisId="revenue"
                 type="monotone"
                 dataKey="revenue"
                 stroke="var(--color-revenue)"
-                strokeWidth={2}
-                dot={{ r: 2.5, fill: "var(--color-revenue)" }}
+                strokeWidth={2.25}
+                dot={{ r: 2.5, fill: "var(--color-revenue)", strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: "var(--color-revenue)", strokeWidth: 2, stroke: "var(--background)" }}
                 connectNulls={false}
                 isAnimationActive={false}
               />
@@ -200,7 +238,9 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                 dataKey="drrPct"
                 stroke="var(--color-drrPct)"
                 strokeWidth={2}
-                dot={{ r: 2.5, fill: "var(--color-drrPct)" }}
+                strokeDasharray="4 3"
+                dot={{ r: 2.25, fill: "var(--color-drrPct)", strokeWidth: 0 }}
+                activeDot={{ r: 4, fill: "var(--color-drrPct)", strokeWidth: 2, stroke: "var(--background)" }}
                 connectNulls={false}
                 isAnimationActive={false}
               />
@@ -220,18 +260,35 @@ function LegendDot({
   color,
   label,
   line = false,
+  dashed = false,
 }: {
   color: string
   label: string
   line?: boolean
+  dashed?: boolean
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-muted-foreground">
       {line ? (
-        <span
-          className="inline-block w-3 h-0.5 rounded-full"
-          style={{ backgroundColor: color }}
-        />
+        dashed ? (
+          <svg width="14" height="3" className="inline-block">
+            <line
+              x1="0"
+              y1="1.5"
+              x2="14"
+              y2="1.5"
+              stroke={color}
+              strokeWidth="2"
+              strokeDasharray="3 2"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : (
+          <span
+            className="inline-block w-3.5 h-0.5 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        )
       ) : (
         <span
           className="inline-block w-2.5 h-2.5 rounded-[2px]"
