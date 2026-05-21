@@ -291,6 +291,46 @@ export async function fetchSpendHistory(
   return raw ?? []
 }
 
+/** GET /api/advert/v2/adverts?ids=...  → детали кампаний с привязкой к nmId.
+ *  Replacement для deprecated /adv/v1/promotion/adverts. Lim Basic: 1/час per
+ *  token. Batch ≤50 IDs. Response: {adverts: [{id, status, nm_settings:
+ *  [{nm_id, subject}]}]}.
+ *  Empirically verified 2026-05-21 — даёт реальные target nmIds даже для
+ *  кампаний без активности (которые /fullstats пропускает). */
+export interface WbAdvertInfo {
+  advertId: number
+  status: number
+  nmIds: number[]
+}
+
+export async function fetchAdvertsInfoV2(
+  advertIds: number[],
+): Promise<WbAdvertInfo[]> {
+  const out: WbAdvertInfo[] = []
+  const BATCH = 50
+  for (let i = 0; i < advertIds.length; i += BATCH) {
+    if (i > 0) await sleep(PROMOTION_RATE_SLEEP_MS)
+    const batch = advertIds.slice(i, i + BATCH)
+    const url = new URL(`${BASE_URL}/api/advert/v2/adverts`)
+    url.searchParams.set("ids", batch.join(","))
+    const res = await callAdvert(url.toString())
+    const data = (await res.json()) as {
+      adverts?: Array<{
+        id: number
+        status: number
+        nm_settings?: Array<{ nm_id: number }>
+      }>
+    } | null
+    for (const a of data?.adverts ?? []) {
+      const nmIds = (a.nm_settings ?? [])
+        .map((n) => n.nm_id)
+        .filter((n): n is number => typeof n === "number")
+      out.push({ advertId: a.id, status: a.status, nmIds })
+    }
+  }
+  return out
+}
+
 /** GET /adv/v1/balance → текущий баланс рекламного счёта.
  *  W0: response — {balance: int, net: int, currency: string}. Поля bonus НЕТ. */
 export async function fetchBalance(): Promise<WbAdvertBalance> {

@@ -167,6 +167,12 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                   <ChartTooltipContent
                     labelFormatter={(label) => `Дата: ${label}`}
                     formatter={(value, name, item) => {
+                      // Дубль: <Area> с тем же dataKey что и <Line revenueAdjusted>
+                      // даёт второй элемент в тултипе. Помечаем Area name="_revenueArea"
+                      // и здесь возвращаем пустой фрагмент → recharts не рендерит строку.
+                      if (typeof name === "string" && name.startsWith("_")) {
+                        return null
+                      }
                       const num = typeof value === "number" ? value : Number(value)
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       const payload = (item as any)?.payload as DailySpendPoint | undefined
@@ -238,6 +244,7 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                 yAxisId="revenue"
                 type="monotone"
                 dataKey="revenueAdjusted"
+                name="_revenueArea"
                 stroke="none"
                 fill="url(#revenueAreaGradient)"
                 isAnimationActive={false}

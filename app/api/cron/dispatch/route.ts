@@ -175,5 +175,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // 2026-05-21: backfill WbAdvertTarget через /api/advert/v2/adverts.
+  // 1 батч (50 advertId) per dispatcher tick. Dispatcher fires каждые 5 мин,
+  // но /api/advert/v2/adverts имеет lim 1/час per token (rotation 2 токена).
+  // Само API кинет 429 → endpoint вернёт 429 → dispatcher просто пропустит.
+  // После полного покрытия endpoint сам возвращает done:true (no-op).
+  // Без gate'a по времени — без attempt запускаем каждые 5 мин, безопасно.
+  try {
+    const { GET: targetsBackfillHandler } = await import(
+      "../wb-adv-targets-backfill/route"
+    )
+    const res = await targetsBackfillHandler(req)
+    fired.push(`targets-backfill:${res.status}`)
+  } catch (e) {
+    console.error("[dispatch] targets-backfill error:", e)
+    fired.push("targets-backfill:error")
+  }
+
   return NextResponse.json({ ok: true, currentHHMM, today, fired })
 }
