@@ -134,10 +134,14 @@ export async function getDailySpend(
   periodDays: number,
   filter?: SpendFilter,
 ): Promise<DailySpendPoint[]> {
+  // Окно — periodDays ПОЛНЫХ прошедших дней, заканчивая вчера.
+  // Текущий день исключаем: данные неполные (utm/funnel cron утром, spend
+  // /adv/v1/upd за час назад), показывать их рядом с полными днями обманчиво.
+  // Соответствует getPeriodRange() в wb-advert-aggregations.ts.
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
-  const to = new Date(today.getTime() + 24 * 3600_000)
+  const to = today // exclusive (= вчера 23:59:59 включительно)
+  const from = new Date(today.getTime() - periodDays * 24 * 3600_000)
 
   const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
 
@@ -222,10 +226,14 @@ export async function getSpendSummary(
   periodDays: number,
   filter?: SpendFilter,
 ): Promise<SpendSummaryData> {
+  // Окно — periodDays ПОЛНЫХ прошедших дней, заканчивая вчера.
+  // Текущий день исключаем: данные неполные (utm/funnel cron утром, spend
+  // /adv/v1/upd за час назад), показывать их рядом с полными днями обманчиво.
+  // Соответствует getPeriodRange() в wb-advert-aggregations.ts.
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
-  const to = new Date(today.getTime() + 24 * 3600_000)
+  const to = today // exclusive (= вчера 23:59:59 включительно)
+  const from = new Date(today.getTime() - periodDays * 24 * 3600_000)
 
   const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
 
@@ -308,10 +316,14 @@ export async function getTopCampaigns(
   limit = 10,
   filter?: SpendFilter,
 ): Promise<TopCampaign[]> {
+  // Окно — periodDays ПОЛНЫХ прошедших дней, заканчивая вчера.
+  // Текущий день исключаем: данные неполные (utm/funnel cron утром, spend
+  // /adv/v1/upd за час назад), показывать их рядом с полными днями обманчиво.
+  // Соответствует getPeriodRange() в wb-advert-aggregations.ts.
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
-  const to = new Date(today.getTime() + 24 * 3600_000)
+  const to = today // exclusive (= вчера 23:59:59 включительно)
+  const from = new Date(today.getTime() - periodDays * 24 * 3600_000)
 
   const advertFilter =
     filter?.advertIds && filter.advertIds.length > 0
