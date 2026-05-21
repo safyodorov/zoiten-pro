@@ -70,8 +70,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     let pairsUpserted = 0
     let campaignsWithNms = 0
+    let sentinelsAdded = 0
     for (const info of infos) {
-      if (info.nmIds.length === 0) continue
+      if (info.nmIds.length === 0) {
+        // Кампания без nm_settings — Auto-РК / пустая / removed. Без сентинела
+        // она вечно крутилась бы в "missing" списке. Ставим (-1, false) —
+        // безвредный маркер «проверено, таргетов нет», не пересекается с
+        // реальными nmId (WB не выдаёт 0/отрицательные).
+        await prisma.wbAdvertTarget.upsert({
+          where: {
+            advertId_nmId: { advertId: info.advertId, nmId: -1 },
+          },
+          create: { advertId: info.advertId, nmId: -1, active: false },
+          update: { active: false },
+        })
+        sentinelsAdded++
+        continue
+      }
       campaignsWithNms++
       for (const nmId of info.nmIds) {
         await prisma.wbAdvertTarget.upsert({
@@ -100,6 +115,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       processed: ids.length,
       campaignsWithNms,
       pairsUpserted,
+      sentinelsAdded,
       remaining: remainCount,
     })
   } catch (err) {
