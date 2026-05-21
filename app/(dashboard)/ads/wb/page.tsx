@@ -120,11 +120,59 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
   const beginDate = new Date(begin + "T00:00:00Z")
   const endDate = new Date(end + "T23:59:59Z")
 
-  // ── 1.5. Spend data (из WbAdvertSpendRow / /adv/v1/upd) ─────────
+  // ── 1.5. Каскадная Prisma where для Product (используется и в spend
+  // фильтре, и ниже для articles). Подняли вверх чтобы Summary/Chart/Top
+  // могли сужать данные под выбор Направление/Бренд/Категория/Подкатегория.
+  const productCascadeWhere: Record<string, unknown> = { deletedAt: null }
+  if (subcategoryIds.length) productCascadeWhere.subcategoryId = { in: subcategoryIds }
+  if (categoryIds.length) productCascadeWhere.categoryId = { in: categoryIds }
+  if (brandIds.length) productCascadeWhere.brandId = { in: brandIds }
+  if (directionIds.length) productCascadeWhere.brand = { directionId: { in: directionIds } }
+
+  const hasCascadeFilter =
+    directionIds.length > 0 ||
+    brandIds.length > 0 ||
+    categoryIds.length > 0 ||
+    subcategoryIds.length > 0
+
+  // ── 1.6. Резолв cascade → {nmIds, advertIds} для spend-функций ──
+  // Cascade фильтр Направление/Бренд/Категория/Подкатегория сужает Summary,
+  // Chart и Top-кампании. Status/Type фильтры (active/paused) остаются ТОЛЬКО
+  // на таблице кампаний — иначе spend chart прячет историю по завершённым РК.
+  let spendFilter: { advertIds?: number[]; nmIds?: number[] } | undefined =
+    undefined
+  if (hasCascadeFilter) {
+    const cascadeArticles = await prisma.marketplaceArticle.findMany({
+      where: {
+        marketplace: { slug: "wb" },
+        product: productCascadeWhere,
+      },
+      select: { article: true },
+    })
+    const cascadeNmIds = cascadeArticles
+      .map((a) => parseInt(a.article, 10))
+      .filter((n) => !Number.isNaN(n))
+    const targets =
+      cascadeNmIds.length > 0
+        ? await prisma.wbAdvertTarget.findMany({
+            where: { nmId: { in: cascadeNmIds } },
+            select: { advertId: true },
+          })
+        : []
+    const cascadeAdvertIds = Array.from(new Set(targets.map((t) => t.advertId)))
+    // Sentinel -1 для пустого набора — заставляем SQL вернуть 0 строк
+    // (вместо вырождения в "no filter").
+    spendFilter = {
+      nmIds: cascadeNmIds.length > 0 ? cascadeNmIds : [-1],
+      advertIds: cascadeAdvertIds.length > 0 ? cascadeAdvertIds : [-1],
+    }
+  }
+
+  // ── 1.7. Spend data (из WbAdvertSpendRow / /adv/v1/upd) ─────────
   const [spendSummary, dailySpend, topCampaigns] = await Promise.all([
-    getSpendSummary(periodDays),
-    getDailySpend(periodDays),
-    getTopCampaigns(periodDays, 10),
+    getSpendSummary(periodDays, spendFilter),
+    getDailySpend(periodDays, spendFilter),
+    getTopCampaigns(periodDays, 10, spendFilter),
   ])
 
   // ── 2. Stats за период ──────────────────────────────────────────
@@ -167,21 +215,7 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
   const nmIdToImtId = new Map<number, number | null>()
   for (const c of wbCards) nmIdToImtId.set(c.nmId, c.imtId ?? null)
 
-  // ── 5. Каскадная Prisma where для Product ──────────────────────
-  const productCascadeWhere: Record<string, unknown> = { deletedAt: null }
-  if (subcategoryIds.length) {
-    productCascadeWhere.subcategoryId = { in: subcategoryIds }
-  }
-  if (categoryIds.length) {
-    productCascadeWhere.categoryId = { in: categoryIds }
-  }
-  if (brandIds.length) {
-    productCascadeWhere.brandId = { in: brandIds }
-  }
-  if (directionIds.length) {
-    productCascadeWhere.brand = { directionId: { in: directionIds } }
-  }
-
+  // ── 5. Articles по cascade-фильтру (productCascadeWhere поднят в §1.5) ──
   const articles =
     allNmIds.size > 0
       ? await prisma.marketplaceArticle.findMany({

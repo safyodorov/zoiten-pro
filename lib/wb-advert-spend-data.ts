@@ -8,7 +8,18 @@
 // где buyoutPct берётся из WbCard.buyoutPercent (monthly avg per nmId из Analytics
 // API). Если поле null — используется global avg по карточкам у которых есть данные.
 
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+
+/** Опциональные фильтры для всех функций модуля.
+ *  - advertIds: ограничить spend выбранными кампаниями (нужно если фильтр
+ *    направления/бренда/категории применён → spend идёт через advertId).
+ *  - nmIds: ограничить revenue выбранными nmId.
+ *  Если поле undefined / пустой массив → не фильтруем по этому измерению. */
+export interface SpendFilter {
+  advertIds?: number[]
+  nmIds?: number[]
+}
 
 export interface DailySpendPoint {
   date: string // YYYY-MM-DD
@@ -67,11 +78,16 @@ export interface TopCampaign {
  *    - globalAvgBuyout: глобальный взвешенный % по всем funnel rows за окно
  *      (fallback для nmId без funnel-данных, должен быть редким случаем)
  */
-async function loadBuyoutPctMap(): Promise<{
+async function loadBuyoutPctMap(nmIdsFilter?: number[]): Promise<{
   buyoutByNmId: Map<number, number>
   globalAvgBuyout: number
 }> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600_000)
+  // SQL fragment для фильтра по nmId — если не задан, передаём NO-OP условие.
+  const nmFilterSql =
+    nmIdsFilter && nmIdsFilter.length > 0
+      ? Prisma.sql`AND "nmId" IN (${Prisma.join(nmIdsFilter)})`
+      : Prisma.sql``
 
   const [perNmId, globalRow] = await Promise.all([
     prisma.$queryRaw<Array<{ nmId: number; weighted: number | null }>>`
@@ -82,6 +98,7 @@ async function loadBuyoutPctMap(): Promise<{
       WHERE "buyoutPercent" IS NOT NULL
         AND "ordersCount" > 0
         AND "date" >= ${thirtyDaysAgo}
+        ${nmFilterSql}
       GROUP BY "nmId"
     `,
     prisma.$queryRaw<Array<{ weighted: number | null }>>`
@@ -91,6 +108,7 @@ async function loadBuyoutPctMap(): Promise<{
       WHERE "buyoutPercent" IS NOT NULL
         AND "ordersCount" > 0
         AND "date" >= ${thirtyDaysAgo}
+        ${nmFilterSql}
     `,
   ])
 
@@ -112,13 +130,22 @@ async function loadBuyoutPctMap(): Promise<{
  *  per-nmId стабильный из WbCard.buyoutPercent (Analytics monthly avg), null →
  *  global avg по карточкам с данными.
  *  ДРР = spend / revenueAdjusted × 100%; null если revenueAdjusted = 0. */
-export async function getDailySpend(periodDays: number): Promise<DailySpendPoint[]> {
+export async function getDailySpend(
+  periodDays: number,
+  filter?: SpendFilter,
+): Promise<DailySpendPoint[]> {
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
   const to = new Date(today.getTime() + 24 * 3600_000)
 
-  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap()
+  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
+
+  // Динамические фильтры для $queryRaw. Если списка нет — NO-OP fragment.
+  const spendAdvertFilter =
+    filter?.advertIds && filter.advertIds.length > 0
+      ? Prisma.sql`AND "advertId" IN (${Prisma.join(filter.advertIds)})`
+      : Prisma.sql``
 
   const [spendRows, revenueRows] = await Promise.all([
     prisma.$queryRaw<Array<{ day: Date; spend: number; cnt: bigint }>>`
@@ -128,6 +155,7 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
         COUNT(*)::bigint AS cnt
       FROM "WbAdvertSpendRow"
       WHERE "effectiveDate" >= ${from} AND "effectiveDate" < ${to}
+        ${spendAdvertFilter}
       GROUP BY day
       ORDER BY day ASC
     `,
@@ -135,7 +163,12 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
     // правильную per-nmId коррекцию и при этом избегает JOIN'а с WbCard в SQL
     // (Prisma $queryRaw не любит дин. JOIN, плюс buyoutByNmId уже в памяти).
     prisma.wbCardFunnelDaily.findMany({
-      where: { date: { gte: from, lt: to } },
+      where: {
+        date: { gte: from, lt: to },
+        ...(filter?.nmIds && filter.nmIds.length > 0
+          ? { nmId: { in: filter.nmIds } }
+          : {}),
+      },
       select: { nmId: true, date: true, ordersSumRub: true },
     }),
   ])
@@ -185,23 +218,40 @@ export async function getDailySpend(periodDays: number): Promise<DailySpendPoint
  *  Выкуп применяется per-nmId (стабильное значение из WbCard.buyoutPercent —
  *  monthly avg из Analytics API). Per-day buyoutPercent НЕ используется —
  *  на свежих днях он 0 (выкупы ещё не вернулись), это искажает ДРР. */
-export async function getSpendSummary(periodDays: number): Promise<SpendSummaryData> {
+export async function getSpendSummary(
+  periodDays: number,
+  filter?: SpendFilter,
+): Promise<SpendSummaryData> {
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
   const to = new Date(today.getTime() + 24 * 3600_000)
 
-  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap()
+  const { buyoutByNmId, globalAvgBuyout } = await loadBuyoutPctMap(filter?.nmIds)
+
+  // Prisma where фильтры для spend / revenue.
+  const spendWhere: Prisma.WbAdvertSpendRowWhereInput = {
+    effectiveDate: { gte: from, lt: to },
+    ...(filter?.advertIds && filter.advertIds.length > 0
+      ? { advertId: { in: filter.advertIds } }
+      : {}),
+  }
+  const revenueWhere: Prisma.WbCardFunnelDailyWhereInput = {
+    date: { gte: from, lt: to },
+    ...(filter?.nmIds && filter.nmIds.length > 0
+      ? { nmId: { in: filter.nmIds } }
+      : {}),
+  }
 
   const [totals, byType, revenueRows] = await Promise.all([
     prisma.wbAdvertSpendRow.aggregate({
-      where: { effectiveDate: { gte: from, lt: to } },
+      where: spendWhere,
       _sum: { updSum: true },
       _count: { _all: true },
     }),
     prisma.wbAdvertSpendRow.groupBy({
       by: ["paymentType"],
-      where: { effectiveDate: { gte: from, lt: to } },
+      where: spendWhere,
       _sum: { updSum: true },
       _count: { _all: true },
       orderBy: { _sum: { updSum: "desc" } },
@@ -210,7 +260,7 @@ export async function getSpendSummary(periodDays: number): Promise<SpendSummaryD
     // buyoutPct per-nmId).
     prisma.wbCardFunnelDaily.groupBy({
       by: ["nmId"],
-      where: { date: { gte: from, lt: to } },
+      where: revenueWhere,
       _sum: { ordersSumRub: true },
     }),
   ])
@@ -253,11 +303,20 @@ export async function getSpendSummary(periodDays: number): Promise<SpendSummaryD
 }
 
 /** Top N кампаний по spend за период. */
-export async function getTopCampaigns(periodDays: number, limit = 10): Promise<TopCampaign[]> {
+export async function getTopCampaigns(
+  periodDays: number,
+  limit = 10,
+  filter?: SpendFilter,
+): Promise<TopCampaign[]> {
   const now = new Date()
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const from = new Date(today.getTime() - (periodDays - 1) * 24 * 3600_000)
   const to = new Date(today.getTime() + 24 * 3600_000)
+
+  const advertFilter =
+    filter?.advertIds && filter.advertIds.length > 0
+      ? Prisma.sql`AND "advertId" IN (${Prisma.join(filter.advertIds)})`
+      : Prisma.sql``
 
   const rows = await prisma.$queryRaw<Array<{
     advertId: number
@@ -277,6 +336,7 @@ export async function getTopCampaigns(periodDays: number, limit = 10): Promise<T
     FROM "WbAdvertSpendRow"
     WHERE "effectiveDate" >= ${from}
       AND "effectiveDate" < ${to}
+      ${advertFilter}
     GROUP BY "advertId"
     ORDER BY spend DESC
     LIMIT ${limit}
