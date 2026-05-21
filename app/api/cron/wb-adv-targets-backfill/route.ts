@@ -68,23 +68,28 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const infos = await fetchAdvertsInfoV2(ids)
     console.log(`[wb-adv-targets-backfill] fetched ${infos.length} info rows`)
 
+    // Маппинг для определения «пропущенных» WB'ом advertIds.
+    const respondedSet = new Set(infos.map((i) => i.advertId))
+
     let pairsUpserted = 0
     let campaignsWithNms = 0
     let sentinelsAdded = 0
+
+    /** Sentinel marker — (advertId, -1, active=false). Помечает «проверено,
+     *  таргетов нет / WB не вернул». Не пересекается с реальными nmId. */
+    async function addSentinel(advertId: number): Promise<void> {
+      await prisma.wbAdvertTarget.upsert({
+        where: { advertId_nmId: { advertId, nmId: -1 } },
+        create: { advertId, nmId: -1, active: false },
+        update: { active: false },
+      })
+      sentinelsAdded++
+    }
+
     for (const info of infos) {
       if (info.nmIds.length === 0) {
-        // Кампания без nm_settings — Auto-РК / пустая / removed. Без сентинела
-        // она вечно крутилась бы в "missing" списке. Ставим (-1, false) —
-        // безвредный маркер «проверено, таргетов нет», не пересекается с
-        // реальными nmId (WB не выдаёт 0/отрицательные).
-        await prisma.wbAdvertTarget.upsert({
-          where: {
-            advertId_nmId: { advertId: info.advertId, nmId: -1 },
-          },
-          create: { advertId: info.advertId, nmId: -1, active: false },
-          update: { active: false },
-        })
-        sentinelsAdded++
+        // Auto-РК / пустая кампания — WB вернул её но без nm_settings.
+        await addSentinel(info.advertId)
         continue
       }
       campaignsWithNms++
@@ -95,6 +100,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           update: { active: true },
         })
         pairsUpserted++
+      }
+    }
+
+    // advertIds которые мы запросили но WB их не вернул — типично 404
+    // (кампания удалена в WB cabinet, но всё ещё в нашей БД с status=11/7).
+    // Без sentinel'а они бы вечно крутились в "missing" списке.
+    for (const advertId of ids) {
+      if (!respondedSet.has(advertId)) {
+        await addSentinel(advertId)
       }
     }
 
