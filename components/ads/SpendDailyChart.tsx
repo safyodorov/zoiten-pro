@@ -1,7 +1,7 @@
 "use client"
-// Phase 19+ 2026-05-20: Composed daily chart для /ads/wb.
-// Bars: расходы (red/coral) + выручка (emerald)
-// Line: ДРР % (amber) на правой оси.
+// Phase 19+ 2026-05-21: Composed daily chart для /ads/wb.
+// Bars: расходы (brand orange — как было до revenue/ДРР).
+// Lines: выручка (emerald) на левой оси денег + ДРР % (amber) на правой оси.
 
 import {
   ComposedChart,
@@ -20,10 +20,8 @@ import {
 } from "@/components/ui/chart"
 import type { DailySpendPoint } from "@/lib/wb-advert-spend-data"
 
-// Custom semantic colors (project's --chart-3/4/5 = greys, не подходят):
-// spend = красно-коралл, revenue = emerald, drrPct = amber (контраст с chart-2 brand orange).
 const chartConfig = {
-  spend: { label: "Расход (₽)", color: "oklch(0.65 0.18 25)" }, // coral/red
+  spend: { label: "Расход (₽)", color: "var(--chart-1)" }, // brand orange (как раньше)
   revenue: { label: "Выручка (₽)", color: "oklch(0.65 0.16 155)" }, // emerald
   drrPct: { label: "ДРР %", color: "oklch(0.7 0.18 70)" }, // amber
 } satisfies ChartConfig
@@ -65,9 +63,9 @@ export function SpendDailyChart({ data, periodDays }: Props) {
         <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
           <div className="text-sm font-medium">Расходы, выручка и ДРР по дням</div>
           <div className="flex items-center gap-3 text-xs">
-            <LegendDot color="var(--chart-5)" label="Расход" />
-            <LegendDot color="var(--chart-2)" label="Выручка" />
-            <LegendDot color="var(--chart-4)" label="ДРР %" line />
+            <LegendDot color="var(--color-spend)" label="Расход" />
+            <LegendDot color="var(--color-revenue)" label="Выручка" line />
+            <LegendDot color="var(--color-drrPct)" label="ДРР %" line />
             {avgDrr != null && (
               <span className="text-muted-foreground">
                 ср. ДРР: <span className="font-medium tabular-nums text-foreground">{avgDrr.toFixed(1)}%</span>
@@ -186,14 +184,15 @@ export function SpendDailyChart({ data, periodDays }: Props) {
                 isAnimationActive={false}
                 maxBarSize={28}
               />
-              <Bar
+              <Line
                 yAxisId="money"
+                type="monotone"
                 dataKey="revenue"
-                fill="var(--color-revenue)"
-                radius={[2, 2, 0, 0]}
+                stroke="var(--color-revenue)"
+                strokeWidth={2}
+                dot={{ r: 2.5, fill: "var(--color-revenue)" }}
+                connectNulls={false}
                 isAnimationActive={false}
-                maxBarSize={28}
-                fillOpacity={0.75}
               />
               <Line
                 yAxisId="drr"
