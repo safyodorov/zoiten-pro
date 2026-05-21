@@ -41,26 +41,36 @@ const CARDS: Card[] = [
     description:
       "Daily snapshot sellerPrice + buyerPrice через card.wb.ru v4 API",
   },
+  {
+    key: "wbCardsRefreshCronTime",
+    title: "Карточки WB (горячие поля)",
+    description:
+      "Daily refresh остатков (stockQty, в пути), цен (Prices API) и СПП (card.wb.ru v4)",
+  },
 ]
 
 export function CronScheduleTab({ schedule }: { schedule: CronSchedule }) {
   const options = useMemo(() => buildTimeOptions(), [])
+
+  const timeByKey: Record<typeof CARDS[number]["key"], string> = {
+    wbOrdersDailyCronTime: schedule.ordersTime,
+    wbPricesDailyCronTime: schedule.pricesTime,
+    wbCardsRefreshCronTime: schedule.cardsRefreshTime,
+  }
+  const lastRunByKey: Record<typeof CARDS[number]["key"], string | null> = {
+    wbOrdersDailyCronTime: schedule.ordersLastRun,
+    wbPricesDailyCronTime: schedule.pricesLastRun,
+    wbCardsRefreshCronTime: schedule.cardsRefreshLastRun,
+  }
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {CARDS.map((c) => (
         <CronCard
           key={c.key}
           card={c}
-          currentTime={
-            c.key === "wbOrdersDailyCronTime"
-              ? schedule.ordersTime
-              : schedule.pricesTime
-          }
-          lastRun={
-            c.key === "wbOrdersDailyCronTime"
-              ? schedule.ordersLastRun
-              : schedule.pricesLastRun
-          }
+          currentTime={timeByKey[c.key]}
+          lastRun={lastRunByKey[c.key]}
           options={options}
         />
       ))}

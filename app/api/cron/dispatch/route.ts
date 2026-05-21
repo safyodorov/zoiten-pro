@@ -33,11 +33,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbFunnelDailyCronTime",
           "wbAdvSyncCronTime",
           "wbAdvUpdSyncCronTime",
+          "wbCardsRefreshCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
           "wbAdvSyncLastRun",
           "wbAdvUpdSyncLastRun",
+          "wbCardsRefreshLastRun",
         ],
       },
     },
@@ -48,11 +50,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const funnelTime = settings.wbFunnelDailyCronTime ?? "04:00"
   const advSyncTime = settings.wbAdvSyncCronTime ?? "03:00"
   const advUpdSyncTime = settings.wbAdvUpdSyncCronTime ?? "03:30"
+  const cardsRefreshTime = settings.wbCardsRefreshCronTime ?? "05:30"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
   const advSyncLastRun = settings.wbAdvSyncLastRun ?? null
   const advUpdSyncLastRun = settings.wbAdvUpdSyncLastRun ?? null
+  const cardsRefreshLastRun = settings.wbCardsRefreshLastRun ?? null
 
   const fired: string[] = []
 
@@ -148,6 +152,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] prices error:", e)
       fired.push("prices:error")
+    }
+  }
+
+  // 2026-05-21: refresh «горячих» полей WbCard (stockQty, inWay*, price, СПП).
+  // По умолчанию 05:30 МСК — после wb-prices-daily (05:10) чтобы не сложить v4 calls.
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: cardsRefreshTime,
+      lastRunDate: cardsRefreshLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: cardsRefreshHandler } = await import("../wb-cards-refresh/route")
+      const res = await cardsRefreshHandler(req)
+      fired.push(`cards-refresh:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] cards-refresh error:", e)
+      fired.push("cards-refresh:error")
     }
   }
 

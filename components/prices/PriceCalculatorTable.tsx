@@ -169,6 +169,10 @@ export interface ProductGroup {
     brandName?: string | null
     /** Сумма WbCard.stockQty по всем карточкам Product. */
     totalStock: number
+    /** Сумма WbCard.inWayToClient по всем карточкам Product (в пути к клиенту, шт). */
+    totalInWayToClient?: number
+    /** Сумма WbCard.inWayFromClient по всем карточкам Product (в пути от клиента, шт). */
+    totalInWayFromClient?: number
     /** Сумма WbCard.avgSalesSpeed7d по всем карточкам Product. */
     totalAvgSalesSpeed: number
     /** Сумма WbCard.ordersYesterday по всем карточкам Product (шт. за вчера). */
@@ -185,6 +189,8 @@ export interface ProductGroup {
     nmId: number
     timeSeries: DayPoint[]
     stockQty: number | null
+    inWayToClient?: number | null
+    inWayFromClient?: number | null
     avgSalesSpeed7d: number | null
     rating: number | null
     reviewsTotal: number | null
@@ -568,14 +574,40 @@ function ReviewChip({
   )
 }
 
+/** Бэйдж «в пути к клиенту / от клиента». Не рендерится если обе цифры 0. */
+function InWayBadge({
+  toClient,
+  fromClient,
+}: {
+  toClient: number
+  fromClient: number
+}) {
+  if (toClient === 0 && fromClient === 0) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md border border-amber-300/60 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-700/40 dark:bg-amber-950/40 dark:text-amber-300"
+      title={`В пути к клиенту: ${toClient} шт.\nВ пути от клиента: ${fromClient} шт.`}
+    >
+      <span aria-hidden="true">в пути</span>
+      <span className="tabular-nums">→ {toClient}</span>
+      <span className="opacity-50">/</span>
+      <span className="tabular-nums">{fromClient} ←</span>
+    </span>
+  )
+}
+
 function NmIdLegend({
   stockQty,
+  inWayToClient,
+  inWayFromClient,
   daysLeft,
   rating,
   reviewsTotal,
   reviews,
 }: {
   stockQty: number | null
+  inWayToClient: number | null
+  inWayFromClient: number | null
   daysLeft: number | null
   rating: number | null
   reviewsTotal: number | null
@@ -594,10 +626,16 @@ function NmIdLegend({
           items-center на родителе центрирует metadata-блок по вертикали относительно
           review lanes (которые обычно выше). */}
       <div className="flex flex-col gap-1 min-w-[140px]">
-        <LegendItem
-          label="Остаток"
-          value={stockQty != null ? `${stockQty} шт` : "—"}
-        />
+        <div className="flex items-baseline gap-1.5 flex-wrap">
+          <LegendItem
+            label="Остаток"
+            value={stockQty != null ? `${stockQty} шт` : "—"}
+          />
+          <InWayBadge
+            toClient={inWayToClient ?? 0}
+            fromClient={inWayFromClient ?? 0}
+          />
+        </div>
         <LegendItem
           label="Дни"
           value={daysLeft != null ? `${daysLeft} дн` : "—"}
@@ -1015,12 +1053,18 @@ export function PriceCalculatorTable({
                                 {group.product.brandName}
                               </div>
                             )}
-                            <div className="text-xs text-muted-foreground">
-                              Остаток:{" "}
-                              <span className="text-foreground tabular-nums">
-                                {Math.trunc(group.product.totalStock)}
-                              </span>{" "}
-                              шт.
+                            <div className="text-xs text-muted-foreground flex items-baseline gap-1.5 flex-wrap">
+                              <span>
+                                Остаток:{" "}
+                                <span className="text-foreground tabular-nums">
+                                  {Math.trunc(group.product.totalStock)}
+                                </span>{" "}
+                                шт.
+                              </span>
+                              <InWayBadge
+                                toClient={group.product.totalInWayToClient ?? 0}
+                                fromClient={group.product.totalInWayFromClient ?? 0}
+                              />
                             </div>
                             {(() => {
                               const perDay = group.product.totalAvgSalesSpeed
@@ -1295,6 +1339,8 @@ export function PriceCalculatorTable({
                               />
                               <NmIdLegend
                                 stockQty={c.stockQty}
+                                inWayToClient={c.inWayToClient ?? null}
+                                inWayFromClient={c.inWayFromClient ?? null}
                                 daysLeft={daysLeft}
                                 rating={c.rating}
                                 reviewsTotal={c.reviewsTotal}

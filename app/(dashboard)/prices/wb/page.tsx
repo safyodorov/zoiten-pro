@@ -790,6 +790,14 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       (s, { card }) => s + (card.stockQty ?? 0),
       0,
     )
+    const totalInWayToClient = cardRefs.reduce(
+      (s, { card }) => s + (card.inWayToClient ?? 0),
+      0,
+    )
+    const totalInWayFromClient = cardRefs.reduce(
+      (s, { card }) => s + (card.inWayFromClient ?? 0),
+      0,
+    )
     // Quick 260519-funnel: totalAvgSalesSpeed / totalOrdersYesterday теперь
     // считаются из merged orders (Funnel приоритет, fallback на Statistics qty),
     // а не из WbCard.avgSalesSpeed7d/ordersYesterday (которые пишутся в /api/wb-sync
@@ -825,6 +833,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       nmId: number
       timeSeries: DayPoint[]
       stockQty: number | null
+      inWayToClient: number | null
+      inWayFromClient: number | null
       avgSalesSpeed7d: number | null
       rating: number | null
       reviewsTotal: number | null
@@ -839,6 +849,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         nmId: card.nmId,
         timeSeries: fillTimeSeries(rawRows),
         stockQty: card.stockQty ?? null,
+        inWayToClient: card.inWayToClient ?? null,
+        inWayFromClient: card.inWayFromClient ?? null,
         avgSalesSpeed7d: card.avgSalesSpeed7d ?? null,
         rating: card.wbStoreRating ?? card.ratingImt ?? card.rating ?? null,
         reviewsTotal:
@@ -855,6 +867,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         // quick 260513-phu: brand-line под product name в Сводной
         brandName: firstProduct.brand?.name ?? null,
         totalStock,
+        totalInWayToClient,
+        totalInWayFromClient,
         totalAvgSalesSpeed,
         totalOrdersYesterday,
       },

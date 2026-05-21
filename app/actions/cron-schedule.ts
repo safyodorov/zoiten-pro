@@ -16,14 +16,20 @@ const HHMM_SCHEMA = z
   .string()
   .refine(isValidCronHHMM, "Формат HH:MM с шагом 5 минут (например 05:10)")
 
-const CRON_KEYS = ["wbOrdersDailyCronTime", "wbPricesDailyCronTime"] as const
+const CRON_KEYS = [
+  "wbOrdersDailyCronTime",
+  "wbPricesDailyCronTime",
+  "wbCardsRefreshCronTime",
+] as const
 export type CronKey = (typeof CRON_KEYS)[number]
 
 export interface CronSchedule {
   ordersTime: string
   pricesTime: string
+  cardsRefreshTime: string
   ordersLastRun: string | null
   pricesLastRun: string | null
+  cardsRefreshLastRun: string | null
 }
 
 export async function getCronSchedule(): Promise<CronSchedule> {
@@ -35,8 +41,10 @@ export async function getCronSchedule(): Promise<CronSchedule> {
         in: [
           "wbOrdersDailyCronTime",
           "wbPricesDailyCronTime",
+          "wbCardsRefreshCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
+          "wbCardsRefreshLastRun",
         ],
       },
     },
@@ -45,8 +53,10 @@ export async function getCronSchedule(): Promise<CronSchedule> {
   return {
     ordersTime: m.wbOrdersDailyCronTime ?? "05:00",
     pricesTime: m.wbPricesDailyCronTime ?? "05:10",
+    cardsRefreshTime: m.wbCardsRefreshCronTime ?? "05:30",
     ordersLastRun: m.wbOrdersDailyLastRun ?? null,
     pricesLastRun: m.wbPricesDailyLastRun ?? null,
+    cardsRefreshLastRun: m.wbCardsRefreshLastRun ?? null,
   }
 }
 
