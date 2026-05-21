@@ -49,35 +49,58 @@ export interface TopCampaign {
   count: number
 }
 
-/** Загрузить средневзвешенный buyoutPct per-nmId + global fallback.
+/** Загрузить взвешенный buyoutPct per-nmId + global fallback.
  *
- *  Источник: WbCard.buyoutPercent — monthly avg per nmId из Analytics API
- *  (стабильная характеристика товара, не дёргается per-day).
+ *  Источник: WbCardFunnelDaily.buyoutPercent — per-day % выкупа от WB Funnel API
+ *  (WB сам учитывает лаг между заказом и выкупом). Взвешиваем по ordersCount
+ *  чтобы дни с малым объёмом не искажали среднее.
+ *
+ *  Окно — последние 90 дней. Этого достаточно чтобы накопилось много заказов
+ *  и при этом редкие старые товары не дотягивали свежие данные.
+ *
+ *  WbCard.buyoutPercent (Analytics API monthly avg) НЕ используется — на 226
+ *  карточках 0 заполнено (Analytics cap 3/сутки + ошибки парсинга CSV).
  *
  *  @returns
- *    - buyoutByNmId: per-nmId буфер %, только для тех где значение не null
- *    - globalAvgBuyout: средневзвешенный % по карточкам где значение есть
- *      (используется как fallback для nmId без данных)
+ *    - buyoutByNmId: per-nmId взвешенный % (только для nmId с заказами)
+ *    - globalAvgBuyout: глобальный взвешенный % по всем funnel rows за окно
+ *      (fallback для nmId без funnel-данных, должен быть редким случаем)
  */
 async function loadBuyoutPctMap(): Promise<{
   buyoutByNmId: Map<number, number>
   globalAvgBuyout: number
 }> {
-  const rows = await prisma.wbCard.findMany({
-    where: { deletedAt: null, buyoutPercent: { not: null } },
-    select: { nmId: true, buyoutPercent: true },
-  })
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600_000)
+
+  const [perNmId, globalRow] = await Promise.all([
+    prisma.$queryRaw<Array<{ nmId: number; weighted: number | null }>>`
+      SELECT
+        "nmId",
+        (SUM("buyoutPercent" * "ordersCount") / NULLIF(SUM("ordersCount"), 0))::float AS weighted
+      FROM "WbCardFunnelDaily"
+      WHERE "buyoutPercent" IS NOT NULL
+        AND "ordersCount" > 0
+        AND "date" >= ${ninetyDaysAgo}
+      GROUP BY "nmId"
+    `,
+    prisma.$queryRaw<Array<{ weighted: number | null }>>`
+      SELECT
+        (SUM("buyoutPercent" * "ordersCount") / NULLIF(SUM("ordersCount"), 0))::float AS weighted
+      FROM "WbCardFunnelDaily"
+      WHERE "buyoutPercent" IS NOT NULL
+        AND "ordersCount" > 0
+        AND "date" >= ${ninetyDaysAgo}
+    `,
+  ])
+
   const buyoutByNmId = new Map<number, number>()
-  let sum = 0
-  let cnt = 0
-  for (const r of rows) {
-    if (r.buyoutPercent == null) continue
-    buyoutByNmId.set(r.nmId, r.buyoutPercent)
-    sum += r.buyoutPercent
-    cnt++
+  for (const r of perNmId) {
+    if (r.weighted != null && r.weighted > 0) {
+      buyoutByNmId.set(r.nmId, r.weighted)
+    }
   }
-  // Fallback 90% если в БД вообще нет данных по выкупу (ранний этап / Analytics cap).
-  const globalAvgBuyout = cnt > 0 ? sum / cnt : 90
+  // Fallback 90% если в БД нет funnel-данных вообще (первый запуск, до cron-backfill).
+  const globalAvgBuyout = globalRow[0]?.weighted ?? 90
   return { buyoutByNmId, globalAvgBuyout }
 }
 
