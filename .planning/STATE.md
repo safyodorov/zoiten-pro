@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: post-v1.1 maintenance
-milestone_name: Post-release UX iterations
-status: Phase 18 done, prod live with composite Product.name + article rename
-stopped_at: 2026-05-18 — Completed quick 260518-igw: vertical reviews lanes + orders sync rolling 7d window (WB flag=0 фильтрует по lastChangeDate)
-last_updated: "2026-05-18T10:17:52.477Z"
+milestone: v1.3 ads + procurement
+milestone_name: WB Ads (Phase 19) + Procurement (Phase 20)
+status: Phase 19 active — UI визуализация spend, backfill targets 100% coverage, выкуп rolling 30d per-day. Phase 20 plans готовы (9 wave), ждёт реализации.
+stopped_at: 2026-05-21 — buyout rolling 30d per-(nmId,day) + RBAC sidebar fix (sectionRoles union)
+last_updated: "2026-05-21T15:25:00.000Z"
 progress:
-  total_phases: 15
-  completed_phases: 15
-  total_plans: 56
-  completed_plans: 57
+  total_phases: 20
+  completed_phases: 18
+  total_plans: 70
+  completed_plans: 65
 ---
 
 # Project State
@@ -19,12 +19,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 16 — wb-stock-sizes (parallel execution)
+**Current focus:** Phase 19 (WB Ads) — итеративные доработки в проде; Phase 20 (закупки) ждёт реализации.
 
 ## Current Position
 
-Phase: 16 (wb-stock-sizes) — EXECUTING (parallel)
-Plan: 16-05 completed; awaiting merge with parallel 16-01..16-04 + 16-06
+Phase: 19 (wb-ads) — IN PROD, итеративный полишинг (UI визуализация spend, выкуп rolling 30d, ДРР).
+Phase: 20 (procurement) — PLANNED, 9 plans (W0 + 01..08), реализация после Phase 19.
+
+Свежие изменения 2026-05-21:
+- `d7daabc` — backfill WbAdvertTarget через /api/advert/v2/adverts (cascade-фильтр работает)
+- `41954e6` / `6aa58c9` — sentinel `nmId=-1` для кампаний без `nm_settings` и для unresponded advertIds
+- `3f036f4` — % выкупа per-(nmId, day) rolling 30d weighted из WbCardFunnelDaily.buyoutPercent (раньше натягивалось одно среднее на всё окно — искажало сезон)
+- `c576988` — sidebar union(allowedSections, sectionRoles): RBAC раздел в меню появляется по любому из двух источников прав
 
 ## Performance Metrics
 
@@ -304,6 +310,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-18T10:17:52.477Z
-Stopped at: Completed quick 260518-igw — vertical reviews lanes + orders sync rolling 7d window fix
+Last session: 2026-05-21T15:25:00.000Z
+Stopped at: Сессия 2026-05-21. Подтверждено 100% покрытие WbAdvertTarget (428 кампаний status 7/9/11: 389 real + 39 sentinel). Заменён single-pct buyout на rolling 30d per-(nmId,date) — `3f036f4`. Починена RBAC видимость sidebar — учёт sectionRoles map в layout/dashboard — `c576988`. После grant прав через UI пользователь должен logout/login (JWT не самообновляется в Edge middleware).
 Resume file: None
