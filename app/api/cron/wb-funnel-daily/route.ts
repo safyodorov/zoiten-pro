@@ -27,8 +27,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   try {
     const existing = await prisma.wbCardFunnelDaily.count()
-    const days = existing === 0 ? BACKFILL_DAYS : DAILY_ROLLING_DAYS
-    const mode: "backfill" | "delta" = existing === 0 ? "backfill" : "delta"
+    // ?days=N override (1..30) — для ручного backfill через curl. Если задан —
+    // считаем mode=backfill чтобы видеть в логе что это форсированный запуск.
+    const url = new URL(req.url)
+    const daysParam = Number(url.searchParams.get("days"))
+    const override =
+      Number.isFinite(daysParam) && daysParam >= 1 && daysParam <= 30
+        ? Math.floor(daysParam)
+        : null
+    const days =
+      override ?? (existing === 0 ? BACKFILL_DAYS : DAILY_ROLLING_DAYS)
+    const mode: "backfill" | "delta" =
+      override != null || existing === 0 ? "backfill" : "delta"
 
     const cards = await prisma.wbCard.findMany({
       where: { deletedAt: null },

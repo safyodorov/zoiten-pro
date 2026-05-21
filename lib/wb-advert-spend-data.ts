@@ -55,8 +55,9 @@ export interface TopCampaign {
  *  (WB сам учитывает лаг между заказом и выкупом). Взвешиваем по ordersCount
  *  чтобы дни с малым объёмом не искажали среднее.
  *
- *  Окно — последние 90 дней. Этого достаточно чтобы накопилось много заказов
- *  и при этом редкие старые товары не дотягивали свежие данные.
+ *  Окно — последние 30 дней. «Процент выкупа за месяц» — стабильная per-nmId
+ *  характеристика, рабочее число для юнит-экономики (соответствует тому что
+ *  показывает кабинет WB Аналитика → Воронка продаж).
  *
  *  WbCard.buyoutPercent (Analytics API monthly avg) НЕ используется — на 226
  *  карточках 0 заполнено (Analytics cap 3/сутки + ошибки парсинга CSV).
@@ -70,7 +71,7 @@ async function loadBuyoutPctMap(): Promise<{
   buyoutByNmId: Map<number, number>
   globalAvgBuyout: number
 }> {
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600_000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600_000)
 
   const [perNmId, globalRow] = await Promise.all([
     prisma.$queryRaw<Array<{ nmId: number; weighted: number | null }>>`
@@ -80,7 +81,7 @@ async function loadBuyoutPctMap(): Promise<{
       FROM "WbCardFunnelDaily"
       WHERE "buyoutPercent" IS NOT NULL
         AND "ordersCount" > 0
-        AND "date" >= ${ninetyDaysAgo}
+        AND "date" >= ${thirtyDaysAgo}
       GROUP BY "nmId"
     `,
     prisma.$queryRaw<Array<{ weighted: number | null }>>`
@@ -89,7 +90,7 @@ async function loadBuyoutPctMap(): Promise<{
       FROM "WbCardFunnelDaily"
       WHERE "buyoutPercent" IS NOT NULL
         AND "ordersCount" > 0
-        AND "date" >= ${ninetyDaysAgo}
+        AND "date" >= ${thirtyDaysAgo}
     `,
   ])
 
