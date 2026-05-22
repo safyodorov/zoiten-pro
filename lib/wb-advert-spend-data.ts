@@ -7,8 +7,16 @@
 // дни периода искажало выручку (старые дни завышались, свежие занижались).
 // Теперь для каждого (nmId, date) считаем взвешенный buyoutPercent по окну
 // [date-30d ; date] из WbCardFunnelDaily, и применяем его к ordersSumRub
-// именно этого дня. Двойной fallback chain: per-(nmId,date) → per-date global
-// (rolling 30d) → final global (всё окно).
+// именно этого дня.
+//
+// 2026-05-22 (v3): добавлен промежуточный уровень fallback — latest per-nmId
+// rolling 30d ≤ dKey. Раньше для свежего дня, где WB ещё не закрыл funnel и
+// у нашего nmId buyoutPercent IS NULL, resolver падал сразу на byDate global,
+// который смешивает high-buyout (бытовая техника) и low-buyout (одежда) →
+// глобальный 45%, заниженный для high-buyout продуктов в 2×. Теперь сначала
+// пытаемся latest known weighted для этого же nmId (вчерашняя цифра nmId 88%
+// много правдоподобнее, чем сегодняшний глобальный 45%). Фолбэк-цепочка:
+// per-(nmId,dKey) → latest per-nmId ≤ dKey → per-date global → final global.
 
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -72,7 +80,7 @@ export interface BuyoutResolver {
   resolve(nmId: number, dateKey: string): number
 }
 
-/** Rolling 30d weighted buyout% per (nmId, date) + per-date global + final global.
+/** Rolling 30d weighted buyout% per (nmId, date) + latest-per-nmId + per-date global + final global.
  *
  *  Берём WbCardFunnelDaily.buyoutPercent (что показано в кабинете WB
  *  «Аналитика → По дням» за конкретный день), но к ordersSumRub дня применяем
@@ -84,12 +92,15 @@ export interface BuyoutResolver {
  *     на весь 28-дневный период отчёта.
  *
  *  Fallback chain в resolve():
- *    1) per-(nmId, date) — основной источник
- *    2) per-date global rolling 30d — для (nmId, date) у которых нет funnel-данных
- *       в окне (например, новый артикул)
- *    3) finalGlobal — взвешенное среднее по всему [from-30d ; to) окну (для дней
- *       у которых вообще не оказалось funnel-данных в БД)
- *    4) 90% — hard fallback, только если БД совсем пустая
+ *    1) per-(nmId, date) — основной источник (CTE требует buyoutPercent IS NOT NULL,
+ *       поэтому свежий день с незакрытым funnel'ом сюда не попадает)
+ *    2) latest perNmId weighted ≤ date — для свежих дней с null buyoutPercent.
+ *       Сохраняет ID-специфику: high-buyout продукт (бытовая техника ~88%)
+ *       продолжает получать своё значение, не падая на mixed-glob ~45%
+ *    3) per-date global rolling 30d — для (nmId, date) у которых нет funnel-данных
+ *       вообще в окне (новый артикул, не имеющий истории)
+ *    4) finalGlobal — взвешенное среднее по всему [from-30d ; to) окну
+ *    5) 90% — hard fallback, только если БД совсем пустая
  *
  *  @param from начало отчётного окна (включительно, UTC midnight)
  *  @param to конец отчётного окна (exclusive, UTC midnight)
@@ -186,10 +197,25 @@ export async function loadBuyoutPctRolling30dMap(
   ])
 
   const byNmDate = new Map<string, number>()
+  // sortedByNm[nmId] = массив [dateKey, weighted], отсортированный по dateKey ASC.
+  // Нужен для fallback «latest per-nmId weighted ≤ dKey» — для свежего дня
+  // у которого buyoutPercent ещё null (WB не закрыл день) ID-specific цифра
+  // сохраняется через предыдущий день.
+  const sortedByNm = new Map<number, Array<[string, number]>>()
   for (const r of perNmDate) {
     if (r.weighted != null && r.weighted > 0) {
-      byNmDate.set(`${r.nmId}_${dateKey(r.date)}`, r.weighted)
+      const dKey = dateKey(r.date)
+      byNmDate.set(`${r.nmId}_${dKey}`, r.weighted)
+      let arr = sortedByNm.get(r.nmId)
+      if (!arr) {
+        arr = []
+        sortedByNm.set(r.nmId, arr)
+      }
+      arr.push([dKey, r.weighted])
     }
+  }
+  for (const arr of sortedByNm.values()) {
+    arr.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
   }
   const byDate = new Map<string, number>()
   for (const r of perDate) {
@@ -199,9 +225,32 @@ export async function loadBuyoutPctRolling30dMap(
   }
   const finalGlobal = finalGlobalRow[0]?.weighted ?? 90
 
+  function latestForNm(nmId: number, dKey: string): number | undefined {
+    const arr = sortedByNm.get(nmId)
+    if (!arr || arr.length === 0) return undefined
+    // Бинарный поиск: наибольший индекс i, где arr[i][0] <= dKey.
+    let lo = 0
+    let hi = arr.length - 1
+    let found = -1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      if (arr[mid][0] <= dKey) {
+        found = mid
+        lo = mid + 1
+      } else {
+        hi = mid - 1
+      }
+    }
+    return found >= 0 ? arr[found][1] : undefined
+  }
+
   return {
     resolve(nmId: number, dKey: string): number {
-      return byNmDate.get(`${nmId}_${dKey}`) ?? byDate.get(dKey) ?? finalGlobal
+      const direct = byNmDate.get(`${nmId}_${dKey}`)
+      if (direct != null) return direct
+      const latestNm = latestForNm(nmId, dKey)
+      if (latestNm != null) return latestNm
+      return byDate.get(dKey) ?? finalGlobal
     },
   }
 }
