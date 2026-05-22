@@ -15,8 +15,21 @@
 // который смешивает high-buyout (бытовая техника) и low-buyout (одежда) →
 // глобальный 45%, заниженный для high-buyout продуктов в 2×. Теперь сначала
 // пытаемся latest known weighted для этого же nmId (вчерашняя цифра nmId 88%
-// много правдоподобнее, чем сегодняшний глобальный 45%). Фолбэк-цепочка:
-// per-(nmId,dKey) → latest per-nmId ≤ dKey → per-date global → final global.
+// много правдоподобнее, чем сегодняшний глобальный 45%).
+//
+// 2026-05-22 (v4): добавлен subcategory-aware fallback ДО byDate-global. Для
+// nmId без funnel-истории вообще (level 1+2 promax) — раньше падали на byDate-
+// global, который зависит от scope (filter.nmIds): /ads/wb с фильтром Vacuum
+// получает scope-средний ~88%, /prices/wb легенда с widescope linkedNmIds —
+// смешанный ~45%. Это давало хвостовое расхождение DRR 1-2 пункта между двумя
+// страницами. Теперь level 3 = bySubDate (rolling 30d weighted среди nmId
+// той же подкатегории) → даёт subcategory-specific buyout независимо от scope.
+// Mapping nmId→subcategoryId автоподтягивается из MarketplaceArticle+Product.
+//
+// Итоговая fallback цепочка:
+//   1) per-(nmId,dKey) → 2) latest per-nmId ≤ dKey →
+//   3) per-(subcatId,dKey) → 4) latest per-subcatId ≤ dKey →
+//   5) per-date global → 6) final global → 7) 90% hard fallback.
 
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -80,7 +93,7 @@ export interface BuyoutResolver {
   resolve(nmId: number, dateKey: string): number
 }
 
-/** Rolling 30d weighted buyout% per (nmId, date) + latest-per-nmId + per-date global + final global.
+/** Rolling 30d weighted buyout% per (nmId, date) + latest-per-nmId + per-(subcat,date) + per-date global + final global.
  *
  *  Берём WbCardFunnelDaily.buyoutPercent (что показано в кабинете WB
  *  «Аналитика → По дням» за конкретный день), но к ordersSumRub дня применяем
@@ -97,14 +110,21 @@ export interface BuyoutResolver {
  *    2) latest perNmId weighted ≤ date — для свежих дней с null buyoutPercent.
  *       Сохраняет ID-специфику: high-buyout продукт (бытовая техника ~88%)
  *       продолжает получать своё значение, не падая на mixed-glob ~45%
- *    3) per-date global rolling 30d — для (nmId, date) у которых нет funnel-данных
- *       вообще в окне (новый артикул, не имеющий истории)
- *    4) finalGlobal — взвешенное среднее по всему [from-30d ; to) окну
- *    5) 90% — hard fallback, только если БД совсем пустая
+ *    3) per-(subcatId, date) rolling 30d — для nmId без funnel-истории вообще.
+ *       Раньше падали сразу на byDate-global, scope-зависимый (Vacuum-only scope
+ *       давал ~88%, all-linked scope — mixed ~45%, отсюда хвостовая расхождение
+ *       между /ads/wb и /prices/wb легендой). Subcategory-уровень scope-независим.
+ *    4) latest per-subcatId ≤ date — для свежих дней где у самой подкатегории
+ *       нет buyout-данных (редкий edge case)
+ *    5) per-date global rolling 30d — финальный fallback по дате
+ *    6) finalGlobal — взвешенное среднее по всему [from-30d ; to) окну
+ *    7) 90% — hard fallback, только если БД совсем пустая
  *
  *  @param from начало отчётного окна (включительно, UTC midnight)
  *  @param to конец отчётного окна (exclusive, UTC midnight)
- *  @param nmIdsFilter ограничить выборку перечисленными nmId
+ *  @param nmIdsFilter ограничить выборку перечисленными nmId. Если undefined —
+ *    берётся весь funnel. Это влияет ТОЛЬКО на byDate-global (level 5); все
+ *    остальные уровни scope-независимы.
  */
 export async function loadBuyoutPctRolling30dMap(
   from: Date,
@@ -225,10 +245,98 @@ export async function loadBuyoutPctRolling30dMap(
   }
   const finalGlobal = finalGlobalRow[0]?.weighted ?? 90
 
-  function latestForNm(nmId: number, dKey: string): number | undefined {
-    const arr = sortedByNm.get(nmId)
-    if (!arr || arr.length === 0) return undefined
-    // Бинарный поиск: наибольший индекс i, где arr[i][0] <= dKey.
+  // ── Per-(subcatId, date) rolling 30d weighted ──
+  // Подтягиваем nmId→subcategoryId mapping из БД (через MarketplaceArticle JOIN
+  // Product). Это делает resolver самодостаточным — callers не обязаны передавать
+  // mapping вручную. Фильтруем по nmIdsFilter если задан (соответствие со scope
+  // per-nmId), иначе берём все WB-linked nmId.
+  const nmIdSubArticles = await prisma.marketplaceArticle.findMany({
+    where: {
+      marketplace: { slug: "wb" },
+      product: { deletedAt: null },
+      ...(nmIdsFilter && nmIdsFilter.length > 0
+        ? { article: { in: nmIdsFilter.map(String) } }
+        : {}),
+    },
+    select: { article: true, product: { select: { subcategoryId: true } } },
+  })
+  const nmIdToSubcatId = new Map<number, string>()
+  for (const a of nmIdSubArticles) {
+    const n = parseInt(a.article, 10)
+    if (Number.isNaN(n)) continue
+    if (a.product.subcategoryId) nmIdToSubcatId.set(n, a.product.subcategoryId)
+  }
+
+  // SQL: per-(subId, date) rolling 30d weighted из funnel rows JOIN nmId→subId.
+  // VALUES CTE с парами передаётся через Prisma.join. Если пар нет (например
+  // вообще нет WB-linked products) — skip query.
+  const bySubDate = new Map<string, number>()
+  const sortedBySub = new Map<string, Array<[string, number]>>()
+  if (nmIdToSubcatId.size > 0) {
+    const pairs: Array<[number, string]> = []
+    for (const [nm, sub] of nmIdToSubcatId) pairs.push([nm, sub])
+    const valuesSql = Prisma.join(
+      pairs.map(
+        ([nm, sub]) => Prisma.sql`(${nm}::bigint, ${sub}::text)`,
+      ),
+    )
+    const perSubDate = await prisma.$queryRaw<
+      Array<{ subId: string; date: Date; weighted: number | null }>
+    >`
+      WITH map("nmId", "subId") AS (VALUES ${valuesSql}),
+      base AS (
+        SELECT m."subId", f."date", f."buyoutPercent", f."ordersCount"
+        FROM "WbCardFunnelDaily" f
+        JOIN map m ON m."nmId" = f."nmId"
+        WHERE f."date" >= ${lookbackFrom} AND f."date" < ${to}
+          AND f."buyoutPercent" IS NOT NULL
+          AND f."ordersCount" > 0
+      ),
+      daily AS (
+        SELECT "subId", "date",
+          SUM("buyoutPercent" * "ordersCount") AS num,
+          SUM("ordersCount") AS den
+        FROM base
+        GROUP BY "subId", "date"
+      )
+      SELECT "subId", "date",
+        (
+          SUM(num) OVER (
+            PARTITION BY "subId" ORDER BY "date"
+            RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+          )
+          / NULLIF(
+              SUM(den) OVER (
+                PARTITION BY "subId" ORDER BY "date"
+                RANGE BETWEEN INTERVAL '29 days' PRECEDING AND CURRENT ROW
+              ), 0
+            )
+        )::float AS weighted
+      FROM daily
+      WHERE "date" >= ${from}
+    `
+    for (const r of perSubDate) {
+      if (r.weighted != null && r.weighted > 0) {
+        const dKey = dateKey(r.date)
+        bySubDate.set(`${r.subId}|${dKey}`, r.weighted)
+        let arr = sortedBySub.get(r.subId)
+        if (!arr) {
+          arr = []
+          sortedBySub.set(r.subId, arr)
+        }
+        arr.push([dKey, r.weighted])
+      }
+    }
+    for (const arr of sortedBySub.values()) {
+      arr.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    }
+  }
+
+  function binarySearchLE(
+    arr: Array<[string, number]>,
+    dKey: string,
+  ): number | undefined {
+    if (arr.length === 0) return undefined
     let lo = 0
     let hi = arr.length - 1
     let found = -1
@@ -244,12 +352,31 @@ export async function loadBuyoutPctRolling30dMap(
     return found >= 0 ? arr[found][1] : undefined
   }
 
+  function latestForNm(nmId: number, dKey: string): number | undefined {
+    const arr = sortedByNm.get(nmId)
+    if (!arr) return undefined
+    return binarySearchLE(arr, dKey)
+  }
+
+  function latestForSub(subId: string, dKey: string): number | undefined {
+    const arr = sortedBySub.get(subId)
+    if (!arr) return undefined
+    return binarySearchLE(arr, dKey)
+  }
+
   return {
     resolve(nmId: number, dKey: string): number {
       const direct = byNmDate.get(`${nmId}_${dKey}`)
       if (direct != null) return direct
       const latestNm = latestForNm(nmId, dKey)
       if (latestNm != null) return latestNm
+      const subId = nmIdToSubcatId.get(nmId)
+      if (subId) {
+        const subDay = bySubDate.get(`${subId}|${dKey}`)
+        if (subDay != null) return subDay
+        const latestSub = latestForSub(subId, dKey)
+        if (latestSub != null) return latestSub
+      }
       return byDate.get(dKey) ?? finalGlobal
     },
   }
