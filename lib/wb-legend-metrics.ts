@@ -67,22 +67,24 @@ export async function loadLegendMetrics(
 
   // ── 1. WbAdvertTarget: nmId → Set<advertId> для scope + ВСЕ targets каждого
   //    advertId (включая nmId вне scope) — нужны для equal-split fallback.
+  //    Фильтр active=true — кампания таргетит nmId в кабинете СЕЙЧАС (cron
+  //    wb-adv-targets-backfill ведёт это поле). Inactive — историческое.
   const scopeTargets = await prisma.wbAdvertTarget.findMany({
-    where: { nmId: { in: scopeNmIds } },
+    where: { nmId: { in: scopeNmIds }, active: true },
     select: { nmId: true, advertId: true },
   })
   const allAdvertIds = new Set<number>()
   for (const t of scopeTargets) {
-    if (t.nmId < 0) continue // sentinel
+    if (t.nmId < 0) continue // sentinel (-1, active=false по схеме, но защитимся)
     allAdvertIds.add(t.advertId)
   }
   const allAdvertIdsArr = [...allAdvertIds]
 
-  // Все targets для этих advertIds (включая outside-scope nmId) — для fallback
+  // Все active targets для этих advertIds — для fallback equal-split.
   const allTargets =
     allAdvertIdsArr.length > 0
       ? await prisma.wbAdvertTarget.findMany({
-          where: { advertId: { in: allAdvertIdsArr } },
+          where: { advertId: { in: allAdvertIdsArr }, active: true },
           select: { advertId: true, nmId: true },
         })
       : []

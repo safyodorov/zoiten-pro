@@ -1,18 +1,29 @@
 // app/api/cron/wb-adv-targets-backfill/route.ts
-// GET — backfill WbAdvertTarget через /api/advert/v2/adverts.
-// Раньше targets деривились из /fullstats — но он возвращает данные только
-// для кампаний с активностью в запрошенном окне. Из 429 кампаний только 15
-// получили targets таким путём → cascade-фильтр на /ads/wb ломался.
+// GET — backfill / refresh WbAdvertTarget через /api/advert/v2/adverts.
 //
-// Новый источник: /api/advert/v2/adverts (replacement для deprecated
-// /adv/v1/promotion/adverts) даёт реальные target nmIds для ВСЕХ статусов.
-// Lim Basic: 1/час per token. С rotation 2 токенов = 100 advertIds/час.
+// v2 (2026-05-22): этот endpoint теперь не просто «бэкфилл missing», а
+// «refresh oldest». Раньше: ищет кампании без всяких targets и upsert'ит. После
+// одного прохода targets никогда не обновляются → старые таргеты живут вечно,
+// даже если в кабинете WB их давно убрали. Сейчас:
 //
-// Per call: ОДИН батч ≤50 кампаний без targets (приоритет — active+paused).
-// Несколько вызовов в течение дня покроют все 429. Цикл self-clears когда
-// все обработаны. Безопасно вызывать многократно.
+//   1) Приоритет: campaigns БЕЗ targets (NULLS FIRST), затем самые старые
+//      по MAX(WbAdvertTarget.updatedAt). Это даёт постоянную ротацию через
+//      ВСЕ active/paused/completed (7/9/11) кампании.
+//   2) Для каждого advertId: маркируем все существующие real targets (nmId > 0)
+//      как active=false, потом upsert свежий список с active=true. Стало:
+//      «active=true» — текущее состояние кабинета, «active=false» — историческое.
+//   3) Sentinel (nmId=-1, active=false) — кампания проверена, но targets нет
+//      (auto-РК или WB не вернул nm_settings). Помечается active=false как и
+//      устаревшие — атрибуция теперь использует только active=true.
 //
-// 2026-05-21
+// Rate limit: /api/advert/v2/adverts — 1 req/час per token. С ротацией двух
+// токенов = 2/час = 100 advertIds/час (batch 50). 429 campaigns → полный
+// рефреш цикла ~5 часов. Dispatcher вызывает каждые 5 мин — лишние вызовы
+// получают 429 и тихо скипаются.
+//
+// Атрибуция (lib/wb-legend-metrics.ts + app/(dashboard)/ads/wb/page.tsx) с
+// 2026-05-22 фильтрует targets по active=true. Сначала targets должны быть
+// рефрешнуты, потом числа в UI сойдутся с кабинетом.
 
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
@@ -25,7 +36,6 @@ import { WbRateLimitError } from "@/lib/wb-api"
 export const runtime = "nodejs"
 export const maxDuration = 600
 
-/** Размер одного батча per call — соответствует limit'у /api/advert/v2/adverts. */
 const BATCH_SIZE = 50
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -36,47 +46,47 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   resetAdvTokenForRun()
 
   try {
-    // Найти все advertIds без targets, приоритет 11 (paused, недавний spend) +
-    // 9 (active) первыми. status 4 (ready) и -1/8 (удалены) пропускаем —
-    // у них нет смысла.
-    const missing = await prisma.$queryRaw<Array<{ advertId: number }>>`
+    // Priority: campaigns без targets (NULLS FIRST), затем самые старые
+    // по MAX(WbAdvertTarget.updatedAt). Это обеспечивает постоянный круг
+    // рефреша через все active/paused/completed campaigns.
+    const oldest = await prisma.$queryRaw<Array<{ advertId: number }>>`
       SELECT c."advertId"
       FROM "WbAdvertCampaign" c
       LEFT JOIN (
-        SELECT DISTINCT "advertId" FROM "WbAdvertTarget"
+        SELECT "advertId", MAX("updatedAt") AS last_refresh
+        FROM "WbAdvertTarget"
+        GROUP BY "advertId"
       ) t ON t."advertId" = c."advertId"
-      WHERE t."advertId" IS NULL
-        AND c.status IN (7, 9, 11)
+      WHERE c.status IN (7, 9, 11)
       ORDER BY
+        t.last_refresh ASC NULLS FIRST,
         CASE c.status WHEN 9 THEN 0 WHEN 11 THEN 1 WHEN 7 THEN 2 ELSE 3 END,
         c."advertId" ASC
       LIMIT ${BATCH_SIZE}
     `
 
-    if (missing.length === 0) {
+    if (oldest.length === 0) {
       return NextResponse.json({
         ok: true,
         done: true,
-        message: "Все кампании уже имеют targets",
+        message: "Нет кампаний для рефреша (status NOT IN 7/9/11)",
         processed: 0,
       })
     }
 
-    const ids = missing.map((r) => r.advertId)
-    console.log(`[wb-adv-targets-backfill] processing ${ids.length} advertIds`)
+    const ids = oldest.map((r) => r.advertId)
+    console.log(`[wb-adv-targets-backfill] refreshing ${ids.length} advertIds (oldest first)`)
 
     const infos = await fetchAdvertsInfoV2(ids)
     console.log(`[wb-adv-targets-backfill] fetched ${infos.length} info rows`)
 
-    // Маппинг для определения «пропущенных» WB'ом advertIds.
     const respondedSet = new Set(infos.map((i) => i.advertId))
 
-    let pairsUpserted = 0
+    let pairsActivated = 0
+    let pairsDeactivated = 0
     let campaignsWithNms = 0
     let sentinelsAdded = 0
 
-    /** Sentinel marker — (advertId, -1, active=false). Помечает «проверено,
-     *  таргетов нет / WB не вернул». Не пересекается с реальными nmId. */
     async function addSentinel(advertId: number): Promise<void> {
       await prisma.wbAdvertTarget.upsert({
         where: { advertId_nmId: { advertId, nmId: -1 } },
@@ -87,8 +97,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     for (const info of infos) {
+      // Маркируем все ранее активные real targets (nmId > 0) как inactive.
+      // На предыдущем шаге дёрнул updatedAt — следующий рефреш этой кампании
+      // снова случится через ~5 часов (после всех others).
+      const deactivated = await prisma.wbAdvertTarget.updateMany({
+        where: {
+          advertId: info.advertId,
+          nmId: { gt: 0 },
+          active: true,
+        },
+        data: { active: false },
+      })
+      pairsDeactivated += deactivated.count
+
       if (info.nmIds.length === 0) {
-        // Auto-РК / пустая кампания — WB вернул её но без nm_settings.
+        // Auto-РК / WB вернул без nm_settings — sentinel
         await addSentinel(info.advertId)
         continue
       }
@@ -99,27 +122,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           create: { advertId: info.advertId, nmId, active: true },
           update: { active: true },
         })
-        pairsUpserted++
+        pairsActivated++
       }
     }
 
-    // advertIds которые мы запросили но WB их не вернул — типично 404
-    // (кампания удалена в WB cabinet, но всё ещё в нашей БД с status=11/7).
-    // Без sentinel'а они бы вечно крутились в "missing" списке.
+    // advertIds, которые мы запросили, но WB не вернул — типично 404
+    // (кампания удалена в кабинете). Не деактивируем существующие targets
+    // (WB может временно не отвечать) — только добавляем sentinel чтобы
+    // updatedAt продвинулся и эта кампания ушла в конец очереди.
     for (const advertId of ids) {
       if (!respondedSet.has(advertId)) {
         await addSentinel(advertId)
       }
     }
 
-    // Сколько ещё осталось — для прозрачности в ответе
+    // Сколько ещё не рефрешено за последние 6 часов
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000)
     const remaining = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
       SELECT COUNT(*)::bigint AS cnt
       FROM "WbAdvertCampaign" c
       LEFT JOIN (
-        SELECT DISTINCT "advertId" FROM "WbAdvertTarget"
+        SELECT "advertId", MAX("updatedAt") AS last_refresh
+        FROM "WbAdvertTarget"
+        GROUP BY "advertId"
       ) t ON t."advertId" = c."advertId"
-      WHERE t."advertId" IS NULL AND c.status IN (7, 9, 11)
+      WHERE c.status IN (7, 9, 11)
+        AND (t.last_refresh IS NULL OR t.last_refresh < ${sixHoursAgo})
     `
     const remainCount = Number(remaining[0]?.cnt ?? 0)
 
@@ -128,9 +156,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       done: remainCount === 0,
       processed: ids.length,
       campaignsWithNms,
-      pairsUpserted,
+      pairsActivated,
+      pairsDeactivated,
       sentinelsAdded,
-      remaining: remainCount,
+      remainingStaleOver6h: remainCount,
     })
   } catch (err) {
     if (err instanceof WbRateLimitError) {

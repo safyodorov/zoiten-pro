@@ -155,7 +155,7 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
     const targets =
       cascadeNmIds.length > 0
         ? await prisma.wbAdvertTarget.findMany({
-            where: { nmId: { in: cascadeNmIds } },
+            where: { nmId: { in: cascadeNmIds }, active: true },
             select: { advertId: true },
           })
         : []
@@ -192,7 +192,10 @@ export default async function AdsWbPage({ searchParams }: AdsWbPageProps) {
 
   const campaigns = await prisma.wbAdvertCampaign.findMany({
     where: campaignWhere,
-    include: { targets: true },
+    // active=true: targets, которые ДЕЙСТВИТЕЛЬНО таргетит кампания в кабинете
+    // WB СЕЙЧАС. Inactive — историческое (cron wb-adv-targets-backfill маркирует
+    // их при рефреше, когда WB вернул другой список).
+    include: { targets: { where: { active: true } } },
   })
 
   // ── 3.5. advertId → type map для groupByType ───────────────────
