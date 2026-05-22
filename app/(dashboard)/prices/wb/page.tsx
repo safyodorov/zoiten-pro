@@ -28,6 +28,7 @@ import { PriceCalculatorTableWrapper } from "@/components/prices/PriceCalculator
 import { getUserPreference } from "@/app/actions/user-preferences"
 import { getMskTodayDate, fillTimeSeries, type DayPoint } from "@/lib/wb-orders-chart"
 import { mergeOrdersAndFunnel } from "@/lib/wb-funnel-merge"
+import { loadLegendMetrics } from "@/lib/wb-legend-metrics"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
@@ -336,6 +337,28 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       : [[], []]
 
   const ordersByNmId = mergeOrdersAndFunnel(ordersRows, funnelRows)
+
+  // ── 6.5.1. Метрики легенды per-nmId (% выкупа + ДРР nmId/subcat/cat) ──
+  // Окно: вчера (single day) и 7 полных прошедших дней. Scope под/категорий —
+  // всех linkedNmIds в текущем filter-state (визуально согласовано с фильтрами).
+  const nmIdToSubcategoryId = new Map<number, string | null>()
+  const nmIdToCategoryId = new Map<number, string | null>()
+  for (const a of linkedArticles) {
+    const nmId = parseInt(a.article, 10)
+    if (Number.isNaN(nmId)) continue
+    if (!nmIdToSubcategoryId.has(nmId)) {
+      nmIdToSubcategoryId.set(nmId, a.product.subcategoryId ?? null)
+    }
+    if (!nmIdToCategoryId.has(nmId)) {
+      nmIdToCategoryId.set(nmId, a.product.categoryId ?? null)
+    }
+  }
+  const legendMetrics = await loadLegendMetrics(
+    linkedNmIds,
+    nmIdToSubcategoryId,
+    nmIdToCategoryId,
+    todayMsk,
+  )
 
   // ── 6.6. Загрузить последние отзывы per nmId (для ленты в expand-панели) ──
   // quick 260518-gg3: SupportTicket channel=FEEDBACK, rating IS NOT NULL,
@@ -839,12 +862,26 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       rating: number | null
       reviewsTotal: number | null
       reviews: { byImt: FeedbackItem[]; byNmId: FeedbackItem[] }
+      buyoutPct: number | null
+      drrNmIdYesterday: number | null
+      drrNmId7d: number | null
+      drrSubcategoryYesterday: number | null
+      drrSubcategory7d: number | null
+      drrCategoryYesterday: number | null
+      drrCategory7d: number | null
     }> = []
-    for (const { card } of cardRefs) {
+    for (const { card, product } of cardRefs) {
       const rawRows = ordersByNmId.get(card.nmId) ?? []
       const hasStock = (card.stockQty ?? 0) > 0
       const hasSales = rawRows.some((r) => r.qty > 0)
       if (!hasStock && !hasSales) continue
+      const nmMetrics = legendMetrics.perNmId.get(card.nmId)
+      const subMetrics = product.subcategoryId
+        ? legendMetrics.perSubcategoryId.get(product.subcategoryId)
+        : undefined
+      const catMetrics = product.categoryId
+        ? legendMetrics.perCategoryId.get(product.categoryId)
+        : undefined
       productNmIdsWithCharts.push({
         nmId: card.nmId,
         timeSeries: fillTimeSeries(rawRows),
@@ -856,6 +893,13 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         reviewsTotal:
           card.wbStoreFeedbacks ?? card.reviewsTotalImt ?? card.reviewsTotal ?? null,
         reviews: reviewsByNmId[card.nmId] ?? { byImt: [], byNmId: [] },
+        buyoutPct: nmMetrics?.buyoutPct ?? null,
+        drrNmIdYesterday: nmMetrics?.drrYesterday ?? null,
+        drrNmId7d: nmMetrics?.drr7d ?? null,
+        drrSubcategoryYesterday: subMetrics?.drrYesterday ?? null,
+        drrSubcategory7d: subMetrics?.drr7d ?? null,
+        drrCategoryYesterday: catMetrics?.drrYesterday ?? null,
+        drrCategory7d: catMetrics?.drr7d ?? null,
       })
     }
 

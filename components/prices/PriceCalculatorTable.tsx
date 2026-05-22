@@ -198,6 +198,18 @@ export interface ProductGroup {
       byImt: Array<{ id: string; rating: number; text: string; createdAt: string }>
       byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
     }
+    /** % выкупа артикула за вчера (raw из WbCardFunnelDaily, fallback на
+     *  7-дневное взвешенное среднее per nmId). null если данных нет. */
+    buyoutPct?: number | null
+    /** ДРР per nmId — за вчера и за 7 дней. null если revenue 0. */
+    drrNmIdYesterday?: number | null
+    drrNmId7d?: number | null
+    /** ДРР подкатегории, к которой относится продукт этого nmId. */
+    drrSubcategoryYesterday?: number | null
+    drrSubcategory7d?: number | null
+    /** ДРР категории, к которой относится продукт этого nmId. */
+    drrCategoryYesterday?: number | null
+    drrCategory7d?: number | null
   }>
 }
 
@@ -596,6 +608,38 @@ function InWayBadge({
   )
 }
 
+/** Заголовок ДРР + 2 строки «вчера / 7 дн.» с процентами. Применяется
+ *  для 3 уровней: артикул, подкатегория, категория. */
+function DrrBlock({
+  title,
+  yesterday,
+  week,
+}: {
+  title: string
+  yesterday: number | null
+  week: number | null
+}) {
+  const fmt = (v: number | null) =>
+    v != null && Number.isFinite(v) ? `${v.toFixed(1)}%` : "—"
+  return (
+    <div className="flex flex-col gap-0.5 mt-0.5">
+      <div className="text-muted-foreground text-[11px] whitespace-nowrap">
+        {title}
+      </div>
+      <div className="flex flex-col gap-0.5 pl-2">
+        <div className="flex flex-row justify-between gap-2 whitespace-nowrap">
+          <span className="text-muted-foreground">вчера</span>
+          <span className="font-medium tabular-nums">{fmt(yesterday)}</span>
+        </div>
+        <div className="flex flex-row justify-between gap-2 whitespace-nowrap">
+          <span className="text-muted-foreground">7 дн.</span>
+          <span className="font-medium tabular-nums">{fmt(week)}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function NmIdLegend({
   stockQty,
   inWayToClient,
@@ -604,6 +648,13 @@ function NmIdLegend({
   rating,
   reviewsTotal,
   reviews,
+  buyoutPct,
+  drrNmIdYesterday,
+  drrNmId7d,
+  drrSubcategoryYesterday,
+  drrSubcategory7d,
+  drrCategoryYesterday,
+  drrCategory7d,
 }: {
   stockQty: number | null
   inWayToClient: number | null
@@ -615,27 +666,40 @@ function NmIdLegend({
     byImt: Array<{ id: string; rating: number; text: string; createdAt: string }>
     byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
   }
+  buyoutPct: number | null
+  drrNmIdYesterday: number | null
+  drrNmId7d: number | null
+  drrSubcategoryYesterday: number | null
+  drrSubcategory7d: number | null
+  drrCategoryYesterday: number | null
+  drrCategory7d: number | null
 }) {
   // quick 260518-igw: vertical layout — metadata column + 2 vertical review lanes
   // (По связке / По товару) справа от графика. Outer flex-row (метаданные слева,
   // потом лента «По связке», потом «По товару»). Пустая лента (вместе с подписью)
   // не рендерится. ReviewChip стэкается вертикально в каждой ленте.
+  // 2026-05-22: Остаток и «в пути» разнесены на две строки (как в сводке по товару).
+  // Добавлены % выкупа + ДРР артикула / подкатегории / категории (вчера + 7 дн).
+  const fmtPct = (v: number | null) =>
+    v != null && Number.isFinite(v) ? `${v.toFixed(1)}%` : "—"
   return (
-    <div className="flex flex-row gap-3 items-center text-xs">
+    <div className="flex flex-row gap-3 items-start text-xs">
       {/* Метаданные — vertical column, каждая строка label/value горизонтально.
-          items-center на родителе центрирует metadata-блок по вертикали относительно
-          review lanes (которые обычно выше). */}
-      <div className="flex flex-col gap-1 min-w-[140px]">
-        <div className="flex items-baseline gap-1.5 flex-wrap">
-          <LegendItem
-            label="Остаток"
-            value={stockQty != null ? `${stockQty} шт` : "—"}
-          />
-          <InWayBadge
-            toClient={inWayToClient ?? 0}
-            fromClient={inWayFromClient ?? 0}
-          />
-        </div>
+          items-start: блок выровнен по верху, чтобы при росте высоты (новые DRR
+          блоки) не «уплывал» от графика. */}
+      <div className="flex flex-col gap-1 min-w-[160px]">
+        <LegendItem
+          label="Остаток"
+          value={stockQty != null ? `${stockQty} шт` : "—"}
+        />
+        {(inWayToClient ?? 0) + (inWayFromClient ?? 0) > 0 && (
+          <div className="flex justify-end">
+            <InWayBadge
+              toClient={inWayToClient ?? 0}
+              fromClient={inWayFromClient ?? 0}
+            />
+          </div>
+        )}
         <LegendItem
           label="Дни"
           value={daysLeft != null ? `${daysLeft} дн` : "—"}
@@ -647,6 +711,23 @@ function NmIdLegend({
         <LegendItem
           label="Оценок"
           value={reviewsTotal != null ? `${reviewsTotal}` : "—"}
+        />
+        <LegendItem label="% выкупа" value={fmtPct(buyoutPct)} />
+        {/* ДРР по 3 уровням, каждый — заголовок + 2 строки (вчера / 7 дн) */}
+        <DrrBlock
+          title="ДРР артикула"
+          yesterday={drrNmIdYesterday}
+          week={drrNmId7d}
+        />
+        <DrrBlock
+          title="ДРР подкатегории"
+          yesterday={drrSubcategoryYesterday}
+          week={drrSubcategory7d}
+        />
+        <DrrBlock
+          title="ДРР категории"
+          yesterday={drrCategoryYesterday}
+          week={drrCategory7d}
         />
       </div>
       {/* Лента «По связке» — vertical stack, рендерится только если есть отзывы */}
@@ -1345,6 +1426,17 @@ export function PriceCalculatorTable({
                                 rating={c.rating}
                                 reviewsTotal={c.reviewsTotal}
                                 reviews={c.reviews}
+                                buyoutPct={c.buyoutPct ?? null}
+                                drrNmIdYesterday={c.drrNmIdYesterday ?? null}
+                                drrNmId7d={c.drrNmId7d ?? null}
+                                drrSubcategoryYesterday={
+                                  c.drrSubcategoryYesterday ?? null
+                                }
+                                drrSubcategory7d={c.drrSubcategory7d ?? null}
+                                drrCategoryYesterday={
+                                  c.drrCategoryYesterday ?? null
+                                }
+                                drrCategory7d={c.drrCategory7d ?? null}
                               />
                             </div>
                           )
