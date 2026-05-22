@@ -198,8 +198,8 @@ export interface ProductGroup {
       byImt: Array<{ id: string; rating: number; text: string; createdAt: string }>
       byNmId: Array<{ id: string; rating: number; text: string; createdAt: string }>
     }
-    /** % выкупа артикула за вчера (raw из WbCardFunnelDaily, fallback на
-     *  7-дневное взвешенное среднее per nmId). null если данных нет. */
+    /** % выкупа артикула — per-nmId rolling 30d weighted ending yesterday.
+     *  null если для nmId нет funnel-данных за окно. */
     buyoutPct?: number | null
     /** ДРР per nmId — за вчера и за 7 дней. null если revenue 0. */
     drrNmIdYesterday?: number | null
@@ -207,9 +207,13 @@ export interface ProductGroup {
     /** ДРР подкатегории, к которой относится продукт этого nmId. */
     drrSubcategoryYesterday?: number | null
     drrSubcategory7d?: number | null
+    /** Название подкатегории — используется в label DRR-блока. */
+    subcategoryName?: string | null
     /** ДРР категории, к которой относится продукт этого nmId. */
     drrCategoryYesterday?: number | null
     drrCategory7d?: number | null
+    /** Название категории — используется в label DRR-блока. */
+    categoryName?: string | null
   }>
 }
 
@@ -641,10 +645,6 @@ function DrrBlock({
 }
 
 function NmIdLegend({
-  stockQty,
-  inWayToClient,
-  inWayFromClient,
-  daysLeft,
   rating,
   reviewsTotal,
   reviews,
@@ -653,13 +653,11 @@ function NmIdLegend({
   drrNmId7d,
   drrSubcategoryYesterday,
   drrSubcategory7d,
+  subcategoryName,
   drrCategoryYesterday,
   drrCategory7d,
+  categoryName,
 }: {
-  stockQty: number | null
-  inWayToClient: number | null
-  inWayFromClient: number | null
-  daysLeft: number | null
   rating: number | null
   reviewsTotal: number | null
   reviews: {
@@ -671,39 +669,19 @@ function NmIdLegend({
   drrNmId7d: number | null
   drrSubcategoryYesterday: number | null
   drrSubcategory7d: number | null
+  subcategoryName: string | null
   drrCategoryYesterday: number | null
   drrCategory7d: number | null
+  categoryName: string | null
 }) {
-  // quick 260518-igw: vertical layout — metadata column + 2 vertical review lanes
-  // (По связке / По товару) справа от графика. Outer flex-row (метаданные слева,
-  // потом лента «По связке», потом «По товару»). Пустая лента (вместе с подписью)
-  // не рендерится. ReviewChip стэкается вертикально в каждой ленте.
-  // 2026-05-22: Остаток и «в пути» разнесены на две строки (как в сводке по товару).
-  // Добавлены % выкупа + ДРР артикула / подкатегории / категории (вчера + 7 дн).
+  // 2026-05-22: Остаток/В пути/Дни перенесены в рамку графика (WbCardOrdersChart).
+  // Здесь остались: Рейтинг, Оценок, % выкупа, 3 динамических DRR-блока.
+  // Названия DRR-блоков подставляются из subcategoryName/categoryName.
   const fmtPct = (v: number | null) =>
     v != null && Number.isFinite(v) ? `${v.toFixed(1)}%` : "—"
   return (
     <div className="flex flex-row gap-3 items-start text-xs">
-      {/* Метаданные — vertical column, каждая строка label/value горизонтально.
-          items-start: блок выровнен по верху, чтобы при росте высоты (новые DRR
-          блоки) не «уплывал» от графика. */}
       <div className="flex flex-col gap-1 min-w-[160px]">
-        <LegendItem
-          label="Остаток"
-          value={stockQty != null ? `${stockQty} шт` : "—"}
-        />
-        {(inWayToClient ?? 0) + (inWayFromClient ?? 0) > 0 && (
-          <div className="flex justify-end">
-            <InWayBadge
-              toClient={inWayToClient ?? 0}
-              fromClient={inWayFromClient ?? 0}
-            />
-          </div>
-        )}
-        <LegendItem
-          label="Дни"
-          value={daysLeft != null ? `${daysLeft} дн` : "—"}
-        />
         <LegendItem
           label="Рейтинг"
           value={rating != null ? rating.toFixed(1) : "—"}
@@ -713,22 +691,27 @@ function NmIdLegend({
           value={reviewsTotal != null ? `${reviewsTotal}` : "—"}
         />
         <LegendItem label="% выкупа" value={fmtPct(buyoutPct)} />
-        {/* ДРР по 3 уровням, каждый — заголовок + 2 строки (вчера / 7 дн) */}
+        {/* ДРР по 3 уровням. Названия динамические из subcategoryName/categoryName.
+            Если name=null → блок не рендерится. */}
         <DrrBlock
           title="ДРР артикула"
           yesterday={drrNmIdYesterday}
           week={drrNmId7d}
         />
-        <DrrBlock
-          title="ДРР подкатегории"
-          yesterday={drrSubcategoryYesterday}
-          week={drrSubcategory7d}
-        />
-        <DrrBlock
-          title="ДРР категории"
-          yesterday={drrCategoryYesterday}
-          week={drrCategory7d}
-        />
+        {subcategoryName && (
+          <DrrBlock
+            title={`ДРР ${subcategoryName}`}
+            yesterday={drrSubcategoryYesterday}
+            week={drrSubcategory7d}
+          />
+        )}
+        {categoryName && (
+          <DrrBlock
+            title={`ДРР ${categoryName}`}
+            yesterday={drrCategoryYesterday}
+            week={drrCategory7d}
+          />
+        )}
       </div>
       {/* Лента «По связке» — vertical stack, рендерится только если есть отзывы */}
       {reviews.byImt.length > 0 && (
@@ -1417,12 +1400,12 @@ export function PriceCalculatorTable({
                               <WbCardOrdersChart
                                 nmId={c.nmId}
                                 timeSeries={c.timeSeries}
-                              />
-                              <NmIdLegend
                                 stockQty={c.stockQty}
                                 inWayToClient={c.inWayToClient ?? null}
                                 inWayFromClient={c.inWayFromClient ?? null}
                                 daysLeft={daysLeft}
+                              />
+                              <NmIdLegend
                                 rating={c.rating}
                                 reviewsTotal={c.reviewsTotal}
                                 reviews={c.reviews}
@@ -1433,10 +1416,12 @@ export function PriceCalculatorTable({
                                   c.drrSubcategoryYesterday ?? null
                                 }
                                 drrSubcategory7d={c.drrSubcategory7d ?? null}
+                                subcategoryName={c.subcategoryName ?? null}
                                 drrCategoryYesterday={
                                   c.drrCategoryYesterday ?? null
                                 }
                                 drrCategory7d={c.drrCategory7d ?? null}
+                                categoryName={c.categoryName ?? null}
                               />
                             </div>
                           )

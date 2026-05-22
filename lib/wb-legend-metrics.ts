@@ -1,23 +1,22 @@
 // Phase 19+ 2026-05-22: метрики per-nmId для legend в expand-панели /prices/wb.
 //
-// v2 (2026-05-22): переписано чтобы числа совпадали с /ads/wb. Источники:
-//   spend  = WbAdvertSpendRow.updSum (ground truth) фильтруется по advertIds,
-//            targeting nmId через WbAdvertTarget. ВАЖНО: если один advertId
-//            таргетит несколько nmId, его spend полностью атрибутируется каждому
-//            из них (overcount на per-nmId уровне). Это сознательно — пользователь
-//            видит «во сколько обходится этот товар, учитывая кампании в которых
-//            он участвует». Для per-subcategory/category агрегации advertIds
-//            дедуплицируются через Set, overcount устраняется.
+// v3 (2026-05-22): пропорциональная атрибуция spend per nmId.
 //
-//   revenue_adj = SUM_per_(nmId,day)( ordersSumRub × buyout_rolling30d / 100 )
-//   buyout_rolling30d = loadBuyoutPctRolling30dMap (та же функция что в /ads/wb)
+// Раньше (v2) делал SUM(WbAdvertSpendRow.updSum WHERE advertId IN targets(nmId))
+// — это сильно overcount'ит per-nmId, если один advertId таргетит несколько nmId
+// (его ВЕСЬ spend атрибутировался КАЖДОМУ). Пример: advertId 35135014 таргетит
+// 7 nmId, его 5000₽/день добавлялись к каждому из 7 → суммарно 35000₽ вместо 5000.
 //
-//   ДРР = spend / revenue_adj × 100
+// Теперь: для каждого (advertId, day) ground truth (WbAdvertSpendRow.updSum)
+// делится между nmId пропорционально WbAdvertStatDaily.sum. Fallback на равное
+// деление, если у advertId нет stats данных (новая кампания / пробелы /fullstats).
+// Суммы сохраняются: SUM_по_всем_nmId attributed_spend ≡ ground truth.
 //
-// «% выкупа» в легенде — отдельный расчёт: per-nmId rolling 30d weighted ENDING
-// YESTERDAY. Без fallback'ов на global/hardcoded — если для nmId нет funnel-данных
-// за 30д → null (UI покажет «—»). Прежний raw daily давал шум 0/100 на низких
-// объёмах.
+// revenue_adj per (nmId, day) = ordersSumRub × rolling30dWeightedBuyout / 100
+// — та же формула, что использует /ads/wb (loadBuyoutPctRolling30dMap).
+//
+// «% выкупа» в легенде — отдельный per-nmId rolling 30d weighted ending yesterday
+// без fallback'ов (null если для nmId нет funnel-данных).
 
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -60,61 +59,135 @@ export async function loadLegendMetrics(
 
   // Окна:
   //   вчера   = [today - 1d, today)
-  //   7 дней  = [today - 7d, today)  — 7 ПОЛНЫХ прошедших дней, согласовано с /ads/wb
+  //   7 дней  = [today - 7d, today)  — 7 ПОЛНЫХ прошедших дней
   //   30 дней = [today - 30d, today) — для «% выкупа» weighted
   const yesterday = new Date(todayMsk.getTime() - 24 * 3600_000)
   const sevenDaysAgo = new Date(todayMsk.getTime() - 7 * 24 * 3600_000)
   const thirtyDaysAgo = new Date(todayMsk.getTime() - 30 * 24 * 3600_000)
-  const yesterdayKey = dateKey(yesterday)
 
-  // ── 1. WbAdvertTarget: nmId → Set<advertId>, и весь union advertIds для spend
-  const targets = await prisma.wbAdvertTarget.findMany({
+  // ── 1. WbAdvertTarget: nmId → Set<advertId> для scope + ВСЕ targets каждого
+  //    advertId (включая nmId вне scope) — нужны для equal-split fallback.
+  const scopeTargets = await prisma.wbAdvertTarget.findMany({
     where: { nmId: { in: scopeNmIds } },
     select: { nmId: true, advertId: true },
   })
-  const advertIdsByNmId = new Map<number, Set<number>>()
   const allAdvertIds = new Set<number>()
-  for (const t of targets) {
-    if (t.nmId < 0) continue // sentinel -1
-    let s = advertIdsByNmId.get(t.nmId)
-    if (!s) {
-      s = new Set()
-      advertIdsByNmId.set(t.nmId, s)
-    }
-    s.add(t.advertId)
+  for (const t of scopeTargets) {
+    if (t.nmId < 0) continue // sentinel
     allAdvertIds.add(t.advertId)
   }
+  const allAdvertIdsArr = [...allAdvertIds]
 
-  // ── 2. spend per (advertId, day) для окна 7д
+  // Все targets для этих advertIds (включая outside-scope nmId) — для fallback
+  const allTargets =
+    allAdvertIdsArr.length > 0
+      ? await prisma.wbAdvertTarget.findMany({
+          where: { advertId: { in: allAdvertIdsArr } },
+          select: { advertId: true, nmId: true },
+        })
+      : []
+  const targetsByAdvertId = new Map<number, Set<number>>()
+  for (const t of allTargets) {
+    if (t.nmId < 0) continue
+    let s = targetsByAdvertId.get(t.advertId)
+    if (!s) {
+      s = new Set()
+      targetsByAdvertId.set(t.advertId, s)
+    }
+    s.add(t.nmId)
+  }
+
+  // Set scopeNmIds для быстрой проверки членства
+  const scopeSet = new Set(scopeNmIds)
+
+  // ── 2. Ground-truth spend per (advertId, day) для окна 7д
   type SpendRow = { advertId: number; day: Date; spend: number }
   const spendRows: SpendRow[] =
-    allAdvertIds.size > 0
+    allAdvertIdsArr.length > 0
       ? await prisma.$queryRaw<SpendRow[]>`
         SELECT
           "advertId",
           DATE_TRUNC('day', "effectiveDate")::date AS day,
           SUM("updSum")::float AS spend
         FROM "WbAdvertSpendRow"
-        WHERE "advertId" IN (${Prisma.join([...allAdvertIds])})
+        WHERE "advertId" IN (${Prisma.join(allAdvertIdsArr)})
           AND "effectiveDate" >= ${sevenDaysAgo}
           AND "effectiveDate" < ${todayMsk}
         GROUP BY "advertId", day
       `
       : []
-  const spendByAdvertDay = new Map<string, number>()
-  for (const r of spendRows) {
-    spendByAdvertDay.set(`${r.advertId}_${dateKey(r.day)}`, r.spend)
+
+  // ── 3. WbAdvertStatDaily per (advertId, day, nmId) — для пропорционального split
+  type StatsRow = { advertId: number; day: Date; nmId: number; statsSum: number }
+  const statsRows: StatsRow[] =
+    allAdvertIdsArr.length > 0
+      ? await prisma.$queryRaw<StatsRow[]>`
+        SELECT
+          "advertId",
+          "date"::date AS day,
+          "nmId",
+          SUM("sum")::float AS "statsSum"
+        FROM "WbAdvertStatDaily"
+        WHERE "advertId" IN (${Prisma.join(allAdvertIdsArr)})
+          AND "date" >= ${sevenDaysAgo}
+          AND "date" < ${todayMsk}
+        GROUP BY "advertId", day, "nmId"
+      `
+      : []
+
+  // Map (advertId, day) → Map<nmId, statsSum> + total
+  const statsByAdvertDay = new Map<string, Map<number, number>>()
+  const statsTotalByAdvertDay = new Map<string, number>()
+  for (const r of statsRows) {
+    const k = `${r.advertId}_${dateKey(r.day)}`
+    let m = statsByAdvertDay.get(k)
+    if (!m) {
+      m = new Map()
+      statsByAdvertDay.set(k, m)
+    }
+    m.set(r.nmId, (m.get(r.nmId) ?? 0) + r.statsSum)
+    statsTotalByAdvertDay.set(k, (statsTotalByAdvertDay.get(k) ?? 0) + r.statsSum)
   }
 
-  // ── 3. Buyout resolver — та же логика, что в /ads/wb (rolling 30d weighted
-  //    per-nmId с fallback'ами per-date/global). Используется для DRR-revenue.
+  // ── 4. Пропорциональная атрибуция: spendByNmDay[nmId, dayKey]
+  const spendByNmDay = new Map<string, number>()
+  const addSpend = (nmId: number, dKey: string, amount: number) => {
+    if (!scopeSet.has(nmId)) return // outside scope — теряем (correct attribution)
+    const k = `${nmId}_${dKey}`
+    spendByNmDay.set(k, (spendByNmDay.get(k) ?? 0) + amount)
+  }
+  for (const sr of spendRows) {
+    if (sr.spend <= 0) continue
+    const dKey = dateKey(sr.day)
+    const advDayKey = `${sr.advertId}_${dKey}`
+    const statsTotal = statsTotalByAdvertDay.get(advDayKey) ?? 0
+
+    if (statsTotal > 0) {
+      // Пропорциональный split по WbAdvertStatDaily.sum
+      const perNmIdStats = statsByAdvertDay.get(advDayKey)!
+      for (const [nmId, nmStats] of perNmIdStats) {
+        const share = nmStats / statsTotal
+        addSpend(nmId, dKey, sr.spend * share)
+      }
+    } else {
+      // Fallback: равное деление между ВСЕМИ известными targets advertId
+      const targets = targetsByAdvertId.get(sr.advertId)
+      if (!targets || targets.size === 0) continue
+      const perTarget = sr.spend / targets.size
+      for (const nmId of targets) {
+        addSpend(nmId, dKey, perTarget)
+      }
+    }
+  }
+
+  // ── 5. Buyout resolver — та же логика, что в /ads/wb
   const buyoutResolver = await loadBuyoutPctRolling30dMap(
     sevenDaysAgo,
     todayMsk,
     scopeNmIds,
   )
 
-  // ── 4. funnel revenue per (nmId, day) → пересчитываем в revenueAdj через resolver
+  // ── 6. funnel revenue per (nmId, day) → revenueAdj через resolver
   const funnelRows = await prisma.wbCardFunnelDaily.findMany({
     where: {
       nmId: { in: scopeNmIds },
@@ -126,11 +199,13 @@ export async function loadLegendMetrics(
   for (const r of funnelRows) {
     const dKey = dateKey(r.date)
     const pct = buyoutResolver.resolve(r.nmId, dKey)
-    const adj = r.ordersSumRub * (pct / 100)
-    revenueAdjByNmDay.set(`${r.nmId}_${dKey}`, adj)
+    revenueAdjByNmDay.set(
+      `${r.nmId}_${dKey}`,
+      r.ordersSumRub * (pct / 100),
+    )
   }
 
-  // ── 5. «% выкупа» display — per-nmId rolling 30d weighted, без fallback'ов
+  // ── 7. «% выкупа» display — per-nmId 30d weighted ending yesterday, без fallback
   const buyout30dRows = await prisma.$queryRaw<
     Array<{ nmId: number; weighted: number | null }>
   >`
@@ -152,28 +227,20 @@ export async function loadLegendMetrics(
     }
   }
 
-  // ── 6. Универсальный агрегатор: spend (с dedup advertIds) + revenueAdj
+  // ── 8. Универсальный агрегатор
   const sevenDayKeys: string[] = []
   for (let i = 7; i >= 1; i--) {
     sevenDayKeys.push(dateKey(new Date(todayMsk.getTime() - i * 24 * 3600_000)))
   }
+  const yesterdayKey = dateKey(yesterday)
   const yesterdayKeys = [yesterdayKey]
 
   function aggregate(nmIds: Iterable<number>, dayKeys: string[]) {
-    const advIds = new Set<number>()
-    for (const nmId of nmIds) {
-      const s = advertIdsByNmId.get(nmId)
-      if (s) for (const id of s) advIds.add(id)
-    }
     let spend = 0
-    for (const advId of advIds) {
-      for (const dKey of dayKeys) {
-        spend += spendByAdvertDay.get(`${advId}_${dKey}`) ?? 0
-      }
-    }
     let revAdj = 0
     for (const nmId of nmIds) {
       for (const dKey of dayKeys) {
+        spend += spendByNmDay.get(`${nmId}_${dKey}`) ?? 0
         revAdj += revenueAdjByNmDay.get(`${nmId}_${dKey}`) ?? 0
       }
     }
@@ -181,7 +248,7 @@ export async function loadLegendMetrics(
     return { spend, revAdj, drr }
   }
 
-  // ── 7. per-nmId
+  // ── 9. per-nmId
   const perNmId = new Map<number, NmIdLegendMetrics>()
   for (const nmId of scopeNmIds) {
     const yest = aggregate([nmId], yesterdayKeys)
@@ -193,7 +260,7 @@ export async function loadLegendMetrics(
     })
   }
 
-  // ── 8. per-subcategory / per-category — группируем nmIds, агрегируем
+  // ── 10. per-subcategory / per-category
   const nmIdsBySubId = new Map<string, Set<number>>()
   const nmIdsByCatId = new Map<string, Set<number>>()
   for (const nmId of scopeNmIds) {

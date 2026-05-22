@@ -16,6 +16,12 @@ import type { DayPoint } from "@/lib/wb-orders-chart"
 interface Props {
   nmId: number
   timeSeries: DayPoint[] // 28 точек: qty + (опц.) buyerPrice
+  /** Опциональные метаданные для встроенной legend (используется в /prices/wb).
+   *  Если не переданы — секция «Остаток/В пути/Дни» не рендерится (для /cards/wb). */
+  stockQty?: number | null
+  inWayToClient?: number | null
+  inWayFromClient?: number | null
+  daysLeft?: number | null
 }
 
 const chartConfig = {
@@ -23,7 +29,14 @@ const chartConfig = {
   buyerPrice: { label: "Цена покупателя (₽)", color: "var(--chart-2)" },
 } satisfies ChartConfig
 
-export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
+export function WbCardOrdersChart({
+  nmId,
+  timeSeries,
+  stockQty,
+  inWayToClient,
+  inWayFromClient,
+  daysLeft,
+}: Props) {
   // CONTEXT.md §График: 28 баров. avg30d = sum(28)/28. avg7d = sum(last 7)/7.
   const last7 = timeSeries.slice(-7)
   const sumAll = timeSeries.reduce((s, d) => s + d.qty, 0)
@@ -148,22 +161,25 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
             </ComposedChart>
           </ChartContainer>
         </div>
-        <div className="flex flex-col gap-3 text-sm min-w-[120px] pr-1">
+        {/* 2026-05-22: легенда стала единым столбцом + добавлены Остаток/В пути/Дни.
+            Метрики продаж/цены сверху (крупнее), per-card остатки снизу (компактные).
+            Тонкая горизонтальная линия отделяет блоки. */}
+        <div className="flex flex-col gap-2 text-sm min-w-[125px] pr-1">
           <div>
-            <div className="text-muted-foreground text-xs">Ср. за месяц</div>
-            <div className="text-xl font-semibold tabular-nums">
+            <div className="text-muted-foreground text-[11px]">Ср. за месяц</div>
+            <div className="text-lg font-semibold tabular-nums leading-tight">
               {avg30d.toFixed(1)}
-              <span className="text-xs text-muted-foreground font-normal">
+              <span className="text-[11px] text-muted-foreground font-normal">
                 {" "}
                 / день
               </span>
             </div>
           </div>
           <div>
-            <div className="text-muted-foreground text-xs">Ср. за 7 дней</div>
-            <div className="text-xl font-semibold tabular-nums">
+            <div className="text-muted-foreground text-[11px]">Ср. за 7 дней</div>
+            <div className="text-lg font-semibold tabular-nums leading-tight">
               {avg7d.toFixed(1)}
-              <span className="text-xs text-muted-foreground font-normal">
+              <span className="text-[11px] text-muted-foreground font-normal">
                 {" "}
                 / день
               </span>
@@ -171,17 +187,53 @@ export function WbCardOrdersChart({ nmId, timeSeries }: Props) {
           </div>
           {lastBuyerPrice != null && (
             <div>
-              <div className="text-muted-foreground text-xs">Цена сейчас</div>
+              <div className="text-muted-foreground text-[11px]">Цена сейчас</div>
               <div
-                className="text-xl font-semibold tabular-nums"
+                className="text-lg font-semibold tabular-nums leading-tight"
                 style={{ color: "var(--chart-2)" }}
               >
                 {lastBuyerPrice.toLocaleString("ru-RU")}
-                <span className="text-xs text-muted-foreground font-normal">
+                <span className="text-[11px] text-muted-foreground font-normal">
                   {" "}
                   ₽
                 </span>
               </div>
+            </div>
+          )}
+          {/* Остаток / В пути / Дни — компактный блок, разделитель сверху */}
+          {(stockQty != null || daysLeft != null) && (
+            <div className="pt-1.5 mt-0.5 border-t border-border/60 flex flex-col gap-0.5 text-[11px]">
+              {stockQty != null && (
+                <div className="flex justify-between gap-2 whitespace-nowrap">
+                  <span className="text-muted-foreground">Остаток</span>
+                  <span className="font-medium tabular-nums">{stockQty} шт</span>
+                </div>
+              )}
+              {(inWayToClient ?? 0) + (inWayFromClient ?? 0) > 0 && (
+                <div
+                  className="flex justify-between gap-2 whitespace-nowrap"
+                  title={`В пути к клиенту: ${inWayToClient ?? 0} шт.\nВ пути от клиента: ${inWayFromClient ?? 0} шт.`}
+                >
+                  <span className="text-muted-foreground">В пути</span>
+                  <span className="font-medium tabular-nums text-amber-700 dark:text-amber-400">
+                    → {inWayToClient ?? 0} / {inWayFromClient ?? 0} ←
+                  </span>
+                </div>
+              )}
+              {daysLeft != null && (
+                <div className="flex justify-between gap-2 whitespace-nowrap">
+                  <span className="text-muted-foreground">Дни</span>
+                  <span
+                    className={`font-medium tabular-nums ${
+                      daysLeft <= 14
+                        ? "text-red-600 dark:text-red-400"
+                        : ""
+                    }`}
+                  >
+                    {daysLeft} дн
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

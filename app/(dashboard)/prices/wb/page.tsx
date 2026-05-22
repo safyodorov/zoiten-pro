@@ -867,8 +867,10 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       drrNmId7d: number | null
       drrSubcategoryYesterday: number | null
       drrSubcategory7d: number | null
+      subcategoryName: string | null
       drrCategoryYesterday: number | null
       drrCategory7d: number | null
+      categoryName: string | null
     }> = []
     for (const { card, product } of cardRefs) {
       const rawRows = ordersByNmId.get(card.nmId) ?? []
@@ -898,8 +900,10 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         drrNmId7d: nmMetrics?.drr7d ?? null,
         drrSubcategoryYesterday: subMetrics?.drrYesterday ?? null,
         drrSubcategory7d: subMetrics?.drr7d ?? null,
+        subcategoryName: product.subcategory?.name ?? null,
         drrCategoryYesterday: catMetrics?.drrYesterday ?? null,
         drrCategory7d: catMetrics?.drr7d ?? null,
+        categoryName: product.category?.name ?? null,
       })
     }
 
