@@ -152,6 +152,11 @@ export async function loadLegendMetrics(
   }
 
   // ── 4. Пропорциональная атрибуция: spendByNmDay[nmId, dayKey]
+  //
+  // Важное: split идёт только среди ACTIVE targets кампании. Если у inactive
+  // (исторического) target есть stats в окне, его доля НЕ учитывается — иначе
+  // spend «уходит» в другую подкатегорию через мёртвый таргет, и subcategory/
+  // category DRR искажается вверх (inflation).
   const spendByNmDay = new Map<string, number>()
   const addSpend = (nmId: number, dKey: string, amount: number) => {
     if (!scopeSet.has(nmId)) return // outside scope — теряем (correct attribution)
@@ -162,21 +167,35 @@ export async function loadLegendMetrics(
     if (sr.spend <= 0) continue
     const dKey = dateKey(sr.day)
     const advDayKey = `${sr.advertId}_${dKey}`
-    const statsTotal = statsTotalByAdvertDay.get(advDayKey) ?? 0
 
-    if (statsTotal > 0) {
-      // Пропорциональный split по WbAdvertStatDaily.sum
-      const perNmIdStats = statsByAdvertDay.get(advDayKey)!
+    const activeTargets = targetsByAdvertId.get(sr.advertId)
+    if (!activeTargets || activeTargets.size === 0) {
+      // Все targets деактивированы (кампания полностью выключена в кабинете,
+      // но всё ещё имеет /upd history). Атрибутировать некуда — пропускаем.
+      continue
+    }
+
+    // Сумма stats ТОЛЬКО по активным targets (inactive с историческими stats
+    // не должны участвовать в split — это и был источник inflation).
+    const perNmIdStats = statsByAdvertDay.get(advDayKey)
+    let activeStatsTotal = 0
+    if (perNmIdStats) {
       for (const [nmId, nmStats] of perNmIdStats) {
-        const share = nmStats / statsTotal
+        if (activeTargets.has(nmId)) activeStatsTotal += nmStats
+      }
+    }
+
+    if (activeStatsTotal > 0 && perNmIdStats) {
+      // Пропорциональный split по активным stats
+      for (const [nmId, nmStats] of perNmIdStats) {
+        if (!activeTargets.has(nmId)) continue
+        const share = nmStats / activeStatsTotal
         addSpend(nmId, dKey, sr.spend * share)
       }
     } else {
-      // Fallback: равное деление между ВСЕМИ известными targets advertId
-      const targets = targetsByAdvertId.get(sr.advertId)
-      if (!targets || targets.size === 0) continue
-      const perTarget = sr.spend / targets.size
-      for (const nmId of targets) {
+      // Fallback: равное деление между активными targets
+      const perTarget = sr.spend / activeTargets.size
+      for (const nmId of activeTargets) {
         addSpend(nmId, dKey, perTarget)
       }
     }
