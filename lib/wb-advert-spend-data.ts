@@ -95,7 +95,7 @@ export interface BuyoutResolver {
  *  @param to конец отчётного окна (exclusive, UTC midnight)
  *  @param nmIdsFilter ограничить выборку перечисленными nmId
  */
-async function loadBuyoutPctRolling30dMap(
+export async function loadBuyoutPctRolling30dMap(
   from: Date,
   to: Date,
   nmIdsFilter?: number[],
