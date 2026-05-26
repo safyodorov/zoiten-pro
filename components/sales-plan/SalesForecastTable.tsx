@@ -20,11 +20,14 @@ type SortKey =
   | "stockNow"
   | "baseline"
   | "buyoutPct"
+  | "endStockUnits"
+  | "endStockRub"
   | "name"
   | "sku"
 
 interface Props {
   products: ProductForecast[]
+  endStockDateLabel: string // например "01.07" — для заголовков leftover-столбцов
 }
 
 function fmtNum(n: number, digits = 0): string {
@@ -58,7 +61,7 @@ function formatDateShort(iso: string | null): string {
   })
 }
 
-export function SalesForecastTable({ products }: Props) {
+export function SalesForecastTable({ products, endStockDateLabel }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("salesRub")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [activeProduct, setActiveProduct] = useState<ProductForecast | null>(null)
@@ -72,6 +75,8 @@ export function SalesForecastTable({ products }: Props) {
       stockNow: (p) => p.stockNow,
       baseline: (p) => p.baselineOrdersPerDay,
       buyoutPct: (p) => p.buyoutPct,
+      endStockUnits: (p) => p.endStockUnits,
+      endStockRub: (p) => p.endStockRub,
       name: (p) => p.name.toLocaleLowerCase("ru"),
       sku: (p) => p.sku,
     }
@@ -106,6 +111,8 @@ export function SalesForecastTable({ products }: Props) {
   const totalRub = products.reduce((s, p) => s + p.salesRub, 0)
   const totalUnits = products.reduce((s, p) => s + p.salesUnits, 0)
   const totalOrders = products.reduce((s, p) => s + p.ordersUnits, 0)
+  const totalEndStockUnits = products.reduce((s, p) => s + p.endStockUnits, 0)
+  const totalEndStockRub = products.reduce((s, p) => s + p.endStockRub, 0)
 
   return (
     <>
@@ -128,7 +135,7 @@ export function SalesForecastTable({ products }: Props) {
                 cur={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="max-w-[280px]"
+                className="max-w-[140px]"
               />
               <TableHead>Бренд</TableHead>
               <TableHead>Категория</TableHead>
@@ -181,13 +188,29 @@ export function SalesForecastTable({ products }: Props) {
                 onClick={toggleSort}
                 className="text-right w-28"
               />
+              <SortableHead
+                label={`Ост ${endStockDateLabel} (шт)`}
+                k="endStockUnits"
+                cur={sortKey}
+                dir={sortDir}
+                onClick={toggleSort}
+                className="text-right w-24"
+              />
+              <SortableHead
+                label={`Ост ${endStockDateLabel} (₽)`}
+                k="endStockRub"
+                cur={sortKey}
+                dir={sortDir}
+                onClick={toggleSort}
+                className="text-right w-28"
+              />
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={12}
+                  colSpan={14}
                   className="text-center py-12 text-muted-foreground"
                 >
                   Товары не найдены
@@ -214,7 +237,7 @@ export function SalesForecastTable({ products }: Props) {
                   )}
                 </TableCell>
                 <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                <TableCell className="font-medium max-w-[280px]">
+                <TableCell className="font-medium max-w-[140px]">
                   <span className="line-clamp-2">{p.name}</span>
                 </TableCell>
                 <TableCell className="text-sm">{p.brandName}</TableCell>
@@ -267,6 +290,12 @@ export function SalesForecastTable({ products }: Props) {
                 <TableCell className="text-right tabular-nums font-semibold">
                   {fmtRub(p.salesRub)}
                 </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtNum(Math.round(p.endStockUnits), 0)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {fmtRub(p.endStockRub)}
+                </TableCell>
               </TableRow>
             ))}
             {sorted.length > 0 && (
@@ -282,6 +311,12 @@ export function SalesForecastTable({ products }: Props) {
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-500">
                   {fmtRub(totalRub)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtNum(Math.round(totalEndStockUnits), 0)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {fmtRub(totalEndStockRub)}
                 </TableCell>
               </TableRow>
             )}

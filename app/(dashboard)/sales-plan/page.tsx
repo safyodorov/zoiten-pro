@@ -8,8 +8,10 @@ import { SalesForecastSummary } from "@/components/sales-plan/SalesForecastSumma
 import { SalesForecastFilters } from "@/components/sales-plan/SalesForecastFilters"
 import { SalesForecastEndDate } from "@/components/sales-plan/SalesForecastEndDate"
 import { SalesForecastTable } from "@/components/sales-plan/SalesForecastTable"
+import { SalesForecastDailyChart } from "@/components/sales-plan/SalesForecastDailyChart"
 
 const DEFAULT_END_DATE = "2026-06-30"
+const DEFAULT_CHART_END = "2026-07-31"
 
 function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s).getTime())
@@ -43,6 +45,8 @@ export default async function SalesPlanPage({
     endDate = endParam
   }
   if (endDate < today) endDate = today
+  // Chart-горизонт — фиксированный (до 31.07), либо endDate, если он больше
+  const chartEndDate = endDate > DEFAULT_CHART_END ? endDate : DEFAULT_CHART_END
 
   const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
   const selectedCategoryIds = categoriesParam
@@ -58,7 +62,7 @@ export default async function SalesPlanPage({
 
   const [forecast, allBrands, allCategories, allSubcategories, allDirections] =
     await Promise.all([
-      computeForecast({ endDate, today }),
+      computeForecast({ endDate, chartEndDate, today }),
       prisma.brand.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true, directionId: true },
@@ -116,6 +120,42 @@ export default async function SalesPlanPage({
     (p) => p.buyoutSource === "global",
   ).length
 
+  // Агрегируем dailySales по видимым товарам — для chart
+  const dailyByDate = new Map<string, { units: number; rub: number }>()
+  for (const p of visible) {
+    for (const d of p.dailySales) {
+      const cur = dailyByDate.get(d.date) ?? { units: 0, rub: 0 }
+      cur.units += d.units
+      cur.rub += d.rub
+      dailyByDate.set(d.date, cur)
+    }
+  }
+  function fmtDayLabel(iso: string): string {
+    const dt = new Date(iso + "T00:00:00Z")
+    return dt.toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "UTC",
+    })
+  }
+  const sortedDates = Array.from(dailyByDate.keys()).sort()
+  const chartData = sortedDates.map((date) => ({
+    date,
+    label: fmtDayLabel(date),
+    units: dailyByDate.get(date)!.units,
+    rub: dailyByDate.get(date)!.rub,
+  }))
+
+  // endStockDateLabel — день после endDate (по умолчанию 01.07)
+  function isoAddOne(iso: string): string {
+    const dt = new Date(iso + "T00:00:00Z")
+    dt.setUTCDate(dt.getUTCDate() + 1)
+    return dt.toISOString().slice(0, 10)
+  }
+  const endStockIso = isoAddOne(endDate)
+  const endStockDateLabel = fmtDayLabel(endStockIso)
+  const accountingEndLabel = fmtDayLabel(endDate)
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -137,6 +177,12 @@ export default async function SalesPlanPage({
         endDate={forecast.endDate}
       />
 
+      <SalesForecastDailyChart
+        data={chartData}
+        accountingEndDate={endDate}
+        accountingEndLabel={accountingEndLabel}
+      />
+
       <SalesForecastFilters
         directions={allDirections}
         brands={allBrands}
@@ -149,7 +195,7 @@ export default async function SalesPlanPage({
         search={search}
       />
 
-      <SalesForecastTable products={visible} />
+      <SalesForecastTable products={visible} endStockDateLabel={endStockDateLabel} />
 
       <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3">
         <summary className="cursor-pointer font-medium text-foreground">

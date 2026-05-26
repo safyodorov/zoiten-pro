@@ -77,8 +77,12 @@ export function getMskTodayIso(): string {
 // ── Типы ─────────────────────────────────────────────────────────
 
 export interface ForecastInput {
-  endDate: string // YYYY-MM-DD включительно
+  endDate: string // YYYY-MM-DD включительно — горизонт учёта (KPI/totals/leftover)
   today?: string // YYYY-MM-DD; по умолчанию getMskTodayIso()
+  // Горизонт дневной кривой выкупов (dailySales[]). По умолчанию = endDate.
+  // Если больше endDate — позволяет показать «хвост» выкупов от заказов
+  // последних дней горизонта + дополнительный месяц на графике без изменения KPI.
+  chartEndDate?: string
 }
 
 // Источник % выкупа:
@@ -114,13 +118,19 @@ export interface ProductForecast {
   ordersUnits: number
   salesUnits: number
   salesRub: number
-  // дневная кривая выкупов (для модалки)
+  // Остаток на endDate+1 (наутро после окончания учётного периода).
+  // Деньги — по той же avgPrice что и для salesRub.
+  endStockUnits: number
+  endStockRub: number
+  // дневная кривая выкупов (для модалки и общего графика — может выходить
+  // за endDate, если chartEndDate был передан)
   dailySales: Array<{ date: string; units: number; rub: number }>
 }
 
 export interface ForecastResult {
   today: string
   endDate: string
+  chartEndDate: string
   globalBuyoutPct: number
   fallbackCount: number
   // Сколько товаров получили % выкупа из каждого источника
@@ -160,6 +170,10 @@ interface ProductMeta {
 export async function computeForecast(input: ForecastInput): Promise<ForecastResult> {
   const today = input.today ?? getMskTodayIso()
   const endDate = input.endDate
+  const chartEndDate =
+    input.chartEndDate && input.chartEndDate > endDate
+      ? input.chartEndDate
+      : endDate
 
   // 1. Marketplace WB
   const wbMarketplace = await prisma.marketplace.findFirst({
@@ -170,6 +184,7 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     return {
       today,
       endDate,
+      chartEndDate,
       globalBuyoutPct: 0,
       fallbackCount: 0,
       bySource: { own: 0, legacy: 0, subcategory: 0, global: 0 },
@@ -318,6 +333,11 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     let cardBuyoutCount = 0
     let funnelOrders = 0
     let funnelBuyouts = 0
+    // Взвешенный по 7-дневным заказам per-nmId buyout.
+    // Каждой WB-карточке товара даём вес = её ords7d. Карточка с funnel-историей,
+    // но без свежих продаж (мало-продающая), получит вес 0 → не тащит средний вниз.
+    let buyoutWeightedNum = 0 // Σ rate(nm) × ords7(nm)
+    let buyoutWeightedDen = 0 // Σ ords7(nm) для nm с funnel-историей
     const seedOrders: Record<string, number> = {}
 
     for (const nm of nmIds) {
@@ -333,7 +353,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
           cardBuyoutCount++
         }
       }
-      baseline += (ords7.get(nm) ?? 0) / ORDERS_LOOKBACK_DAYS
+      const nmOrds7 = ords7.get(nm) ?? 0
+      baseline += nmOrds7 / ORDERS_LOOKBACK_DAYS
       const pw = priceWeighted.get(nm)
       if (pw) {
         priceNum += pw.num
@@ -343,6 +364,12 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       if (f) {
         funnelOrders += f.orders
         funnelBuyouts += f.buyouts
+        // Per-nmId buyout rate (если есть orders в funnel за settled 30d)
+        if (f.orders > 0) {
+          const nmRate = f.buyouts / f.orders
+          buyoutWeightedNum += nmRate * nmOrds7
+          buyoutWeightedDen += nmOrds7
+        }
       }
       const sm = seedByNmId.get(nm)
       if (sm) {
@@ -358,7 +385,13 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
 
     let buyoutPct = 0
     let buyoutSource: BuyoutSource = "global"
-    if (funnelOrders > 0) {
+    if (buyoutWeightedDen > 0) {
+      // Основной случай: есть свежие 7д заказы по карточкам с funnel-историей.
+      // Взвешенное среднее per-nmId rates по объёму свежих заказов.
+      buyoutPct = buyoutWeightedNum / buyoutWeightedDen
+      buyoutSource = "own"
+    } else if (funnelOrders > 0) {
+      // Резерв: 7д заказов нет, но funnel-история есть — используем 30d-веса.
       buyoutPct = funnelBuyouts / funnelOrders
       buyoutSource = "own"
     } else if (cardBuyoutCount > 0) {
@@ -404,12 +437,13 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
 
   // 9. Симуляция per Product
   const results: ProductForecast[] = metas.map((m) =>
-    simulateProduct(m, today, endDate),
+    simulateProduct(m, today, endDate, chartEndDate),
   )
 
   return {
     today,
     endDate,
+    chartEndDate,
     globalBuyoutPct: globalBuyout,
     fallbackCount,
     bySource,
@@ -421,10 +455,13 @@ function simulateProduct(
   p: ProductMeta,
   today: string,
   endDate: string,
+  chartEndDate: string,
 ): ProductForecast {
   const horizonStart = today
   const horizonEnd = endDate
-  const simEnd = addDays(horizonEnd, DELIVERY_TO_CUSTOMER_DAYS + RETURN_LAG)
+  // Симулируем до chartEndDate (если он больше endDate) + buffer на T+3 и возвраты.
+  const innerEnd = chartEndDate > endDate ? chartEndDate : endDate
+  const simEnd = addDays(innerEnd, DELIVERY_TO_CUSTOMER_DAYS + RETURN_LAG)
   const days = rangeIso(horizonStart, simEnd)
 
   const stock: Record<string, number> = {}
@@ -437,19 +474,23 @@ function simulateProduct(
 
   stock[horizonStart] = p.stockNow
 
-  function accrueSale(buyoutDate: string, units: number) {
+  // KPI накопители — только в пределах [horizonStart, endDate].
+  // Daily-кривая — расширена до chartEndDate (для общего графика).
+  function accrueDaily(buyoutDate: string, units: number) {
     const rub = units * p.avgPrice
-    salesUnits += units
-    salesRub += rub
     dailySalesUnits[buyoutDate] = (dailySalesUnits[buyoutDate] ?? 0) + units
     dailySalesRub[buyoutDate] = (dailySalesRub[buyoutDate] ?? 0) + rub
+    if (buyoutDate <= horizonEnd) {
+      salesUnits += units
+      salesRub += rub
+    }
   }
 
   // Seed выкупы от заказов в past 3 дня
   for (const [d, q] of Object.entries(p.seedOrders)) {
     const buyoutDate = addDays(d, DELIVERY_TO_CUSTOMER_DAYS)
-    if (buyoutDate >= horizonStart && buyoutDate <= horizonEnd) {
-      accrueSale(buyoutDate, q * p.buyoutPct)
+    if (buyoutDate >= horizonStart && buyoutDate <= chartEndDate) {
+      accrueDaily(buyoutDate, q * p.buyoutPct)
     }
     const returnDate = addDays(d, RETURN_LAG)
     if (returnDate >= horizonStart && returnDate <= simEnd) {
@@ -488,8 +529,8 @@ function simulateProduct(
     if (d <= horizonEnd) ordersUnits += actual
 
     const buyoutDate = addDays(d, DELIVERY_TO_CUSTOMER_DAYS)
-    if (buyoutDate >= horizonStart && buyoutDate <= horizonEnd) {
-      accrueSale(buyoutDate, actual * p.buyoutPct)
+    if (buyoutDate >= horizonStart && buyoutDate <= chartEndDate) {
+      accrueDaily(buyoutDate, actual * p.buyoutPct)
     }
     const returnDate = addDays(d, RETURN_LAG)
     if (returnDate <= simEnd) {
@@ -498,15 +539,22 @@ function simulateProduct(
     }
   }
 
-  // Dailysales: сводим в массив отсортированных дней
+  // Dailysales: сводим в массив отсортированных дней (до chartEndDate)
   const dailySales: Array<{ date: string; units: number; rub: number }> = []
-  for (const d of rangeIso(horizonStart, horizonEnd)) {
+  for (const d of rangeIso(horizonStart, chartEndDate)) {
     dailySales.push({
       date: d,
       units: dailySalesUnits[d] ?? 0,
       rub: dailySalesRub[d] ?? 0,
     })
   }
+
+  // Остаток на endDate+1 — то, что физически на складе наутро после
+  // окончания учётного периода (заказы дня endDate уже уехали, возвраты
+  // от этих заказов ещё не пришли — это T+6, т.е. endDate+6).
+  const endStockDate = addDays(horizonEnd, 1)
+  const endStockUnits = Math.max(0, stock[endStockDate] ?? 0)
+  const endStockRub = endStockUnits * p.avgPrice
 
   return {
     productId: p.productId,
@@ -534,6 +582,8 @@ function simulateProduct(
     ordersUnits,
     salesUnits,
     salesRub,
+    endStockUnits,
+    endStockRub,
     dailySales,
   }
 }
