@@ -173,8 +173,12 @@ export default async function SalesPlanPage({
           </p>
           <p>
             • <strong>% выкупа</strong> — взвешенный 30-дневный
-            (buyouts/orders из funnel). Если своей истории нет — fallback по
-            цепочке: legacy <code>WbCard.buyoutPercent</code> →{" "}
+            (buyouts/orders из funnel) на settled-окне{" "}
+            <code>[today−37; today−7]</code>. Сдвиг на 7 дней назад
+            исключает «свежие» заказы, по которым выкупы ещё не материализовались
+            (T+3 лаг доставки) — без сдвига % занижается на 15-20 п.п. Если своей
+            истории нет — fallback по цепочке: legacy{" "}
+            <code>WbCard.buyoutPercent</code> →{" "}
             <span className="text-blue-600 dark:text-blue-500">
               среднее по подкатегории
             </span>{" "}

@@ -16,6 +16,14 @@ import { prisma } from "@/lib/prisma"
 // ── Константы модели ─────────────────────────────────────────────
 export const ORDERS_LOOKBACK_DAYS = 7
 export const FUNNEL_LOOKBACK_DAYS = 30
+// КРИТИЧНО: funnel-окно сдвигается на FUNNEL_SETTLE_LAG_DAYS назад.
+// Причина: WbCardFunnelDaily.ordersCount на день D — заказы дня D, а
+// buyoutsCount на тот же D — выкупы дня D (которые были заказаны ~3 дня назад).
+// При SUM по «свежему» окну [-30, -1] заказы за последние 3 дня попадают в
+// знаменатель, а соответствующие им выкупы ещё не материализовались —
+// % выкупа искусственно занижается на 15-20 п.п. Сдвиг на 7 дней даёт
+// «settled» окно где и заказы, и их выкупы полностью внутри.
+export const FUNNEL_SETTLE_LAG_DAYS = 7
 export const DELIVERY_TO_CUSTOMER_DAYS = 3
 export const RETURN_FROM_CUSTOMER_DAYS = 3
 export const RAMP_UP_WORKING_DAYS = 3
@@ -215,12 +223,15 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     select: { nmId: true, date: true, qty: true, buyerPrice: true },
   })
 
-  // 6. Funnel rolling 30d
-  const funnelFrom = addDays(today, -FUNNEL_LOOKBACK_DAYS)
+  // 6. Funnel settled 30d window — shifted by FUNNEL_SETTLE_LAG_DAYS назад
+  // чтобы T+3 buyouts по «свежим» заказам не искажали ratio (см. комментарий
+  // у FUNNEL_SETTLE_LAG_DAYS).
+  const funnelTo = addDays(today, -FUNNEL_SETTLE_LAG_DAYS)
+  const funnelFrom = addDays(funnelTo, -FUNNEL_LOOKBACK_DAYS)
   const funnel = await prisma.wbCardFunnelDaily.findMany({
     where: {
       nmId: { in: allNmIds },
-      date: { gte: parseDate(funnelFrom), lte: parseDate(addDays(today, -1)) },
+      date: { gte: parseDate(funnelFrom), lte: parseDate(funnelTo) },
     },
     select: { nmId: true, date: true, ordersCount: true, buyoutsCount: true },
   })
