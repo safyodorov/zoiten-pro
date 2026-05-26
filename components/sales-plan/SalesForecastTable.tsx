@@ -1,6 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import {
   Table,
   TableBody,
@@ -9,9 +11,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { ProductForecastDialog } from "./ProductForecastDialog"
 import type { ProductForecast } from "@/lib/sales-forecast"
-import { ArrowUpDown } from "lucide-react"
+import { ArrowUpDown, RotateCcw, Calculator } from "lucide-react"
+import {
+  saveBaselineOverrides,
+  clearBaselineOverrides,
+} from "@/app/actions/sales-plan"
 
 type SortKey =
   | "salesRub"
@@ -28,6 +36,8 @@ type SortKey =
 interface Props {
   products: ProductForecast[]
   endStockDateLabel: string // например "01.07" — для заголовков leftover-столбцов
+  /** Текущие сохранённые корректировки (из UserPreference) */
+  currentOverrides: Record<string, number>
 }
 
 function fmtNum(n: number, digits = 0): string {
@@ -61,11 +71,99 @@ function formatDateShort(iso: string | null): string {
   })
 }
 
-export function SalesForecastTable({ products, endStockDateLabel }: Props) {
+export function SalesForecastTable({
+  products,
+  endStockDateLabel,
+  currentOverrides,
+}: Props) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
   const [sortKey, setSortKey] = useState<SortKey>("salesRub")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [activeProduct, setActiveProduct] = useState<ProductForecast | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Pending input drafts: productId → string (что юзер набил в инпуте,
+  // ещё не сохранено). На mount инициализируем из currentOverrides.
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const [pid, v] of Object.entries(currentOverrides)) {
+      init[pid] = String(v)
+    }
+    return init
+  })
+
+  // Текст драфта для конкретной строки: pending → currentOverride → ""
+  function draftValueFor(pid: string): string {
+    if (Object.prototype.hasOwnProperty.call(drafts, pid)) return drafts[pid]
+    return currentOverrides[pid] !== undefined ? String(currentOverrides[pid]) : ""
+  }
+
+  function setDraft(pid: string, value: string) {
+    setDrafts((prev) => ({ ...prev, [pid]: value }))
+  }
+
+  // Сколько товаров будут «изменены» относительно текущих сохранённых
+  const pendingChangedCount = useMemo(() => {
+    let cnt = 0
+    for (const [pid, txt] of Object.entries(drafts)) {
+      const parsed = txt.trim() === "" ? null : parseFloat(txt.replace(",", "."))
+      const cur = currentOverrides[pid] ?? null
+      if (parsed === null && cur === null) continue
+      if (parsed === null && cur !== null) {
+        cnt++
+        continue
+      }
+      if (parsed !== null && cur === null) {
+        cnt++
+        continue
+      }
+      if (parsed !== null && cur !== null && Math.abs(parsed - cur) > 1e-6) {
+        cnt++
+      }
+    }
+    return cnt
+  }, [drafts, currentOverrides])
+
+  const hasActiveOverrides = Object.keys(currentOverrides).length > 0
+
+  function applyRecalc() {
+    // Собираем итоговый overrides из drafts; пустые строки → удаляем ключ.
+    const finalOverrides: Record<string, number> = {}
+    for (const [pid, txt] of Object.entries(drafts)) {
+      const trimmed = txt.trim().replace(",", ".")
+      if (trimmed === "") continue
+      const num = parseFloat(trimmed)
+      if (!Number.isFinite(num) || num < 0) continue
+      finalOverrides[pid] = num
+    }
+    startTransition(async () => {
+      const res = await saveBaselineOverrides(finalOverrides)
+      if (res.ok) {
+        toast.success("Модель пересчитана")
+        router.refresh()
+      } else {
+        toast.error(res.error)
+      }
+    })
+  }
+
+  function applyReset() {
+    if (
+      !confirm("Сбросить все корректировки и вернуться к базовым настройкам?")
+    ) {
+      return
+    }
+    startTransition(async () => {
+      const res = await clearBaselineOverrides()
+      if (res.ok) {
+        toast.success("Корректировки сброшены")
+        setDrafts({})
+        router.refresh()
+      } else {
+        toast.error(res.error)
+      }
+    })
+  }
 
   const sorted = useMemo(() => {
     const accessor: Record<SortKey, (p: ProductForecast) => number | string> = {
@@ -73,7 +171,7 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
       salesUnits: (p) => p.salesUnits,
       ordersUnits: (p) => p.ordersUnits,
       stockNow: (p) => p.stockNow,
-      baseline: (p) => p.baselineOrdersPerDay,
+      baseline: (p) => p.baselineUsed,
       buyoutPct: (p) => p.buyoutPct,
       endStockUnits: (p) => p.endStockUnits,
       endStockRub: (p) => p.endStockRub,
@@ -116,6 +214,45 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
 
   return (
     <>
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 p-3">
+        <div className="text-xs text-muted-foreground">
+          {hasActiveOverrides && (
+            <span className="text-blue-600 dark:text-blue-500 font-medium">
+              Активных корректировок: {Object.keys(currentOverrides).length}
+            </span>
+          )}
+          {!hasActiveOverrides && (
+            <span>Можно ввести корректировки заказов/день в столбце «Коррект.»</span>
+          )}
+          {pendingChangedCount > 0 && (
+            <span className="ml-2 text-amber-600 dark:text-amber-500 font-medium">
+              · Несохранённых изменений: {pendingChangedCount}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={applyReset}
+            disabled={isPending || !hasActiveOverrides}
+            className="gap-1.5"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Вернуться к базовым
+          </Button>
+          <Button
+            size="sm"
+            onClick={applyRecalc}
+            disabled={isPending || pendingChangedCount === 0}
+            className="gap-1.5"
+          >
+            <Calculator className="h-3.5 w-3.5" />
+            Пересчитать модель
+            {pendingChangedCount > 0 && ` (${pendingChangedCount})`}
+          </Button>
+        </div>
+      </div>
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -172,6 +309,12 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
                 onClick={toggleSort}
                 className="text-right w-24"
               />
+              <TableHead className="text-right w-20" title="Текущая базовая ставка заказов в день (override → база 7д)">
+                Зак/день
+              </TableHead>
+              <TableHead className="text-right w-24" title="Введи новое число и нажми «Пересчитать модель»">
+                Коррект.
+              </TableHead>
               <SortableHead
                 label="Выкупы"
                 k="salesUnits"
@@ -210,7 +353,7 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
             {sorted.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={14}
+                  colSpan={16}
                   className="text-center py-12 text-muted-foreground"
                 >
                   Товары не найдены
@@ -284,6 +427,32 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
                 <TableCell className="text-right tabular-nums">
                   {fmtNum(p.ordersUnits, 1)}
                 </TableCell>
+                <TableCell
+                  className={`text-right tabular-nums ${p.baselineOverride !== null ? "text-blue-600 dark:text-blue-500 font-medium" : ""}`}
+                  title={
+                    p.baselineOverride !== null
+                      ? `Корректировка активна; базовое (7д): ${fmtNum(p.baselineOrdersPerDay, 2)}`
+                      : "База: avg orders/day за 7 дней (funnel)"
+                  }
+                >
+                  {fmtNum(p.baselineUsed, 2)}
+                </TableCell>
+                <TableCell
+                  className="p-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    inputMode="decimal"
+                    placeholder="—"
+                    value={draftValueFor(p.productId)}
+                    onChange={(e) => setDraft(p.productId, e.target.value)}
+                    disabled={isPending}
+                    className="h-7 text-right tabular-nums"
+                  />
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {fmtNum(p.salesUnits, 1)}
                 </TableCell>
@@ -306,6 +475,8 @@ export function SalesForecastTable({ products, endStockDateLabel }: Props) {
                 <TableCell className="text-right tabular-nums">
                   {fmtNum(totalOrders, 0)}
                 </TableCell>
+                <TableCell />
+                <TableCell />
                 <TableCell className="text-right tabular-nums">
                   {fmtNum(totalUnits, 0)}
                 </TableCell>

@@ -83,6 +83,10 @@ export interface ForecastInput {
   // Если больше endDate — позволяет показать «хвост» выкупов от заказов
   // последних дней горизонта + дополнительный месяц на графике без изменения KPI.
   chartEndDate?: string
+  // Пользовательские корректировки baseline-заказов per Product (productId → orders/day).
+  // Если задано — replaces computed baseline для этого товара. Используется
+  // для what-if сценариев на /sales-plan.
+  baselineOverrides?: Record<string, number>
 }
 
 // Источник % выкупа:
@@ -115,6 +119,11 @@ export interface ProductForecast {
   arrivalDate: string | null
   arrivalQty: number
   plannedTargetPerDay: number | null
+  // Исходная вычисленная база (avg orders/day за 7д).
+  // Если задан baselineOverride — переопределяет её при симуляции.
+  // baselineUsed = baselineOverride ?? baselineOrdersPerDay.
+  baselineOverride: number | null
+  baselineUsed: number
   ordersUnits: number
   salesUnits: number
   salesRub: number
@@ -465,9 +474,10 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     })
   }
 
-  // 9. Симуляция per Product
+  // 9. Симуляция per Product (с применением user-overrides baseline если есть)
+  const overrides = input.baselineOverrides ?? {}
   const results: ProductForecast[] = metas.map((m) =>
-    simulateProduct(m, today, endDate, chartEndDate),
+    simulateProduct(m, today, endDate, chartEndDate, overrides[m.productId]),
   )
 
   return {
@@ -486,6 +496,7 @@ function simulateProduct(
   today: string,
   endDate: string,
   chartEndDate: string,
+  baselineOverride?: number,
 ): ProductForecast {
   const horizonStart = today
   const horizonEnd = endDate
@@ -493,6 +504,13 @@ function simulateProduct(
   const innerEnd = chartEndDate > endDate ? chartEndDate : endDate
   const simEnd = addDays(innerEnd, DELIVERY_TO_CUSTOMER_DAYS + RETURN_LAG)
   const days = rangeIso(horizonStart, simEnd)
+  // Какой baseline использовать в симуляции
+  const baselineUsed =
+    typeof baselineOverride === "number" &&
+    Number.isFinite(baselineOverride) &&
+    baselineOverride >= 0
+      ? baselineOverride
+      : p.baselineOrdersPerDay
 
   const stock: Record<string, number> = {}
   const orders: Record<string, number> = {}
@@ -547,11 +565,9 @@ function simulateProduct(
     ) {
       const wd = workingDaysBetween(addDays(p.arrivalDate, 1), d) + 1
       const factor = wd >= RAMP_UP_WORKING_DAYS ? 1 : wd / RAMP_UP_WORKING_DAYS
-      rate =
-        p.baselineOrdersPerDay +
-        (p.plannedTargetPerDay - p.baselineOrdersPerDay) * factor
+      rate = baselineUsed + (p.plannedTargetPerDay - baselineUsed) * factor
     } else {
-      rate = p.baselineOrdersPerDay
+      rate = baselineUsed
     }
 
     const actual = Math.min(rate, stock[d] ?? 0)
@@ -609,6 +625,13 @@ function simulateProduct(
     arrivalDate: p.arrivalDate,
     arrivalQty: p.arrivalQty,
     plannedTargetPerDay: p.plannedTargetPerDay,
+    baselineOverride:
+      typeof baselineOverride === "number" &&
+      Number.isFinite(baselineOverride) &&
+      baselineOverride >= 0
+        ? baselineOverride
+        : null,
+    baselineUsed,
     ordersUnits,
     salesUnits,
     salesRub,

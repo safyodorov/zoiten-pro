@@ -2,13 +2,15 @@
 // План продаж — прогноз выкупов до заданной даты, с разрезами по товарам.
 
 import { prisma } from "@/lib/prisma"
-import { requireSection } from "@/lib/rbac"
+import { requireSection, getCurrentUser } from "@/lib/rbac"
 import { computeForecast, getMskTodayIso } from "@/lib/sales-forecast"
 import { SalesForecastSummary } from "@/components/sales-plan/SalesForecastSummary"
 import { SalesForecastFilters } from "@/components/sales-plan/SalesForecastFilters"
 import { SalesForecastEndDate } from "@/components/sales-plan/SalesForecastEndDate"
 import { SalesForecastTable } from "@/components/sales-plan/SalesForecastTable"
 import { SalesForecastDailyChart } from "@/components/sales-plan/SalesForecastDailyChart"
+
+const BASELINE_OVERRIDES_KEY = "salesPlan.baselineOverrides"
 
 const DEFAULT_END_DATE = "2026-06-30"
 const DEFAULT_CHART_END = "2026-07-31"
@@ -60,9 +62,26 @@ export default async function SalesPlanPage({
     : []
   const search = (q ?? "").trim()
 
+  // Загружаем пользовательские корректировки baseline (если есть)
+  const user = await getCurrentUser()
+  let baselineOverrides: Record<string, number> = {}
+  if (user?.id) {
+    const pref = await prisma.userPreference.findUnique({
+      where: { userId_key: { userId: user.id, key: BASELINE_OVERRIDES_KEY } },
+    })
+    if (pref && pref.value && typeof pref.value === "object" && !Array.isArray(pref.value)) {
+      const raw = pref.value as Record<string, unknown>
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+          baselineOverrides[k] = v
+        }
+      }
+    }
+  }
+
   const [forecast, allBrands, allCategories, allSubcategories, allDirections] =
     await Promise.all([
-      computeForecast({ endDate, chartEndDate, today }),
+      computeForecast({ endDate, chartEndDate, today, baselineOverrides }),
       prisma.brand.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true, directionId: true },
@@ -195,7 +214,11 @@ export default async function SalesPlanPage({
         search={search}
       />
 
-      <SalesForecastTable products={visible} endStockDateLabel={endStockDateLabel} />
+      <SalesForecastTable
+        products={visible}
+        endStockDateLabel={endStockDateLabel}
+        currentOverrides={baselineOverrides}
+      />
 
       <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3">
         <summary className="cursor-pointer font-medium text-foreground">
