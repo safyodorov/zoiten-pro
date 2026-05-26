@@ -428,14 +428,21 @@ export function SalesForecastTable({
                   {fmtNum(p.ordersUnits, 1)}
                 </TableCell>
                 <TableCell
-                  className={`text-right tabular-nums ${p.baselineOverride !== null ? "text-blue-600 dark:text-blue-500 font-medium" : ""}`}
+                  className={`text-right tabular-nums ${p.rateOverride !== null ? "text-blue-600 dark:text-blue-500 font-medium" : p.plannedTargetUsed !== null ? "text-emerald-700 dark:text-emerald-500" : ""}`}
                   title={
-                    p.baselineOverride !== null
-                      ? `Корректировка активна; базовое (7д): ${fmtNum(p.baselineOrdersPerDay, 2)}`
-                      : "База: avg orders/day за 7 дней (funnel)"
+                    p.rateOverride !== null
+                      ? p.overrideAppliesTo === "planned"
+                        ? `Корректировка плана активна. Базовое из 7д: ${fmtNum(p.baselineOrdersPerDay, 2)}; план до коррекции: ${p.plannedTargetPerDay != null ? fmtNum(p.plannedTargetPerDay, 1) : "—"}`
+                        : `Корректировка baseline активна. 7д avg: ${fmtNum(p.baselineOrdersPerDay, 2)}`
+                      : p.plannedTargetUsed !== null
+                        ? `План из /purchase-plan; baseline 7д: ${fmtNum(p.baselineOrdersPerDay, 2)}`
+                        : "База: avg orders/day за 7 дней (funnel)"
                   }
                 >
-                  {fmtNum(p.baselineUsed, 2)}
+                  {fmtNum(p.effectiveRate, p.effectiveRate >= 10 ? 1 : 2)}
+                  {p.plannedTargetUsed !== null && (
+                    <span className="ml-0.5 text-[10px] opacity-70">план</span>
+                  )}
                 </TableCell>
                 <TableCell
                   className="p-1"
@@ -446,11 +453,20 @@ export function SalesForecastTable({
                     min={0}
                     step="0.1"
                     inputMode="decimal"
-                    placeholder="—"
+                    placeholder={
+                      p.plannedTargetPerDay !== null
+                        ? fmtNum(p.plannedTargetPerDay, 1)
+                        : fmtNum(p.baselineOrdersPerDay, 1)
+                    }
                     value={draftValueFor(p.productId)}
                     onChange={(e) => setDraft(p.productId, e.target.value)}
                     disabled={isPending}
                     className="h-7 text-right tabular-nums"
+                    title={
+                      p.plannedTargetPerDay !== null
+                        ? `Меняет ПЛАН из /purchase-plan (${fmtNum(p.plannedTargetPerDay, 1)} шт/д). Очисти → план вернётся.`
+                        : `Меняет baseline (avg 7д: ${fmtNum(p.baselineOrdersPerDay, 2)} шт/д). Очисти → baseline вернётся.`
+                    }
                   />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">

@@ -119,11 +119,18 @@ export interface ProductForecast {
   arrivalDate: string | null
   arrivalQty: number
   plannedTargetPerDay: number | null
-  // Исходная вычисленная база (avg orders/day за 7д).
-  // Если задан baselineOverride — переопределяет её при симуляции.
-  // baselineUsed = baselineOverride ?? baselineOrdersPerDay.
-  baselineOverride: number | null
+  // Override-семантика:
+  //   • Если plannedTargetPerDay задан → override меняет ПЛАН (post-arrival).
+  //     baselineUsed остаётся = baselineOrdersPerDay (что есть сейчас).
+  //   • Если plannedTargetPerDay не задан → override меняет baseline.
+  // `overrideAppliesTo` явно показывает, на что повлиял override.
+  // `effectiveRate` — то, что показываем в колонке «Зак/день» (план если есть,
+  // иначе baseline) — оба с применённым override.
+  rateOverride: number | null
+  overrideAppliesTo: "planned" | "baseline" | null
   baselineUsed: number
+  plannedTargetUsed: number | null
+  effectiveRate: number
   ordersUnits: number
   salesUnits: number
   salesRub: number
@@ -474,7 +481,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     })
   }
 
-  // 9. Симуляция per Product (с применением user-overrides baseline если есть)
+  // 9. Симуляция per Product (с применением user-overrides если есть)
+  // Override применяется к plannedTargetPerDay (если есть план) или к baseline.
   const overrides = input.baselineOverrides ?? {}
   const results: ProductForecast[] = metas.map((m) =>
     simulateProduct(m, today, endDate, chartEndDate, overrides[m.productId]),
@@ -496,21 +504,37 @@ function simulateProduct(
   today: string,
   endDate: string,
   chartEndDate: string,
-  baselineOverride?: number,
+  rawOverride?: number,
 ): ProductForecast {
   const horizonStart = today
   const horizonEnd = endDate
-  // Симулируем до chartEndDate (если он больше endDate) + buffer на T+3 и возвраты.
   const innerEnd = chartEndDate > endDate ? chartEndDate : endDate
   const simEnd = addDays(innerEnd, DELIVERY_TO_CUSTOMER_DAYS + RETURN_LAG)
   const days = rangeIso(horizonStart, simEnd)
-  // Какой baseline использовать в симуляции
-  const baselineUsed =
-    typeof baselineOverride === "number" &&
-    Number.isFinite(baselineOverride) &&
-    baselineOverride >= 0
-      ? baselineOverride
-      : p.baselineOrdersPerDay
+
+  // Применение override:
+  //   • Если есть plannedTargetPerDay → override меняет ПЛАН.
+  //   • Иначе → override меняет baseline.
+  const hasOverride =
+    typeof rawOverride === "number" &&
+    Number.isFinite(rawOverride) &&
+    rawOverride >= 0
+  const hasPlanned = p.plannedTargetPerDay !== null
+  let baselineUsed = p.baselineOrdersPerDay
+  let plannedTargetUsed = p.plannedTargetPerDay
+  let overrideAppliesTo: "planned" | "baseline" | null = null
+  if (hasOverride) {
+    if (hasPlanned) {
+      plannedTargetUsed = rawOverride!
+      overrideAppliesTo = "planned"
+    } else {
+      baselineUsed = rawOverride!
+      overrideAppliesTo = "baseline"
+    }
+  }
+  // effectiveRate — что показывать в таблице как «Зак/день»
+  const effectiveRate =
+    plannedTargetUsed !== null ? plannedTargetUsed : baselineUsed
 
   const stock: Record<string, number> = {}
   const orders: Record<string, number> = {}
@@ -560,12 +584,12 @@ function simulateProduct(
     let rate: number
     if (
       p.arrivalDate &&
-      p.plannedTargetPerDay != null &&
+      plannedTargetUsed !== null &&
       d >= addDays(p.arrivalDate, 1)
     ) {
       const wd = workingDaysBetween(addDays(p.arrivalDate, 1), d) + 1
       const factor = wd >= RAMP_UP_WORKING_DAYS ? 1 : wd / RAMP_UP_WORKING_DAYS
-      rate = baselineUsed + (p.plannedTargetPerDay - baselineUsed) * factor
+      rate = baselineUsed + (plannedTargetUsed - baselineUsed) * factor
     } else {
       rate = baselineUsed
     }
@@ -625,13 +649,11 @@ function simulateProduct(
     arrivalDate: p.arrivalDate,
     arrivalQty: p.arrivalQty,
     plannedTargetPerDay: p.plannedTargetPerDay,
-    baselineOverride:
-      typeof baselineOverride === "number" &&
-      Number.isFinite(baselineOverride) &&
-      baselineOverride >= 0
-        ? baselineOverride
-        : null,
+    rateOverride: hasOverride ? rawOverride! : null,
+    overrideAppliesTo,
     baselineUsed,
+    plannedTargetUsed,
+    effectiveRate,
     ordersUnits,
     salesUnits,
     salesRub,
