@@ -227,66 +227,78 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
   })
   const cardByNmId = new Map(cards.map((c) => [c.nmId, c]))
 
-  // 5. Orders last 7d + seed last 3d
-  const ordersFrom = addDays(today, -ORDERS_LOOKBACK_DAYS - DELIVERY_TO_CUSTOMER_DAYS)
-  const ordersTo = addDays(today, -1)
-  const orders = await prisma.wbCardOrdersDaily.findMany({
-    where: {
-      nmId: { in: allNmIds },
-      date: { gte: parseDate(ordersFrom), lte: parseDate(ordersTo) },
-    },
-    select: { nmId: true, date: true, qty: true, buyerPrice: true },
-  })
-
-  // 6. Funnel settled 30d window — shifted by FUNNEL_SETTLE_LAG_DAYS назад
-  // чтобы T+3 buyouts по «свежим» заказам не искажали ratio (см. комментарий
-  // у FUNNEL_SETTLE_LAG_DAYS).
-  const funnelTo = addDays(today, -FUNNEL_SETTLE_LAG_DAYS)
-  const funnelFrom = addDays(funnelTo, -FUNNEL_LOOKBACK_DAYS)
+  // 5. Funnel — единственный источник истины (analytics API).
+  // WbCardOrdersDaily (sales API) систематически underreport'ит ~40% — не используем.
+  //   • Settled окно [today-37, today-7] → buyout%, avgPrice
+  //   • Окно [today-7, today-1] → baseline (avg orders/day)
+  //   • Окно [today-3, today-1] → seed (orders → выкупы в первые дни прогноза)
+  const settledTo = addDays(today, -FUNNEL_SETTLE_LAG_DAYS) // today-7
+  const settledFrom = addDays(settledTo, -FUNNEL_LOOKBACK_DAYS) // today-37
+  const yesterday = addDays(today, -1)
+  // Берём шире — settledFrom .. yesterday — покрывает все три окна одним запросом.
   const funnel = await prisma.wbCardFunnelDaily.findMany({
     where: {
       nmId: { in: allNmIds },
-      date: { gte: parseDate(funnelFrom), lte: parseDate(funnelTo) },
+      date: { gte: parseDate(settledFrom), lte: parseDate(yesterday) },
     },
-    select: { nmId: true, date: true, ordersCount: true, buyoutsCount: true },
+    select: {
+      nmId: true,
+      date: true,
+      ordersCount: true,
+      buyoutsCount: true,
+      buyoutsSumRub: true,
+    },
   })
 
-  // 7. Агрегаты per nmId
+  // 7. Агрегаты per nmId (все три окна — из одного funnel-запроса).
+  // ords7 хранит сумму заказов last 7d per nmId — используется и как baseline,
+  // и как вес при расчёте per-product % выкупа.
   const ords7 = new Map<number, number>()
-  const priceWeighted = new Map<number, { num: number; den: number }>()
+  const priceWeighted = new Map<number, { num: number; den: number }>() // avgPrice
   const seedByNmId = new Map<number, Map<string, number>>()
-  const seedFrom = addDays(today, -DELIVERY_TO_CUSTOMER_DAYS)
-  for (const o of orders) {
-    const iso = toIso(o.date)
-    const inLast7 =
-      iso >= addDays(today, -ORDERS_LOOKBACK_DAYS) && iso <= addDays(today, -1)
-    if (inLast7) {
-      ords7.set(o.nmId, (ords7.get(o.nmId) ?? 0) + o.qty)
-      if (o.buyerPrice != null && o.qty > 0) {
-        const pw = priceWeighted.get(o.nmId) ?? { num: 0, den: 0 }
-        pw.num += o.buyerPrice * o.qty
-        pw.den += o.qty
-        priceWeighted.set(o.nmId, pw)
-      }
-    }
-    if (iso >= seedFrom && iso <= addDays(today, -1)) {
-      if (!seedByNmId.has(o.nmId)) seedByNmId.set(o.nmId, new Map())
-      const m = seedByNmId.get(o.nmId)!
-      m.set(iso, (m.get(iso) ?? 0) + o.qty)
-    }
-  }
+  const seed7dStart = addDays(today, -DELIVERY_TO_CUSTOMER_DAYS) // today-3
+  const last7dStart = addDays(today, -ORDERS_LOOKBACK_DAYS) // today-7
 
   const funnelByNmId = new Map<number, { orders: number; buyouts: number }>()
   let globalOrders = 0
   let globalBuyouts = 0
+
   for (const f of funnel) {
-    const cur = funnelByNmId.get(f.nmId) ?? { orders: 0, buyouts: 0 }
-    cur.orders += f.ordersCount ?? 0
-    cur.buyouts += f.buyoutsCount ?? 0
-    funnelByNmId.set(f.nmId, cur)
-    globalOrders += f.ordersCount ?? 0
-    globalBuyouts += f.buyoutsCount ?? 0
+    const iso = toIso(f.date)
+    const ords = f.ordersCount ?? 0
+    const byts = f.buyoutsCount ?? 0
+    const bytRub = f.buyoutsSumRub ?? 0
+
+    // Settled окно для buyout% и price — [today-37, today-7]
+    if (iso >= settledFrom && iso <= settledTo) {
+      const cur = funnelByNmId.get(f.nmId) ?? { orders: 0, buyouts: 0 }
+      cur.orders += ords
+      cur.buyouts += byts
+      funnelByNmId.set(f.nmId, cur)
+      globalOrders += ords
+      globalBuyouts += byts
+      // avgPrice: взвешенная по выкуплено-rubli / выкуплено-штук
+      if (byts > 0) {
+        const pw = priceWeighted.get(f.nmId) ?? { num: 0, den: 0 }
+        pw.num += bytRub
+        pw.den += byts
+        priceWeighted.set(f.nmId, pw)
+      }
+    }
+
+    // Last 7d для baseline — [today-7, today-1]
+    if (iso >= last7dStart && iso <= yesterday) {
+      ords7.set(f.nmId, (ords7.get(f.nmId) ?? 0) + ords)
+    }
+
+    // Seed [today-3, today-1] — заказы прошлой недели → выкупы T+3 в окне прогноза
+    if (iso >= seed7dStart && iso <= yesterday) {
+      if (!seedByNmId.has(f.nmId)) seedByNmId.set(f.nmId, new Map())
+      const m = seedByNmId.get(f.nmId)!
+      m.set(iso, (m.get(iso) ?? 0) + ords)
+    }
   }
+
   const globalBuyout = globalOrders > 0 ? globalBuyouts / globalOrders : 0
 
   // 7.1. Funnel per Subcategory — взвешенный по объёму заказов
