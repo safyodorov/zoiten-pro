@@ -350,6 +350,9 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     // но без свежих продаж (мало-продающая), получит вес 0 → не тащит средний вниз.
     let buyoutWeightedNum = 0 // Σ rate(nm) × ords7(nm)
     let buyoutWeightedDen = 0 // Σ ords7(nm) для nm с funnel-историей
+    // То же для avgPrice: per-nmId средняя цена выкупа × вес ords7d
+    let priceWeightedNum = 0 // Σ price(nm) × ords7(nm)
+    let priceWeightedDen = 0 // Σ ords7(nm) для nm с funnel-buyouts историей
     const seedOrders: Record<string, number> = {}
 
     for (const nm of nmIds) {
@@ -369,8 +372,16 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       baseline += nmOrds7 / ORDERS_LOOKBACK_DAYS
       const pw = priceWeighted.get(nm)
       if (pw) {
+        // Старая сумма-by-сумма агрегация — используется как fallback,
+        // если ни у одной из карточек нет свежих ords7.
         priceNum += pw.num
         priceDen += pw.den
+        // Per-nmId средняя цена выкупа (rub/buyout) × вес ords7
+        if (pw.den > 0) {
+          const nmAvgPrice = pw.num / pw.den
+          priceWeightedNum += nmAvgPrice * nmOrds7
+          priceWeightedDen += nmOrds7
+        }
       }
       const f = funnelByNmId.get(nm)
       if (f) {
@@ -392,8 +403,15 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     }
 
     let avgPrice = 0
-    if (priceDen > 0) avgPrice = priceNum / priceDen
-    else if (cardPriceCount > 0) avgPrice = cardPriceFallback / cardPriceCount
+    if (priceWeightedDen > 0) {
+      // Основной случай: per-nmId avg-buyout-price взвешенный по 7д заказам.
+      avgPrice = priceWeightedNum / priceWeightedDen
+    } else if (priceDen > 0) {
+      // Резерв: нет ords7 ни у одной карточки — sum/sum по settled buyouts.
+      avgPrice = priceNum / priceDen
+    } else if (cardPriceCount > 0) {
+      avgPrice = cardPriceFallback / cardPriceCount
+    }
 
     let buyoutPct = 0
     let buyoutSource: BuyoutSource = "global"
