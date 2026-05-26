@@ -176,7 +176,8 @@ export default async function SalesPlanPage({
   const accountingEndLabel = fmtDayLabel(endDate)
 
   return (
-    <div className="space-y-4">
+    <div className="h-full flex flex-col gap-4 min-h-0">
+      <div className="flex-none space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="text-sm text-muted-foreground">
           Прогноз выкупов по дневной симуляции (заказы → T+3 → выкуп)
@@ -213,6 +214,7 @@ export default async function SalesPlanPage({
         selectedSubcategoryIds={selectedSubcategoryIds}
         search={search}
       />
+      </div>
 
       <SalesForecastTable
         products={visible}
@@ -220,7 +222,7 @@ export default async function SalesPlanPage({
         currentOverrides={baselineOverrides}
       />
 
-      <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3">
+      <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3 flex-none">
         <summary className="cursor-pointer font-medium text-foreground">
           Как считается прогноз
         </summary>

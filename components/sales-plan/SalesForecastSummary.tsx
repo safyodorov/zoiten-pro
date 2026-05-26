@@ -1,6 +1,10 @@
 "use client"
 
-import { Package, Wallet, TrendingUp, Boxes } from "lucide-react"
+import { Package, Wallet, TrendingUp, Boxes, Target } from "lucide-react"
+
+// «Осталось выполнить по ИУ» — индивидуальные условия (контрактный план).
+// Задано вручную; в перспективе вынести в AppSetting.
+const IU_REMAINING_RUB = 82_708_995
 
 interface SalesForecastSummaryProps {
   totalOrders: number
@@ -91,6 +95,13 @@ export function SalesForecastSummary({
       icon: Boxes,
       accent: "text-amber-600 dark:text-amber-500",
     },
+    {
+      label: "Осталось выполнить по ИУ",
+      value: fmtRub(IU_REMAINING_RUB),
+      sub: `${(((totalSalesRub / IU_REMAINING_RUB) * 100) || 0).toFixed(1)}% покроет прогноз`,
+      icon: Target,
+      accent: "text-rose-600 dark:text-rose-500",
+    },
   ]
 
   return (
@@ -101,7 +112,7 @@ export function SalesForecastSummary({
         <span className="font-medium text-foreground">{formatRu(endDate)}</span>{" "}
         <span className="text-muted-foreground/60">включительно</span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {cards.map((c) => (
           <div
             key={c.label}

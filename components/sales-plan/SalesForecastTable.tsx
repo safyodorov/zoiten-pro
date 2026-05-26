@@ -22,6 +22,7 @@ import {
 } from "@/app/actions/sales-plan"
 
 type SortKey =
+  | "hierarchy" // дефолт: порядок как в /prices/wb (Направление→Бренд→Категория→Подкатегория→name)
   | "salesRub"
   | "salesUnits"
   | "ordersUnits"
@@ -45,6 +46,12 @@ function fmtNum(n: number, digits = 0): string {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })
+}
+
+// Адаптивный формат: целые если |n| >= 2, иначе 1 знак после запятой.
+// Применяется к заказам / выкупам / зак-в-день в таблице.
+function fmtAdaptive(n: number): string {
+  return Math.abs(n) >= 2 ? fmtNum(Math.round(n), 0) : fmtNum(n, 1)
 }
 
 function fmtRub(n: number): string {
@@ -78,7 +85,7 @@ export function SalesForecastTable({
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [sortKey, setSortKey] = useState<SortKey>("salesRub")
+  const [sortKey, setSortKey] = useState<SortKey>("hierarchy")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [activeProduct, setActiveProduct] = useState<ProductForecast | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -166,7 +173,10 @@ export function SalesForecastTable({
   }
 
   const sorted = useMemo(() => {
-    const accessor: Record<SortKey, (p: ProductForecast) => number | string> = {
+    // hierarchy = просто массив в том порядке, в котором пришёл с сервера
+    // (там уже PRODUCT_HIERARCHY_ORDER_BY)
+    if (sortKey === "hierarchy") return products
+    const accessor: Record<Exclude<SortKey, "hierarchy">, (p: ProductForecast) => number | string> = {
       salesRub: (p) => p.salesRub,
       salesUnits: (p) => p.salesUnits,
       ordersUnits: (p) => p.ordersUnits,
@@ -214,7 +224,7 @@ export function SalesForecastTable({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 p-3">
+      <div className="flex-none flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 p-3">
         <div className="text-xs text-muted-foreground">
           {hasActiveOverrides && (
             <span className="text-blue-600 dark:text-blue-500 font-medium">
@@ -253,11 +263,11 @@ export function SalesForecastTable({
           </Button>
         </div>
       </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16">Фото</TableHead>
+      <div className="flex-1 min-h-0 overflow-auto rounded-md border">
+        <table className="w-full caption-bottom text-sm border-separate border-spacing-0">
+          <thead className="bg-background">
+            <tr>
+              <TableHead className="sticky top-0 z-20 bg-background border-b w-16">Фото</TableHead>
               <SortableHead
                 label="SKU"
                 k="sku"
@@ -300,7 +310,7 @@ export function SalesForecastTable({
                 onClick={toggleSort}
                 className="text-right w-20"
               />
-              <TableHead className="text-right w-24">Приход</TableHead>
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-right w-24">Приход</TableHead>
               <SortableHead
                 label="Заказы"
                 k="ordersUnits"
@@ -309,10 +319,10 @@ export function SalesForecastTable({
                 onClick={toggleSort}
                 className="text-right w-24"
               />
-              <TableHead className="text-right w-20" title="Текущая базовая ставка заказов в день (override → база 7д)">
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-right w-20" title="Текущая базовая ставка заказов в день (override → база 7д)">
                 Зак/день
               </TableHead>
-              <TableHead className="text-right w-24" title="Введи новое число и нажми «Пересчитать модель»">
+              <TableHead className="sticky top-0 z-20 bg-background border-b text-right w-24" title="Введи новое число и нажми «Пересчитать модель»">
                 Коррект.
               </TableHead>
               <SortableHead
@@ -347,8 +357,8 @@ export function SalesForecastTable({
                 onClick={toggleSort}
                 className="text-right w-28"
               />
-            </TableRow>
-          </TableHeader>
+            </tr>
+          </thead>
           <TableBody>
             {sorted.length === 0 && (
               <TableRow>
@@ -425,21 +435,21 @@ export function SalesForecastTable({
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {fmtNum(p.ordersUnits, 1)}
+                  {fmtAdaptive(p.ordersUnits)}
                 </TableCell>
                 <TableCell
                   className={`text-right tabular-nums ${p.rateOverride !== null ? "text-blue-600 dark:text-blue-500 font-medium" : p.plannedTargetUsed !== null ? "text-emerald-700 dark:text-emerald-500" : ""}`}
                   title={
                     p.rateOverride !== null
                       ? p.overrideAppliesTo === "planned"
-                        ? `Корректировка плана активна. Базовое из 7д: ${fmtNum(p.baselineOrdersPerDay, 2)}; план до коррекции: ${p.plannedTargetPerDay != null ? fmtNum(p.plannedTargetPerDay, 1) : "—"}`
-                        : `Корректировка baseline активна. 7д avg: ${fmtNum(p.baselineOrdersPerDay, 2)}`
+                        ? `Корректировка плана активна. Базовое из 7д: ${fmtAdaptive(p.baselineOrdersPerDay)}; план до коррекции: ${p.plannedTargetPerDay != null ? fmtAdaptive(p.plannedTargetPerDay) : "—"}`
+                        : `Корректировка baseline активна. 7д avg: ${fmtAdaptive(p.baselineOrdersPerDay)}`
                       : p.plannedTargetUsed !== null
-                        ? `План из /purchase-plan; baseline 7д: ${fmtNum(p.baselineOrdersPerDay, 2)}`
+                        ? `План из /purchase-plan; baseline 7д: ${fmtAdaptive(p.baselineOrdersPerDay)}`
                         : "База: avg orders/day за 7 дней (funnel)"
                   }
                 >
-                  {fmtNum(p.effectiveRate, p.effectiveRate >= 10 ? 1 : 2)}
+                  {fmtAdaptive(p.effectiveRate)}
                   {p.plannedTargetUsed !== null && (
                     <span className="ml-0.5 text-[10px] opacity-70">план</span>
                   )}
@@ -455,8 +465,8 @@ export function SalesForecastTable({
                     inputMode="decimal"
                     placeholder={
                       p.plannedTargetPerDay !== null
-                        ? fmtNum(p.plannedTargetPerDay, 1)
-                        : fmtNum(p.baselineOrdersPerDay, 1)
+                        ? fmtAdaptive(p.plannedTargetPerDay)
+                        : fmtAdaptive(p.baselineOrdersPerDay)
                     }
                     value={draftValueFor(p.productId)}
                     onChange={(e) => setDraft(p.productId, e.target.value)}
@@ -464,13 +474,13 @@ export function SalesForecastTable({
                     className="h-7 text-right tabular-nums"
                     title={
                       p.plannedTargetPerDay !== null
-                        ? `Меняет ПЛАН из /purchase-plan (${fmtNum(p.plannedTargetPerDay, 1)} шт/д). Очисти → план вернётся.`
-                        : `Меняет baseline (avg 7д: ${fmtNum(p.baselineOrdersPerDay, 2)} шт/д). Очисти → baseline вернётся.`
+                        ? `Меняет ПЛАН из /purchase-plan (${fmtAdaptive(p.plannedTargetPerDay)} шт/д). Очисти → план вернётся.`
+                        : `Меняет baseline (avg 7д: ${fmtAdaptive(p.baselineOrdersPerDay)} шт/д). Очисти → baseline вернётся.`
                     }
                   />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {fmtNum(p.salesUnits, 1)}
+                  {fmtAdaptive(p.salesUnits)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-semibold">
                   {fmtRub(p.salesRub)}
@@ -489,12 +499,12 @@ export function SalesForecastTable({
                   Итого по {sorted.length} товарам:
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {fmtNum(totalOrders, 0)}
+                  {fmtAdaptive(totalOrders)}
                 </TableCell>
                 <TableCell />
                 <TableCell />
                 <TableCell className="text-right tabular-nums">
-                  {fmtNum(totalUnits, 0)}
+                  {fmtAdaptive(totalUnits)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-500">
                   {fmtRub(totalRub)}
@@ -508,7 +518,7 @@ export function SalesForecastTable({
               </TableRow>
             )}
           </TableBody>
-        </Table>
+        </table>
       </div>
       <ProductForecastDialog
         product={activeProduct}
@@ -536,7 +546,7 @@ function SortableHead({
 }) {
   const active = cur === k
   return (
-    <TableHead className={className}>
+    <TableHead className={`sticky top-0 z-20 bg-background border-b ${className ?? ""}`}>
       <button
         onClick={() => onClick(k)}
         className={`inline-flex items-center gap-1 hover:text-foreground transition-colors ${active ? "text-foreground" : "text-muted-foreground"}`}

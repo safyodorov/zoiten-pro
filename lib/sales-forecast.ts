@@ -12,6 +12,7 @@
 //  • Выкупы засчитываются на T+3 от заказа, возвраты на T+6 пополняют сток.
 
 import { prisma } from "@/lib/prisma"
+import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 
 // ── Константы модели ─────────────────────────────────────────────
 export const ORDERS_LOOKBACK_DAYS = 7
@@ -208,7 +209,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     }
   }
 
-  // 2. Все активные товары
+  // 2. Все активные товары — в иерархическом порядке (Направление → Бренд →
+  // Категория → Подкатегория → name), как в /prices/wb и /products.
   const products = await prisma.product.findMany({
     where: { deletedAt: null },
     include: {
@@ -221,6 +223,7 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       },
       incoming: true,
     },
+    orderBy: PRODUCT_HIERARCHY_ORDER_BY,
   })
 
   // 3. Все nmIds
