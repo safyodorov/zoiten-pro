@@ -23,6 +23,7 @@ interface ProcurementRowData {
   subcategoryName: string | null
   orderedQty: number
   expectedDate: string | null // YYYY-MM-DD или null
+  plannedSalesPerDay: number | null
 }
 
 interface ProcurementTableProps {
@@ -43,13 +44,14 @@ export function ProcurementTable({ rows, canManage }: ProcurementTableProps) {
             <TableHead>Подкатегория</TableHead>
             <TableHead className="w-44">Заказано в Китае</TableHead>
             <TableHead className="w-44">Плановая дата прихода</TableHead>
+            <TableHead className="w-44">План продаж после прихода, шт/день</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={7}
+                colSpan={8}
                 className="text-center py-12 text-muted-foreground"
               >
                 Товары не найдены
@@ -74,11 +76,16 @@ function ProcurementRow({
 }) {
   const [qtyStr, setQtyStr] = useState<string>(String(row.orderedQty ?? 0))
   const [dateStr, setDateStr] = useState<string>(row.expectedDate ?? "")
+  const [salesStr, setSalesStr] = useState<string>(
+    row.plannedSalesPerDay !== null ? String(row.plannedSalesPerDay) : "",
+  )
   const [savingQty, setSavingQty] = useState(false)
   const [savingDate, setSavingDate] = useState(false)
+  const [savingSales, setSavingSales] = useState(false)
   const [, startTransition] = useTransition()
   const qtyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const salesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Если данные с сервера обновились (revalidatePath) — синхронизируем формы.
   useEffect(() => {
@@ -87,6 +94,9 @@ function ProcurementRow({
   useEffect(() => {
     setDateStr(row.expectedDate ?? "")
   }, [row.expectedDate])
+  useEffect(() => {
+    setSalesStr(row.plannedSalesPerDay !== null ? String(row.plannedSalesPerDay) : "")
+  }, [row.plannedSalesPerDay])
 
   function saveQty(rawValue: string) {
     const parsed = rawValue === "" ? 0 : parseInt(rawValue, 10)
@@ -117,6 +127,30 @@ function ProcurementRow({
     })
   }
 
+  function saveSales(rawValue: string) {
+    const trimmed = rawValue.trim().replace(",", ".")
+    let payload: number | null
+    if (trimmed === "") {
+      payload = null
+    } else {
+      const parsed = parseFloat(trimmed)
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        toast.error("Невалидное число")
+        return
+      }
+      payload = parsed
+    }
+    setSavingSales(true)
+    startTransition(async () => {
+      const result = await upsertProductIncoming({
+        productId: row.id,
+        plannedSalesPerDay: payload,
+      })
+      setSavingSales(false)
+      if (!result.ok) toast.error(result.error)
+    })
+  }
+
   function handleQtyChange(e: React.ChangeEvent<HTMLInputElement>) {
     const value = e.target.value
     setQtyStr(value)
@@ -129,6 +163,13 @@ function ProcurementRow({
     setDateStr(value)
     if (dateTimer.current) clearTimeout(dateTimer.current)
     dateTimer.current = setTimeout(() => saveDate(value), 500)
+  }
+
+  function handleSalesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const value = e.target.value
+    setSalesStr(value)
+    if (salesTimer.current) clearTimeout(salesTimer.current)
+    salesTimer.current = setTimeout(() => saveSales(value), 500)
   }
 
   return (
@@ -183,6 +224,19 @@ function ProcurementRow({
           onChange={handleDateChange}
           disabled={!canManage}
           className={`h-8 ${savingDate ? "border-primary" : ""}`}
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          type="number"
+          min={0}
+          step="0.1"
+          inputMode="decimal"
+          placeholder="—"
+          value={salesStr}
+          onChange={handleSalesChange}
+          disabled={!canManage}
+          className={`h-8 ${savingSales ? "border-primary" : ""}`}
         />
       </TableCell>
     </TableRow>

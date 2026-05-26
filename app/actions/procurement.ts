@@ -18,6 +18,8 @@ const UpsertIncomingSchema = z.object({
     .max(10_000_000)
     .optional(),
   expectedDate: z.union([z.string(), z.null()]).optional(),
+  // null чистит, undefined не трогает, число — устанавливает
+  plannedSalesPerDay: z.union([z.number().min(0).max(1_000_000), z.null()]).optional(),
 })
 
 export async function upsertProductIncoming(
@@ -29,7 +31,7 @@ export async function upsertProductIncoming(
   if (!parsed.success) {
     return { ok: false, error: "Невалидные данные" }
   }
-  const { productId, orderedQty, expectedDate } = parsed.data
+  const { productId, orderedQty, expectedDate, plannedSalesPerDay } = parsed.data
 
   let expected: Date | null | undefined = undefined
   if (expectedDate === null) {
@@ -57,10 +59,12 @@ export async function upsertProductIncoming(
         productId,
         orderedQty: orderedQty ?? 0,
         expectedDate: expected ?? null,
+        plannedSalesPerDay: plannedSalesPerDay ?? null,
       },
       update: {
         ...(orderedQty !== undefined ? { orderedQty } : {}),
         ...(expected !== undefined ? { expectedDate: expected } : {}),
+        ...(plannedSalesPerDay !== undefined ? { plannedSalesPerDay } : {}),
       },
     })
 

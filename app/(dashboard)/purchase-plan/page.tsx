@@ -104,6 +104,7 @@ export default async function PurchasePlanPage({
     expectedDate: p.incoming?.expectedDate
       ? p.incoming.expectedDate.toISOString().slice(0, 10)
       : null,
+    plannedSalesPerDay: p.incoming?.plannedSalesPerDay ?? null,
   }))
 
   return (

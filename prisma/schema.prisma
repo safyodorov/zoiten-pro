@@ -1197,11 +1197,12 @@ model WbAdvertSpendRow {
 // unique и добавим UI для разбивки по партиям.
 
 model ProductIncoming {
-  id           String    @id @default(cuid())
-  productId    String    @unique
-  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderedQty   Int       @default(0) // заказано в Китае, шт
-  expectedDate DateTime? @db.Date // плановая дата прихода на склад
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  productId          String    @unique
+  product            Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderedQty         Int       @default(0) // заказано в Китае, шт
+  expectedDate       DateTime? @db.Date // плановая дата прихода на склад
+  plannedSalesPerDay Float? // план продаж после прихода, шт/день (когда товар появится на остатках продажи будут другие)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
