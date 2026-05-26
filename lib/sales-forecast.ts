@@ -266,6 +266,10 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       ordersCount: true,
       buyoutsCount: true,
       buyoutsSumRub: true,
+      // Используется как primary источник % выкупа — это WB-собственное число
+      // (учитывает cancelCount, не равно buyoutsCount/ordersCount). NULL для
+      // дней, по которым WB ещё не закрыл статистику.
+      buyoutPercent: true,
     },
   })
 
@@ -278,24 +282,37 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
   const seed7dStart = addDays(today, -DELIVERY_TO_CUSTOMER_DAYS) // today-3
   const last7dStart = addDays(today, -ORDERS_LOOKBACK_DAYS) // today-7
 
-  const funnelByNmId = new Map<number, { orders: number; buyouts: number }>()
-  let globalOrders = 0
-  let globalBuyouts = 0
+  // Per-nmId аккумулятор % выкупа: SUM(buyoutPercent × ordersCount) / SUM(ordersCount)
+  // — та же формула что в /prices/wb (loadBuyoutPctRolling30dMap), use WB-own
+  // buyoutPercent (учитывает cancelCount + null для unsettled дней).
+  const funnelByNmId = new Map<
+    number,
+    { pctNum: number; pctDen: number; orders: number; buyouts: number }
+  >()
+  let globalPctNum = 0
+  let globalPctDen = 0
 
   for (const f of funnel) {
     const iso = toIso(f.date)
     const ords = f.ordersCount ?? 0
     const byts = f.buyoutsCount ?? 0
     const bytRub = f.buyoutsSumRub ?? 0
+    const buyPctDaily = f.buyoutPercent // 0..100 или null
 
     // Settled окно для buyout% и price — [today-37, today-7]
     if (iso >= settledFrom && iso <= settledTo) {
-      const cur = funnelByNmId.get(f.nmId) ?? { orders: 0, buyouts: 0 }
+      const cur =
+        funnelByNmId.get(f.nmId) ?? { pctNum: 0, pctDen: 0, orders: 0, buyouts: 0 }
       cur.orders += ords
       cur.buyouts += byts
+      // % выкупа — только settled-дни (где WB подтянул buyoutPercent).
+      if (buyPctDaily !== null && ords > 0) {
+        cur.pctNum += buyPctDaily * ords
+        cur.pctDen += ords
+        globalPctNum += buyPctDaily * ords
+        globalPctDen += ords
+      }
       funnelByNmId.set(f.nmId, cur)
-      globalOrders += ords
-      globalBuyouts += byts
       // avgPrice: взвешенная по выкуплено-rubli / выкуплено-штук
       if (byts > 0) {
         const pw = priceWeighted.get(f.nmId) ?? { num: 0, den: 0 }
@@ -318,7 +335,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     }
   }
 
-  const globalBuyout = globalOrders > 0 ? globalBuyouts / globalOrders : 0
+  // Глобальный % выкупа: взвешенная средняя buyoutPercent по всем nmId+settled-дням
+  const globalBuyout = globalPctDen > 0 ? globalPctNum / globalPctDen / 100 : 0
 
   // 7.1. Funnel per Subcategory — взвешенный по объёму заказов
   // (используется как fallback до глобального для товаров без собственной истории).
@@ -328,18 +346,19 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     const nmIds = productToNmIds.get(p.id) ?? []
     for (const nm of nmIds) nmIdToSubcat.set(nm, p.subcategoryId)
   }
-  const funnelBySubcat = new Map<string, { orders: number; buyouts: number }>()
+  // Subcategory rate: та же weighted формула (SUM(pct × orders) / SUM(orders)).
+  const funnelBySubcat = new Map<string, { pctNum: number; pctDen: number }>()
   for (const [nm, f] of funnelByNmId) {
     const subcatId = nmIdToSubcat.get(nm)
     if (!subcatId) continue
-    const cur = funnelBySubcat.get(subcatId) ?? { orders: 0, buyouts: 0 }
-    cur.orders += f.orders
-    cur.buyouts += f.buyouts
+    const cur = funnelBySubcat.get(subcatId) ?? { pctNum: 0, pctDen: 0 }
+    cur.pctNum += f.pctNum
+    cur.pctDen += f.pctDen
     funnelBySubcat.set(subcatId, cur)
   }
   const subcatBuyout = new Map<string, number>()
   for (const [subcatId, f] of funnelBySubcat) {
-    if (f.orders > 0) subcatBuyout.set(subcatId, f.buyouts / f.orders)
+    if (f.pctDen > 0) subcatBuyout.set(subcatId, f.pctNum / f.pctDen / 100)
   }
 
   // 8. Сборка ProductMeta
@@ -406,9 +425,9 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       if (f) {
         funnelOrders += f.orders
         funnelBuyouts += f.buyouts
-        // Per-nmId buyout rate (если есть orders в funnel за settled 30d)
-        if (f.orders > 0) {
-          const nmRate = f.buyouts / f.orders
+        // Per-nmId weighted buyout% за settled 30d (по той же формуле что /prices/wb).
+        if (f.pctDen > 0) {
+          const nmRate = f.pctNum / f.pctDen / 100
           buyoutWeightedNum += nmRate * nmOrds7
           buyoutWeightedDen += nmOrds7
         }
@@ -432,6 +451,17 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       avgPrice = cardPriceFallback / cardPriceCount
     }
 
+    // Считаем product-level pctDen/Num для fallback'а когда нет ords7
+    let pctNumSum = 0
+    let pctDenSum = 0
+    for (const nm of nmIds) {
+      const f = funnelByNmId.get(nm)
+      if (f) {
+        pctNumSum += f.pctNum
+        pctDenSum += f.pctDen
+      }
+    }
+
     let buyoutPct = 0
     let buyoutSource: BuyoutSource = "global"
     if (buyoutWeightedDen > 0) {
@@ -439,9 +469,9 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       // Взвешенное среднее per-nmId rates по объёму свежих заказов.
       buyoutPct = buyoutWeightedNum / buyoutWeightedDen
       buyoutSource = "own"
-    } else if (funnelOrders > 0) {
+    } else if (pctDenSum > 0) {
       // Резерв: 7д заказов нет, но funnel-история есть — используем 30d-веса.
-      buyoutPct = funnelBuyouts / funnelOrders
+      buyoutPct = pctNumSum / pctDenSum / 100
       buyoutSource = "own"
     } else if (cardBuyoutCount > 0) {
       buyoutPct = cardBuyoutFallback / cardBuyoutCount / 100
