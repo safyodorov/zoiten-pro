@@ -73,6 +73,13 @@ export interface ForecastInput {
   today?: string // YYYY-MM-DD; по умолчанию getMskTodayIso()
 }
 
+// Источник % выкупа:
+//  own  — собственная funnel-история за 30 дней
+//  legacy — legacy WbCard.buyoutPercent (агрегированная WB за месяц)
+//  subcategory — среднее по подкатегории (взвешенное по объёму заказов)
+//  global — глобальное среднее (последний fallback)
+export type BuyoutSource = "own" | "legacy" | "subcategory" | "global"
+
 export interface ProductForecast {
   productId: string
   sku: string
@@ -91,7 +98,8 @@ export interface ProductForecast {
   baselineOrdersPerDay: number
   avgPrice: number
   buyoutPct: number
-  buyoutFallback: boolean
+  buyoutSource: BuyoutSource
+  buyoutFallback: boolean // true если source != "own"
   arrivalDate: string | null
   arrivalQty: number
   plannedTargetPerDay: number | null
@@ -107,6 +115,8 @@ export interface ForecastResult {
   endDate: string
   globalBuyoutPct: number
   fallbackCount: number
+  // Сколько товаров получили % выкупа из каждого источника
+  bySource: Record<BuyoutSource, number>
   products: ProductForecast[]
 }
 
@@ -130,7 +140,7 @@ interface ProductMeta {
   baselineOrdersPerDay: number
   avgPrice: number
   buyoutPct: number
-  buyoutFallback: boolean
+  buyoutSource: BuyoutSource
   arrivalDate: string | null
   arrivalQty: number
   plannedTargetPerDay: number | null
@@ -149,7 +159,14 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     select: { id: true },
   })
   if (!wbMarketplace) {
-    return { today, endDate, globalBuyoutPct: 0, fallbackCount: 0, products: [] }
+    return {
+      today,
+      endDate,
+      globalBuyoutPct: 0,
+      fallbackCount: 0,
+      bySource: { own: 0, legacy: 0, subcategory: 0, global: 0 },
+      products: [],
+    }
   }
 
   // 2. Все активные товары
@@ -246,9 +263,37 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
   }
   const globalBuyout = globalOrders > 0 ? globalBuyouts / globalOrders : 0
 
+  // 7.1. Funnel per Subcategory — взвешенный по объёму заказов
+  // (используется как fallback до глобального для товаров без собственной истории).
+  // Маппинг: nmId → subcategoryId через Product.subcategoryId.
+  const nmIdToSubcat = new Map<number, string | null>()
+  for (const p of products) {
+    const nmIds = productToNmIds.get(p.id) ?? []
+    for (const nm of nmIds) nmIdToSubcat.set(nm, p.subcategoryId)
+  }
+  const funnelBySubcat = new Map<string, { orders: number; buyouts: number }>()
+  for (const [nm, f] of funnelByNmId) {
+    const subcatId = nmIdToSubcat.get(nm)
+    if (!subcatId) continue
+    const cur = funnelBySubcat.get(subcatId) ?? { orders: 0, buyouts: 0 }
+    cur.orders += f.orders
+    cur.buyouts += f.buyouts
+    funnelBySubcat.set(subcatId, cur)
+  }
+  const subcatBuyout = new Map<string, number>()
+  for (const [subcatId, f] of funnelBySubcat) {
+    if (f.orders > 0) subcatBuyout.set(subcatId, f.buyouts / f.orders)
+  }
+
   // 8. Сборка ProductMeta
   const metas: ProductMeta[] = []
   let fallbackCount = 0
+  const bySource: Record<BuyoutSource, number> = {
+    own: 0,
+    legacy: 0,
+    subcategory: 0,
+    global: 0,
+  }
   for (const p of products) {
     const nmIds = productToNmIds.get(p.id) ?? []
 
@@ -301,15 +346,22 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     else if (cardPriceCount > 0) avgPrice = cardPriceFallback / cardPriceCount
 
     let buyoutPct = 0
-    let buyoutFallback = false
-    if (funnelOrders > 0) buyoutPct = funnelBuyouts / funnelOrders
-    else if (cardBuyoutCount > 0)
+    let buyoutSource: BuyoutSource = "global"
+    if (funnelOrders > 0) {
+      buyoutPct = funnelBuyouts / funnelOrders
+      buyoutSource = "own"
+    } else if (cardBuyoutCount > 0) {
       buyoutPct = cardBuyoutFallback / cardBuyoutCount / 100
-    else {
+      buyoutSource = "legacy"
+    } else if (p.subcategoryId && subcatBuyout.has(p.subcategoryId)) {
+      buyoutPct = subcatBuyout.get(p.subcategoryId)!
+      buyoutSource = "subcategory"
+    } else {
       buyoutPct = globalBuyout
-      buyoutFallback = true
-      fallbackCount++
+      buyoutSource = "global"
     }
+    bySource[buyoutSource]++
+    if (buyoutSource !== "own") fallbackCount++
 
     metas.push({
       productId: p.id,
@@ -329,7 +381,7 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       baselineOrdersPerDay: baseline,
       avgPrice,
       buyoutPct,
-      buyoutFallback,
+      buyoutSource,
       arrivalDate: p.incoming?.expectedDate
         ? toIso(p.incoming.expectedDate)
         : null,
@@ -349,6 +401,7 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     endDate,
     globalBuyoutPct: globalBuyout,
     fallbackCount,
+    bySource,
     products: results,
   }
 }
@@ -462,7 +515,8 @@ function simulateProduct(
     baselineOrdersPerDay: p.baselineOrdersPerDay,
     avgPrice: p.avgPrice,
     buyoutPct: p.buyoutPct,
-    buyoutFallback: p.buyoutFallback,
+    buyoutSource: p.buyoutSource,
+    buyoutFallback: p.buyoutSource !== "own",
     arrivalDate: p.arrivalDate,
     arrivalQty: p.arrivalQty,
     plannedTargetPerDay: p.plannedTargetPerDay,

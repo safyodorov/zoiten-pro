@@ -7,7 +7,8 @@ interface SalesForecastSummaryProps {
   totalSalesUnits: number
   totalSalesRub: number
   productsCount: number
-  fallbackCount: number
+  subcategoryFallbackCount: number
+  globalFallbackCount: number
   globalBuyoutPct: number
   today: string
   endDate: string
@@ -45,11 +46,19 @@ export function SalesForecastSummary({
   totalSalesUnits,
   totalSalesRub,
   productsCount,
-  fallbackCount,
+  subcategoryFallbackCount,
+  globalFallbackCount,
   globalBuyoutPct,
   today,
   endDate,
 }: SalesForecastSummaryProps) {
+  const fallbackSub =
+    subcategoryFallbackCount > 0
+      ? `${subcategoryFallbackCount} по подкатегории`
+      : null
+  const fallbackGlob =
+    globalFallbackCount > 0 ? `${globalFallbackCount} глобальный` : null
+  const fallbackSub2 = [fallbackSub, fallbackGlob].filter(Boolean).join(", ")
   const cards = [
     {
       label: "Выручка по выкупам",
@@ -68,7 +77,10 @@ export function SalesForecastSummary({
     {
       label: "Товаров в прогнозе",
       value: fmtNum(productsCount),
-      sub: `${fallbackCount} с глобальным % выкупа`,
+      sub:
+        fallbackSub2.length > 0
+          ? `% выкупа: ${fallbackSub2}`
+          : "все с собственной историей",
       icon: Package,
       accent: "text-blue-600 dark:text-blue-500",
     },

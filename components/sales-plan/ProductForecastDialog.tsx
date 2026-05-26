@@ -105,11 +105,22 @@ export function ProductForecastDialog({ product, open, onOpenChange }: Props) {
             <div className="text-xs text-muted-foreground">% выкупа</div>
             <div className="text-lg font-semibold tabular-nums">
               {fmtPct(product.buyoutPct)}
-              {product.buyoutFallback && (
-                <span className="text-xs text-amber-600 ml-1">* global</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {product.buyoutSource === "own" && "своя 30д funnel-история"}
+              {product.buyoutSource === "legacy" &&
+                "legacy WbCard (месячный WB)"}
+              {product.buyoutSource === "subcategory" && (
+                <span className="text-blue-600 dark:text-blue-500">
+                  ↑ среднее по подкатегории
+                </span>
+              )}
+              {product.buyoutSource === "global" && (
+                <span className="text-amber-600 dark:text-amber-500">
+                  * глобальное среднее
+                </span>
               )}
             </div>
-            <div className="text-xs text-muted-foreground">взвеш. 30д</div>
           </div>
           <div className="rounded-md border bg-card p-3">
             <div className="text-xs text-muted-foreground">Цена выкупа</div>

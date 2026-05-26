@@ -229,8 +229,19 @@ export function SalesForecastTable({ products }: Props) {
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {fmtPct(p.buyoutPct)}
-                  {p.buyoutFallback && (
-                    <span className="text-amber-500 ml-0.5" title="глобальный fallback">
+                  {p.buyoutSource === "subcategory" && (
+                    <span
+                      className="text-blue-500 ml-0.5"
+                      title="средний % по подкатегории (нет собственной funnel-истории)"
+                    >
+                      ↑
+                    </span>
+                  )}
+                  {p.buyoutSource === "global" && (
+                    <span
+                      className="text-amber-500 ml-0.5"
+                      title="глобальное среднее (ни своей истории, ни по подкатегории)"
+                    >
                       *
                     </span>
                   )}

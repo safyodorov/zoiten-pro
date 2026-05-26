@@ -109,7 +109,12 @@ export default async function SalesPlanPage({
   const totalOrders = visible.reduce((s, p) => s + p.ordersUnits, 0)
   const totalSalesUnits = visible.reduce((s, p) => s + p.salesUnits, 0)
   const totalSalesRub = visible.reduce((s, p) => s + p.salesRub, 0)
-  const fallbackInView = visible.filter((p) => p.buyoutFallback).length
+  const subcatFallbackInView = visible.filter(
+    (p) => p.buyoutSource === "subcategory",
+  ).length
+  const globalFallbackInView = visible.filter(
+    (p) => p.buyoutSource === "global",
+  ).length
 
   return (
     <div className="space-y-4">
@@ -125,7 +130,8 @@ export default async function SalesPlanPage({
         totalSalesUnits={totalSalesUnits}
         totalSalesRub={totalSalesRub}
         productsCount={visible.length}
-        fallbackCount={fallbackInView}
+        subcategoryFallbackCount={subcatFallbackInView}
+        globalFallbackCount={globalFallbackInView}
         globalBuyoutPct={forecast.globalBuyoutPct}
         today={forecast.today}
         endDate={forecast.endDate}
@@ -167,9 +173,16 @@ export default async function SalesPlanPage({
           </p>
           <p>
             • <strong>% выкупа</strong> — взвешенный 30-дневный
-            (buyouts/orders из funnel). Fallback на legacy
-            <code> WbCard.buyoutPercent</code>, затем на глобальный
-            <span className="text-amber-500"> *</span>.
+            (buyouts/orders из funnel). Если своей истории нет — fallback по
+            цепочке: legacy <code>WbCard.buyoutPercent</code> →{" "}
+            <span className="text-blue-600 dark:text-blue-500">
+              среднее по подкатегории
+            </span>{" "}
+            (↑) →{" "}
+            <span className="text-amber-600 dark:text-amber-500">
+              глобальное среднее
+            </span>{" "}
+            (*).
           </p>
           <p>
             • <strong>Выкупы</strong> засчитываются на T+3 от заказа. В горизонт
