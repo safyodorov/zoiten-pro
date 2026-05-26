@@ -19,6 +19,8 @@ import { ArrowUpDown, RotateCcw, Calculator } from "lucide-react"
 import {
   saveBaselineOverrides,
   clearBaselineOverrides,
+  saveLeadTimes,
+  bulkUpdateArrivalDates,
 } from "@/app/actions/sales-plan"
 
 type SortKey =
@@ -36,9 +38,14 @@ type SortKey =
 
 interface Props {
   products: ProductForecast[]
-  endStockDateLabel: string // например "01.07" — для заголовков leftover-столбцов
-  /** Текущие сохранённые корректировки (из UserPreference) */
+  endStockDateLabel: string
   currentOverrides: Record<string, number>
+  /** Текущие применённые lead times (с учётом override) */
+  currentDeliveryDays: number
+  currentReturnDays: number
+  /** Базовые значения (для сброса) */
+  defaultDeliveryDays: number
+  defaultReturnDays: number
 }
 
 function fmtNum(n: number, digits = 0): string {
@@ -82,6 +89,10 @@ export function SalesForecastTable({
   products,
   endStockDateLabel,
   currentOverrides,
+  currentDeliveryDays,
+  currentReturnDays,
+  defaultDeliveryDays,
+  defaultReturnDays,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -89,8 +100,10 @@ export function SalesForecastTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [activeProduct, setActiveProduct] = useState<ProductForecast | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  // Pending input drafts: productId → string (что юзер набил в инпуте,
-  // ещё не сохранено). На mount инициализируем из currentOverrides.
+  // Pending drafts:
+  //   drafts[pid] — корректировка заказов/день (planned либо baseline)
+  //   arrivalDrafts[pid] — изменения даты прихода (глобально, в БД)
+  //   deliveryDraft / returnDraft — кастомные lead times
   const [drafts, setDrafts] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const [pid, v] of Object.entries(currentOverrides)) {
@@ -98,6 +111,13 @@ export function SalesForecastTable({
     }
     return init
   })
+  const [arrivalDrafts, setArrivalDrafts] = useState<Record<string, string>>({})
+  const [deliveryDraft, setDeliveryDraft] = useState<string>(
+    String(currentDeliveryDays),
+  )
+  const [returnDraft, setReturnDraft] = useState<string>(
+    String(currentReturnDays),
+  )
 
   // Текст драфта для конкретной строки: pending → currentOverride → ""
   function draftValueFor(pid: string): string {
@@ -109,9 +129,29 @@ export function SalesForecastTable({
     setDrafts((prev) => ({ ...prev, [pid]: value }))
   }
 
-  // Сколько товаров будут «изменены» относительно текущих сохранённых
+  // Дата прихода drafts (yyyy-mm-dd или "" → сбросить)
+  function arrivalDraftFor(p: ProductForecast): string {
+    if (Object.prototype.hasOwnProperty.call(arrivalDrafts, p.productId))
+      return arrivalDrafts[p.productId]
+    return p.arrivalDate ?? ""
+  }
+  function setArrivalDraft(pid: string, value: string) {
+    setArrivalDrafts((prev) => ({ ...prev, [pid]: value }))
+  }
+
+  // Подсчёт «грязного» состояния:
+  // 1) baseline-корректировки vs currentOverrides
+  // 2) arrival drafts vs текущее p.arrivalDate
+  // 3) deliveryDraft / returnDraft vs currentDeliveryDays / currentReturnDays
+  const productById = useMemo(() => {
+    const m = new Map<string, ProductForecast>()
+    for (const p of products) m.set(p.productId, p)
+    return m
+  }, [products])
+
   const pendingChangedCount = useMemo(() => {
     let cnt = 0
+    // baseline overrides
     for (const [pid, txt] of Object.entries(drafts)) {
       const parsed = txt.trim() === "" ? null : parseFloat(txt.replace(",", "."))
       const cur = currentOverrides[pid] ?? null
@@ -128,13 +168,49 @@ export function SalesForecastTable({
         cnt++
       }
     }
+    // arrival drafts
+    for (const [pid, txt] of Object.entries(arrivalDrafts)) {
+      const product = productById.get(pid)
+      const cur = product?.arrivalDate ?? ""
+      const next = txt.trim()
+      if (next !== cur) cnt++
+    }
+    // lead times
+    const delNum = parseInt(deliveryDraft, 10)
+    const retNum = parseInt(returnDraft, 10)
+    if (
+      Number.isFinite(delNum) &&
+      delNum >= 0 &&
+      delNum !== currentDeliveryDays
+    ) {
+      cnt++
+    }
+    if (
+      Number.isFinite(retNum) &&
+      retNum >= 0 &&
+      retNum !== currentReturnDays
+    ) {
+      cnt++
+    }
     return cnt
-  }, [drafts, currentOverrides])
+  }, [
+    drafts,
+    arrivalDrafts,
+    deliveryDraft,
+    returnDraft,
+    currentOverrides,
+    currentDeliveryDays,
+    currentReturnDays,
+    productById,
+  ])
 
   const hasActiveOverrides = Object.keys(currentOverrides).length > 0
+  const hasCustomLeadTimes =
+    currentDeliveryDays !== defaultDeliveryDays ||
+    currentReturnDays !== defaultReturnDays
 
   function applyRecalc() {
-    // Собираем итоговый overrides из drafts; пустые строки → удаляем ключ.
+    // 1) Baseline overrides
     const finalOverrides: Record<string, number> = {}
     for (const [pid, txt] of Object.entries(drafts)) {
       const trimmed = txt.trim().replace(",", ".")
@@ -143,14 +219,49 @@ export function SalesForecastTable({
       if (!Number.isFinite(num) || num < 0) continue
       finalOverrides[pid] = num
     }
+    // 2) Arrival drafts: только реальные изменения отправляем
+    const arrivalUpdates: Record<string, string | null> = {}
+    for (const [pid, txt] of Object.entries(arrivalDrafts)) {
+      const product = productById.get(pid)
+      const cur = product?.arrivalDate ?? ""
+      const next = txt.trim()
+      if (next === cur) continue
+      arrivalUpdates[pid] = next === "" ? null : next
+    }
+    // 3) Lead times
+    const delNum = parseInt(deliveryDraft, 10)
+    const retNum = parseInt(returnDraft, 10)
+    const validLeadTimes =
+      Number.isFinite(delNum) &&
+      delNum >= 0 &&
+      Number.isFinite(retNum) &&
+      retNum >= 0
     startTransition(async () => {
-      const res = await saveBaselineOverrides(finalOverrides)
-      if (res.ok) {
-        toast.success("Модель пересчитана")
-        router.refresh()
-      } else {
-        toast.error(res.error)
+      const r1 = await saveBaselineOverrides(finalOverrides)
+      if (!r1.ok) {
+        toast.error(r1.error)
+        return
       }
+      if (validLeadTimes) {
+        const r2 = await saveLeadTimes({
+          deliveryDays: delNum,
+          returnDays: retNum,
+        })
+        if (!r2.ok) {
+          toast.error(r2.error)
+          return
+        }
+      }
+      if (Object.keys(arrivalUpdates).length > 0) {
+        const r3 = await bulkUpdateArrivalDates(arrivalUpdates)
+        if (!r3.ok) {
+          toast.error(r3.error)
+          return
+        }
+      }
+      toast.success("Модель пересчитана")
+      setArrivalDrafts({})
+      router.refresh()
     })
   }
 
@@ -163,8 +274,11 @@ export function SalesForecastTable({
     startTransition(async () => {
       const res = await clearBaselineOverrides()
       if (res.ok) {
-        toast.success("Корректировки сброшены")
+        toast.success("Корректировки сброшены (даты прихода — без изменений, они глобальные)")
         setDrafts({})
+        setArrivalDrafts({})
+        setDeliveryDraft(String(defaultDeliveryDays))
+        setReturnDraft(String(defaultReturnDays))
         router.refresh()
       } else {
         toast.error(res.error)
@@ -225,27 +339,59 @@ export function SalesForecastTable({
   return (
     <>
       <div className="flex-none flex items-center justify-between gap-3 flex-wrap rounded-md border bg-muted/30 p-3">
-        <div className="text-xs text-muted-foreground">
-          {hasActiveOverrides && (
-            <span className="text-blue-600 dark:text-blue-500 font-medium">
-              Активных корректировок: {Object.keys(currentOverrides).length}
-            </span>
-          )}
-          {!hasActiveOverrides && (
-            <span>Можно ввести корректировки заказов/день в столбце «Коррект.»</span>
-          )}
-          {pendingChangedCount > 0 && (
-            <span className="ml-2 text-amber-600 dark:text-amber-500 font-medium">
-              · Несохранённых изменений: {pendingChangedCount}
-            </span>
-          )}
+        <div className="flex items-center gap-4 flex-wrap text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">К клиенту:</span>
+            <Input
+              type="number"
+              min={0}
+              max={60}
+              step={1}
+              value={deliveryDraft}
+              onChange={(e) => setDeliveryDraft(e.target.value)}
+              disabled={isPending}
+              className={`h-7 w-14 text-right tabular-nums ${currentDeliveryDays !== defaultDeliveryDays ? "border-blue-500 text-blue-600 dark:text-blue-500" : ""}`}
+            />
+            <span className="text-muted-foreground">дн</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">От клиента:</span>
+            <Input
+              type="number"
+              min={0}
+              max={60}
+              step={1}
+              value={returnDraft}
+              onChange={(e) => setReturnDraft(e.target.value)}
+              disabled={isPending}
+              className={`h-7 w-14 text-right tabular-nums ${currentReturnDays !== defaultReturnDays ? "border-blue-500 text-blue-600 dark:text-blue-500" : ""}`}
+            />
+            <span className="text-muted-foreground">дн</span>
+          </div>
+          <div className="text-muted-foreground">
+            {hasActiveOverrides && (
+              <span className="text-blue-600 dark:text-blue-500 font-medium">
+                · Корректировок: {Object.keys(currentOverrides).length}
+              </span>
+            )}
+            {hasCustomLeadTimes && (
+              <span className="text-blue-600 dark:text-blue-500 font-medium ml-1">
+                · lead-times изменены
+              </span>
+            )}
+            {pendingChangedCount > 0 && (
+              <span className="ml-2 text-amber-600 dark:text-amber-500 font-medium">
+                · Несохранённых: {pendingChangedCount}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button
             size="sm"
             variant="outline"
             onClick={applyReset}
-            disabled={isPending || !hasActiveOverrides}
+            disabled={isPending || (!hasActiveOverrides && !hasCustomLeadTimes)}
             className="gap-1.5"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -422,17 +568,29 @@ export function SalesForecastTable({
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="text-right text-sm whitespace-nowrap">
-                  {p.arrivalQty > 0 ? (
-                    <>
-                      {fmtNum(p.arrivalQty)}
-                      <div className="text-[11px] text-muted-foreground">
-                        {formatDateShort(p.arrivalDate)}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                <TableCell
+                  className="text-right text-sm whitespace-nowrap"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex flex-col items-end gap-1">
+                    <span>
+                      {p.arrivalQty > 0 ? (
+                        fmtNum(p.arrivalQty)
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </span>
+                    <Input
+                      type="date"
+                      value={arrivalDraftFor(p)}
+                      onChange={(e) =>
+                        setArrivalDraft(p.productId, e.target.value)
+                      }
+                      disabled={isPending}
+                      className={`h-6 text-[11px] w-32 ${arrivalDraftFor(p) !== (p.arrivalDate ?? "") ? "border-amber-500 text-amber-600 dark:text-amber-500" : ""}`}
+                      title="Дата прихода (глобальная). После «Пересчитать модель» сохраняется в БД — откат через «Базовые» не сработает."
+                    />
+                  </div>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {fmtAdaptive(p.ordersUnits)}

@@ -81,13 +81,13 @@ export interface ForecastInput {
   endDate: string // YYYY-MM-DD включительно — горизонт учёта (KPI/totals/leftover)
   today?: string // YYYY-MM-DD; по умолчанию getMskTodayIso()
   // Горизонт дневной кривой выкупов (dailySales[]). По умолчанию = endDate.
-  // Если больше endDate — позволяет показать «хвост» выкупов от заказов
-  // последних дней горизонта + дополнительный месяц на графике без изменения KPI.
   chartEndDate?: string
   // Пользовательские корректировки baseline-заказов per Product (productId → orders/day).
-  // Если задано — replaces computed baseline для этого товара. Используется
-  // для what-if сценариев на /sales-plan.
   baselineOverrides?: Record<string, number>
+  // Кастомные lead times (по умолчанию DELIVERY_TO_CUSTOMER_DAYS / RETURN_FROM_CUSTOMER_DAYS).
+  // Используются для what-if сценариев. Целые числа >= 0.
+  deliveryDaysOverride?: number
+  returnDaysOverride?: number
 }
 
 // Источник % выкупа:
@@ -153,6 +153,9 @@ export interface ForecastResult {
   // Сколько товаров получили % выкупа из каждого источника
   bySource: Record<BuyoutSource, number>
   products: ProductForecast[]
+  // Lead times использованные в симуляции (с учётом override)
+  deliveryDays: number
+  returnDays: number
 }
 
 // ── Внутренние ────────────────────────────────────────────────────
@@ -191,6 +194,20 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     input.chartEndDate && input.chartEndDate > endDate
       ? input.chartEndDate
       : endDate
+  // Lead-times с override-ами
+  const deliveryDays =
+    typeof input.deliveryDaysOverride === "number" &&
+    Number.isFinite(input.deliveryDaysOverride) &&
+    input.deliveryDaysOverride >= 0
+      ? Math.round(input.deliveryDaysOverride)
+      : DELIVERY_TO_CUSTOMER_DAYS
+  const returnDays =
+    typeof input.returnDaysOverride === "number" &&
+    Number.isFinite(input.returnDaysOverride) &&
+    input.returnDaysOverride >= 0
+      ? Math.round(input.returnDaysOverride)
+      : RETURN_FROM_CUSTOMER_DAYS
+  const returnLagRuntime = deliveryDays + returnDays
 
   // 1. Marketplace WB
   const wbMarketplace = await prisma.marketplace.findFirst({
@@ -206,6 +223,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       fallbackCount: 0,
       bySource: { own: 0, legacy: 0, subcategory: 0, global: 0 },
       products: [],
+      deliveryDays,
+      returnDays,
     }
   }
 
@@ -515,10 +534,17 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
   }
 
   // 9. Симуляция per Product (с применением user-overrides если есть)
-  // Override применяется к plannedTargetPerDay (если есть план) или к baseline.
   const overrides = input.baselineOverrides ?? {}
   const results: ProductForecast[] = metas.map((m) =>
-    simulateProduct(m, today, endDate, chartEndDate, overrides[m.productId]),
+    simulateProduct(
+      m,
+      today,
+      endDate,
+      chartEndDate,
+      overrides[m.productId],
+      deliveryDays,
+      returnLagRuntime,
+    ),
   )
 
   return {
@@ -529,6 +555,8 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
     fallbackCount,
     bySource,
     products: results,
+    deliveryDays,
+    returnDays,
   }
 }
 
@@ -538,11 +566,13 @@ function simulateProduct(
   endDate: string,
   chartEndDate: string,
   rawOverride?: number,
+  deliveryDays: number = DELIVERY_TO_CUSTOMER_DAYS,
+  returnLag: number = DELIVERY_TO_CUSTOMER_DAYS + RETURN_FROM_CUSTOMER_DAYS,
 ): ProductForecast {
   const horizonStart = today
   const horizonEnd = endDate
   const innerEnd = chartEndDate > endDate ? chartEndDate : endDate
-  const simEnd = addDays(innerEnd, DELIVERY_TO_CUSTOMER_DAYS + RETURN_LAG)
+  const simEnd = addDays(innerEnd, deliveryDays + returnLag)
   const days = rangeIso(horizonStart, simEnd)
 
   // Применение override:
@@ -591,13 +621,13 @@ function simulateProduct(
     }
   }
 
-  // Seed выкупы от заказов в past 3 дня
+  // Seed выкупы от заказов в past N дней (N = deliveryDays)
   for (const [d, q] of Object.entries(p.seedOrders)) {
-    const buyoutDate = addDays(d, DELIVERY_TO_CUSTOMER_DAYS)
+    const buyoutDate = addDays(d, deliveryDays)
     if (buyoutDate >= horizonStart && buyoutDate <= chartEndDate) {
       accrueDaily(buyoutDate, q * p.buyoutPct)
     }
-    const returnDate = addDays(d, RETURN_LAG)
+    const returnDate = addDays(d, returnLag)
     if (returnDate >= horizonStart && returnDate <= simEnd) {
       stock[returnDate] = (stock[returnDate] ?? 0) + q * (1 - p.buyoutPct)
     }
@@ -631,11 +661,11 @@ function simulateProduct(
     orders[d] = actual
     if (d <= horizonEnd) ordersUnits += actual
 
-    const buyoutDate = addDays(d, DELIVERY_TO_CUSTOMER_DAYS)
+    const buyoutDate = addDays(d, deliveryDays)
     if (buyoutDate >= horizonStart && buyoutDate <= chartEndDate) {
       accrueDaily(buyoutDate, actual * p.buyoutPct)
     }
-    const returnDate = addDays(d, RETURN_LAG)
+    const returnDate = addDays(d, returnLag)
     if (returnDate <= simEnd) {
       stock[returnDate] =
         (stock[returnDate] ?? 0) + actual * (1 - p.buyoutPct)

@@ -12,6 +12,7 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 
 const PREF_KEY = "salesPlan.baselineOverrides"
+const LEAD_TIMES_KEY = "salesPlan.leadTimes"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -62,12 +63,96 @@ export async function clearBaselineOverrides(): Promise<ActionResult> {
   if (!session?.user?.id) return { ok: false, error: "UNAUTHORIZED" }
   try {
     await prisma.userPreference.deleteMany({
-      where: { userId: session.user.id, key: PREF_KEY },
+      where: {
+        userId: session.user.id,
+        key: { in: [PREF_KEY, LEAD_TIMES_KEY] },
+      },
     })
     revalidatePath("/sales-plan")
     return { ok: true }
   } catch (err) {
     console.error("[clearBaselineOverrides]", err)
     return { ok: false, error: "Не удалось сбросить" }
+  }
+}
+
+// ── Lead times ────────────────────────────────────────────────────
+
+const LeadTimesSchema = z.object({
+  deliveryDays: z.number().int().min(0).max(60),
+  returnDays: z.number().int().min(0).max(60),
+})
+
+export async function saveLeadTimes(
+  payload: { deliveryDays: number; returnDays: number },
+): Promise<ActionResult> {
+  await requireSection("SALES")
+  const session = await auth()
+  if (!session?.user?.id) return { ok: false, error: "UNAUTHORIZED" }
+  const parsed = LeadTimesSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные сроки" }
+  try {
+    await prisma.userPreference.upsert({
+      where: { userId_key: { userId: session.user.id, key: LEAD_TIMES_KEY } },
+      create: {
+        userId: session.user.id,
+        key: LEAD_TIMES_KEY,
+        value: parsed.data,
+      },
+      update: { value: parsed.data },
+    })
+    revalidatePath("/sales-plan")
+    return { ok: true }
+  } catch (err) {
+    console.error("[saveLeadTimes]", err)
+    return { ok: false, error: "Не удалось сохранить" }
+  }
+}
+
+// ── Bulk обновление дат прихода (глобально, в ProductIncoming) ──
+// Меняет дату глобально для всех пользователей. НЕ откатывается через
+// clearBaselineOverrides — это не override, а изменение БД.
+
+const ArrivalDatesSchema = z.record(
+  z.string().min(1), // productId
+  z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()]),
+)
+
+export async function bulkUpdateArrivalDates(
+  payload: Record<string, string | null>,
+): Promise<ActionResult> {
+  await requireSection("PROCUREMENT", "MANAGE")
+  const parsed = ArrivalDatesSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные даты" }
+  try {
+    // Для каждой пары (productId → date) — upsert ProductIncoming
+    for (const [productId, dateStr] of Object.entries(parsed.data)) {
+      const date = dateStr === null ? null : new Date(dateStr + "T00:00:00Z")
+      if (date !== null && Number.isNaN(date.getTime())) continue
+      // Существует ли уже incoming-row?
+      const existing = await prisma.productIncoming.findUnique({
+        where: { productId },
+      })
+      if (existing) {
+        await prisma.productIncoming.update({
+          where: { productId },
+          data: { expectedDate: date },
+        })
+      } else {
+        // Создаём только если есть какие-то осмысленные данные (нельзя
+        // оставить orderedQty=0 без даты вообще).
+        if (date !== null) {
+          await prisma.productIncoming.create({
+            data: { productId, expectedDate: date, orderedQty: 0 },
+          })
+        }
+      }
+    }
+    revalidatePath("/sales-plan")
+    revalidatePath("/purchase-plan")
+    return { ok: true }
+  } catch (err) {
+    console.error("[bulkUpdateArrivalDates]", err)
+    return { ok: false, error: "Не удалось обновить даты" }
   }
 }

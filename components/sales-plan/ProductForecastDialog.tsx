@@ -71,7 +71,7 @@ export function ProductForecastDialog({ product, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-[min(1400px,95vw)] w-[95vw]">
         <DialogHeader>
           <DialogTitle className="flex items-baseline justify-between gap-4">
             <span className="truncate">

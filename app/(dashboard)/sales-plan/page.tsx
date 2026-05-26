@@ -11,6 +11,9 @@ import { SalesForecastTable } from "@/components/sales-plan/SalesForecastTable"
 import { SalesForecastDailyChart } from "@/components/sales-plan/SalesForecastDailyChart"
 
 const BASELINE_OVERRIDES_KEY = "salesPlan.baselineOverrides"
+const LEAD_TIMES_KEY = "salesPlan.leadTimes"
+const DEFAULT_DELIVERY_DAYS = 3
+const DEFAULT_RETURN_DAYS = 3
 
 const DEFAULT_END_DATE = "2026-06-30"
 const DEFAULT_CHART_END = "2026-07-31"
@@ -62,26 +65,59 @@ export default async function SalesPlanPage({
     : []
   const search = (q ?? "").trim()
 
-  // Загружаем пользовательские корректировки baseline (если есть)
+  // Загружаем пользовательские корректировки baseline + lead times (если есть)
   const user = await getCurrentUser()
   let baselineOverrides: Record<string, number> = {}
+  let deliveryDaysOverride: number | undefined
+  let returnDaysOverride: number | undefined
   if (user?.id) {
-    const pref = await prisma.userPreference.findUnique({
-      where: { userId_key: { userId: user.id, key: BASELINE_OVERRIDES_KEY } },
-    })
-    if (pref && pref.value && typeof pref.value === "object" && !Array.isArray(pref.value)) {
-      const raw = pref.value as Record<string, unknown>
+    const [prefBaseline, prefLeadTimes] = await Promise.all([
+      prisma.userPreference.findUnique({
+        where: { userId_key: { userId: user.id, key: BASELINE_OVERRIDES_KEY } },
+      }),
+      prisma.userPreference.findUnique({
+        where: { userId_key: { userId: user.id, key: LEAD_TIMES_KEY } },
+      }),
+    ])
+    if (
+      prefBaseline &&
+      prefBaseline.value &&
+      typeof prefBaseline.value === "object" &&
+      !Array.isArray(prefBaseline.value)
+    ) {
+      const raw = prefBaseline.value as Record<string, unknown>
       for (const [k, v] of Object.entries(raw)) {
         if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
           baselineOverrides[k] = v
         }
       }
     }
+    if (
+      prefLeadTimes &&
+      prefLeadTimes.value &&
+      typeof prefLeadTimes.value === "object" &&
+      !Array.isArray(prefLeadTimes.value)
+    ) {
+      const raw = prefLeadTimes.value as Record<string, unknown>
+      if (typeof raw.deliveryDays === "number" && raw.deliveryDays >= 0) {
+        deliveryDaysOverride = raw.deliveryDays
+      }
+      if (typeof raw.returnDays === "number" && raw.returnDays >= 0) {
+        returnDaysOverride = raw.returnDays
+      }
+    }
   }
 
   const [forecast, allBrands, allCategories, allSubcategories, allDirections] =
     await Promise.all([
-      computeForecast({ endDate, chartEndDate, today, baselineOverrides }),
+      computeForecast({
+        endDate,
+        chartEndDate,
+        today,
+        baselineOverrides,
+        deliveryDaysOverride,
+        returnDaysOverride,
+      }),
       prisma.brand.findMany({
         orderBy: { name: "asc" },
         select: { id: true, name: true, directionId: true },
@@ -220,6 +256,10 @@ export default async function SalesPlanPage({
         products={visible}
         endStockDateLabel={endStockDateLabel}
         currentOverrides={baselineOverrides}
+        currentDeliveryDays={forecast.deliveryDays}
+        currentReturnDays={forecast.returnDays}
+        defaultDeliveryDays={DEFAULT_DELIVERY_DAYS}
+        defaultReturnDays={DEFAULT_RETURN_DAYS}
       />
 
       <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3 flex-none">
