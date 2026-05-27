@@ -279,7 +279,7 @@ model WbCard {
   reviews4            Int? // оценок 4
   reviews5            Int? // оценок 5
   // Phase 260514-mci: imt-агрегат рейтинга (агрегация feedback'ов всех nmId одной imt-склейки)
-  imtId               Int? // id склейки из WB Content API (характеристика товара)
+  imtId               Int? // id склейки из WB Content API; значения > 2^31 — обнуляем в parseCard
   ratingImt           Float? // средний рейтинг склейки (наш расчёт по Feedbacks API)
   reviewsTotalImt     Int? // кол-во оценок склейки (наш расчёт по Feedbacks API)
   // 2026-05-15: точные значения с витрины WB (card.wb.ru v4) — то что видит покупатель.

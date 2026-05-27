@@ -590,7 +590,12 @@ export function parseCard(card: WbCardRaw) {
   return {
     nmId: card.nmID,
     // Phase 260514-mci: imt-склейка для группировки рейтингов
-    imtId: card.imtID ?? null,
+    // WB Content API в 2026-05 начал отдавать imtID > 2^31 (например 2 194 826 467).
+    // WbCard.imtId — Int (INT4 в Postgres, max 2 147 483 647). Если значение
+    // не помещается — обнуляем (теряем группировку рейтингов по imt-склейке,
+    // но карточка сохранится). См. memory project_wb_card_imt_id_overflow.
+    imtId:
+      card.imtID == null || card.imtID > 2_147_483_647 ? null : card.imtID,
     article: card.vendorCode,
     name: card.title || card.vendorCode,
     brand: card.brand || null,
