@@ -4,7 +4,7 @@ import { Package, Wallet, TrendingUp, Boxes, Target } from "lucide-react"
 
 // «Осталось выполнить по ИУ» — индивидуальные условия (контрактный план).
 // Задано вручную; в перспективе вынести в AppSetting.
-const IU_REMAINING_RUB = 80_343_299
+const IU_REMAINING_RUB = 79_062_101
 
 interface SalesForecastSummaryProps {
   totalOrders: number
