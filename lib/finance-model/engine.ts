@@ -351,8 +351,11 @@ export function computeProductMetrics(
 
     return {
       name: p.name,
+      ordersPerDay: p.ordersPerDay,
+      batchQty: p.batchQty,
       marginPct: p.marginPct,
-      roi: p.roi,
+      // ROI считаем из маржи для консистентности при редактировании параметров.
+      roi: p.costPerUnit > 0 ? (p.marginPct * p.price) / p.costPerUnit : 0,
       cashCycleDays,
       annualRevenue,
       annualCogs,

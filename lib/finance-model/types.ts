@@ -153,9 +153,13 @@ export interface VariantResult {
 /** Метрики по одному товару за горизонт (база, маржа без дельты варианта). */
 export interface ProductMetrics {
   name: string
+  /** Заказы на маркетплейсе, шт/день (D) */
+  ordersPerDay: number
+  /** Минимальная партия товара, шт (C) */
+  batchQty: number
   /** Рентабельность продаж (U), доля */
   marginPct: number
-  /** ROI за цикл (V), доля */
+  /** ROI за цикл (V), доля — считается из маржи: marginPct×price/costPerUnit */
   roi: number
   /** Денежный цикл (оплата поставщику → деньги от WB), дней */
   cashCycleDays: number
