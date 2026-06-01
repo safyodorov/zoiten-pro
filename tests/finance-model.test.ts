@@ -39,15 +39,21 @@ describe("finance-model engine", () => {
     }
   })
 
-  it("кредит привлекается траншами кратно 5 млн и не гасится в пределах года", () => {
+  it("кредит привлекается траншами кратно 5 млн и гасится дифференцированно", () => {
+    const step = DEFAULT_PARAMS.creditStepRub
     for (const v of model.variants) {
-      // пик кратен шагу 5 млн
-      expect(v.credit.peakCredit % DEFAULT_PARAMS.creditStepRub).toBeCloseTo(0, 3)
-      // нет досрочного гашения → остаток на конец года равен пику (кредит только растёт/плато)
-      expect(v.credit.endingCredit).toBeCloseTo(v.credit.peakCredit, 3)
-      // гашения в помесячной таблице нет
-      const repaid = v.cashFlow.reduce((a, r) => a + r.creditRepaid, 0)
-      expect(repaid).toBe(0)
+      // каждый добор кратен шагу 5 млн
+      for (const r of v.cashFlow) {
+        expect(r.creditDrawn % step).toBeCloseTo(0, 3)
+      }
+      // тело гасится в течение года (сумма гашений > 0)
+      const principal = v.cashFlow.reduce((a, r) => a + r.creditPrincipalRepaid, 0)
+      expect(principal).toBeGreaterThan(0)
+      // амортизация снижает остаток ниже пика
+      expect(v.credit.endingCredit).toBeLessThan(v.credit.peakCredit)
+      // проценты в первые месяцы выше, чем в последние (на убывающий остаток) —
+      // на каком-то месяце с долгом проценты должны быть > 0
+      expect(v.credit.totalInterest).toBeGreaterThan(0)
     }
   })
 

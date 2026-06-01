@@ -112,8 +112,8 @@ export interface CashFlowMonthRow {
   netCashFlow: number
   /** Привлечение кредита за месяц */
   creditDrawn: number
-  /** Гашение кредита за месяц */
-  creditRepaid: number
+  /** Гашение тела кредита за месяц (равными долями, дифференцированная схема) */
+  creditPrincipalRepaid: number
   /** Остаток кредита на конец месяца */
   creditBalanceEnd: number
   /** Остаток денежных средств на конец месяца */

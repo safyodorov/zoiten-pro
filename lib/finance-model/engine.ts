@@ -154,72 +154,82 @@ export function simulateVariant(
     }
   }
 
-  // ── Посуточная симуляция баланса ДС и кредита ──
-  const monthlyRate = params.creditAnnualRate / 12
-  const creditStep = params.creditStepRub > 0 ? params.creditStepRub : 0
-
+  // ── Операционные потоки помесячно (агрегация дневных массивов) ──
   const cfWbReceipts = new Float64Array(nMonths)
   const cfProcurement = new Float64Array(nMonths)
-  const cfInterest = new Float64Array(nMonths)
   const cfWithdrawal = new Float64Array(nMonths)
+  for (let d = 0; d < nDays; d++) {
+    const mi = monthIndexOfDay(startMs, d)
+    if (mi < 0 || mi >= nMonths) continue
+    cfWbReceipts[mi] += wbReceiptIn[d]
+    cfWithdrawal[mi] += profitArriving[d] * (1 - params.reinvestRate)
+    cfProcurement[mi] += procurementOut[d]
+  }
+
+  // ── Финансовый слой: помесячно, кредит траншами кратно creditStep (мин. 5 млн),
+  //    дифференцированное гашение каждого транша: тело равными долями за creditMinTermMonths,
+  //    проценты на остаток долга транша (убывающие). ──
+  const monthlyRate = params.creditAnnualRate / 12
+  const creditStep = params.creditStepRub > 0 ? params.creditStepRub : 0
+  const termMonths = Math.max(1, Math.round(params.creditMinTermMonths))
+
+  const cfInterest = new Float64Array(nMonths)
   const cfCreditDrawn = new Float64Array(nMonths)
-  const cfCreditRepaid = new Float64Array(nMonths)
+  const cfPrincipalRepaid = new Float64Array(nMonths)
   const creditBalanceEnd = new Float64Array(nMonths)
   const cashBalanceEnd = new Float64Array(nMonths)
 
+  // Транши: остаток тела, ежемесячное тело, осталось платежей, месяц привлечения.
+  const tranches: { remaining: number; principalPerMonth: number; monthsLeft: number; drawMonth: number }[] = []
+
   let cash = variant.ownFunds
-  let credit = 0
   let peakCredit = 0
-  let peakDay = 0
-  let creditDaySum = 0
+  let peakMonth = 0
+  let creditMonthSum = 0
 
-  for (let d = 0; d < nDays; d++) {
-    const mi = monthIndexOfDay(startMs, d)
+  for (let mi = 0; mi < nMonths; mi++) {
+    // 1) Операционный поток месяца
+    cash += cfWbReceipts[mi] - cfProcurement[mi] - cfWithdrawal[mi]
 
-    // Притоки/оттоки дня
-    const inflow = wbReceiptIn[d]
-    const withdrawal = profitArriving[d] * (1 - params.reinvestRate)
-    const procurement = procurementOut[d]
-
-    cash += inflow
-    cash -= withdrawal
-    cash -= procurement
-
-    if (mi >= 0 && mi < nMonths) {
-      cfWbReceipts[mi] += inflow
-      cfWithdrawal[mi] += withdrawal
-      cfProcurement[mi] += procurement
+    // 2) Платёж по кредиту (по траншам, привлечённым в прошлые месяцы): проценты + тело
+    let interestM = 0
+    let principalM = 0
+    for (const t of tranches) {
+      if (t.monthsLeft <= 0 || t.drawMonth >= mi) continue
+      const interest = t.remaining * monthlyRate
+      const principal = Math.min(t.principalPerMonth, t.remaining)
+      interestM += interest
+      principalM += principal
+      t.remaining -= principal
+      t.monthsLeft -= 1
     }
+    cash -= interestM + principalM
+    cfInterest[mi] = interestM
+    cfPrincipalRepaid[mi] = principalM
 
-    // Конец месяца → проценты на остаток долга
-    const isMonthEnd = d === nDays - 1 || monthIndexOfDay(startMs, d + 1) !== mi
-    if (isMonthEnd && credit > 0) {
-      const interest = credit * monthlyRate
-      cash -= interest
-      if (mi >= 0 && mi < nMonths) cfInterest[mi] += interest
-    }
-
-    // Финансирование: дефицит → добор кредита траншами кратно creditStep (мин. 5 млн).
-    // Мин. срок кредита ≥ 1 год → в пределах годового горизонта гашения нет.
+    // 3) Дефицит → новый транш кратно creditStep
     if (cash < -1e-6) {
       const deficit = -cash
       const draw = creditStep > 0 ? Math.ceil(deficit / creditStep) * creditStep : deficit
-      credit += draw
+      tranches.push({
+        remaining: draw,
+        principalPerMonth: draw / termMonths,
+        monthsLeft: termMonths,
+        drawMonth: mi,
+      })
       cash += draw
-      if (mi >= 0 && mi < nMonths) cfCreditDrawn[mi] += draw
+      cfCreditDrawn[mi] = draw
     }
 
-    if (credit > peakCredit) {
-      peakCredit = credit
-      peakDay = d
+    // 4) Остатки на конец месяца
+    const creditBalance = tranches.reduce((a, t) => a + t.remaining, 0)
+    creditBalanceEnd[mi] = creditBalance
+    cashBalanceEnd[mi] = cash
+    if (creditBalance > peakCredit) {
+      peakCredit = creditBalance
+      peakMonth = mi
     }
-    creditDaySum += credit
-
-    // Снимок остатков на конец месяца
-    if (isMonthEnd && mi >= 0 && mi < nMonths) {
-      creditBalanceEnd[mi] = credit
-      cashBalanceEnd[mi] = cash
-    }
+    creditMonthSum += creditBalance
   }
 
   // ── Сборка строк ──
@@ -252,7 +262,7 @@ export function simulateVariant(
       ownerWithdrawal: cfWithdrawal[mi],
       netCashFlow,
       creditDrawn: cfCreditDrawn[mi],
-      creditRepaid: cfCreditRepaid[mi],
+      creditPrincipalRepaid: cfPrincipalRepaid[mi],
       creditBalanceEnd: creditBalanceEnd[mi],
       cashBalanceEnd: cashBalanceEnd[mi],
     })
@@ -261,11 +271,11 @@ export function simulateVariant(
   const totalInterest = cfInterest.reduce((a, b) => a + b, 0)
   const creditAssessment: CreditAssessment = {
     peakCredit,
-    peakMonthIndex: monthIndexOfDay(startMs, peakDay),
-    peakMonthLabel: monthLabel(startMs, monthIndexOfDay(startMs, peakDay)),
+    peakMonthIndex: peakMonth,
+    peakMonthLabel: monthLabel(startMs, peakMonth),
     totalInterest,
-    avgCredit: creditDaySum / nDays,
-    endingCredit: credit,
+    avgCredit: creditMonthSum / nMonths,
+    endingCredit: creditBalanceEnd[nMonths - 1],
     ownFundsSufficient: peakCredit < 1,
     peakCapitalNeed: variant.ownFunds + peakCredit,
   }
