@@ -32,7 +32,7 @@ export default async function DashboardLayout({
   ])
 
   const visibleItems = NAV_ITEMS.filter(
-    (item) => isSuperadmin || grantedSections.has(item.section)
+    (item) => item.public || isSuperadmin || grantedSections.has(item.section)
   )
 
   const hasSupportAccess = isSuperadmin || grantedSections.has("SUPPORT")

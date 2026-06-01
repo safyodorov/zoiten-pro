@@ -1,9 +1,7 @@
-// app/finance-models/page.tsx
-// Раздел «Финансовые модели» — standalone (без привязки к RBAC-sections).
-// Доступен любому залогиненному пользователю (middleware требует только аутентификации).
+// app/(dashboard)/finance-models/page.tsx
+// Раздел «Финансовые модели». Внутри dashboard-шелла (сайдбар + хедер),
+// но без RBAC-section-гейта: пункт меню помечен public, middleware требует только логин.
 
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
 import { FinanceModelView } from "@/components/finance-models/FinanceModelView"
 
 export const metadata = {
@@ -12,22 +10,13 @@ export const metadata = {
 
 export default function FinanceModelsPage() {
   return (
-    <div className="mx-auto max-w-[1600px] px-4 py-6 md:px-8">
-      <header className="mb-6">
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" /> Дашборд
-        </Link>
-        <h1 className="mt-2 text-2xl font-bold">Финансовые модели</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Запуск 9 товаров на Wildberries — денежные потоки и прибыль на 1 год (старт 1 июня 2026),
-          три варианта финансирования. Оценка потребности в кредитных средствах.
-        </p>
-      </header>
+    <div className="mx-auto max-w-[1600px] space-y-6">
+      <p className="text-sm text-muted-foreground">
+        Запуск 9 товаров на Wildberries — денежные потоки и прибыль на 1 год (старт 1 июня 2026),
+        три варианта финансирования. Оценка потребности в кредитных средствах.
+      </p>
 
-      <details className="mb-6 rounded-lg border bg-muted/30 p-4 text-sm">
+      <details className="rounded-lg border bg-muted/30 p-4 text-sm">
         <summary className="cursor-pointer font-medium">Методология и допущения</summary>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-muted-foreground">
           <li><b>Реализация = Заказы × Выкуп</b> (87%): заказ ≠ выкуп; только выкупленные дают выручку и расходуют товар.</li>
