@@ -39,6 +39,18 @@ describe("finance-model engine", () => {
     }
   })
 
+  it("кредит привлекается траншами кратно 5 млн и не гасится в пределах года", () => {
+    for (const v of model.variants) {
+      // пик кратен шагу 5 млн
+      expect(v.credit.peakCredit % DEFAULT_PARAMS.creditStepRub).toBeCloseTo(0, 3)
+      // нет досрочного гашения → остаток на конец года равен пику (кредит только растёт/плато)
+      expect(v.credit.endingCredit).toBeCloseTo(v.credit.peakCredit, 3)
+      // гашения в помесячной таблице нет
+      const repaid = v.cashFlow.reduce((a, r) => a + r.creditRepaid, 0)
+      expect(repaid).toBe(0)
+    }
+  })
+
   it("больше собственных средств → меньше пиковый кредит", () => {
     const v1 = model.variants.find((v) => v.config.id === 1)!
     const v2 = model.variants.find((v) => v.config.id === 2)!
@@ -72,6 +84,24 @@ describe("finance-model engine", () => {
     // Минимальная доступность ~60 дней → в июне продаж нет.
     expect(base.profit[0].revenue).toBe(0)
     expect(base.profit[2].revenue).toBeGreaterThan(0) // к августу продажи идут
+  })
+
+  it("метрики товаров: 9 шт, прибыль и доходность капитала положительны", () => {
+    expect(model.productMetrics).toHaveLength(9)
+    for (const pm of model.productMetrics) {
+      expect(pm.annualProfit).toBeGreaterThan(0)
+      expect(pm.avgWorkingCapital).toBeGreaterThan(0)
+      expect(pm.peakWorkingCapital).toBeGreaterThanOrEqual(pm.avgWorkingCapital)
+      expect(pm.capitalTurnsPerYear).toBeGreaterThan(0)
+      expect(pm.returnOnWorkingCapital).toBeGreaterThan(0)
+      expect(pm.cashCycleDays).toBeGreaterThan(50) // лид-тайм 60–91 дн + отсрочка WB
+    }
+  })
+
+  it("сумма прибыли по товарам ≈ прибыль базового варианта", () => {
+    const sumProfit = model.productMetrics.reduce((a, m) => a + m.annualProfit, 0)
+    // productMetrics на базовой марже = вариант 2
+    expect(sumProfit).toBeCloseTo(base.profitTotals.netProfit, -3)
   })
 
   it("детерминированность: повторный прогон идентичен", () => {

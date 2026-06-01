@@ -29,7 +29,6 @@ function cashRows(v: VariantResult): MetricRow[] {
     { label: "− Вывод собственнику", values: get("ownerWithdrawal") },
     { label: "Чистый денежный поток", values: get("netCashFlow"), kind: "accent" },
     { label: "Привлечение кредита", values: get("creditDrawn") },
-    { label: "Гашение кредита", values: get("creditRepaid") },
     { label: "Остаток кредита (к.м.)", values: get("creditBalanceEnd"), noTotal: true, kind: "bold" },
     { label: "Остаток ДС (к.м.)", values: get("cashBalanceEnd"), noTotal: true },
   ]
@@ -78,8 +77,9 @@ export function VariantPanel({ variant }: { variant: VariantResult }) {
         </h3>
         <MetricsTable monthLabels={months} rows={cashRows(variant)} />
         <p className="mt-2 text-xs text-muted-foreground">
-          Годовая прибыль: <b>{mln(variant.profitTotals.netProfit)} млн ₽</b>. «Остаток ДС» держится на нуле, пока
-          есть непогашенный кредит (свободные средства направляются на гашение).
+          Годовая прибыль: <b>{mln(variant.profitTotals.netProfit)} млн ₽</b>. Кредит привлекается траншами
+          кратно шагу (мин. 5 млн ₽); срок ≥ 1 года, поэтому в пределах годового горизонта гашения нет —
+          свободные средства накапливаются в «Остатке ДС».
         </p>
       </div>
     </div>

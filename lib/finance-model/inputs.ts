@@ -80,6 +80,8 @@ export const DEFAULT_PARAMS: GlobalParams = {
   wbPayoutWeeks: 4,
   reinvestRate: 0.3,
   creditAnnualRate: 0.25,
+  creditStepRub: 5_000_000,
+  creditMinTermMonths: 12,
   paymentSplit: { onOrder: 0.2, beforeShip: 0.5, atCustoms: 0.3 },
 }
 

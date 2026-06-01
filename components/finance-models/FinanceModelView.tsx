@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ParamsEditor } from "./ParamsEditor"
 import { ComparisonSummary } from "./ComparisonSummary"
 import { VariantPanel } from "./VariantPanel"
+import { ProductsTable } from "./ProductsTable"
 
 export function FinanceModelView() {
   const [params, setParams] = useState<GlobalParams>(DEFAULT_PARAMS)
@@ -32,6 +33,11 @@ export function FinanceModelView() {
         onVariantsChange={setVariants}
         onReset={reset}
       />
+
+      <section>
+        <h2 className="mb-2 text-base font-semibold">Товары: рентабельность, оборачиваемость, потребность в оборотке</h2>
+        <ProductsTable metrics={model.productMetrics} />
+      </section>
 
       <section>
         <h2 className="mb-2 text-base font-semibold">Сравнение вариантов финансирования</h2>

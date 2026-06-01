@@ -53,6 +53,10 @@ export interface GlobalParams {
   reinvestRate: number
   /** Ставка кредита, годовых (доля, напр. 0.25) */
   creditAnnualRate: number
+  /** Минимальная сумма и шаг привлечения кредита, ₽ (транши кратны этому, напр. 5 млн) */
+  creditStepRub: number
+  /** Минимальный срок кредита, месяцев — в пределах этого срока досрочного гашения нет */
+  creditMinTermMonths: number
   /** Дробление платежа поставщику; суммы долей должны давать 1 */
   paymentSplit: {
     /** при заказе */
@@ -146,8 +150,35 @@ export interface VariantResult {
   profitTotals: Omit<ProfitMonthRow, "monthIndex" | "monthLabel">
 }
 
-/** Полный результат: все варианты + использованные параметры. */
+/** Метрики по одному товару за горизонт (база, маржа без дельты варианта). */
+export interface ProductMetrics {
+  name: string
+  /** Рентабельность продаж (U), доля */
+  marginPct: number
+  /** ROI за цикл (V), доля */
+  roi: number
+  /** Денежный цикл (оплата поставщику → деньги от WB), дней */
+  cashCycleDays: number
+  /** Выручка за период, ₽ */
+  annualRevenue: number
+  /** Себестоимость проданного за период, ₽ */
+  annualCogs: number
+  /** Чистая прибыль за период, ₽ */
+  annualProfit: number
+  /** Пиковая потребность в оборотном капитале, ₽ */
+  peakWorkingCapital: number
+  /** Средняя потребность в оборотном капитале, ₽ */
+  avgWorkingCapital: number
+  /** Оборачиваемость капитала: себест. за период / средний оборотный капитал, раз/год */
+  capitalTurnsPerYear: number
+  /** Доходность оборотного капитала за период (прибыль / средний оборотный капитал), доля */
+  returnOnWorkingCapital: number
+}
+
+/** Полный результат: все варианты + метрики по товарам + использованные параметры. */
 export interface ModelResult {
   params: GlobalParams
   variants: VariantResult[]
+  /** Метрики по каждому товару (на базовой марже) */
+  productMetrics: ProductMetrics[]
 }

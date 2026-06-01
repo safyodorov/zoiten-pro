@@ -10,7 +10,8 @@
 //  • Платёж поставщику 20/50/30: при заказе / +I+J / +I+J+K.
 //  • Деньги от WB: понедельник-отчёт за неделю продажи + 4 недели.
 //  • Из прибыли реинвест 30%, 70% выводится собственнику (всегда, даже при кредите).
-//  • Кредит: дефицит ДС → добор; профицит при долге → гашение; 25%/год помесячно.
+//  • Кредит: дефицит ДС → добор траншами кратно creditStepRub (мин. 5 млн).
+//    Мин. срок ≥ 1 год → в пределах горизонта досрочного гашения нет; 25%/год помесячно.
 
 import type {
   CashFlowMonthRow,
@@ -18,6 +19,7 @@ import type {
   GlobalParams,
   ModelResult,
   ProductInput,
+  ProductMetrics,
   ProfitMonthRow,
   VariantConfig,
   VariantResult,
@@ -154,6 +156,7 @@ export function simulateVariant(
 
   // ── Посуточная симуляция баланса ДС и кредита ──
   const monthlyRate = params.creditAnnualRate / 12
+  const creditStep = params.creditStepRub > 0 ? params.creditStepRub : 0
 
   const cfWbReceipts = new Float64Array(nMonths)
   const cfProcurement = new Float64Array(nMonths)
@@ -196,17 +199,14 @@ export function simulateVariant(
       if (mi >= 0 && mi < nMonths) cfInterest[mi] += interest
     }
 
-    // Финансирование: дефицит → добор кредита; профицит при долге → гашение
+    // Финансирование: дефицит → добор кредита траншами кратно creditStep (мин. 5 млн).
+    // Мин. срок кредита ≥ 1 год → в пределах годового горизонта гашения нет.
     if (cash < -1e-6) {
-      const draw = -cash
+      const deficit = -cash
+      const draw = creditStep > 0 ? Math.ceil(deficit / creditStep) * creditStep : deficit
       credit += draw
-      cash = 0
+      cash += draw
       if (mi >= 0 && mi < nMonths) cfCreditDrawn[mi] += draw
-    } else if (credit > 0 && cash > 1e-6) {
-      const repay = Math.min(cash, credit)
-      credit -= repay
-      cash -= repay
-      if (mi >= 0 && mi < nMonths) cfCreditRepaid[mi] += repay
     }
 
     if (credit > peakCredit) {
@@ -282,6 +282,89 @@ export function simulateVariant(
   }
 }
 
+/**
+ * Метрики по каждому товару за горизонт (на базовой марже, без дельты варианта).
+ * Оборотный капитал = пик/средн. суммы «вложено в товар, ещё не вернулось деньгами»
+ * (накопленные платежи поставщикам − накопленный возврат себестоимости от WB).
+ */
+export function computeProductMetrics(
+  products: ProductInput[],
+  params: GlobalParams,
+): ProductMetrics[] {
+  const startMs = parseUtc(params.startDate)
+  const nDays = horizonDays(startMs, params.horizonMonths)
+  const nMonths = params.horizonMonths
+  const split = params.paymentSplit
+
+  return products.map((p) => {
+    const soldPerDay = p.ordersPerDay * p.buyoutRate
+    const avail = leadToAvailability(p)
+    const beforeShipOffset = p.productionDays + p.inspectionDays
+    const atCustomsOffset = p.productionDays + p.inspectionDays + p.chinaLogisticsDays
+
+    const procOut = new Float64Array(nDays)
+    const cogsRecovered = new Float64Array(nDays)
+
+    // Закупка
+    const orderInterval = p.batchQty / soldPerDay
+    const batchCost = p.batchQty * p.costPerUnit
+    for (let k = 0; ; k++) {
+      const orderDay = Math.round(k * orderInterval)
+      if (orderDay >= nDays) break
+      const d1 = orderDay + beforeShipOffset
+      const d2 = orderDay + atCustomsOffset
+      if (orderDay < nDays) procOut[orderDay] += batchCost * split.onOrder
+      if (d1 < nDays) procOut[d1] += batchCost * split.beforeShip
+      if (d2 < nDays) procOut[d2] += batchCost * split.atCustoms
+    }
+
+    // Продажи (accrual) + возврат себестоимости (cash)
+    const dailyRevenue = soldPerDay * p.price
+    const dailyCogs = soldPerDay * p.costPerUnit
+    const dailyProfit = p.marginPct * dailyRevenue
+    let annualRevenue = 0, annualCogs = 0, annualProfit = 0
+    for (let d = avail; d < nDays; d++) {
+      const mi = monthIndexOfDay(startMs, d)
+      if (mi >= 0 && mi < nMonths) {
+        annualRevenue += dailyRevenue
+        annualCogs += dailyCogs
+        annualProfit += dailyProfit
+      }
+      const cashDay = wbCashDay(startMs, d, params.wbPayoutWeeks)
+      if (cashDay < nDays) cogsRecovered[cashDay] += dailyCogs
+    }
+
+    // Оборотный капитал = накопленная закупка − накопленный возврат себестоимости
+    let cumProc = 0, cumRec = 0
+    let peakWC = 0, sumWC = 0
+    for (let d = 0; d < nDays; d++) {
+      cumProc += procOut[d]
+      cumRec += cogsRecovered[d]
+      const wc = cumProc - cumRec
+      if (wc > peakWC) peakWC = wc
+      sumWC += wc
+    }
+    const avgWC = sumWC / nDays
+    const capitalTurnsPerYear = avgWC > 0 ? annualCogs / avgWC : 0
+    const cashCycleDays = capitalTurnsPerYear > 0 ? 365 / capitalTurnsPerYear : 0
+    const returnOnWorkingCapital = avgWC > 0 ? annualProfit / avgWC : 0
+
+    return {
+      name: p.name,
+      marginPct: p.marginPct,
+      roi: p.roi,
+      cashCycleDays,
+      annualRevenue,
+      annualCogs,
+      annualProfit,
+      peakWorkingCapital: peakWC,
+      avgWorkingCapital: avgWC,
+      capitalTurnsPerYear,
+      returnOnWorkingCapital,
+    }
+  })
+}
+
 /** Полный прогон всех вариантов. */
 export function runModel(
   products: ProductInput[] = PRODUCTS,
@@ -291,5 +374,6 @@ export function runModel(
   return {
     params,
     variants: variants.map((v) => simulateVariant(products, params, v)),
+    productMetrics: computeProductMetrics(products, params),
   }
 }

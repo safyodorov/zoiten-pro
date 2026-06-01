@@ -55,12 +55,24 @@ export function ParamsEditor({ params, variants, onParamsChange, onVariantsChang
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Field
           label="Ставка кредита, % годовых"
           value={params.creditAnnualRate * 100}
           step={0.5}
           onChange={(v) => onParamsChange({ ...params, creditAnnualRate: (v || 0) / 100 })}
+        />
+        <Field
+          label="Шаг/мин. кредита, млн ₽"
+          value={params.creditStepRub / 1_000_000}
+          step={1}
+          onChange={(v) => onParamsChange({ ...params, creditStepRub: (v || 0) * 1_000_000 })}
+        />
+        <Field
+          label="Мин. срок кредита, мес"
+          value={params.creditMinTermMonths}
+          step={1}
+          onChange={(v) => onParamsChange({ ...params, creditMinTermMonths: v || 0 })}
         />
         <Field
           label="Реинвест прибыли, %"
