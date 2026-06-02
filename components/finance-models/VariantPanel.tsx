@@ -58,7 +58,7 @@ export function VariantPanel({ variant }: { variant: VariantResult }) {
           <Stat label="Пиковый кредит" value={rub(c.peakCredit)} hint={`пик: ${c.peakMonthLabel}`} />
           <Stat label="Совокупный капитал (пик)" value={rub(c.peakCapitalNeed)} hint="собств. + кредит" />
           <Stat label="Проценты за год" value={rub(c.totalInterest)} />
-          <Stat label="Средний долг" value={rub(c.avgCredit)} />
+          <Stat label="Прибыль после %" value={rub(variant.profitAfterInterest)} hint="чистая − проценты" />
           <Stat label="Долг на конец года" value={rub(c.endingCredit)} />
         </div>
       </div>

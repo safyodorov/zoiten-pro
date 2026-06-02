@@ -148,6 +148,8 @@ export interface VariantResult {
   credit: CreditAssessment
   /** Годовые итоги модели прибыли */
   profitTotals: Omit<ProfitMonthRow, "monthIndex" | "monthLabel">
+  /** Прибыль после процентов по кредиту за период, ₽ (= netProfit − totalInterest) */
+  profitAfterInterest: number
 }
 
 /** Метрики по одному товару за горизонт (база, маржа без дельты варианта). */

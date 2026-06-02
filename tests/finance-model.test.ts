@@ -71,6 +71,31 @@ describe("finance-model engine", () => {
     expect(v1.profitTotals.netProfit).toBeGreaterThan(v3.profitTotals.netProfit)
   })
 
+  it("прибыль после процентов = чистая прибыль − проценты", () => {
+    for (const v of model.variants) {
+      expect(v.profitAfterInterest).toBeCloseTo(
+        v.profitTotals.netProfit - v.credit.totalInterest, 3,
+      )
+    }
+  })
+
+  it("при равной марже больше собств. средств → больше прибыль после процентов", () => {
+    // изолируем эффект финансирования: дельта маржи = 0 во всех вариантах
+    const variants = [
+      { id: 1, label: "10", ownFunds: 10_000_000, marginDeltaPct: 0 },
+      { id: 2, label: "20", ownFunds: 20_000_000, marginDeltaPct: 0 },
+      { id: 3, label: "30", ownFunds: 30_000_000, marginDeltaPct: 0 },
+    ]
+    const [a, b, c] = variants.map((v) => simulateVariant(PRODUCTS, DEFAULT_PARAMS, v))
+    // одинаковая операционная прибыль (маржа равна)
+    expect(a.profitTotals.netProfit).toBeCloseTo(b.profitTotals.netProfit, 3)
+    // меньше процентов при больших собств. средствах → больше прибыль после процентов
+    expect(a.credit.totalInterest).toBeGreaterThan(b.credit.totalInterest)
+    expect(b.credit.totalInterest).toBeGreaterThan(c.credit.totalInterest)
+    expect(c.profitAfterInterest).toBeGreaterThan(b.profitAfterInterest)
+    expect(b.profitAfterInterest).toBeGreaterThan(a.profitAfterInterest)
+  })
+
   it("12 месяцев в каждой таблице", () => {
     expect(base.profit).toHaveLength(12)
     expect(base.cashFlow).toHaveLength(12)

@@ -289,6 +289,7 @@ export function simulateVariant(
       revenue: tRevenue, cogs: tCogs, opex: tOpex,
       netProfit: tProfit, reinvested: tReinv, withdrawn: tWith,
     },
+    profitAfterInterest: tProfit - totalInterest,
   }
 }
 
