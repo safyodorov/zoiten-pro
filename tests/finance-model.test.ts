@@ -6,12 +6,12 @@ describe("finance-model engine", () => {
   const model = runModel()
   const base = model.variants.find((v) => v.config.id === 2)!
 
-  it("базовый вариант: годовая выручка в разумном диапазоне (~877 млн ± старт-рамп)", () => {
-    // Полный стационар = 73.1М/мес × 12 = 877М, но первые месяцы — наполнение трубы,
-    // поэтому годовая выручка ниже. Ожидаем 600–877 млн.
+  it("базовый вариант: годовая выручка в разумном диапазоне (с учётом старт-рампа)", () => {
+    // 8 товаров (без моющего). Полный стационар ≈ 62.5М/мес gross × 0.87 выкуп × 12 ≈ 652М,
+    // но первые месяцы — наполнение трубы, поэтому годовая выручка ниже.
     const annualRevenue = base.profitTotals.revenue
-    expect(annualRevenue).toBeGreaterThan(600_000_000)
-    expect(annualRevenue).toBeLessThan(877_000_000)
+    expect(annualRevenue).toBeGreaterThan(450_000_000)
+    expect(annualRevenue).toBeLessThan(660_000_000)
   })
 
   it("ROI-консистентность: профит/себест проданного ≈ ROI из таблицы (взвешенно)", () => {
@@ -117,8 +117,8 @@ describe("finance-model engine", () => {
     expect(base.profit[2].revenue).toBeGreaterThan(0) // к августу продажи идут
   })
 
-  it("метрики товаров: 9 шт, прибыль и доходность капитала положительны", () => {
-    expect(model.productMetrics).toHaveLength(9)
+  it("метрики товаров: 8 шт, прибыль и доходность капитала положительны", () => {
+    expect(model.productMetrics).toHaveLength(8)
     for (const pm of model.productMetrics) {
       expect(pm.annualProfit).toBeGreaterThan(0)
       expect(pm.avgWorkingCapital).toBeGreaterThan(0)

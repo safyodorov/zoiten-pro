@@ -6,70 +6,64 @@
 
 import type { GlobalParams, ProductInput, VariantConfig } from "./types"
 
-/** 9 товаров из вводной.xlsx. Себестоимость — колонка W (₽/шт). */
+/** Товары из вводной.xlsx (обновление 2026-06-03). Себестоимость — колонка W (₽/шт).
+ *  «пылесос моющий 800» убран собственником (плохие показатели). */
 export const PRODUCTS: ProductInput[] = [
   {
     name: "паровая швабра 1000",
-    batchQty: 1000, ordersPerDay: 30, price: 7200, costPerUnit: 1757,
+    batchQty: 500, ordersPerDay: 30, price: 7200, costPerUnit: 1757,
     productionDays: 25, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.087, roi: 0.369,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.067, roi: 0.284,
   },
   {
     name: "паровая швабра 580",
-    batchQty: 300, ordersPerDay: 30, price: 7200, costPerUnit: 1853,
+    batchQty: 500, ordersPerDay: 30, price: 7200, costPerUnit: 1853,
     productionDays: 25, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.087, roi: 0.339,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.067, roi: 0.261,
   },
   {
     name: "пылесос сухой 700",
     batchQty: 300, ordersPerDay: 20, price: 12000, costPerUnit: 2818,
     productionDays: 25, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.168, roi: 0.853,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.107, roi: 0.458,
   },
   {
     name: "пылесос сухой 800",
     batchQty: 300, ordersPerDay: 20, price: 12000, costPerUnit: 2818,
     productionDays: 25, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.168, roi: 0.853,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.107, roi: 0.458,
   },
   {
     name: "пароочиститель",
     batchQty: 2700, ordersPerDay: 20, price: 6000, costPerUnit: 1083,
     productionDays: 14, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.069, roi: 0.29,
-  },
-  {
-    name: "пылесос моющий 800",
-    batchQty: 1000, ordersPerDay: 15, price: 23700, costPerUnit: 6832,
-    productionDays: 45, inspectionDays: 2, chinaLogisticsDays: 40,
-    customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.039, roi: 0.135,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.094, roi: 0.558,
   },
   {
     name: "пылесос сухие",
     batchQty: 2200, ordersPerDay: 50, price: 14200, costPerUnit: 3500,
     productionDays: 14, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.103, roi: 0.42,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.093, roi: 0.379,
   },
   {
     name: "кофемашина 1",
     batchQty: 700, ordersPerDay: 10, price: 17000, costPerUnit: 5000,
     productionDays: 45, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.138, roi: 0.469,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.048, roi: 0.163,
   },
   {
     name: "кофемашина 2",
     batchQty: 500, ordersPerDay: 10, price: 17000, costPerUnit: 5143,
     productionDays: 45, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.129, roi: 0.427,
+    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.039, roi: 0.128,
   },
 ]
 
