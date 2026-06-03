@@ -25,9 +25,20 @@ describe("finance-model engine", () => {
   it("прибыль положительна и опекс — основная доля выручки", () => {
     expect(base.profitTotals.netProfit).toBeGreaterThan(0)
     expect(base.profitTotals.opex).toBeGreaterThan(base.profitTotals.netProfit)
-    // выведено = 70% прибыли
-    expect(base.profitTotals.withdrawn).toBeCloseTo(base.profitTotals.netProfit * 0.7, 0)
-    expect(base.profitTotals.reinvested).toBeCloseTo(base.profitTotals.netProfit * 0.3, 0)
+  })
+
+  it("реинвест/вывод считаются от ОЧИЩЕННОЙ прибыли (после процентов), не от операционной", () => {
+    // профит после процентов = операц. прибыль − проценты
+    expect(base.profitTotals.profitAfterInterest).toBeCloseTo(
+      base.profitTotals.netProfit - base.profitTotals.interest, 2,
+    )
+    // проценты > 0 → очищенная прибыль строго меньше операционной
+    expect(base.profitTotals.interest).toBeGreaterThan(0)
+    expect(base.profitTotals.profitAfterInterest).toBeLessThan(base.profitTotals.netProfit)
+    // распределение 30/70 от очищенной прибыли: withdrawn / reinvested = 7/3
+    expect(base.profitTotals.withdrawn).toBeCloseTo((base.profitTotals.reinvested * 7) / 3, 2)
+    // вывод НЕ равен 70% операционной прибыли (т.е. проценты реально вычтены)
+    expect(base.profitTotals.withdrawn).toBeLessThan(base.profitTotals.netProfit * 0.7 - 1)
   })
 
   it("кредит необходим во всех вариантах (собств. средств недостаточно)", () => {
@@ -94,6 +105,9 @@ describe("finance-model engine", () => {
     expect(b.credit.totalInterest).toBeGreaterThan(c.credit.totalInterest)
     expect(c.profitAfterInterest).toBeGreaterThan(b.profitAfterInterest)
     expect(b.profitAfterInterest).toBeGreaterThan(a.profitAfterInterest)
+    // и вывод собственнику растёт (распределяется ОЧИЩЕННАЯ прибыль)
+    expect(c.profitTotals.withdrawn).toBeGreaterThan(b.profitTotals.withdrawn)
+    expect(b.profitTotals.withdrawn).toBeGreaterThan(a.profitTotals.withdrawn)
   })
 
   it("12 месяцев в каждой таблице", () => {

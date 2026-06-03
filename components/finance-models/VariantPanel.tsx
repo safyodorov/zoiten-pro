@@ -13,9 +13,11 @@ function profitRows(v: VariantResult): MetricRow[] {
     { label: "Выручка", values: get("revenue"), kind: "bold" },
     { label: "Себестоимость проданного", values: get("cogs") },
     { label: "Операционные расходы", values: get("opex"), kind: "subtle" },
-    { label: "Чистая прибыль", values: get("netProfit"), kind: "accent" },
-    { label: "  Реинвест (удержано)", values: get("reinvested"), kind: "subtle" },
-    { label: "  Выведено собственнику", values: get("withdrawn"), kind: "subtle" },
+    { label: "Операционная прибыль", values: get("netProfit") },
+    { label: "− Проценты по кредиту", values: get("interest"), kind: "subtle" },
+    { label: "Чистая прибыль после процентов", values: get("profitAfterInterest"), kind: "accent" },
+    { label: "  Реинвест 30% (удержано)", values: get("reinvested"), kind: "subtle" },
+    { label: "  Выведено собственнику 70%", values: get("withdrawn"), kind: "subtle" },
   ]
 }
 
@@ -78,10 +80,10 @@ export function VariantPanel({ variant }: { variant: VariantResult }) {
         </h3>
         <MetricsTable monthLabels={months} rows={cashRows(variant)} />
         <p className="mt-2 text-xs text-muted-foreground">
-          Годовая прибыль: <b>{mln(variant.profitTotals.netProfit)} млн ₽</b>. Кредит привлекается траншами
-          кратно шагу (мин. 5 млн ₽) и гасится <b>дифференцированно</b>: тело — равными долями за срок кредита,
-          проценты — на остаток долга (убывающие). Остаток кредита на конец года — недогашенная часть
-          траншей, привлечённых ближе к концу периода.
+          Операционная прибыль за год: <b>{mln(variant.profitTotals.netProfit)} млн ₽</b>, после процентов:{" "}
+          <b>{mln(variant.profitAfterInterest)} млн ₽</b> (из неё реинвест 30% / вывод 70%). Кредит привлекается
+          траншами кратно шагу (мин. 5 млн ₽) и гасится <b>дифференцированно</b>: тело — равными долями за срок
+          кредита, проценты — на остаток долга (убывающие).
         </p>
       </div>
     </div>

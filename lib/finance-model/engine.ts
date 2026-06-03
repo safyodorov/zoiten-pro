@@ -103,7 +103,6 @@ export function simulateVariant(
   // Посуточные потоки на горизонте [0, nDays)
   const procurementOut = new Float64Array(nDays) // платежи поставщикам
   const wbReceiptIn = new Float64Array(nDays)     // приход на р/с (себест + прибыль)
-  const profitArriving = new Float64Array(nDays)  // прибыль в составе прихода (для вывода 70%)
 
   // Accrual-агрегаты модели прибыли — по месяцу продажи
   const mRevenue = new Float64Array(nMonths)
@@ -145,16 +144,17 @@ export function simulateVariant(
         mCogs[mi] += dailyCogs
         mProfit[mi] += dailyProfit
       }
-      // Cash — приход от WB
+      // Cash — приход от WB (возврат себестоимости + прибыль)
       const cashDay = wbCashDay(startMs, d, params.wbPayoutWeeks)
       if (cashDay < nDays) {
         wbReceiptIn[cashDay] += dailyCogs + dailyProfit
-        profitArriving[cashDay] += dailyProfit
       }
     }
   }
 
   // ── Операционные потоки помесячно (агрегация дневных массивов) ──
+  // Вывод собственнику НЕ предрассчитываем — он считается в финансовом слое из
+  // очищенной прибыли (операц. прибыль − проценты), т.к. зависит от процентов.
   const cfWbReceipts = new Float64Array(nMonths)
   const cfProcurement = new Float64Array(nMonths)
   const cfWithdrawal = new Float64Array(nMonths)
@@ -162,7 +162,6 @@ export function simulateVariant(
     const mi = monthIndexOfDay(startMs, d)
     if (mi < 0 || mi >= nMonths) continue
     cfWbReceipts[mi] += wbReceiptIn[d]
-    cfWithdrawal[mi] += profitArriving[d] * (1 - params.reinvestRate)
     cfProcurement[mi] += procurementOut[d]
   }
 
@@ -188,8 +187,8 @@ export function simulateVariant(
   let creditMonthSum = 0
 
   for (let mi = 0; mi < nMonths; mi++) {
-    // 1) Операционный поток месяца
-    cash += cfWbReceipts[mi] - cfProcurement[mi] - cfWithdrawal[mi]
+    // 1) Операционный поток месяца (поступления − закупка). Вывод — ниже, после процентов.
+    cash += cfWbReceipts[mi] - cfProcurement[mi]
 
     // 2) Платёж по кредиту (по траншам, привлечённым в прошлые месяцы): проценты + тело
     let interestM = 0
@@ -207,7 +206,14 @@ export function simulateVariant(
     cfInterest[mi] = interestM
     cfPrincipalRepaid[mi] = principalM
 
-    // 3) Дефицит → новый транш кратно creditStep
+    // 3) Вывод собственнику из ОЧИЩЕННОЙ прибыли = (операц. прибыль − проценты) × (1 − reinvest).
+    //    Та же формула используется в модели прибыли. Если очищенная прибыль ≤ 0 — вывод 0.
+    const cleanProfit = mProfit[mi] - interestM
+    const withdrawalM = cleanProfit > 0 ? cleanProfit * (1 - params.reinvestRate) : 0
+    cash -= withdrawalM
+    cfWithdrawal[mi] = withdrawalM
+
+    // 4) Дефицит → новый транш кратно creditStep
     if (cash < -1e-6) {
       const deficit = -cash
       const draw = creditStep > 0 ? Math.ceil(deficit / creditStep) * creditStep : deficit
@@ -221,7 +227,7 @@ export function simulateVariant(
       cfCreditDrawn[mi] = draw
     }
 
-    // 4) Остатки на конец месяца
+    // 5) Остатки на конец месяца
     const creditBalance = tranches.reduce((a, t) => a + t.remaining, 0)
     creditBalanceEnd[mi] = creditBalance
     cashBalanceEnd[mi] = cash
@@ -238,13 +244,17 @@ export function simulateVariant(
   for (let mi = 0; mi < nMonths; mi++) {
     const revenue = mRevenue[mi]
     const cogs = mCogs[mi]
-    const netProfit = mProfit[mi]
+    const netProfit = mProfit[mi] // операционная прибыль (до процентов)
     const opex = revenue - cogs - netProfit
-    const reinvested = netProfit * params.reinvestRate
-    const withdrawn = netProfit * (1 - params.reinvestRate)
+    const interest = cfInterest[mi]
+    const profitAfterInterest = netProfit - interest
+    // Реинвест/вывод считаются от ОЧИЩЕННОЙ прибыли (та же формула, что в финансовом слое).
+    const splitBase = profitAfterInterest > 0 ? profitAfterInterest : 0
+    const reinvested = splitBase * params.reinvestRate
+    const withdrawn = splitBase * (1 - params.reinvestRate)
     profit.push({
       monthIndex: mi, monthLabel: monthLabel(startMs, mi),
-      revenue, cogs, opex, netProfit, reinvested, withdrawn,
+      revenue, cogs, opex, netProfit, interest, profitAfterInterest, reinvested, withdrawn,
     })
     tRevenue += revenue; tCogs += cogs; tOpex += opex
     tProfit += netProfit; tReinv += reinvested; tWith += withdrawn
@@ -287,7 +297,9 @@ export function simulateVariant(
     credit: creditAssessment,
     profitTotals: {
       revenue: tRevenue, cogs: tCogs, opex: tOpex,
-      netProfit: tProfit, reinvested: tReinv, withdrawn: tWith,
+      netProfit: tProfit, interest: totalInterest,
+      profitAfterInterest: tProfit - totalInterest,
+      reinvested: tReinv, withdrawn: tWith,
     },
     profitAfterInterest: tProfit - totalInterest,
   }
