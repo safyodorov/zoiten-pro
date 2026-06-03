@@ -25,7 +25,7 @@ describe("fillTimeSeries", () => {
     const ts = fillTimeSeries([{ date: new Date("2026-05-14"), qty: 5 }], now)
     // quick 260515-o4o: DayPoint расширен полем buyerPrice (по умолчанию null).
     // 260515-phv: DayPoint также расширен sellerPrice (null по умолчанию).
-    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 5, sellerPrice: null, buyerPrice: null })
+    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 5, sellerPrice: null, buyerPrice: null, discountWb: null })
     expect(ts.slice(0, 27).every((p) => p.qty === 0)).toBe(true)
   })
 
@@ -39,7 +39,7 @@ describe("fillTimeSeries", () => {
       now,
     )
     expect(ts.length).toBe(28)
-    expect(ts[0]).toEqual({ date: "2026-04-17", qty: 7, sellerPrice: null, buyerPrice: null })
+    expect(ts[0]).toEqual({ date: "2026-04-17", qty: 7, sellerPrice: null, buyerPrice: null, discountWb: null })
     expect(ts.reduce((s, p) => s + p.qty, 0)).toBe(7) // 100 и 50 отброшены
   })
 
@@ -56,9 +56,9 @@ describe("fillTimeSeries", () => {
       ],
       now,
     )
-    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 3, sellerPrice: null, buyerPrice: 3817 })
-    expect(ts[26]).toEqual({ date: "2026-05-13", qty: 1, sellerPrice: null, buyerPrice: null })
-    expect(ts[25]).toEqual({ date: "2026-05-12", qty: 2, sellerPrice: null, buyerPrice: null })
+    expect(ts[27]).toEqual({ date: "2026-05-14", qty: 3, sellerPrice: null, buyerPrice: 3817, discountWb: null })
+    expect(ts[26]).toEqual({ date: "2026-05-13", qty: 1, sellerPrice: null, buyerPrice: null, discountWb: null })
+    expect(ts[25]).toEqual({ date: "2026-05-12", qty: 2, sellerPrice: null, buyerPrice: null, discountWb: null })
   })
 
   it("forward-fill: дни без заказов наследуют последнюю известную цену", () => {
@@ -141,5 +141,46 @@ describe("fillTimeSeries", () => {
     // day 27 — заданная цена
     expect(ts[27].sellerPrice).toBe(5000)
     expect(ts[27].buyerPrice).toBe(3800)
+  })
+})
+
+describe("fillTimeSeries — СПП (discountWb)", () => {
+  const now = new Date("2026-05-15T12:00:00Z")
+
+  it("использует stored discountWb из raw (приоритет над выводом из цен)", () => {
+    const ts = fillTimeSeries(
+      [{ date: new Date("2026-05-14"), qty: 1, sellerPrice: 5000, buyerPrice: 3800, discountWb: 22.2 }],
+      now,
+    )
+    // stored 22.2 используется как есть, не пересчитывается из 5000/3800 (=24.0)
+    expect(ts[27].discountWb).toBe(22.2)
+  })
+
+  it("выводит СПП из seller/buyer, если stored нет", () => {
+    const ts = fillTimeSeries(
+      [{ date: new Date("2026-05-14"), qty: 1, sellerPrice: 5000, buyerPrice: 3800 }],
+      now,
+    )
+    // (1 − 3800/5000) × 100 = 24.0
+    expect(ts[27].discountWb).toBe(24)
+  })
+
+  it("forward-fill: СПП наследуется на дни без snapshot", () => {
+    const ts = fillTimeSeries(
+      [
+        { date: new Date("2026-05-07"), qty: 1, sellerPrice: 6000, buyerPrice: 4500, discountWb: 25 },
+      ],
+      now,
+    )
+    // day 20 = 2026-05-07 → 25; days 21..27 наследуют 25
+    expect(ts[20].discountWb).toBe(25)
+    for (let i = 21; i < 28; i++) expect(ts[i].discountWb).toBe(25)
+    // до первого значения (days 0..19) — null
+    for (let i = 0; i < 20; i++) expect(ts[i].discountWb).toBeNull()
+  })
+
+  it("нет цен и нет stored → discountWb null", () => {
+    const ts = fillTimeSeries([{ date: new Date("2026-05-14"), qty: 1 }], now)
+    expect(ts.every((p) => p.discountWb == null)).toBe(true)
   })
 })

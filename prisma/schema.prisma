@@ -1035,6 +1035,10 @@ model WbCardOrdersDaily {
   //   уже включает SPP + кошелёк + клуб + промо. НЕ умножать дополнительно на (1 - walletPct/100).
   sellerPrice Int?
   buyerPrice  Int?
+  // 2026-06-03 (quick 260603-spp): дневная скидка WB (СПП), % с точностью 0.1.
+  // = round((1 − buyerPrice/sellerPrice) × 100, 0.1). Пишется в wb-prices-daily cron
+  // и в /api/wb-sync-spp. Источник для графика СПП per-артикул на /cards/wb.
+  discountWb  Float?
   // Future: sumRub Decimal?, returnsQty Int?, cancelQty Int? — расширение в следующих фазах.
   createdAt   DateTime @default(now())
 

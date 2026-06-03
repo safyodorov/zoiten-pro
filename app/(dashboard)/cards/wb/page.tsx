@@ -152,7 +152,7 @@ export default async function WbCardsPage({
               nmId: { in: visibleNmIds },
               date: { gte: windowStart, lte: windowEnd },
             },
-            select: { nmId: true, date: true, qty: true, buyerPrice: true },
+            select: { nmId: true, date: true, qty: true, sellerPrice: true, buyerPrice: true, discountWb: true },
           }),
           prisma.wbCardFunnelDaily.findMany({
             where: {

@@ -17,7 +17,7 @@ describe("mergeOrdersAndFunnel", () => {
     ]
     const m = mergeOrdersAndFunnel(orders, [])
     expect(m.get(100)).toEqual([
-      { date: d("2026-05-18"), qty: 5, sellerPrice: 1000, buyerPrice: 800 },
+      { date: d("2026-05-18"), qty: 5, sellerPrice: 1000, buyerPrice: 800, discountWb: null },
     ])
   })
 
@@ -36,7 +36,7 @@ describe("mergeOrdersAndFunnel", () => {
     const funnel = [{ nmId: 200, date: d("2026-05-19"), ordersCount: 10 }]
     const m = mergeOrdersAndFunnel([], funnel)
     expect(m.get(200)).toEqual([
-      { date: d("2026-05-19"), qty: 10, sellerPrice: null, buyerPrice: null },
+      { date: d("2026-05-19"), qty: 10, sellerPrice: null, buyerPrice: null, discountWb: null },
     ])
   })
 

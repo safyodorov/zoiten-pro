@@ -13,6 +13,10 @@ export interface DayPoint {
   // 2026-05-15 (quick 260515-phv): + sellerPrice — цена продавца со скидкой продавца.
   sellerPrice?: number | null
   buyerPrice?: number | null
+  // quick 260603-spp: скидка WB (СПП), % с точностью 0.1 на эту дату.
+  // Источник — WbCardOrdersDaily.discountWb (forward-fill как у цен); если в строке
+  // нет stored-значения, но есть seller+buyer — выводится из них.
+  discountWb?: number | null
 }
 
 /** 00:00:00 UTC даты, соответствующей сегодняшнему дню в MSK (UTC+3).
@@ -68,6 +72,7 @@ export function fillTimeSeries(
     qty: number
     sellerPrice?: number | null
     buyerPrice?: number | null
+    discountWb?: number | null
   }>,
   now?: Date,
 ): DayPoint[] {
@@ -75,6 +80,7 @@ export function fillTimeSeries(
   const qtyByKey = new Map<string, number>()
   const sellerByKey = new Map<string, number | null>()
   const buyerByKey = new Map<string, number | null>()
+  const discountByKey = new Map<string, number | null>()
   for (const r of raw) {
     // r.date — JS Date с time=00:00 UTC после Prisma @db.Date чтения.
     // Конвертируем в MSK YYYY-MM-DD ключ.
@@ -96,12 +102,19 @@ export function fillTimeSeries(
     } else if (!buyerByKey.has(key)) {
       buyerByKey.set(key, null)
     }
+    // discountWb (СПП): берём stored-значение если задано (включая 0), иначе null.
+    if (r.discountWb != null && Number.isFinite(r.discountWb)) {
+      discountByKey.set(key, r.discountWb)
+    } else if (!discountByKey.has(key)) {
+      discountByKey.set(key, null)
+    }
   }
   const result: DayPoint[] = window.map((date) => ({
     date,
     qty: qtyByKey.get(date) ?? 0,
     sellerPrice: sellerByKey.get(date) ?? null,
     buyerPrice: buyerByKey.get(date) ?? null,
+    discountWb: discountByKey.get(date) ?? null,
   }))
 
   // Forward-fill loop: дни без price наследуют lastKnown от ближайшего предыдущего дня с ценой.
@@ -109,6 +122,7 @@ export function fillTimeSeries(
   // qty НЕ трогается — на день без заказов qty=0 это правда.
   let lastSeller: number | null = null
   let lastBuyer: number | null = null
+  let lastDiscount: number | null = null
   for (const point of result) {
     if (point.sellerPrice != null) {
       lastSeller = point.sellerPrice
@@ -119,6 +133,15 @@ export function fillTimeSeries(
       lastBuyer = point.buyerPrice
     } else if (lastBuyer != null) {
       point.buyerPrice = lastBuyer
+    }
+    // СПП: forward-fill stored-значения; если нет — выводим из (forward-filled) цен.
+    if (point.discountWb == null && point.sellerPrice != null && point.sellerPrice > 0 && point.buyerPrice != null) {
+      point.discountWb = Math.round((1 - point.buyerPrice / point.sellerPrice) * 1000) / 10
+    }
+    if (point.discountWb != null) {
+      lastDiscount = point.discountWb
+    } else if (lastDiscount != null) {
+      point.discountWb = lastDiscount
     }
   }
   return result

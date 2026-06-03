@@ -27,6 +27,7 @@ interface Props {
 const chartConfig = {
   qty: { label: "Заказы", color: "var(--chart-1)" },
   buyerPrice: { label: "Цена покупателя (₽)", color: "var(--chart-2)" },
+  discountWb: { label: "СПП (%)", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
 export function WbCardOrdersChart({
@@ -53,12 +54,21 @@ export function WbCardOrdersChart({
     return null
   })()
 
+  // Текущая СПП — последняя не-null discountWb.
+  const lastDiscountWb = (() => {
+    for (let i = timeSeries.length - 1; i >= 0; i--) {
+      const v = timeSeries[i]?.discountWb
+      if (v != null) return v
+    }
+    return null
+  })()
+
   return (
     <div className="max-w-[640px] py-4 px-2">
       <div className="grid grid-cols-[1fr_auto] gap-6 items-center rounded-md border bg-card p-3">
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
-            арт. {nmId} · заказы и цена покупателя · 28 дней
+            арт. {nmId} · заказы, цена покупателя и СПП · 28 дней
           </div>
           <ChartContainer config={chartConfig} className="h-40 w-full">
             <ComposedChart
@@ -97,6 +107,8 @@ export function WbCardOrdersChart({
                 domain={["auto", "auto"]}
                 tickFormatter={(v: number) => `${Math.round(v)}`}
               />
+              {/* Скрытая ось для линии СПП (%) — отдельный масштаб, без лишних тиков. */}
+              <YAxis yAxisId="spp" hide domain={["auto", "auto"]} />
               <ChartTooltip
                 content={
                   <ChartTooltipContent
@@ -106,15 +118,19 @@ export function WbCardOrdersChart({
                       // между label и value (mimicking default ChartTooltipContent layout).
                       const numValue =
                         typeof value === "number" ? value : Number(value)
-                      const formatted = Number.isFinite(numValue)
-                        ? numValue.toLocaleString("ru-RU")
-                        : String(value)
+                      const formatted = !Number.isFinite(numValue)
+                        ? String(value)
+                        : name === "discountWb"
+                          ? numValue.toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + " %"
+                          : numValue.toLocaleString("ru-RU")
                       const label =
                         name === "qty"
                           ? "Заказы"
                           : name === "buyerPrice"
                             ? "Цена покупателя (₽)"
-                            : String(name)
+                            : name === "discountWb"
+                              ? "СПП (%)"
+                              : String(name)
                       const indicatorColor =
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         (item as any)?.payload?.fill ?? (item as any)?.color
@@ -158,6 +174,17 @@ export function WbCardOrdersChart({
                 connectNulls={false}
                 isAnimationActive={false}
               />
+              <Line
+                yAxisId="spp"
+                type="monotone"
+                dataKey="discountWb"
+                stroke="var(--color-discountWb)"
+                strokeWidth={2}
+                strokeDasharray="4 2"
+                dot={{ r: 1.5, fill: "var(--color-discountWb)" }}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
             </ComposedChart>
           </ChartContainer>
         </div>
@@ -196,6 +223,21 @@ export function WbCardOrdersChart({
                 <span className="text-[11px] text-muted-foreground font-normal">
                   {" "}
                   ₽
+                </span>
+              </div>
+            </div>
+          )}
+          {lastDiscountWb != null && (
+            <div>
+              <div className="text-muted-foreground text-[11px]">СПП сейчас</div>
+              <div
+                className="text-lg font-semibold tabular-nums leading-tight"
+                style={{ color: "var(--chart-3)" }}
+              >
+                {lastDiscountWb.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}
+                <span className="text-[11px] text-muted-foreground font-normal">
+                  {" "}
+                  %
                 </span>
               </div>
             </div>

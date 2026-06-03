@@ -33,10 +33,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const buyerPrice = buyerMap.get(nmId) ?? null
     const sellerPrice = sellerMap.get(nmId) ?? null
     if (!buyerPrice && !sellerPrice) continue
+    // СПП = (1 − buyerPrice/sellerPrice) × 100, точность 0.1. null если нет обеих цен.
+    const discountWb =
+      sellerPrice && sellerPrice > 0 && buyerPrice
+        ? Math.round((1 - buyerPrice / sellerPrice) * 1000) / 10
+        : null
     await prisma.wbCardOrdersDaily.upsert({
       where: { nmId_date: { nmId, date: today } },
-      create: { nmId, date: today, qty: 0, sellerPrice, buyerPrice },
-      update: { sellerPrice, buyerPrice }, // qty не трогаем
+      create: { nmId, date: today, qty: 0, sellerPrice, buyerPrice, discountWb },
+      update: { sellerPrice, buyerPrice, discountWb }, // qty не трогаем
     })
     upserted++
   }

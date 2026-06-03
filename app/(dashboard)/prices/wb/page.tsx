@@ -324,6 +324,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
               qty: true,
               sellerPrice: true,
               buyerPrice: true,
+              discountWb: true,
             },
           }),
           prisma.wbCardFunnelDaily.findMany({

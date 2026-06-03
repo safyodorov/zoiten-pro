@@ -12,6 +12,7 @@ export interface MergedDailyRow {
   qty: number
   sellerPrice: number | null
   buyerPrice: number | null
+  discountWb: number | null
 }
 
 interface OrdersRow {
@@ -20,6 +21,7 @@ interface OrdersRow {
   qty: number
   sellerPrice?: number | null
   buyerPrice?: number | null
+  discountWb?: number | null
 }
 
 interface FunnelRow {
@@ -63,6 +65,7 @@ export function mergeOrdersAndFunnel(
       qty: fnQty ?? r.qty,
       sellerPrice: r.sellerPrice ?? null,
       buyerPrice: r.buyerPrice ?? null,
+      discountWb: r.discountWb ?? null,
     })
     byNm.set(r.nmId, arr)
   }
@@ -76,6 +79,7 @@ export function mergeOrdersAndFunnel(
       qty: f.ordersCount,
       sellerPrice: null,
       buyerPrice: null,
+      discountWb: null,
     })
     byNm.set(f.nmId, arr)
   }

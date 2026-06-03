@@ -10,6 +10,7 @@ import { NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
 import { execSync } from "node:child_process"
 import { getWbToken } from "@/lib/wb-token"
+import { getMskTodayDate } from "@/lib/wb-orders-chart"
 
 export async function POST(): Promise<NextResponse> {
   const session = await auth()
@@ -29,6 +30,9 @@ export async function POST(): Promise<NextResponse> {
 
     const sellerPrices = new Map(cards.map((c) => [c.nmId, c.price ?? 0]))
     const nmIds = cards.map((c) => c.nmId)
+    // quick 260603-spp: дневной snapshot СПП — обновляем точку графика «сегодня»
+    // при ручном расчёте (cron wb-prices-daily делает то же раз в сутки).
+    const today = getMskTodayDate()
 
     let updated = 0
     let v4Success = 0
@@ -86,6 +90,27 @@ export async function POST(): Promise<NextResponse> {
               if (spp > 0 && spp < 100) {
                 updateFields.discountWb = spp
                 v4Success++
+                // Дневной snapshot СПП (+ цены) для графика per-артикул.
+                try {
+                  await prisma.wbCardOrdersDaily.upsert({
+                    where: { nmId_date: { nmId, date: today } },
+                    create: {
+                      nmId,
+                      date: today,
+                      qty: 0,
+                      sellerPrice: Math.round(sellerPrice),
+                      buyerPrice: Math.round(buyerPriceRub),
+                      discountWb: spp,
+                    },
+                    update: {
+                      sellerPrice: Math.round(sellerPrice),
+                      buyerPrice: Math.round(buyerPriceRub),
+                      discountWb: spp,
+                    },
+                  })
+                } catch {
+                  // не блокируем основной флоу СПП на ошибке дневного snapshot
+                }
               }
             }
           }
