@@ -179,9 +179,9 @@ export function WbCardOrdersChart({
                 type="monotone"
                 dataKey="discountWb"
                 stroke="var(--color-discountWb)"
-                strokeWidth={2}
+                strokeWidth={1.3}
                 strokeDasharray="4 2"
-                dot={{ r: 1.5, fill: "var(--color-discountWb)" }}
+                dot={{ r: 1.2, fill: "var(--color-discountWb)" }}
                 connectNulls={false}
                 isAnimationActive={false}
               />
