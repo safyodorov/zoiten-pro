@@ -76,6 +76,8 @@ export const DEFAULT_PARAMS: GlobalParams = {
   creditAnnualRate: 0.25,
   creditStepRub: 5_000_000,
   creditMinTermMonths: 12,
+  safetyStockPct: 0.15,
+  cashReservePct: 0.1,
   paymentSplit: { onOrder: 0.2, beforeShip: 0.5, atCustoms: 0.3 },
 }
 

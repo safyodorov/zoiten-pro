@@ -103,6 +103,11 @@ export function simulateVariant(
   // Посуточные потоки на горизонте [0, nDays)
   const procurementOut = new Float64Array(nDays) // платежи поставщикам
   const wbReceiptIn = new Float64Array(nDays)     // приход на р/с (себест + прибыль)
+  const profitArriving = new Float64Array(nDays)  // прибыль в составе прихода (для вывода по факту кэша)
+
+  // Дебиторка/кредиторка на конец горизонта (хвостовые потоки за пределами года)
+  let endingReceivable = 0 // деньги WB за продажи, приходящие после nDays
+  let endingPayable = 0    // платежи поставщикам по заказам, падающие после nDays
 
   // Accrual-агрегаты модели прибыли — по месяцу продажи
   const mRevenue = new Float64Array(nMonths)
@@ -119,17 +124,27 @@ export function simulateVariant(
     const atCustomsOffset = p.productionDays + p.inspectionDays + p.chinaLogisticsDays
 
     // ── Закупка: заказы партии каждые batchQty/soldPerDay дней, старт t=0 ──
+    // Хвостовые транши (веха за горизонтом) → кредиторка (обязательство, не оплачено в году).
     const orderInterval = p.batchQty / soldPerDay
     const batchCost = p.batchQty * p.costPerUnit
     for (let k = 0; ; k++) {
       const orderDay = Math.round(k * orderInterval)
       if (orderDay >= nDays) break
-      const d0 = orderDay
       const d1 = orderDay + beforeShipOffset
       const d2 = orderDay + atCustomsOffset
-      if (d0 < nDays) procurementOut[d0] += batchCost * split.onOrder
+      procurementOut[orderDay] += batchCost * split.onOrder // orderDay < nDays по условию
       if (d1 < nDays) procurementOut[d1] += batchCost * split.beforeShip
+      else endingPayable += batchCost * split.beforeShip
       if (d2 < nDays) procurementOut[d2] += batchCost * split.atCustoms
+      else endingPayable += batchCost * split.atCustoms
+    }
+
+    // ── Страховой запас: единоразовая закупка safetyStockPct × партия (буфер, не продаётся) ──
+    const safetyCost = p.batchQty * params.safetyStockPct * p.costPerUnit
+    if (safetyCost > 0) {
+      procurementOut[0] += safetyCost * split.onOrder
+      if (beforeShipOffset < nDays) procurementOut[beforeShipOffset] += safetyCost * split.beforeShip
+      if (atCustomsOffset < nDays) procurementOut[atCustomsOffset] += safetyCost * split.atCustoms
     }
 
     // ── Продажи: с дня доступности, soldPerDay шт/день ──
@@ -144,10 +159,13 @@ export function simulateVariant(
         mCogs[mi] += dailyCogs
         mProfit[mi] += dailyProfit
       }
-      // Cash — приход от WB (возврат себестоимости + прибыль)
+      // Cash — приход от WB (возврат себестоимости + прибыль). Хвост (после nDays) → дебиторка.
       const cashDay = wbCashDay(startMs, d, params.wbPayoutWeeks)
       if (cashDay < nDays) {
         wbReceiptIn[cashDay] += dailyCogs + dailyProfit
+        profitArriving[cashDay] += dailyProfit
+      } else {
+        endingReceivable += dailyCogs + dailyProfit
       }
     }
   }
@@ -157,12 +175,14 @@ export function simulateVariant(
   // очищенной прибыли (операц. прибыль − проценты), т.к. зависит от процентов.
   const cfWbReceipts = new Float64Array(nMonths)
   const cfProcurement = new Float64Array(nMonths)
+  const cfProfitArrived = new Float64Array(nMonths) // прибыль, пришедшая кэшем (для вывода)
   const cfWithdrawal = new Float64Array(nMonths)
   for (let d = 0; d < nDays; d++) {
     const mi = monthIndexOfDay(startMs, d)
     if (mi < 0 || mi >= nMonths) continue
     cfWbReceipts[mi] += wbReceiptIn[d]
     cfProcurement[mi] += procurementOut[d]
+    cfProfitArrived[mi] += profitArriving[d]
   }
 
   // ── Финансовый слой: помесячно, кредит траншами кратно creditStep (мин. 5 млн),
@@ -206,16 +226,17 @@ export function simulateVariant(
     cfInterest[mi] = interestM
     cfPrincipalRepaid[mi] = principalM
 
-    // 3) Вывод собственнику из ОЧИЩЕННОЙ прибыли = (операц. прибыль − проценты) × (1 − reinvest).
-    //    Та же формула используется в модели прибыли. Если очищенная прибыль ≤ 0 — вывод 0.
-    const cleanProfit = mProfit[mi] - interestM
+    // 3) Вывод собственнику — ТОЛЬКО из пришедшей кэшем прибыли, за вычетом процентов:
+    //    (прибыль, поступившая на счёт за месяц − проценты) × (1 − reinvest). Если ≤ 0 — вывод 0.
+    const cleanProfit = cfProfitArrived[mi] - interestM
     const withdrawalM = cleanProfit > 0 ? cleanProfit * (1 - params.reinvestRate) : 0
     cash -= withdrawalM
     cfWithdrawal[mi] = withdrawalM
 
-    // 4) Дефицит → новый транш кратно creditStep
-    if (cash < -1e-6) {
-      const deficit = -cash
+    // 4) Дефицит относительно страхового запаса ДС (10% месячной выручки) → добор траншем.
+    const cashFloor = params.cashReservePct * mRevenue[mi]
+    if (cash < cashFloor - 1e-6) {
+      const deficit = cashFloor - cash
       const draw = creditStep > 0 ? Math.ceil(deficit / creditStep) * creditStep : deficit
       tranches.push({
         remaining: draw,
@@ -288,6 +309,9 @@ export function simulateVariant(
     endingCredit: creditBalanceEnd[nMonths - 1],
     ownFundsSufficient: peakCredit < 1,
     peakCapitalNeed: variant.ownFunds + peakCredit,
+    endingReceivable,
+    endingPayable,
+    netDebtEnd: creditBalanceEnd[nMonths - 1] - endingReceivable + endingPayable,
   }
 
   return {
@@ -339,6 +363,13 @@ export function computeProductMetrics(
       if (orderDay < nDays) procOut[orderDay] += batchCost * split.onOrder
       if (d1 < nDays) procOut[d1] += batchCost * split.beforeShip
       if (d2 < nDays) procOut[d2] += batchCost * split.atCustoms
+    }
+    // Страховой запас (буфер, не продаётся) — повышает замороженный в товаре капитал.
+    const safetyCost = p.batchQty * params.safetyStockPct * p.costPerUnit
+    if (safetyCost > 0) {
+      procOut[0] += safetyCost * split.onOrder
+      if (beforeShipOffset < nDays) procOut[beforeShipOffset] += safetyCost * split.beforeShip
+      if (atCustomsOffset < nDays) procOut[atCustomsOffset] += safetyCost * split.atCustoms
     }
 
     // Продажи (accrual) + возврат себестоимости (cash)

@@ -110,6 +110,40 @@ describe("finance-model engine", () => {
     expect(b.profitTotals.withdrawn).toBeGreaterThan(a.profitTotals.withdrawn)
   })
 
+  it("страховой запас товара и резерв ДС повышают пиковый кредит", () => {
+    const off = simulateVariant(
+      PRODUCTS,
+      { ...DEFAULT_PARAMS, safetyStockPct: 0, cashReservePct: 0 },
+      DEFAULT_VARIANTS[1],
+    )
+    expect(base.credit.peakCredit).toBeGreaterThan(off.credit.peakCredit)
+  })
+
+  it("остаток ДС не уходит в минус (страховой запас денег)", () => {
+    for (const v of model.variants) {
+      for (const r of v.cashFlow) {
+        expect(r.cashBalanceEnd).toBeGreaterThanOrEqual(-1)
+      }
+    }
+  })
+
+  it("дебиторка и кредиторка положительны; чистый долг = кредит − ДЗ + КЗ", () => {
+    for (const v of model.variants) {
+      expect(v.credit.endingReceivable).toBeGreaterThan(0)
+      expect(v.credit.endingPayable).toBeGreaterThan(0)
+      expect(v.credit.netDebtEnd).toBeCloseTo(
+        v.credit.endingCredit - v.credit.endingReceivable + v.credit.endingPayable, 2,
+      )
+    }
+  })
+
+  it("вывод (по факту кэша) меньше начисленного на величину хвостовой дебиторки", () => {
+    // cash-basis вывод (денежный поток) < accrual-вывод (модель прибыли), т.к. деньги
+    // за продажи конца года ещё не поступили (учтены в дебиторке).
+    const cashWithdrawn = base.cashFlow.reduce((a, r) => a + r.ownerWithdrawal, 0)
+    expect(cashWithdrawn).toBeLessThan(base.profitTotals.withdrawn)
+  })
+
   it("12 месяцев в каждой таблице", () => {
     expect(base.profit).toHaveLength(12)
     expect(base.cashFlow).toHaveLength(12)

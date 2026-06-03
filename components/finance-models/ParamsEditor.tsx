@@ -109,12 +109,24 @@ export function ParamsEditor({
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <Field
           label="Ставка кредита, % годовых"
           value={params.creditAnnualRate * 100}
           step={0.5}
           onChange={(v) => onParamsChange({ ...params, creditAnnualRate: (v || 0) / 100 })}
+        />
+        <Field
+          label="Страховой запас товара, %"
+          value={params.safetyStockPct * 100}
+          step={5}
+          onChange={(v) => onParamsChange({ ...params, safetyStockPct: (v || 0) / 100 })}
+        />
+        <Field
+          label="Страховой запас ДС, % выручки"
+          value={params.cashReservePct * 100}
+          step={5}
+          onChange={(v) => onParamsChange({ ...params, cashReservePct: (v || 0) / 100 })}
         />
         <Field
           label="Шаг/мин. кредита, млн ₽"

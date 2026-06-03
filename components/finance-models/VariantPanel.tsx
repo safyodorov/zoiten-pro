@@ -55,13 +55,14 @@ export function VariantPanel({ variant }: { variant: VariantResult }) {
       {/* Оценка кредита */}
       <div>
         <h3 className="mb-2 text-sm font-semibold text-muted-foreground">Оценка кредита</h3>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
           <Stat label="Собственные средства" value={rub(variant.config.ownFunds)} />
           <Stat label="Пиковый кредит" value={rub(c.peakCredit)} hint={`пик: ${c.peakMonthLabel}`} />
           <Stat label="Совокупный капитал (пик)" value={rub(c.peakCapitalNeed)} hint="собств. + кредит" />
           <Stat label="Проценты за год" value={rub(c.totalInterest)} />
           <Stat label="Прибыль после %" value={rub(variant.profitAfterInterest)} hint="чистая − проценты" />
           <Stat label="Долг на конец года" value={rub(c.endingCredit)} />
+          <Stat label="Чистый долг (с ДЗ/КЗ)" value={rub(c.netDebtEnd)} hint={`ДЗ ${rub(c.endingReceivable)} · КЗ ${rub(c.endingPayable)}`} />
         </div>
       </div>
 
@@ -81,9 +82,11 @@ export function VariantPanel({ variant }: { variant: VariantResult }) {
         <MetricsTable monthLabels={months} rows={cashRows(variant)} />
         <p className="mt-2 text-xs text-muted-foreground">
           Операционная прибыль за год: <b>{mln(variant.profitTotals.netProfit)} млн ₽</b>, после процентов:{" "}
-          <b>{mln(variant.profitAfterInterest)} млн ₽</b> (из неё реинвест 30% / вывод 70%). Кредит привлекается
-          траншами кратно шагу (мин. 5 млн ₽) и гасится <b>дифференцированно</b>: тело — равными долями за срок
-          кредита, проценты — на остаток долга (убывающие).
+          <b>{mln(variant.profitAfterInterest)} млн ₽</b>. Вывод собственнику считается <b>по факту поступления
+          денег на счёт</b> (а не по начислению). Остаток ДС не опускается ниже страхового запаса (10% месячной
+          выручки) — добор кредитом. «Долг на конец года» завышен хвостом (закупка запаса 2-го года + ещё не
+          полученная выручка); реальную картину даёт <b>«Чистый долг (с ДЗ/КЗ)»</b>. Кредит — траншами кратно
+          5 млн ₽, гашение дифференцированное.
         </p>
       </div>
     </div>
