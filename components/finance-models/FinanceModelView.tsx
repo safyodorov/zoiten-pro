@@ -15,8 +15,11 @@ import { VariantPanel } from "./VariantPanel"
 import { ProductsTable } from "./ProductsTable"
 import { mln } from "./format"
 
-const DEFAULT_OWN_FUNDS = [10_000_000, 20_000_000, 30_000_000]
+const DEFAULT_OWN_FUNDS = [0, 10_000_000, 20_000_000, 30_000_000]
 const DEFAULT_MARGIN_DELTAS = [-0.01, 0, 0.01]
+// Индекс варианта «20 млн» в DEFAULT_OWN_FUNDS — выбран по умолчанию в детальном просмотре.
+const DEFAULT_OWN_IDX = 2
+const DEFAULT_MARGIN_IDX = 1
 
 function deltaLabel(d: number): string {
   if (Math.abs(d) < 1e-9) return "база"
@@ -29,7 +32,7 @@ export function FinanceModelView() {
   const [products, setProducts] = useState<ProductInput[]>(PRODUCTS)
   const [ownFundsLevels, setOwnFundsLevels] = useState<number[]>(DEFAULT_OWN_FUNDS)
   const [marginDeltas, setMarginDeltas] = useState<number[]>(DEFAULT_MARGIN_DELTAS)
-  const [sel, setSel] = useState<{ ownIdx: number; marginIdx: number }>({ ownIdx: 1, marginIdx: 1 })
+  const [sel, setSel] = useState<{ ownIdx: number; marginIdx: number }>({ ownIdx: DEFAULT_OWN_IDX, marginIdx: DEFAULT_MARGIN_IDX })
 
   const setProduct = (index: number, patch: Partial<ProductInput>) =>
     setProducts((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)))
@@ -66,7 +69,7 @@ export function FinanceModelView() {
     setProducts(PRODUCTS)
     setOwnFundsLevels(DEFAULT_OWN_FUNDS)
     setMarginDeltas(DEFAULT_MARGIN_DELTAS)
-    setSel({ ownIdx: 1, marginIdx: 1 })
+    setSel({ ownIdx: DEFAULT_OWN_IDX, marginIdx: DEFAULT_MARGIN_IDX })
   }
 
   return (

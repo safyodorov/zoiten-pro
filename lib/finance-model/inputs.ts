@@ -7,7 +7,7 @@
 import type { GlobalParams, ProductInput, VariantConfig } from "./types"
 
 /** Товары из вводной.xlsx (обновление 2026-06-03). Себестоимость — колонка W (₽/шт).
- *  «пылесос моющий 800» убран собственником (плохие показатели). */
+ *  Убраны собственником из-за плохих показателей: «пылесос моющий 800» и кофемашины 1/2. */
 export const PRODUCTS: ProductInput[] = [
   {
     name: "паровая швабра 1000",
@@ -50,20 +50,6 @@ export const PRODUCTS: ProductInput[] = [
     productionDays: 14, inspectionDays: 2, chinaLogisticsDays: 40,
     customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
     buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.093, roi: 0.379,
-  },
-  {
-    name: "кофемашина 1",
-    batchQty: 700, ordersPerDay: 10, price: 17000, costPerUnit: 5000,
-    productionDays: 45, inspectionDays: 2, chinaLogisticsDays: 40,
-    customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.048, roi: 0.163,
-  },
-  {
-    name: "кофемашина 2",
-    batchQty: 500, ordersPerDay: 10, price: 17000, costPerUnit: 5143,
-    productionDays: 45, inspectionDays: 2, chinaLogisticsDays: 40,
-    customsToIvanovoDays: 1, ivanovoReceiveDays: 1, shipToMpDays: 1, mpReceiveDays: 1,
-    buyoutRate: 0.87, defectRate: 0.015, marginPct: 0.039, roi: 0.128,
   },
 ]
 

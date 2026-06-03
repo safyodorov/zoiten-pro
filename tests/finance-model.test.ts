@@ -7,11 +7,11 @@ describe("finance-model engine", () => {
   const base = model.variants.find((v) => v.config.id === 2)!
 
   it("базовый вариант: годовая выручка в разумном диапазоне (с учётом старт-рампа)", () => {
-    // 8 товаров (без моющего). Полный стационар ≈ 62.5М/мес gross × 0.87 выкуп × 12 ≈ 652М,
+    // 6 товаров (без моющего и кофемашин). Полный стационар ≈ 52М/мес gross × 0.87 × 12 ≈ 545М,
     // но первые месяцы — наполнение трубы, поэтому годовая выручка ниже.
     const annualRevenue = base.profitTotals.revenue
-    expect(annualRevenue).toBeGreaterThan(450_000_000)
-    expect(annualRevenue).toBeLessThan(660_000_000)
+    expect(annualRevenue).toBeGreaterThan(380_000_000)
+    expect(annualRevenue).toBeLessThan(560_000_000)
   })
 
   it("ROI-консистентность: профит/себест проданного ≈ ROI из таблицы (взвешенно)", () => {
@@ -110,6 +110,18 @@ describe("finance-model engine", () => {
     expect(b.profitTotals.withdrawn).toBeGreaterThan(a.profitTotals.withdrawn)
   })
 
+  it("вариант с нулём собственных средств — всё финансируется кредитом", () => {
+    const z = simulateVariant(PRODUCTS, DEFAULT_PARAMS, {
+      id: 0, label: "0", ownFunds: 0, marginDeltaPct: 0,
+    })
+    expect(z.credit.peakCredit).toBeGreaterThan(0)
+    // без собственных средств пик кредита выше, чем у базового (20 млн)
+    expect(z.credit.peakCredit).toBeGreaterThan(base.credit.peakCredit)
+    // модель остаётся жизнеспособной: прибыль после процентов положительна
+    expect(z.profitAfterInterest).toBeGreaterThan(0)
+    expect(z.cashFlow).toHaveLength(12)
+  })
+
   it("страховой запас товара и резерв ДС повышают пиковый кредит", () => {
     const off = simulateVariant(
       PRODUCTS,
@@ -165,8 +177,8 @@ describe("finance-model engine", () => {
     expect(base.profit[2].revenue).toBeGreaterThan(0) // к августу продажи идут
   })
 
-  it("метрики товаров: 8 шт, прибыль и доходность капитала положительны", () => {
-    expect(model.productMetrics).toHaveLength(8)
+  it("метрики товаров: 6 шт, прибыль и доходность капитала положительны", () => {
+    expect(model.productMetrics).toHaveLength(6)
     for (const pm of model.productMetrics) {
       expect(pm.annualProfit).toBeGreaterThan(0)
       expect(pm.avgWorkingCapital).toBeGreaterThan(0)
