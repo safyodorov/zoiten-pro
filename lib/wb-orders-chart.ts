@@ -135,8 +135,10 @@ export function fillTimeSeries(
       point.buyerPrice = lastBuyer
     }
     // СПП: forward-fill stored-значения; если нет — выводим из (forward-filled) цен.
+    // Отбрасываем вне диапазона [0, 100) (битые снапшоты: buyer > seller и т.п.).
     if (point.discountWb == null && point.sellerPrice != null && point.sellerPrice > 0 && point.buyerPrice != null) {
-      point.discountWb = Math.round((1 - point.buyerPrice / point.sellerPrice) * 1000) / 10
+      const spp = Math.round((1 - point.buyerPrice / point.sellerPrice) * 1000) / 10
+      if (spp >= 0 && spp < 100) point.discountWb = spp
     }
     if (point.discountWb != null) {
       lastDiscount = point.discountWb

@@ -183,4 +183,13 @@ describe("fillTimeSeries — СПП (discountWb)", () => {
     const ts = fillTimeSeries([{ date: new Date("2026-05-14"), qty: 1 }], now)
     expect(ts.every((p) => p.discountWb == null)).toBe(true)
   })
+
+  it("вывод из цен с buyer > seller (битый снапшот) → null, не отрицательная СПП", () => {
+    const ts = fillTimeSeries(
+      [{ date: new Date("2026-05-14"), qty: 1, sellerPrice: 1000, buyerPrice: 2750 }],
+      now,
+    )
+    // (1 − 2750/1000)×100 = −175 → вне [0,100) → отбрасываем
+    expect(ts[27].discountWb).toBeNull()
+  })
 })
