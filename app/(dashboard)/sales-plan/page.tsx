@@ -11,6 +11,7 @@ import { SalesForecastTable } from "@/components/sales-plan/SalesForecastTable"
 import { SalesForecastDailyChart } from "@/components/sales-plan/SalesForecastDailyChart"
 
 const BASELINE_OVERRIDES_KEY = "salesPlan.baselineOverrides"
+const PRICE_OVERRIDES_KEY = "salesPlan.priceOverrides"
 const LEAD_TIMES_KEY = "salesPlan.leadTimes"
 const DEFAULT_DELIVERY_DAYS = 3
 const DEFAULT_RETURN_DAYS = 3
@@ -68,12 +69,16 @@ export default async function SalesPlanPage({
   // Загружаем пользовательские корректировки baseline + lead times (если есть)
   const user = await getCurrentUser()
   let baselineOverrides: Record<string, number> = {}
+  let priceOverrides: Record<string, number> = {}
   let deliveryDaysOverride: number | undefined
   let returnDaysOverride: number | undefined
   if (user?.id) {
-    const [prefBaseline, prefLeadTimes] = await Promise.all([
+    const [prefBaseline, prefPrice, prefLeadTimes] = await Promise.all([
       prisma.userPreference.findUnique({
         where: { userId_key: { userId: user.id, key: BASELINE_OVERRIDES_KEY } },
+      }),
+      prisma.userPreference.findUnique({
+        where: { userId_key: { userId: user.id, key: PRICE_OVERRIDES_KEY } },
       }),
       prisma.userPreference.findUnique({
         where: { userId_key: { userId: user.id, key: LEAD_TIMES_KEY } },
@@ -89,6 +94,19 @@ export default async function SalesPlanPage({
       for (const [k, v] of Object.entries(raw)) {
         if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
           baselineOverrides[k] = v
+        }
+      }
+    }
+    if (
+      prefPrice &&
+      prefPrice.value &&
+      typeof prefPrice.value === "object" &&
+      !Array.isArray(prefPrice.value)
+    ) {
+      const raw = prefPrice.value as Record<string, unknown>
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === "number" && Number.isFinite(v) && v > 0) {
+          priceOverrides[k] = v
         }
       }
     }
@@ -115,6 +133,7 @@ export default async function SalesPlanPage({
         chartEndDate,
         today,
         baselineOverrides,
+        priceOverrides,
         deliveryDaysOverride,
         returnDaysOverride,
       }),
@@ -256,6 +275,7 @@ export default async function SalesPlanPage({
         products={visible}
         endStockDateLabel={endStockDateLabel}
         currentOverrides={baselineOverrides}
+        currentPriceOverrides={priceOverrides}
         currentDeliveryDays={forecast.deliveryDays}
         currentReturnDays={forecast.returnDays}
         defaultDeliveryDays={DEFAULT_DELIVERY_DAYS}

@@ -18,6 +18,7 @@ import type { ProductForecast } from "@/lib/sales-forecast"
 import { ArrowUpDown, RotateCcw, Calculator } from "lucide-react"
 import {
   saveBaselineOverrides,
+  savePriceOverrides,
   clearBaselineOverrides,
   saveLeadTimes,
   bulkUpdateArrivalDates,
@@ -40,6 +41,8 @@ interface Props {
   products: ProductForecast[]
   endStockDateLabel: string
   currentOverrides: Record<string, number>
+  /** Текущие применённые корректировки цены (productId → ₽) */
+  currentPriceOverrides: Record<string, number>
   /** Текущие применённые lead times (с учётом override) */
   currentDeliveryDays: number
   currentReturnDays: number
@@ -89,6 +92,7 @@ export function SalesForecastTable({
   products,
   endStockDateLabel,
   currentOverrides,
+  currentPriceOverrides,
   currentDeliveryDays,
   currentReturnDays,
   defaultDeliveryDays,
@@ -111,6 +115,13 @@ export function SalesForecastTable({
     }
     return init
   })
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const [pid, v] of Object.entries(currentPriceOverrides)) {
+      init[pid] = String(v)
+    }
+    return init
+  })
   const [arrivalDrafts, setArrivalDrafts] = useState<Record<string, string>>({})
   const [deliveryDraft, setDeliveryDraft] = useState<string>(
     String(currentDeliveryDays),
@@ -127,6 +138,16 @@ export function SalesForecastTable({
 
   function setDraft(pid: string, value: string) {
     setDrafts((prev) => ({ ...prev, [pid]: value }))
+  }
+
+  // Текст драфта цены: pending → currentPriceOverride → "" (пусто = расчётная avgPrice)
+  function priceDraftFor(pid: string): string {
+    if (Object.prototype.hasOwnProperty.call(priceDrafts, pid)) return priceDrafts[pid]
+    return currentPriceOverrides[pid] !== undefined ? String(currentPriceOverrides[pid]) : ""
+  }
+
+  function setPriceDraft(pid: string, value: string) {
+    setPriceDrafts((prev) => ({ ...prev, [pid]: value }))
   }
 
   // Дата прихода drafts (yyyy-mm-dd или "" → сбросить)
@@ -168,6 +189,15 @@ export function SalesForecastTable({
         cnt++
       }
     }
+    // price overrides
+    for (const [pid, txt] of Object.entries(priceDrafts)) {
+      const parsed = txt.trim() === "" ? null : parseFloat(txt.replace(",", "."))
+      const cur = currentPriceOverrides[pid] ?? null
+      if (parsed === null && cur === null) continue
+      if (parsed === null && cur !== null) { cnt++; continue }
+      if (parsed !== null && cur === null) { cnt++; continue }
+      if (parsed !== null && cur !== null && Math.abs(parsed - cur) > 1e-6) cnt++
+    }
     // arrival drafts
     for (const [pid, txt] of Object.entries(arrivalDrafts)) {
       const product = productById.get(pid)
@@ -195,16 +225,20 @@ export function SalesForecastTable({
     return cnt
   }, [
     drafts,
+    priceDrafts,
     arrivalDrafts,
     deliveryDraft,
     returnDraft,
     currentOverrides,
+    currentPriceOverrides,
     currentDeliveryDays,
     currentReturnDays,
     productById,
   ])
 
-  const hasActiveOverrides = Object.keys(currentOverrides).length > 0
+  const hasActiveOverrides =
+    Object.keys(currentOverrides).length > 0 ||
+    Object.keys(currentPriceOverrides).length > 0
   const hasCustomLeadTimes =
     currentDeliveryDays !== defaultDeliveryDays ||
     currentReturnDays !== defaultReturnDays
@@ -218,6 +252,15 @@ export function SalesForecastTable({
       const num = parseFloat(trimmed)
       if (!Number.isFinite(num) || num < 0) continue
       finalOverrides[pid] = num
+    }
+    // 1b) Price overrides (пусто → нет override, цена расчётная)
+    const finalPriceOverrides: Record<string, number> = {}
+    for (const [pid, txt] of Object.entries(priceDrafts)) {
+      const trimmed = txt.trim().replace(",", ".")
+      if (trimmed === "") continue
+      const num = parseFloat(trimmed)
+      if (!Number.isFinite(num) || num <= 0) continue
+      finalPriceOverrides[pid] = num
     }
     // 2) Arrival drafts: только реальные изменения отправляем
     const arrivalUpdates: Record<string, string | null> = {}
@@ -240,6 +283,11 @@ export function SalesForecastTable({
       const r1 = await saveBaselineOverrides(finalOverrides)
       if (!r1.ok) {
         toast.error(r1.error)
+        return
+      }
+      const rPrice = await savePriceOverrides(finalPriceOverrides)
+      if (!rPrice.ok) {
+        toast.error(rPrice.error)
         return
       }
       if (validLeadTimes) {
@@ -276,6 +324,7 @@ export function SalesForecastTable({
       if (res.ok) {
         toast.success("Корректировки сброшены (даты прихода — без изменений, они глобальные)")
         setDrafts({})
+        setPriceDrafts({})
         setArrivalDrafts({})
         setDeliveryDraft(String(defaultDeliveryDays))
         setReturnDraft(String(defaultReturnDays))
@@ -646,8 +695,18 @@ export function SalesForecastTable({
                 <TableCell className="text-right tabular-nums">
                   {fmtAdaptive(p.salesUnits)}
                 </TableCell>
-                <TableCell className="text-right tabular-nums text-muted-foreground">
-                  {fmtNum(Math.round(p.avgPrice), 0)} ₽
+                <TableCell className="text-right tabular-nums w-24">
+                  <Input
+                    type="number"
+                    min={0}
+                    inputMode="decimal"
+                    value={priceDraftFor(p.productId)}
+                    placeholder={String(Math.round(p.avgPrice))}
+                    onChange={(e) => setPriceDraft(p.productId, e.target.value)}
+                    disabled={isPending}
+                    className="h-7 text-right tabular-nums"
+                    title={`В расчётах: ${fmtNum(Math.round(p.avgPrice), 0)} ₽ (расчётная цена выкупа). Введи новую цену и нажми «Пересчитать модель». Очисти → вернётся расчётная.`}
+                  />
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-semibold">
                   {fmtRub(p.salesRub)}

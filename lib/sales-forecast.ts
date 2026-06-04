@@ -84,6 +84,9 @@ export interface ForecastInput {
   chartEndDate?: string
   // Пользовательские корректировки baseline-заказов per Product (productId → orders/day).
   baselineOverrides?: Record<string, number>
+  // Пользовательские корректировки цены выкупа per Product (productId → цена ₽).
+  // Перекрывают расчётную avgPrice — влияют на выручку и остаток в деньгах.
+  priceOverrides?: Record<string, number>
   // Кастомные lead times (по умолчанию DELIVERY_TO_CUSTOMER_DAYS / RETURN_FROM_CUSTOMER_DAYS).
   // Используются для what-if сценариев. Целые числа >= 0.
   deliveryDaysOverride?: number
@@ -468,6 +471,14 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
       avgPrice = priceNum / priceDen
     } else if (cardPriceCount > 0) {
       avgPrice = cardPriceFallback / cardPriceCount
+    }
+
+    // Пользовательский override цены (per-user) перекрывает расчётную avgPrice.
+    if (input.priceOverrides) {
+      const ov = input.priceOverrides[p.id]
+      if (typeof ov === "number" && Number.isFinite(ov) && ov > 0) {
+        avgPrice = ov
+      }
     }
 
     // Считаем product-level pctDen/Num для fallback'а когда нет ords7

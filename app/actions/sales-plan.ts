@@ -12,6 +12,7 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 
 const PREF_KEY = "salesPlan.baselineOverrides"
+const PRICE_KEY = "salesPlan.priceOverrides"
 const LEAD_TIMES_KEY = "salesPlan.leadTimes"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
@@ -57,6 +58,45 @@ export async function saveBaselineOverrides(
   }
 }
 
+const PriceOverridesSchema = z.record(
+  z.string().min(1),
+  z.number().min(0).max(10_000_000),
+)
+
+/** Сохраняет per-user корректировки цены выкупа (productId → ₽). Пусто → удаляет запись. */
+export async function savePriceOverrides(
+  overrides: Record<string, number>,
+): Promise<ActionResult> {
+  await requireSection("SALES")
+  const session = await auth()
+  if (!session?.user?.id) return { ok: false, error: "UNAUTHORIZED" }
+
+  const parsed = PriceOverridesSchema.safeParse(overrides)
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+
+  try {
+    const filtered = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, v]) => Number.isFinite(v) && v > 0),
+    )
+    if (Object.keys(filtered).length === 0) {
+      await prisma.userPreference.deleteMany({
+        where: { userId: session.user.id, key: PRICE_KEY },
+      })
+    } else {
+      await prisma.userPreference.upsert({
+        where: { userId_key: { userId: session.user.id, key: PRICE_KEY } },
+        create: { userId: session.user.id, key: PRICE_KEY, value: filtered },
+        update: { value: filtered },
+      })
+    }
+    revalidatePath("/sales-plan")
+    return { ok: true }
+  } catch (err) {
+    console.error("[savePriceOverrides]", err)
+    return { ok: false, error: "Не удалось сохранить" }
+  }
+}
+
 export async function clearBaselineOverrides(): Promise<ActionResult> {
   await requireSection("SALES")
   const session = await auth()
@@ -65,7 +105,7 @@ export async function clearBaselineOverrides(): Promise<ActionResult> {
     await prisma.userPreference.deleteMany({
       where: {
         userId: session.user.id,
-        key: { in: [PREF_KEY, LEAD_TIMES_KEY] },
+        key: { in: [PREF_KEY, PRICE_KEY, LEAD_TIMES_KEY] },
       },
     })
     revalidatePath("/sales-plan")
