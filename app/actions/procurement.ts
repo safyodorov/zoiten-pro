@@ -68,7 +68,10 @@ export async function upsertProductIncoming(
       },
     })
 
+    // Производство в /stock = тот же ProductIncoming → ревалидируем связанные разделы
     revalidatePath("/purchase-plan")
+    revalidatePath("/stock")
+    revalidatePath("/sales-plan")
     return { ok: true }
   } catch (err) {
     console.error("[upsertProductIncoming]", err)

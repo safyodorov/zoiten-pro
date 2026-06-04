@@ -49,7 +49,10 @@ export interface StockProductRow {
 
   // Inline редактируемые поля
   ivanovoStock: number | null
+  // Производство = ProductIncoming (единый источник с Планом закупок/продаж):
+  // кол-во = orderedQty, дата прихода на склад Иваново = expectedDate.
   productionStock: number | null
+  productionArrivalDate: string | null // ISO YYYY-MM-DD
 
   articles: StockArticleRow[]
   aggregates: StockAggregates
@@ -111,6 +114,8 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
         include: { marketplace: { select: { id: true, name: true } } },
         orderBy: { sortOrder: "asc" },
       },
+      // Производство ← ProductIncoming (синхронно с /purchase-plan и /sales-plan)
+      incoming: { select: { orderedQty: true, expectedDate: true } },
     },
     // Глобальная иерархия: Направление → Бренд → Категория → Подкатегория → name
     // (sortOrder каждого уровня настраивается DnD в /admin/settings)
@@ -202,7 +207,11 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
       abcStatus: p.abcStatus,
       photoUrl: p.photoUrl ?? null,
       ivanovoStock: p.ivanovoStock,
-      productionStock: p.productionStock,
+      // Производство из ProductIncoming: orderedQty + expectedDate (а не legacy Product.productionStock)
+      productionStock: p.incoming ? p.incoming.orderedQty : null,
+      productionArrivalDate: p.incoming?.expectedDate
+        ? p.incoming.expectedDate.toISOString().slice(0, 10)
+        : null,
       articles,
       aggregates: {
         wbTotalStock,

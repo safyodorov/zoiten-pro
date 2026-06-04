@@ -381,6 +381,8 @@ model Product {
   sizes                    ProductSize[]
   // Phase 14: Stock management fields
   ivanovoStock             Int?
+  // DEPRECATED 2026-06-04: Производство в /stock теперь = ProductIncoming (orderedQty/expectedDate).
+  // Поле обнулено миграцией 20260604, больше не читается/пишется.
   productionStock          Int?
   ivanovoStockUpdatedAt    DateTime?
   productionStockUpdatedAt DateTime?

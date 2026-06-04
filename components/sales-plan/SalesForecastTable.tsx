@@ -479,6 +479,12 @@ export function SalesForecastTable({
                 onClick={toggleSort}
                 className="text-right w-24"
               />
+              <TableHead
+                className="sticky top-0 z-20 bg-background border-b text-right w-24"
+                title="Цена в расчётах = средняя цена выкупа (взвеш. по заказам за 7 дней), ₽"
+              >
+                Цена
+              </TableHead>
               <SortableHead
                 label="Выручка"
                 k="salesRub"
@@ -640,6 +646,9 @@ export function SalesForecastTable({
                 <TableCell className="text-right tabular-nums">
                   {fmtAdaptive(p.salesUnits)}
                 </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {fmtNum(Math.round(p.avgPrice), 0)} ₽
+                </TableCell>
                 <TableCell className="text-right tabular-nums font-semibold">
                   {fmtRub(p.salesRub)}
                 </TableCell>
@@ -663,6 +672,9 @@ export function SalesForecastTable({
                 <TableCell />
                 <TableCell className="text-right tabular-nums">
                   {fmtAdaptive(totalUnits)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">
+                  {totalUnits > 0 ? `${fmtNum(Math.round(totalRub / totalUnits), 0)} ₽` : "—"}
                 </TableCell>
                 <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-500">
                   {fmtRub(totalRub)}

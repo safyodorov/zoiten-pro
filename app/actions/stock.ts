@@ -81,16 +81,24 @@ export async function upsertIvanovoStock(
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Plan 14-05: updateProductionStock (STOCK-13)
-// Inline-редактирование поля Производство (debounced 500ms от UI).
-// Zod: int(0..99999) | null — для очистки поля.
+// Производство = ProductIncoming (2026-06-04): единый источник с Планом
+// закупок/продаж. Редактирование Производства в /stock пишет в ProductIncoming
+// (кол-во → orderedQty, дата прихода → expectedDate), сохраняя plannedSalesPerDay.
+// Двусторонняя синхронизация: /stock ↔ /purchase-plan ↔ /sales-plan.
 // ──────────────────────────────────────────────────────────────────
+
+function revalidateProductionLinked() {
+  revalidatePath("/stock")
+  revalidatePath("/purchase-plan")
+  revalidatePath("/sales-plan")
+}
 
 const ProductionStockSchema = z.object({
   productId: z.string().min(1),
-  value: z.number().int().min(0).max(99999).nullable(),
+  value: z.number().int().min(0).max(10_000_000).nullable(),
 })
 
+/** Кол-во Производства → ProductIncoming.orderedQty (null/пусто → 0). */
 export async function updateProductionStock(
   productId: string,
   value: number | null
@@ -102,13 +110,80 @@ export async function updateProductionStock(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Validation failed" }
   }
 
+  const orderedQty = parsed.data.value ?? 0
+  try {
+    await prisma.productIncoming.upsert({
+      where: { productId: parsed.data.productId },
+      create: { productId: parsed.data.productId, orderedQty },
+      update: { orderedQty },
+    })
+    revalidateProductionLinked()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+const ArrivalDateSchema = z.object({
+  productId: z.string().min(1),
+  dateIso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+})
+
+/** Дата прихода Производства на склад Иваново → ProductIncoming.expectedDate (null чистит). */
+export async function updateProductionArrivalDate(
+  productId: string,
+  dateIso: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireSection("STOCK", "MANAGE")
+
+  const parsed = ArrivalDateSchema.safeParse({ productId, dateIso })
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидная дата" }
+  }
+
+  const expectedDate = parsed.data.dateIso ? new Date(parsed.data.dateIso) : null
+  if (expectedDate && Number.isNaN(expectedDate.getTime())) {
+    return { ok: false, error: "Невалидная дата" }
+  }
+
+  try {
+    await prisma.productIncoming.upsert({
+      where: { productId: parsed.data.productId },
+      create: { productId: parsed.data.productId, orderedQty: 0, expectedDate },
+      update: { expectedDate },
+    })
+    revalidateProductionLinked()
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// updateIvanovoStock (2026-06-04): ручной ввод остатка Иваново (inline).
+// Глобально в Product.ivanovoStock (тот же столбец, что и Excel-импорт).
+// ──────────────────────────────────────────────────────────────────
+
+const IvanovoStockSchema = z.object({
+  productId: z.string().min(1),
+  value: z.number().int().min(0).max(999999).nullable(),
+})
+
+export async function updateIvanovoStock(
+  productId: string,
+  value: number | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireSection("STOCK", "MANAGE")
+
+  const parsed = IvanovoStockSchema.safeParse({ productId, value })
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Validation failed" }
+  }
+
   try {
     await prisma.product.update({
       where: { id: parsed.data.productId },
-      data: {
-        productionStock: parsed.data.value,
-        productionStockUpdatedAt: new Date(),
-      },
+      data: { ivanovoStock: parsed.data.value, ivanovoStockUpdatedAt: new Date() },
     })
     revalidatePath("/stock")
     return { ok: true }

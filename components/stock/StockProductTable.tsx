@@ -4,11 +4,12 @@
 // Структура:
 //   - 4 sticky колонки: Фото (left-0, 80px) | Сводка (left-[80px], 240px) | Ярлык (left-[320px], 80px) | Артикул (left-[400px], 120px)
 //   - 2-уровневый header: группы (top-0) + sub-columns О/З/Об/Д (top-[40px])
-//   - 6 групп колонок: Производство(1 inline input) | РФ(1) | Иваново(1) | МП(4) | WB(4) | Ozon(4)
+//   - 6 групп колонок: Производство(2: кол-во+дата) | РФ(1) | Иваново(1) | МП(4) | WB(4) | Ozon(4)
 //     (порядок изменён 2026-04-22: Производство перед РФ для наглядности планируемого прихода)
 //   - rowSpan: Фото+Сводка rowSpan = 1 + N_articles (Сводная строка + per-article строки)
 //   - DeficitCell: 3-уровневая цветовая кодировка (зелёный/жёлтый/красный)
-//   - Inline productionStock input: debounced 500ms через updateProductionStock server action
+//   - Inline-поля (debounced 500ms): Производство (кол-во+дата → ProductIncoming, синхр.
+//     с /purchase-plan и /sales-plan) и Иваново (→ Product.ivanovoStock, глобально).
 //
 // Паттерн sticky: components/prices/PriceCalculatorTable.tsx — accumulated left, z-20/30, bg-background.
 
@@ -31,7 +32,11 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
-import { updateProductionStock } from "@/app/actions/stock"
+import {
+  updateProductionStock,
+  updateProductionArrivalDate,
+  updateIvanovoStock,
+} from "@/app/actions/stock"
 import type { StockProductRow } from "@/lib/stock-data"
 
 // ──────────────────────────────────────────────────────────────────
@@ -138,28 +143,38 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   /**
-   * Debounced save productionStock — 500ms.
+   * Debounced save (500ms) с namespaced-ключом таймера (несколько полей на товар).
    * После сохранения: toast.success + router.refresh() для RSC re-render.
    */
-  const debouncedSaveProduction = (productId: string, value: number | null) => {
-    const existing = timersRef.current.get(productId)
+  const debouncedSave = (
+    key: string,
+    action: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    successMsg: string,
+  ) => {
+    const existing = timersRef.current.get(key)
     if (existing) clearTimeout(existing)
 
     const timer = setTimeout(() => {
       startTransition(async () => {
-        const result = await updateProductionStock(productId, value)
+        const result = await action()
         if (result.ok) {
-          toast.success("Производство обновлено")
+          toast.success(successMsg)
           router.refresh()
         } else {
-          const errMsg = "error" in result ? result.error : "Неизвестная ошибка"
-          toast.error(`Не удалось сохранить производство: ${errMsg}`)
+          toast.error(`Не удалось сохранить: ${result.error}`)
         }
       })
     }, 500)
 
-    timersRef.current.set(productId, timer)
+    timersRef.current.set(key, timer)
   }
+
+  const saveProduction = (productId: string, value: number | null) =>
+    debouncedSave(`prod:${productId}`, () => updateProductionStock(productId, value), "Производство обновлено")
+  const saveArrivalDate = (productId: string, dateIso: string | null) =>
+    debouncedSave(`date:${productId}`, () => updateProductionArrivalDate(productId, dateIso), "Дата прихода обновлена")
+  const saveIvanovo = (productId: string, value: number | null) =>
+    debouncedSave(`iv:${productId}`, () => updateIvanovoStock(productId, value), "Иваново обновлено")
 
   // ── Empty state ────────────────────────────────────────────────
   if (products.length === 0) {
@@ -206,10 +221,11 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
               Артикул
             </TableHead>
 
-            {/* Группы: Производство (1 col), РФ (1 col), Иваново (1 col) — порядок 2026-04-22 */}
+            {/* Группы: Производство (2 col: кол-во + дата прихода), РФ (1), Иваново (1) */}
             <TableHead
-              colSpan={1}
-              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2 w-[88px] min-w-[88px]"
+              colSpan={2}
+              className="sticky top-0 z-20 bg-background text-xs font-medium text-center border-b border-r px-2"
+              title="Производство = заказано (План закупок/продаж): кол-во + дата прихода на склад Иваново"
             >
               Производство
             </TableHead>
@@ -250,12 +266,18 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
 
           {/* ── Уровень 2: sub-columns О/З/Об/Д ── */}
           <tr>
-            {/* Производство → только О (inline input в данных) */}
+            {/* Производство → О (кол-во, inline) + Дата прихода (inline) */}
             <TableHead
-              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1 w-[88px] min-w-[88px]"
-              title="Остаток (шт)"
+              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b px-2 py-1 w-[88px] min-w-[88px]"
+              title="Заказано, шт"
             >
               О
+            </TableHead>
+            <TableHead
+              className="sticky top-[40px] z-20 bg-background text-xs text-muted-foreground text-center border-b border-r px-2 py-1 w-[130px] min-w-[130px]"
+              title="Дата прихода на склад Иваново"
+            >
+              Дата
             </TableHead>
             {/* РФ → только О */}
             <TableHead
@@ -401,21 +423,35 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                     <input
                       type="number"
                       min={0}
-                      max={99999}
+                      max={9999999}
                       className="h-7 w-full rounded border border-input bg-transparent px-1.5 text-xs tabular-nums text-right focus:ring-2 focus:ring-ring outline-none"
                       defaultValue={p.productionStock ?? ""}
                       placeholder="—"
-                      aria-label={`Производство: ${p.name}`}
+                      aria-label={`Производство (заказано): ${p.name}`}
                       onChange={(e) => {
                         const v = e.target.value
                         if (v === "") {
-                          debouncedSaveProduction(p.id, null)
+                          saveProduction(p.id, null)
                         } else {
                           const parsed = parseInt(v, 10)
                           if (!isNaN(parsed) && parsed >= 0) {
-                            debouncedSaveProduction(p.id, parsed)
+                            saveProduction(p.id, parsed)
                           }
                         }
+                      }}
+                    />
+                  </TableCell>
+
+                  {/* Производство — Дата прихода на склад Иваново (inline) */}
+                  <TableCell className="px-2 py-1 h-8 text-xs w-[130px] min-w-[130px]">
+                    <input
+                      type="date"
+                      className="h-7 w-full rounded border border-input bg-transparent px-1.5 text-xs focus:ring-2 focus:ring-ring outline-none"
+                      defaultValue={p.productionArrivalDate ?? ""}
+                      aria-label={`Дата прихода: ${p.name}`}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        saveArrivalDate(p.id, v === "" ? null : v)
                       }}
                     />
                   </TableCell>
@@ -423,8 +459,29 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                   {/* РФ — О (агрегат Иваново + МП, БЕЗ Производства) */}
                   <StockCell value={p.aggregates.rfTotalStock} />
 
-                  {/* Иваново — О */}
-                  <StockCell value={p.ivanovoStock} />
+                  {/* Иваново — О (ручной ввод, глобально) */}
+                  <TableCell className="px-2 py-1 h-8 text-xs tabular-nums text-right">
+                    <input
+                      type="number"
+                      min={0}
+                      max={999999}
+                      className="h-7 w-full rounded border border-input bg-transparent px-1.5 text-xs tabular-nums text-right focus:ring-2 focus:ring-ring outline-none"
+                      defaultValue={p.ivanovoStock ?? ""}
+                      placeholder="—"
+                      aria-label={`Иваново: ${p.name}`}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (v === "") {
+                          saveIvanovo(p.id, null)
+                        } else {
+                          const parsed = parseInt(v, 10)
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            saveIvanovo(p.id, parsed)
+                          }
+                        }
+                      }}
+                    />
+                  </TableCell>
 
                   {/* МП О/З/Об/Д — Об integer */}
                   <StockCell value={p.aggregates.mpTotalStock} />
@@ -473,9 +530,9 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                         {a.marketplaceName}: {a.article}
                       </TableCell>
 
-                      {/* Производство/РФ/Иваново — только агрегат в Сводной строке.
-                          Первая ячейка (Производство) фикс ширина 88px — совпадает с Сводной для выравнивания колонки. */}
+                      {/* Производство(кол-во+дата)/РФ/Иваново — только product-level в Сводной строке. */}
                       <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right text-muted-foreground w-[88px] min-w-[88px]">—</TableCell>
+                      <TableCell className="px-2 py-1 h-8 text-xs text-center text-muted-foreground w-[130px] min-w-[130px]">—</TableCell>
                       <StockCell value={null} />
                       <StockCell value={null} />
 
