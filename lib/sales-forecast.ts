@@ -667,6 +667,10 @@ function simulateProduct(
       const wd = workingDaysBetween(addDays(p.arrivalDate, 1), d) + 1
       const factor = wd >= RAMP_UP_WORKING_DAYS ? 1 : wd / RAMP_UP_WORKING_DAYS
       rate = baselineUsed + (plannedTargetUsed - baselineUsed) * factor
+    } else if (plannedTargetUsed !== null && !p.arrivalDate) {
+      // План задан, но приход не ожидается (дата прихода пуста) — товар уже в наличии.
+      // Применяем план сразу с начала горизонта (без ramp-up от исторической базы).
+      rate = plannedTargetUsed
     } else {
       rate = baselineUsed
     }
