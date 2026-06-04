@@ -185,6 +185,9 @@ interface ProductMeta {
   arrivalDate: string | null
   arrivalQty: number
   plannedTargetPerDay: number | null
+  // Дата последнего изменения плана (ProductIncoming.updatedAt) — ISO YYYY-MM-DD.
+  // Для товара без даты прихода план применяется через 3 дня после этой даты.
+  plannedSetDate: string | null
   seedOrders: Record<string, number>
 }
 
@@ -543,6 +546,7 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
         : null,
       arrivalQty: p.incoming?.orderedQty ?? 0,
       plannedTargetPerDay: p.incoming?.plannedSalesPerDay ?? null,
+      plannedSetDate: p.incoming?.updatedAt ? toIso(p.incoming.updatedAt) : null,
       seedOrders,
     })
   }
@@ -669,8 +673,12 @@ function simulateProduct(
       rate = baselineUsed + (plannedTargetUsed - baselineUsed) * factor
     } else if (plannedTargetUsed !== null && !p.arrivalDate) {
       // План задан, но приход не ожидается (дата прихода пуста) — товар уже в наличии.
-      // Применяем план сразу с начала горизонта (без ramp-up от исторической базы).
-      rate = plannedTargetUsed
+      // Применяем план через 3 дня после внесения плана (deliveryDays): заказы по новому
+      // плану станут выкупами через T+3, до этого выкупы идут с исторической базы.
+      const planStart = p.plannedSetDate
+        ? addDays(p.plannedSetDate, deliveryDays)
+        : horizonStart
+      rate = d >= planStart ? plannedTargetUsed : baselineUsed
     } else {
       rate = baselineUsed
     }
