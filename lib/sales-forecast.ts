@@ -7,7 +7,7 @@
 // Модель:
 //  • Baseline ставка заказов = avg за 7 дней (WbCardOrdersDaily.qty)
 //  • plannedSalesPerDay (ProductIncoming) — target orders post-arrival, ramp 3 раб. дней
-//  • Сток = WbCard.stockQty + приходы на expectedDate+1
+//  • Сток = WbCard.stockQty (ВБ) + Product.ivanovoStock (Иваново) + приходы на expectedDate+1
 //  • % выкупа — взвешенный 30d из WbCardFunnelDaily (buyouts/orders) → fallback на legacy WbCard.buyoutPercent → fallback на глобальный
 //  • Выкупы засчитываются на T+3 от заказа, возвраты на T+6 пополняют сток.
 
@@ -461,6 +461,9 @@ export async function computeForecast(input: ForecastInput): Promise<ForecastRes
         }
       }
     }
+
+    // Сток к продаже = остаток на WB (sum по nmId) + остаток на складе Иваново.
+    stockNow += p.ivanovoStock ?? 0
 
     let avgPrice = 0
     if (priceWeightedDen > 0) {

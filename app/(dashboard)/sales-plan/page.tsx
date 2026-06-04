@@ -2,7 +2,7 @@
 // План продаж — прогноз выкупов до заданной даты, с разрезами по товарам.
 
 import { prisma } from "@/lib/prisma"
-import { requireSection, getCurrentUser } from "@/lib/rbac"
+import { requireSection } from "@/lib/rbac"
 import { computeForecast, getMskTodayIso } from "@/lib/sales-forecast"
 import { SalesForecastSummary } from "@/components/sales-plan/SalesForecastSummary"
 import { SalesForecastFilters } from "@/components/sales-plan/SalesForecastFilters"
@@ -66,64 +66,41 @@ export default async function SalesPlanPage({
     : []
   const search = (q ?? "").trim()
 
-  // Загружаем пользовательские корректировки baseline + lead times (если есть)
-  const user = await getCurrentUser()
-  let baselineOverrides: Record<string, number> = {}
-  let priceOverrides: Record<string, number> = {}
+  // Глобальные корректировки плана (общие для всех) — из AppSetting (JSON-строки).
+  const settingsRows = await prisma.appSetting.findMany({
+    where: { key: { in: [BASELINE_OVERRIDES_KEY, PRICE_OVERRIDES_KEY, LEAD_TIMES_KEY] } },
+    select: { key: true, value: true },
+  })
+  const settingByKey = new Map(settingsRows.map((s) => [s.key, s.value]))
+
+  function parseJsonObject(raw: string | undefined): Record<string, unknown> {
+    if (!raw) return {}
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+    } catch {
+      return {}
+    }
+  }
+
+  const baselineOverrides: Record<string, number> = {}
+  for (const [k, v] of Object.entries(parseJsonObject(settingByKey.get(BASELINE_OVERRIDES_KEY)))) {
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) baselineOverrides[k] = v
+  }
+  const priceOverrides: Record<string, number> = {}
+  for (const [k, v] of Object.entries(parseJsonObject(settingByKey.get(PRICE_OVERRIDES_KEY)))) {
+    if (typeof v === "number" && Number.isFinite(v) && v > 0) priceOverrides[k] = v
+  }
   let deliveryDaysOverride: number | undefined
   let returnDaysOverride: number | undefined
-  if (user?.id) {
-    const [prefBaseline, prefPrice, prefLeadTimes] = await Promise.all([
-      prisma.userPreference.findUnique({
-        where: { userId_key: { userId: user.id, key: BASELINE_OVERRIDES_KEY } },
-      }),
-      prisma.userPreference.findUnique({
-        where: { userId_key: { userId: user.id, key: PRICE_OVERRIDES_KEY } },
-      }),
-      prisma.userPreference.findUnique({
-        where: { userId_key: { userId: user.id, key: LEAD_TIMES_KEY } },
-      }),
-    ])
-    if (
-      prefBaseline &&
-      prefBaseline.value &&
-      typeof prefBaseline.value === "object" &&
-      !Array.isArray(prefBaseline.value)
-    ) {
-      const raw = prefBaseline.value as Record<string, unknown>
-      for (const [k, v] of Object.entries(raw)) {
-        if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
-          baselineOverrides[k] = v
-        }
-      }
-    }
-    if (
-      prefPrice &&
-      prefPrice.value &&
-      typeof prefPrice.value === "object" &&
-      !Array.isArray(prefPrice.value)
-    ) {
-      const raw = prefPrice.value as Record<string, unknown>
-      for (const [k, v] of Object.entries(raw)) {
-        if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-          priceOverrides[k] = v
-        }
-      }
-    }
-    if (
-      prefLeadTimes &&
-      prefLeadTimes.value &&
-      typeof prefLeadTimes.value === "object" &&
-      !Array.isArray(prefLeadTimes.value)
-    ) {
-      const raw = prefLeadTimes.value as Record<string, unknown>
-      if (typeof raw.deliveryDays === "number" && raw.deliveryDays >= 0) {
-        deliveryDaysOverride = raw.deliveryDays
-      }
-      if (typeof raw.returnDays === "number" && raw.returnDays >= 0) {
-        returnDaysOverride = raw.returnDays
-      }
-    }
+  const leadRaw = parseJsonObject(settingByKey.get(LEAD_TIMES_KEY))
+  if (typeof leadRaw.deliveryDays === "number" && leadRaw.deliveryDays >= 0) {
+    deliveryDaysOverride = leadRaw.deliveryDays
+  }
+  if (typeof leadRaw.returnDays === "number" && leadRaw.returnDays >= 0) {
+    returnDaysOverride = leadRaw.returnDays
   }
 
   const [forecast, allBrands, allCategories, allSubcategories, allDirections] =
