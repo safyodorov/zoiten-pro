@@ -171,13 +171,54 @@ export default async function SalesPlanPage({
     (p) => p.buyoutSource === "global",
   ).length
 
-  // Агрегируем dailySales по видимым товарам — для chart
-  const dailyByDate = new Map<string, { units: number; rub: number }>()
+  // Агрегируем dailySales по видимым товарам — для chart.
+  // Дополнительно разбиваем выручку по направлениям (Одежда / Бытовая техника / Прочее)
+  // для двухцветных stacked-баров.
+  type DirBucket = "clothing" | "appliances" | "other"
+  function bucketOf(name: string | null): DirBucket {
+    if (name === "Одежда") return "clothing"
+    if (name === "Бытовая техника") return "appliances"
+    return "other"
+  }
+  interface DailyAgg {
+    units: number
+    rub: number
+    rubClothing: number
+    rubAppliances: number
+    rubOther: number
+    unitsClothing: number
+    unitsAppliances: number
+    unitsOther: number
+  }
+  function emptyAgg(): DailyAgg {
+    return {
+      units: 0,
+      rub: 0,
+      rubClothing: 0,
+      rubAppliances: 0,
+      rubOther: 0,
+      unitsClothing: 0,
+      unitsAppliances: 0,
+      unitsOther: 0,
+    }
+  }
+  const dailyByDate = new Map<string, DailyAgg>()
   for (const p of visible) {
+    const b = bucketOf(p.directionName)
     for (const d of p.dailySales) {
-      const cur = dailyByDate.get(d.date) ?? { units: 0, rub: 0 }
+      const cur = dailyByDate.get(d.date) ?? emptyAgg()
       cur.units += d.units
       cur.rub += d.rub
+      if (b === "clothing") {
+        cur.rubClothing += d.rub
+        cur.unitsClothing += d.units
+      } else if (b === "appliances") {
+        cur.rubAppliances += d.rub
+        cur.unitsAppliances += d.units
+      } else {
+        cur.rubOther += d.rub
+        cur.unitsOther += d.units
+      }
       dailyByDate.set(d.date, cur)
     }
   }
@@ -190,12 +231,21 @@ export default async function SalesPlanPage({
     })
   }
   const sortedDates = Array.from(dailyByDate.keys()).sort()
-  const chartData = sortedDates.map((date) => ({
-    date,
-    label: fmtDayLabel(date),
-    units: dailyByDate.get(date)!.units,
-    rub: dailyByDate.get(date)!.rub,
-  }))
+  const chartData = sortedDates.map((date) => {
+    const a = dailyByDate.get(date)!
+    return {
+      date,
+      label: fmtDayLabel(date),
+      units: a.units,
+      rub: a.rub,
+      rubClothing: a.rubClothing,
+      rubAppliances: a.rubAppliances,
+      rubOther: a.rubOther,
+      unitsClothing: a.unitsClothing,
+      unitsAppliances: a.unitsAppliances,
+      unitsOther: a.unitsOther,
+    }
+  })
 
   // endStockDateLabel — день после endDate (по умолчанию 01.07)
   function isoAddOne(iso: string): string {
