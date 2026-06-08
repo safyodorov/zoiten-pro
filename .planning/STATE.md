@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3 ads + procurement
-milestone_name: WB Ads (Phase 19) + Procurement (Phase 20)
+milestone: v1.1
+milestone_name: Служба поддержки WB
 status: Phase 19 active — UI визуализация spend, backfill targets 100% coverage, выкуп rolling 30d per-day. Phase 20 plans готовы (9 wave), ждёт реализации.
-stopped_at: 2026-05-21 — buyout rolling 30d per-(nmId,day) + RBAC sidebar fix (sectionRoles union)
-last_updated: "2026-05-21T15:25:00.000Z"
+stopped_at: Phase 21 context gathered
+last_updated: "2026-06-08T12:21:49.720Z"
 progress:
   total_phases: 20
-  completed_phases: 18
-  total_plans: 70
-  completed_plans: 65
+  completed_phases: 16
+  total_plans: 86
+  completed_plans: 73
 ---
 
 # Project State
@@ -27,6 +27,7 @@ Phase: 19 (wb-ads) — IN PROD, итеративный полишинг (UI ви
 Phase: 20 (procurement) — PLANNED, 9 plans (W0 + 01..08), реализация после Phase 19.
 
 Свежие изменения 2026-05-21:
+
 - `d7daabc` — backfill WbAdvertTarget через /api/advert/v2/adverts (cascade-фильтр работает)
 - `41954e6` / `6aa58c9` — sentinel `nmId=-1` для кампаний без `nm_settings` и для unresponded advertIds
 - `3f036f4` — % выкупа per-(nmId, day) rolling 30d weighted из WbCardFunnelDaily.buyoutPercent (раньше натягивалось одно среднее на всё окно — искажало сезон)
@@ -259,6 +260,7 @@ Recent decisions affecting current work:
 - Phase 16 added (2026-04-22): Размерная разбивка остатков WB в /stock/wb + фикс sync bug — расширение схемы WbCardWarehouseStock с techSize, кнопка «По размерам» в UI с per-size строками, расследование расхождения API vs БД (например nmId 859398279 «Брюки» Котовск API ~70 шт vs БД 8)
 - Phase 19 added (2026-05-19): Управление рекламой WB — собственная БД рекламных расходов (WbAdvertCampaign, WbAdvertTarget, WbAdvertStatDaily, WbAdvertBalanceSnapshot), отдельный WB_ADS_TOKEN, daily cron в 3:00 МСК, view-only UI /ads/wb с per-product таблицей + expandable charts + каскадные фильтры. Контекст: .planning/research/ads-sheets/FINDINGS.md
 - Phase 20 added (2026-05-20): Управление закупками — Поставщики (БД с контактами/переговорами/per-product параметрами), Закупки (статусы планируемые/текущие/завершённые, multi-payment депозит/баланс с курсами ЦБ РФ), План закупок (детали TBD). Контекст: .planning/phases/20-procurement/20-CONTEXT.md. Планирование запущено 2026-05-20 параллельно с активной Phase 19 (реклама), реализация после Phase 19.
+- Phase 21 added (2026-06-08): Кредиты — визуализация и учёт кредитов компании. Новая БД Loan + LoanPayment (орг / банк / № КД / сумма / ставка % / срок / дата выдачи / график тело+проценты). UI: список кредитов → детальная карточка с графиком → сводный горизонтальный график выплат с разбивкой день/неделя/месяц. Источник данных: Кредиты.xlsx (Лист1 дневной график тела долга + балансы; Лист2 метаданные + помесячные основной долг+проценты). Добавлена как Phase 21 вручную (gsd-tools насчитал 1000 из-за backlog 999.1).
 
 ### Pending Todos
 
@@ -310,6 +312,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T15:25:00.000Z
-Stopped at: Сессия 2026-05-21. Подтверждено 100% покрытие WbAdvertTarget (428 кампаний status 7/9/11: 389 real + 39 sentinel). Заменён single-pct buyout на rolling 30d per-(nmId,date) — `3f036f4`. Починена RBAC видимость sidebar — учёт sectionRoles map в layout/dashboard — `c576988`. После grant прав через UI пользователь должен logout/login (JWT не самообновляется в Edge middleware).
-Resume file: None
+Last session: 2026-06-08T12:21:49.713Z
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-credits/21-CONTEXT.md
