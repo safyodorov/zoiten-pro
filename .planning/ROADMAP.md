@@ -454,11 +454,21 @@ Plans:
 2. **Закупки** — список закупок со статусами (планируемые / текущие / завершённые), мультивалютные суммы с курсами ЦБ РФ, автоматически рассчитанные депозиты/балансы по параметрам из БД Поставщики, multi-payment схемы (Депозит 1/2/..., Баланс 1/2/...)
 3. **План закупок** — текущая заглушка превращается в работающий раздел (детали TBD в discuss-phase)
 
-**Requirements:** TBD (будут сформулированы в /gsd:plan-phase)
+**Requirements:** D-01..D-21 (трассировка по decision IDs из `.planning/phases/20-procurement/20-CONTEXT.md`; формальных REQ-ID нет — решения D-01..D-21 + resolved/defaults blocks)
 
 **Depends on:** Phase 4 (Products), Phase 2 (User Management — Employee и связка с Закупщиком)
 
-**Plans:** 0 plans (run `/gsd:plan-phase 20` to break down)
+**Plans:** 8 plans (W0 test stubs + schema + wiring + 2 lib helpers + suppliers + purchases + plan/deploy/UAT)
+
+Plans:
+- [ ] 20-00-PLAN.md — Wave 0: RED test stubs (procurement-math / cbr-rates / supplier-actions isPrimary)
+- [ ] 20-01-PLAN.md — Wave 1: Schema + manual migration (10 models + 6 enums + partial unique SupplierProductLink + CurrencyRate)
+- [ ] 20-02-PLAN.md — Wave 2: Section wiring (sections.ts /procurement + nav group + titles + section-labels + dashboard; rename temp plan)
+- [ ] 20-03-PLAN.md — Wave 2: lib/procurement-math.ts (deposit/balance dates + percent↔amount) — GREEN golden test
+- [ ] 20-04-PLAN.md — Wave 2: lib/cbr-rates.ts + /api/cbr-rate-sync + dispatcher branch (12:00 МСК, forward-only) — GREEN cbr test
+- [ ] 20-05-PLAN.md — Wave 3: Suppliers — actions/suppliers.ts + isPrimary helper + list + detail tabs (Контакты/Товары/Переговоры)
+- [ ] 20-06-PLAN.md — Wave 3: Purchases — actions/purchases.ts (auto deposit+balance) + list + detail multi-payment editor
+- [ ] 20-07-PLAN.md — Wave 4: /procurement/plan MVP (read-only forecast) + DEPLOY.md + deploy + human UAT
 
 **Контекст из original prompt пользователя 2026-05-20** (хранится в `.planning/phases/20-procurement/20-CONTEXT.md`)
 
