@@ -404,6 +404,10 @@ model Product {
   creditOverridePct        Float?
   overheadOverridePct      Float?
   taxOverridePct           Float?
+  // Phase 20: procurement back-relations
+  supplierProductLinks     SupplierProductLink[]
+  negotiationProducts      NegotiationProduct[]
+  purchaseItems            PurchaseItem[]
   deletedAt                DateTime? // Soft delete: null = active
   createdAt                DateTime               @default(now())
   updatedAt                DateTime               @updatedAt
@@ -516,6 +520,9 @@ model Employee {
   emails      EmployeeEmail[]
   passes      EmployeePass[]
   user        User?
+  // Phase 20: procurement back-relations
+  supplierBuyers            Supplier[]
+  negotiationParticipations NegotiationParticipant[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 }
@@ -1266,4 +1273,222 @@ model LoanPayment {
   createdAt DateTime @default(now())
 
   @@index([loanId, date])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 20: Управление закупками (procurement)
+// ──────────────────────────────────────────────────────────────────
+
+enum PurchaseStatus {
+  PLANNED
+  ACTIVE
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PLANNED
+  PAID
+  OVERDUE
+}
+
+enum PaymentType {
+  DEPOSIT
+  BALANCE
+}
+
+enum DeliveryType {
+  CARGO
+  WHITE
+}
+
+enum ContactMethod {
+  WECHAT
+  PHONE
+  ALIBABA
+  OTHER
+}
+
+enum SupplierContactType {
+  SUPPLIER_MANAGER
+  SUPPLIER_BOSS
+}
+
+// Поставщик (D-01). Soft delete через deletedAt (D-20).
+model Supplier {
+  id                String                @id @default(cuid())
+  nameForeign       String // китайское/иностранное исходное имя
+  nameEnglish       String
+  buyerEmployeeId   String? // наш Закупщик (nullable если сотрудник уволен)
+  buyer             Employee?             @relation(fields: [buyerEmployeeId], references: [id], onDelete: SetNull)
+  cooperationSummary String?
+  contacts          SupplierContact[]
+  productLinks      SupplierProductLink[]
+  negotiations      Negotiation[]
+  purchases         Purchase[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  deletedAt         DateTime?
+
+  @@index([buyerEmployeeId])
+}
+
+// Контакты поставщика — менеджеры + боссы через type discriminator (D-02).
+// isPrimary uniqueness per (supplierId, type) enforced в server action, НЕ DB constraint.
+model SupplierContact {
+  id                     String                    @id @default(cuid())
+  supplierId             String
+  supplier               Supplier                  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  type                   SupplierContactType
+  name                   String
+  phone                  String?
+  preferredContact       ContactMethod
+  preferredContactCustom String? // обязателен для OTHER (enforce в server action)
+  description            String?
+  isPrimary              Boolean                   @default(false)
+  negotiationParticipations NegotiationParticipant[]
+  createdAt              DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  @@index([supplierId])
+}
+
+// Связка Supplier↔Product с per-product параметрами (D-03).
+// Partial unique: (supplierId, productId) WHERE productId IS NOT NULL — manual SQL index,
+// Prisma не поддерживает partial @@unique.
+model SupplierProductLink {
+  id                  String        @id @default(cuid())
+  supplierId          String
+  supplier            Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productNameFallback String? // текстовое имя если productId=null
+  leadTimeDays        Int?
+  leadTimeComment     String?
+  unitPrice           Decimal?      @db.Decimal(14, 4)
+  currency            String?
+  deliveryType        DeliveryType?
+  deliveryComment     String?
+  exclusivityStatus   Boolean       @default(false)
+  exclusivityTerms    String?
+  depositPct          Decimal?      @db.Decimal(5, 2)
+  balancePct          Decimal?      @db.Decimal(5, 2)
+  deferralPct         Decimal?      @db.Decimal(5, 2)
+  deferralTerms       String?
+  inspectionCity      String?
+  inspectionAddress   String?
+  inspectionMapUrl    String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([supplierId, productId])
+  @@index([productId])
+}
+
+// Переговоры с поставщиком (D-04).
+model Negotiation {
+  id           String                   @id @default(cuid())
+  supplierId   String
+  supplier     Supplier                 @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  date         DateTime
+  goals        String
+  summary      String? // nullable если переговоры ещё не прошли
+  products     NegotiationProduct[]
+  participants NegotiationParticipant[]
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([supplierId])
+}
+
+// Обсуждаемые на переговорах товары (D-04, M:N).
+model NegotiationProduct {
+  id            String      @id @default(cuid())
+  negotiationId String
+  negotiation   Negotiation @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([negotiationId, productId])
+}
+
+// Участники переговоров (D-04, polymorphic).
+// Ровно одно из (employeeId, supplierContactId, customName+customRole) enforced в server action.
+model NegotiationParticipant {
+  id                String           @id @default(cuid())
+  negotiationId     String
+  negotiation       Negotiation      @relation(fields: [negotiationId], references: [id], onDelete: Cascade)
+  employeeId        String?
+  employee          Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  supplierContactId String?
+  supplierContact   SupplierContact? @relation(fields: [supplierContactId], references: [id], onDelete: SetNull)
+  customName        String?
+  customRole        String?
+
+  @@index([negotiationId])
+}
+
+// Закупка (D-05). Hard delete запрещён если status != PLANNED (D-21, enforce в server action).
+model Purchase {
+  id                 String            @id @default(cuid())
+  status             PurchaseStatus    @default(PLANNED)
+  currency           String            @default("CNY")
+  supplierId         String
+  supplier           Supplier          @relation(fields: [supplierId], references: [id])
+  optionsDescription String?
+  optionsExtraCost   Decimal?          @db.Decimal(14, 2)
+  logisticsCost      Decimal?          @db.Decimal(14, 2)
+  logisticsComment   String?
+  items              PurchaseItem[]
+  payments           PurchasePayment[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([supplierId])
+  @@index([status])
+}
+
+// Позиции закупки — multi-product (D-06).
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(14, 4)
+
+  @@index([purchaseId])
+}
+
+// Платежи по закупке — депозит/баланс, multi-payment (D-08).
+model PurchasePayment {
+  id         String        @id @default(cuid())
+  purchaseId String
+  purchase   Purchase      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  type       PaymentType
+  ordinal    Int
+  percent    Decimal?      @db.Decimal(5, 2)
+  amount     Decimal       @db.Decimal(14, 2)
+  currency   String
+  dueDate    DateTime
+  paidDate   DateTime?
+  status     PaymentStatus @default(PLANNED)
+  comment    String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([purchaseId])
+}
+
+// Курсы валют ЦБ РФ (D-09). Forward-only sync через daily cron.
+model CurrencyRate {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+  code      String // CNY/USD/EUR/RUB/...
+  nominal   Int
+  rateToRub Decimal  @db.Decimal(14, 6)
+  syncedAt  DateTime @default(now())
+
+  @@unique([date, code])
+  @@index([code])
 }
