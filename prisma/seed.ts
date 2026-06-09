@@ -64,6 +64,14 @@ async function main() {
     update: {},
   })
   console.log("AppSetting seeded: stock.turnoverNormDays = 37")
+
+  // ── Phase 20 (D-09): курс синхронизации ЦБ РФ ───────────────────
+  await prisma.appSetting.upsert({
+    where: { key: "cbrRateSyncCronTime" },
+    create: { key: "cbrRateSyncCronTime", value: "12:00" },
+    update: {},
+  })
+  console.log("AppSetting seeded: cbrRateSyncCronTime = 12:00")
 }
 
 main()

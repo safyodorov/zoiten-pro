@@ -34,12 +34,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbAdvSyncCronTime",
           "wbAdvUpdSyncCronTime",
           "wbCardsRefreshCronTime",
+          "cbrRateSyncCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
           "wbAdvSyncLastRun",
           "wbAdvUpdSyncLastRun",
           "wbCardsRefreshLastRun",
+          "cbrRateSyncLastRun",
         ],
       },
     },
@@ -51,12 +53,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const advSyncTime = settings.wbAdvSyncCronTime ?? "03:00"
   const advUpdSyncTime = settings.wbAdvUpdSyncCronTime ?? "03:30"
   const cardsRefreshTime = settings.wbCardsRefreshCronTime ?? "05:30"
+  const cbrTime = settings.cbrRateSyncCronTime ?? "12:00"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
   const advSyncLastRun = settings.wbAdvSyncLastRun ?? null
   const advUpdSyncLastRun = settings.wbAdvUpdSyncLastRun ?? null
   const cardsRefreshLastRun = settings.wbCardsRefreshLastRun ?? null
+  const cbrLastRun = settings.cbrRateSyncLastRun ?? null
 
   const fired: string[] = []
 
@@ -172,6 +176,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] cards-refresh error:", e)
       fired.push("cards-refresh:error")
+    }
+  }
+
+  // Phase 20 (D-09): курсы валют ЦБ РФ. По умолчанию 12:00 МСК — ЦБ публикует
+  // ~11:30 МСК, +30 мин буфер. Forward-only, без исторического backfill.
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: cbrTime,
+      lastRunDate: cbrLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: cbrHandler } = await import("../../cbr-rate-sync/route")
+      const res = await cbrHandler(req)
+      fired.push(`cbr:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] cbr error:", e)
+      fired.push("cbr:error")
     }
   }
 
