@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase 19 active — UI визуализация spend, backfill targets 100% coverage, выкуп rolling 30d per-day. Phase 20 plans готовы (9 wave), ждёт реализации.
-stopped_at: Phase 21 context gathered
-last_updated: "2026-06-08T12:21:49.720Z"
+status: Ready to execute
+stopped_at: Completed 21-credits 21-01-PLAN.md
+last_updated: "2026-06-09T09:44:21.582Z"
 progress:
-  total_phases: 20
-  completed_phases: 16
-  total_plans: 86
-  completed_plans: 73
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -19,19 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 19 (WB Ads) — итеративные доработки в проде; Phase 20 (закупки) ждёт реализации.
+**Current focus:** Phase 21 — credits
 
 ## Current Position
 
-Phase: 19 (wb-ads) — IN PROD, итеративный полишинг (UI визуализация spend, выкуп rolling 30d, ДРР).
-Phase: 20 (procurement) — PLANNED, 9 plans (W0 + 01..08), реализация после Phase 19.
-
-Свежие изменения 2026-05-21:
-
-- `d7daabc` — backfill WbAdvertTarget через /api/advert/v2/adverts (cascade-фильтр работает)
-- `41954e6` / `6aa58c9` — sentinel `nmId=-1` для кампаний без `nm_settings` и для unresponded advertIds
-- `3f036f4` — % выкупа per-(nmId, day) rolling 30d weighted из WbCardFunnelDaily.buyoutPercent (раньше натягивалось одно среднее на всё окно — искажало сезон)
-- `c576988` — sidebar union(allowedSections, sectionRoles): RBAC раздел в меню появляется по любому из двух источников прав
+Phase: 21 (credits) — EXECUTING
+Plan: 2 of 8
 
 ## Performance Metrics
 
@@ -109,6 +102,7 @@ Phase: 20 (procurement) — PLANNED, 9 plans (W0 + 01..08), реализация
 | Phase 15-per-cluster-orders P03 | ~2.5 минуты | 2 tasks | 2 files |
 | Phase 16-wb-stock-sizes P05 | 4min | 3 tasks | 1 files |
 | Phase 16-wb-stock-sizes P06 | 4min | 1 tasks | 2 files |
+| Phase 21-credits P01 | 99s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -250,6 +244,9 @@ Recent decisions affecting current work:
 - [Phase 16-wb-stock-sizes]: Plan 16-05 — React.Fragment key переехал с TableRow на Fragment (требование React: key на корневом элементе map callback'а после wrap)
 - [Phase 16-wb-stock-sizes]: Plan 16-05 — hideSc / hiddenWarehouseIds применяются к visibleClusterWarehouses в expanded view размерной row — visual filter only, идентично per-nmId
 - [Phase 16-wb-stock-sizes]: Plan 16-06 — Pre-UAT автоматизирован: deploy + re-sync + diagnostic выполнены агентом ДО checkpoint. Diagnostic full-set (87 nmId, 2237 пар) → diff=0, sync bug Phase 16-02 эмпирически устранён в проде.
+- [Phase 21-credits]: Lender (не Bank): справочник кредиторов U-03 — JetLend краудлендинг, не банк; везде Lender/lenderId
+- [Phase 21-credits]: D-09: статус кредита computed из LoanPayment records, не хранится полем в БД
+- [Phase 21-credits]: D-19: Decimal(14,2) для денег, Decimal(6,3) для годовой ставки процента (28.000)
 
 ### Roadmap Evolution
 
@@ -312,6 +309,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-08T12:21:49.713Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-credits/21-CONTEXT.md
+Last session: 2026-06-09T09:44:21.576Z
+Stopped at: Completed 21-credits 21-01-PLAN.md
+Resume file: None
