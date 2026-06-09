@@ -251,6 +251,74 @@ Requirements добавленные в milestone v1.2 (2026-04-21). Research: `.
 - [x] **STOCK-36**: UI кнопка «По размерам» в верхней панели `StockWbTable.tsx` (рядом с «Без СЦ»/«Склады») — `<Button variant={showSizes ? "default" : "outline"}>` с optimistic update (`useState` + `useTransition` → `saveStockWbShowSizes`). RSC `app/(dashboard)/stock/wb/page.tsx` читает `User.stockWbShowSizes` через session, передаёт `initialShowSizes` prop. Под per-nmId строкой при `showSizes && card.hasMultipleSizes` рендерятся `card.sizeBreakdown.map(...)` строки с приглушённым фоном (`bg-muted/30`), префиксом `↳ Размер X` в Артикул-колонке, placeholder `—` в Иваново/in-way, полная per-cluster структура О/З/Об/Д. `rowSpan` Фото/Сводки пересчитан с учётом размерных строк.
 - [x] **STOCK-37**: Re-sync на VPS после deploy + UAT — после `bash deploy.sh` запустить `node scripts/wb-sync-stocks.js`, нажать «Обновить из WB» в UI, прогнать `node scripts/wb-stocks-diagnose.js` (diff=0 для всех контрольных rows). UAT-чеклист `16-HUMAN-UAT.md` с 9 пунктами: (a) /stock/wb открывается, (b) кнопка «По размерам» persist, (c) nmId 859398279 sum размеров = stockQty, (d) Котовск показывает 6 строк {46:11,48:10,50:10,54:10,58:10,60:10}, (e) per-cluster агрегаты при «Без СЦ»/hidden warehouses не меняются, (f) one-size товары без размерных строк, (g) sticky cells не пересекаются при showSizes+expand-all, (h) `/stock/wb` `/inventory` redirect 1 релиз, (i) diagnostic CSV diff=0.
 
+## Phase 21 Requirements — Кредиты
+
+Requirements для Phase 21, добавленные 2026-06-08/09. Трассировка по decision IDs из `.planning/phases/21-credits/21-CONTEXT.md` (формальных REQ-ID нет — решения D-01..D-19 + вводные U-01..U-05).
+
+### Модель данных
+
+- [x] **CRED-01** (D-01, U-01, U-04, U-05): Новые модели `Lender`, `Loan`, `LoanPayment` + `ERP_SECTION.CREDITS` enum. Источник строк — детальные файлы из папки `Кредиты/` (11 JetLend PDF через `pdftotext -layout` + 2 Сбербанк XLSX). Метаданные и контрольные суммы — `Кредиты.xlsx` Лист2. Разовый seed-скрипт `scripts/seed-credits.ts`.
+- [x] **CRED-02** (D-02, D-03): График погашения хранится явными строками `LoanPayment { loanId, date, principal, interest }`. Остаток вычисляется накопительно из `Loan.amount`. Бакетирование день/неделя/месяц — на лету при рендере.
+- [x] **CRED-03** (D-05, D-19): `Loan { id, contractNumber, companyId FK Company, lenderId FK Lender, amount Decimal(14,2), annualRatePct Decimal(6,3), termMonths Int?, issueDate DateTime? @default(null), notes, deletedAt }`. Деньги `Decimal(14,2)`, ставка `Decimal(6,3)`.
+- [x] **CRED-04** (D-08, U-03): Переименование `Bank` → `Lender` («Кредитор»). Справочник `Lender { id, name @unique, sortOrder Int, createdAt, updatedAt }`. Значения при seed: Сбербанк, JetLend. UI управления: таб «Кредиторы» в `/admin/settings` (НЕ «Банки»).
+- [x] **CRED-05** (D-09): Статус кредита — computed из LoanPayment records, не хранится в БД: `активен` (остаток > 0), `погашён` (остаток ≤ 0).
+
+### RBAC и навигация
+
+- [x] **CRED-06** (D-10, D-11): Новый `ERP_SECTION.CREDITS` в enum Prisma (ручная миграция `ALTER TYPE`). Routes: `/credits`, `/credits/[id]`, `/credits/schedule`. Read — `requireSection("CREDITS")`, write server actions — `requireSection("CREDITS", "MANAGE")`.
+- [x] **CRED-07**: Sidebar — пункт «Кредиты» с иконкой `Landmark`, позиция после SALES. `lib/sections.ts`, `lib/section-titles.ts`, `components/layout/nav-items.ts` обновлены. Middleware защищает `/credits/*` через RBAC.
+
+### UI — Список кредитов (/credits)
+
+- [x] **CRED-08** (D-12): Sticky-таблица кредитов (raw HTML, не shadcn `<Table>`) с колонками: организация / кредитор / № КД / сумма / ставка % / срок / дата выдачи / текущий остаток / статус. Фильтры: организация / кредитор / статус. Клик → `/credits/[id]`.
+- [x] **CRED-09**: LoanModal CRUD — создание/редактирование кредита через модалку с вложенной таблицей строк графика (inline add/edit/delete строк `LoanPayment`). Server actions `createLoan`, `updateLoan`, `deleteLoan`, `upsertLoanPayments` — все с `requireSection("CREDITS", "MANAGE")`.
+
+### UI — Детальная карточка (/credits/[id])
+
+- [x] **CRED-10** (D-18): Summary cards: сумма кредита / погашено тела / уплачено процентов / текущий остаток / переплата / ставка/срок/даты. Паттерн `components/ads/SpendSummary.tsx`.
+- [x] **CRED-11** (D-18): Таблица графика: дата / тело / проценты / вычисленный остаток (накопительно). Line-chart остатка (recharts, паттерн `WbAdvertOrdersChart`). Опциональная начальная точка — amount кредита для полной кривой.
+
+### UI — Сводный горизонтальный график (/credits/schedule)
+
+- [x] **CRED-12** (D-13, D-13a): Горизонтальная sticky-таблица. Левый блок (sticky): организация / кредитор / № КД / сумма / ставка / остаток. Колонки-периоды: настраиваемый диапазон дат + разбивка день/неделя/месяц. Горизонтальный скролл.
+- [x] **CRED-13** (D-14, D-15): Переключатель день/неделя/месяц. Каждый кредит = 2 строки (тело + проценты). Бакетирование на лету из `LoanPayment.date`.
+- [x] **CRED-14** (D-16): Группировка по организации: per-org подытоги (тело + проценты) + строка «Итого» внизу. Иерархия границ (CLAUDE.md): inter-org = полный `border-r`, intra-org = `border-r/40`.
+
+### Seed и данные
+
+- [x] **CRED-15** (U-01, U-02, U-03, U-04, U-05): Seed загружает 23 кредита (4 Сбербанк + 19 JetLend). JetLend с PDF (11 кредитов) — строки из PDF; JetLend без PDF (8 кредитов) — строки из Лист2 помесячно; Сбербанк — история из Лист2 + хвост из XLSX. Сверка per-org + Итого vs контрольным суммам Лист2 (допуск 100₽/200₽).
+- [x] **CRED-16** (D-07): `issueDate = null` для всех seed-кредитов. Fallback UI — дата первого платежа из графика.
+
+### Traceability: Decision IDs → Implementation
+
+| Decision | Реализовано в | Статус |
+|----------|--------------|--------|
+| D-01 (загрузка данных: seed-скрипт) | scripts/seed-credits.ts | Complete |
+| D-02 (явные строки LoanPayment) | prisma/schema.prisma, Plan 21-01 | Complete |
+| D-03 (гранулярность — по датам платежей) | LoanPayment.date, seed-credits.ts | Complete |
+| D-04 (остаток вычисляется из amount + платежи) | lib/loan-math.ts | Complete |
+| D-05 (модель Loan) | prisma/schema.prisma | Complete |
+| D-06 (модель LoanPayment) | prisma/schema.prisma | Complete |
+| D-07 (issueDate nullable, null при seed) | prisma/schema.prisma, seed | Complete |
+| D-08 (Lender справочник, U-03: Bank→Lender) | prisma/schema.prisma, app/actions/lender.ts, components/settings/LendersTab.tsx | Complete |
+| D-09 (статус computed) | lib/loan-math.ts, /credits page | Complete |
+| D-10 (CREDITS ERP_SECTION, routes) | prisma/schema.prisma миграция, app/(dashboard)/credits/* | Complete |
+| D-11 (RBAC requireSection CREDITS) | app/actions/credits.ts, app/actions/lender.ts | Complete |
+| D-12 (список кредитов, фильтры) | app/(dashboard)/credits/page.tsx, components/credits/ | Complete |
+| D-13 (горизонтальная sticky-таблица) | app/(dashboard)/credits/schedule/page.tsx | Complete |
+| D-13a (настраиваемый диапазон) | components/credits/ScheduleFilters.tsx | Complete |
+| D-14 (день/неделя/месяц бакетирование) | lib/loan-math.ts (generateBucketSequence) | Complete |
+| D-15 (2 строки per кредит) | components/credits/ScheduleTable.tsx | Complete |
+| D-16 (группировка по орг, подытоги) | components/credits/ScheduleTable.tsx | Complete |
+| D-17 (левый sticky блок: кредитор + инфо) | components/credits/ScheduleTable.tsx | Complete |
+| D-18 (детальная карточка: summary + график + chart) | app/(dashboard)/credits/[id]/page.tsx | Complete |
+| D-19 (Decimal(14,2) деньги, Decimal(6,3) ставка) | prisma/schema.prisma | Complete |
+| U-01 (источник строк — детальные файлы Кредиты/) | scripts/seed-credits.ts, 21-04-SEED-NOTES.md | Complete |
+| U-02 (минимум 2 кредитора: Сбербанк + JetLend) | scripts/seed-credits.ts Lender upsert | Complete |
+| U-03 (Bank→Lender, «Кредитор» в UI) | повсюду в Phase 21 | Complete |
+| U-04 (JetLend PDF авто-парсинг через pdftotext) | scripts/seed-credits.ts parseJetLendPdf | Complete |
+| U-05 (Сбер: история из Лист2 + хвост из XLSX) | scripts/seed-credits.ts Sber merge logic | Complete |
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
