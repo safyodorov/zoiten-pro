@@ -30,6 +30,7 @@ enum ERP_SECTION {
   EMPLOYEES
   ADS
   USER_MANAGEMENT
+  CREDITS
 }
 
 enum AbcStatus {
@@ -495,6 +496,7 @@ model Company {
   id        String            @id @default(cuid())
   name      String            @unique
   employees EmployeeCompany[]
+  loans     Loan[]
   createdAt DateTime          @default(now())
 }
 
@@ -1211,4 +1213,57 @@ model ProductIncoming {
   plannedSalesPerDay Float? // план продаж после прихода, шт/день (когда товар появится на остатках продажи будут другие)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 21: Кредиты — Loan + LoanPayment + Lender
+// ──────────────────────────────────────────────────────────────────
+
+// Справочник кредиторов (D-08 + U-03). Банки, краудлендинг и др.
+// Значения: «Сбербанк», «JetLend». Паттерн Brand/Category с sortOrder.
+model Lender {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  loans     Loan[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Кредит компании (D-05). Soft delete через deletedAt.
+// Статус кредита НЕ хранится (D-09) — вычисляется из платежей (computed).
+model Loan {
+  id             String        @id @default(cuid())
+  contractNumber String // № КД, free text («№ 3702242101-23-2», «№21220»)
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  lenderId       String
+  lender         Lender        @relation(fields: [lenderId], references: [id], onDelete: Restrict)
+  amount         Decimal       @db.Decimal(14, 2) // сумма кредита (тело), руб
+  annualRatePct  Decimal       @db.Decimal(6, 3) // годовая ставка %, напр. 28.000
+  termMonths     Int? // срок в месяцах, nullable
+  issueDate      DateTime? // дата выдачи — ручное поле, nullable (D-07)
+  notes          String?       @db.Text
+  payments       LoanPayment[]
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([deletedAt])
+  @@index([companyId])
+  @@index([lenderId])
+}
+
+// Строка графика погашения кредита (D-06).
+// Остаток основного долга НЕ хранится — вычисляется при рендере.
+model LoanPayment {
+  id        String   @id @default(cuid())
+  loanId    String
+  loan      Loan     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  principal Decimal  @default(0) @db.Decimal(14, 2) // тело долга, руб
+  interest  Decimal  @default(0) @db.Decimal(14, 2) // проценты, руб
+  createdAt DateTime @default(now())
+
+  @@index([loanId, date])
 }
