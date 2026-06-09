@@ -7,6 +7,7 @@ import { MarketplacesTab } from "./MarketplacesTab"
 import { DirectionsTab } from "./DirectionsTab"
 import { WbTokensTab } from "./WbTokensTab"
 import { CronScheduleTab } from "./CronScheduleTab"
+import { LendersTab } from "./LendersTab"
 import type { WbTokenListItem } from "@/app/actions/wb-tokens"
 import type { CronSchedule } from "@/app/actions/cron-schedule"
 
@@ -64,6 +65,12 @@ interface DirectionWithBrands {
   brands: { id: string; name: string }[]
 }
 
+interface LenderRow {
+  id: string
+  name: string
+  sortOrder: number
+}
+
 interface SettingsTabsProps {
   brands: BrandWithCategories[]
   marketplaces: MarketplaceRow[]
@@ -72,6 +79,7 @@ interface SettingsTabsProps {
   wbTokens: WbTokenListItem[] | null // null = не показывать tab (non-superadmin)
   // 2026-05-15 (quick 260515-o4o): null = не показывать таб (non-superadmin)
   schedule: CronSchedule | null
+  lenders: LenderRow[]
 }
 
 // ── SettingsTabs ──────────────────────────────────────────────────
@@ -83,6 +91,7 @@ export function SettingsTabs({
   brandsLite,
   wbTokens,
   schedule,
+  lenders,
 }: SettingsTabsProps) {
   return (
     <Tabs defaultValue="directions">
@@ -91,6 +100,7 @@ export function SettingsTabs({
         <TabsTrigger value="brands">Бренды</TabsTrigger>
         <TabsTrigger value="categories">Категории</TabsTrigger>
         <TabsTrigger value="marketplaces">Маркетплейсы</TabsTrigger>
+        <TabsTrigger value="lenders">Кредиторы</TabsTrigger>
         {wbTokens && <TabsTrigger value="wb-tokens">WB API токены</TabsTrigger>}
         {schedule && (
           <TabsTrigger value="cron-schedule">Расписание</TabsTrigger>
@@ -107,6 +117,9 @@ export function SettingsTabs({
       </TabsContent>
       <TabsContent value="marketplaces">
         <MarketplacesTab marketplaces={marketplaces} />
+      </TabsContent>
+      <TabsContent value="lenders">
+        <LendersTab lenders={lenders} />
       </TabsContent>
       {wbTokens && (
         <TabsContent value="wb-tokens">

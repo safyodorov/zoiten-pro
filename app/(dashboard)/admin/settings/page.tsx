@@ -8,7 +8,7 @@ import { getCronSchedule } from "@/app/actions/cron-schedule"
 export default async function SettingsPage() {
   await requireSuperadmin() // SUPERADMIN only (D-03)
 
-  const [brands, marketplaces, directions, wbTokens, schedule] =
+  const [brands, marketplaces, directions, wbTokens, schedule, lenders] =
     await Promise.all([
       prisma.brand.findMany({
         orderBy: { sortOrder: "asc" },
@@ -34,6 +34,7 @@ export default async function SettingsPage() {
       }),
       listWbTokens(), // Quick 260512-jxh
       getCronSchedule(), // Quick 260515-o4o
+      prisma.lender.findMany({ orderBy: { sortOrder: "asc" } }), // Phase 21
     ])
 
   const brandsLite = brands.map((b) => ({
@@ -51,6 +52,7 @@ export default async function SettingsPage() {
         brandsLite={brandsLite}
         wbTokens={wbTokens}
         schedule={schedule}
+        lenders={lenders}
       />
     </div>
   )
