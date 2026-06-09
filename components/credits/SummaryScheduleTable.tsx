@@ -105,125 +105,118 @@ interface LoanRowsProps {
 }
 
 function LoanRows({ row, columns, onClick, isLastInGroup }: LoanRowsProps) {
-  // Строка 1: Тело
-  const bodyRowClass = cn(
-    "cursor-pointer hover:bg-muted/30 transition-colors group",
-  )
-  // Строка 2: % (intra-credit boundary — тонкая)
-  const interestRowClass = cn(
-    "cursor-pointer hover:bg-muted/30 transition-colors",
-    isLastInGroup ? "" : "border-b-2"
-  )
+  // Иерархия границ (CLAUDE.md «Иерархия границ между группами») — различие по ЦВЕТУ, не ширине:
+  //  - intra (тело|% ОДНОГО кредита) — тонкая border-b-border/40
+  //  - inter (между кредитами) — полный цвет border-b-border; последний кредит группы → /40 (подытог отделит фоном)
+  const intra = "border-b-border/40"
+  const inter = isLastInGroup ? "border-b-border/40" : "border-b-border"
 
   return (
     <>
-      {/* Строка «Тело» — все данные кредита в левом блоке */}
-      <tr className={bodyRowClass} onClick={onClick}>
+      {/* Строка «Тело» — все данные кредита в левом блоке. Низ строки = граница тело|% (intra, тонкая) */}
+      <tr className="cursor-pointer hover:bg-muted/30 transition-colors group" onClick={onClick}>
         {/* Тип */}
         <td
-          className={cn(STICKY_BASE, "font-medium text-blue-600 dark:text-blue-400")}
+          className={cn(STICKY_BASE, intra, "font-medium text-blue-600 dark:text-blue-400")}
           style={{ left: LEFT_OFFSETS.type, width: COL_WIDTHS.type, minWidth: COL_WIDTHS.type }}
         >
           Тело
         </td>
         {/* Организация */}
         <td
-          className={STICKY_BASE}
+          className={cn(STICKY_BASE, intra)}
           style={{ left: LEFT_OFFSETS.org, width: COL_WIDTHS.org, minWidth: COL_WIDTHS.org }}
         >
           <span className="text-muted-foreground">{row.companyName}</span>
         </td>
         {/* Кредитор (U-03) */}
         <td
-          className={STICKY_BASE}
+          className={cn(STICKY_BASE, intra)}
           style={{ left: LEFT_OFFSETS.lender, width: COL_WIDTHS.lender, minWidth: COL_WIDTHS.lender }}
         >
           {row.lenderName}
         </td>
         {/* № КД */}
         <td
-          className={STICKY_BASE}
+          className={cn(STICKY_BASE, intra)}
           style={{ left: LEFT_OFFSETS.contract, width: COL_WIDTHS.contract, minWidth: COL_WIDTHS.contract }}
         >
           {row.contractNumber}
         </td>
         {/* Сумма */}
         <td
-          className={cn(STICKY_BASE, "text-right")}
+          className={cn(STICKY_BASE, intra, "text-right")}
           style={{ left: LEFT_OFFSETS.amount, width: COL_WIDTHS.amount, minWidth: COL_WIDTHS.amount }}
         >
           {formatMoney(row.amount)}
         </td>
         {/* Ставка */}
         <td
-          className={cn(STICKY_BASE, "text-right")}
+          className={cn(STICKY_BASE, intra, "text-right")}
           style={{ left: LEFT_OFFSETS.rate, width: COL_WIDTHS.rate, minWidth: COL_WIDTHS.rate }}
         >
           {formatRate(row.annualRatePct)}
         </td>
         {/* Остаток — последняя sticky-колонка, border-r полный */}
         <td
-          className={cn(STICKY_BASE, "border-r border-r-border text-right")}
+          className={cn(STICKY_BASE, intra, "border-r border-r-border text-right")}
           style={{ left: LEFT_OFFSETS.balance, width: COL_WIDTHS.balance, minWidth: COL_WIDTHS.balance }}
         >
           {formatMoney(row.currentBalance)}
         </td>
         {/* Период-ячейки: principal */}
         {columns.map((col) => (
-          <PeriodCell key={col.key} value={row.principalByPeriod[col.key]} />
+          <PeriodCell key={col.key} value={row.principalByPeriod[col.key]} className={intra} />
         ))}
       </tr>
 
-      {/* Строка «%» — placeholder «—» в левом блоке (CLAUDE.md: no rowSpan) */}
-      <tr
-        className={interestRowClass}
-        onClick={onClick}
-      >
+      {/* Строка «%» — placeholder «—» в левом блоке (CLAUDE.md: no rowSpan). Низ строки = граница между кредитами (inter) */}
+      <tr className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={onClick}>
         {/* Тип */}
         <td
-          className={cn(STICKY_BASE, "font-medium text-amber-600 dark:text-amber-400 border-b border-b-border/40")}
+          className={cn(STICKY_BASE, inter, "font-medium text-amber-600 dark:text-amber-400")}
           style={{ left: LEFT_OFFSETS.type, width: COL_WIDTHS.type, minWidth: COL_WIDTHS.type }}
         >
           %
         </td>
         {/* Организация — placeholder */}
         <td
-          className={cn(STICKY_BASE, "border-b border-b-border/40 text-muted-foreground")}
+          className={cn(STICKY_BASE, inter, "text-muted-foreground")}
           style={{ left: LEFT_OFFSETS.org, width: COL_WIDTHS.org, minWidth: COL_WIDTHS.org }}
         >
           —
         </td>
         {/* Кредитор — placeholder */}
         <td
-          className={cn(STICKY_BASE, "border-b border-b-border/40 text-muted-foreground")}
+          className={cn(STICKY_BASE, inter, "text-muted-foreground")}
           style={{ left: LEFT_OFFSETS.lender, width: COL_WIDTHS.lender, minWidth: COL_WIDTHS.lender }}
         >
           —
         </td>
         {/* № КД — placeholder */}
         <td
-          className={cn(STICKY_BASE, "border-b border-b-border/40 text-muted-foreground")}
+          className={cn(STICKY_BASE, inter, "text-muted-foreground")}
           style={{ left: LEFT_OFFSETS.contract, width: COL_WIDTHS.contract, minWidth: COL_WIDTHS.contract }}
         >
           —
         </td>
         {/* Сумма — placeholder */}
         <td
-          className={cn(STICKY_BASE, "border-b border-b-border/40 text-muted-foreground text-right")}
+          className={cn(STICKY_BASE, inter, "text-muted-foreground text-right")}
           style={{ left: LEFT_OFFSETS.amount, width: COL_WIDTHS.amount, minWidth: COL_WIDTHS.amount }}
         >
           —
         </td>
         {/* Ставка — placeholder */}
         <td
-          className={cn(STICKY_BASE, "border-b border-b-border/40 text-muted-foreground text-right")}
+          className={cn(STICKY_BASE, inter, "text-muted-foreground text-right")}
           style={{ left: LEFT_OFFSETS.rate, width: COL_WIDTHS.rate, minWidth: COL_WIDTHS.rate }}
         >
           —
         </td>
         {/* Остаток — последняя sticky, border-r */}
         <td
-          className={cn(STICKY_BASE, "border-r border-r-border border-b border-b-border/40 text-muted-foreground text-right")}
+          className={cn(STICKY_BASE, inter, "border-r border-r-border text-muted-foreground text-right")}
           style={{ left: LEFT_OFFSETS.balance, width: COL_WIDTHS.balance, minWidth: COL_WIDTHS.balance }}
         >
           —
@@ -233,7 +226,7 @@ function LoanRows({ row, columns, onClick, isLastInGroup }: LoanRowsProps) {
           <PeriodCell
             key={col.key}
             value={row.interestByPeriod[col.key]}
-            className="border-b border-b-border/40"
+            className={inter}
           />
         ))}
       </tr>
@@ -256,14 +249,16 @@ function OrgSubtotalRows({
   subtotalInterestByPeriod,
   columns,
 }: OrgSubtotalRowsProps) {
+  // bg-muted СПЛОШНОЙ (не /40) — иначе при горизонтальной прокрутке период-ячейки
+  // просвечивают сквозь зафиксированный sticky-блок подытога.
   const subtotalStickyClass = cn(
-    "sticky z-20 bg-muted/40 border-b text-xs px-2 h-8 align-middle whitespace-nowrap overflow-hidden text-ellipsis font-medium"
+    "sticky z-20 bg-muted border-b text-xs px-2 h-8 align-middle whitespace-nowrap overflow-hidden text-ellipsis font-medium"
   )
 
   return (
     <>
       {/* Подытог тела орг */}
-      <tr className="bg-muted/40">
+      <tr className="bg-muted">
         <td
           className={cn(subtotalStickyClass, "text-blue-700 dark:text-blue-300")}
           style={{ left: LEFT_OFFSETS.type, width: COL_WIDTHS.type, minWidth: COL_WIDTHS.type }}
@@ -284,7 +279,7 @@ function OrgSubtotalRows({
         {columns.map((col) => (
           <td
             key={col.key}
-            className={cn(PERIOD_BASE, "border-r border-r-border/30 bg-muted/40 font-medium")}
+            className={cn(PERIOD_BASE, "border-r border-r-border/30 bg-muted font-medium")}
           >
             {(subtotalPrincipalByPeriod[col.key] ?? 0) === 0 ? (
               <span className="text-muted-foreground">—</span>
@@ -296,7 +291,7 @@ function OrgSubtotalRows({
       </tr>
 
       {/* Подытог процентов орг */}
-      <tr className="bg-muted/40">
+      <tr className="bg-muted">
         <td
           className={cn(subtotalStickyClass, "text-amber-700 dark:text-amber-300 border-b-2 border-b-border")}
           style={{ left: LEFT_OFFSETS.type, width: COL_WIDTHS.type, minWidth: COL_WIDTHS.type }}
@@ -317,7 +312,7 @@ function OrgSubtotalRows({
         {columns.map((col) => (
           <td
             key={col.key}
-            className={cn(PERIOD_BASE, "border-r border-r-border/30 bg-muted/40 font-medium border-b-2 border-b-border")}
+            className={cn(PERIOD_BASE, "border-r border-r-border/30 bg-muted font-medium border-b-2 border-b-border")}
           >
             {(subtotalInterestByPeriod[col.key] ?? 0) === 0 ? (
               <span className="text-muted-foreground">—</span>

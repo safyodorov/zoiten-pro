@@ -446,6 +446,7 @@ middleware.ts                ← RBAC route guard (Edge runtime)
   - `<TableHead>` cells с `sticky top-0 z-20 bg-background border-b`
   - Body: `<TableBody>` + `<TableRow>` (от shadcn — там hover OK)
 - **Flex layout для sticky:** `h-full flex flex-col` → `flex-1 min-h-0` → таблица сама вычисляет высоту. НЕ использовать `h-[calc(100vh-Npx)]`.
+- **СПЛОШНОЙ фон на КАЖДОЙ sticky-ячейке (header И frozen-колонки И подытоги/итоги):** только `bg-background`/`bg-muted`/`bg-card` БЕЗ модификатора прозрачности. `bg-muted/40`, `bg-muted/60`, `bg-muted/30` на sticky-ячейке → прокручиваемый контент просвечивает сквозь зафиксированную часть (тема: `--background`/`--muted`/`--card` непрозрачны, но `/NN` добавляет alpha). Это повторяющийся баг — для подсветки подытогов/итогов использовать сплошной `bg-muted` (не `/40`). Hover (`hover:bg-muted/30` на `<tr>`) безопасен только потому, что sticky-`<td>` перекрывает его своим сплошным фоном. ⚠ `components/finance-models/{ScenarioMatrix,ProductsTable,MetricsTable}.tsx` ещё используют `bg-muted/60`/`/40` на sticky — текут, ждут фикса. Подробно: [memory/project_zoiten_sticky_opaque_bg.md](../../Users/User/.claude/projects/c--Users-User-zoiten-pro/memory/project_zoiten_sticky_opaque_bg.md)
 
 ### Форматирование чисел (Д, Об, остатки)
 
