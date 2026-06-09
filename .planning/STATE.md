@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 20-00-PLAN.md (Wave 0 RED stubs)
-last_updated: "2026-06-09T14:06:00.401Z"
+stopped_at: Completed 20-01-PLAN.md
+last_updated: "2026-06-09T14:10:19.275Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 20 (procurement) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 
 ## Performance Metrics
 
@@ -109,6 +109,7 @@ Plan: 2 of 8
 | Phase 21-credits P05 | 256s | 3 tasks | 6 files |
 | Phase 21-credits P07 | 288s | 3 tasks | 4 files |
 | Phase 20-procurement P00 | 4min | 3 tasks | 3 files |
+| Phase 20 P01 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -262,6 +263,9 @@ Recent decisions affecting current work:
 - [Phase 21-credits]: generateBucketSequence итерация по cursor с шагом день/неделю/месяц с дедупликацией через Set — правильный охват крайних бакетов
 - [Phase 20-procurement]: Plan 20-00: D-02 isPrimary pinned via PURE helper @/lib/supplier-primary (resolvePrimaryWrites) — server action pulls next-auth, vitest can't load it; 20-05 must extract enforcement
 - [Phase 20-procurement]: Plan 20-00: fetchCbrRates mocked via vi.stubGlobal('fetch') — CBR uses plain Node fetch (no TLS workaround unlike WB v4)
+- [Phase 20]: Plan 20-01: 6th enum PaymentType (DEPOSIT|BALANCE) created for PurchasePayment.type (plan correction over reusing SupplierContactType)
+- [Phase 20]: Plan 20-01: ERP_SECTION untouched (PROCUREMENT already exists, no ALTER); business uniqueness (isPrimary/participant/OTHER-custom) enforced in server actions not DB
+- [Phase 20]: Plan 20-01: Purchase.supplierId + PurchaseItem.productId ON DELETE RESTRICT (protect history); SupplierProductLink.productId SET NULL; partial unique WHERE productId IS NOT NULL
 
 ### Roadmap Evolution
 
@@ -324,6 +328,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T14:06:00.396Z
-Stopped at: Completed 20-00-PLAN.md (Wave 0 RED stubs)
+Last session: 2026-06-09T14:10:12.571Z
+Stopped at: Completed 20-01-PLAN.md
 Resume file: None

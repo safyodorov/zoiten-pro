@@ -458,11 +458,11 @@ Plans:
 
 **Depends on:** Phase 4 (Products), Phase 2 (User Management — Employee и связка с Закупщиком)
 
-**Plans:** 1/8 plans executed
+**Plans:** 2/8 plans executed
 
 Plans:
 - [x] 20-00-PLAN.md — Wave 0: RED test stubs (procurement-math / cbr-rates / supplier-actions isPrimary)
-- [ ] 20-01-PLAN.md — Wave 1: Schema + manual migration (10 models + 6 enums + partial unique SupplierProductLink + CurrencyRate)
+- [x] 20-01-PLAN.md — Wave 1: Schema + manual migration (10 models + 6 enums + partial unique SupplierProductLink + CurrencyRate)
 - [ ] 20-02-PLAN.md — Wave 2: Section wiring (sections.ts /procurement + nav group + titles + section-labels + dashboard; rename temp plan)
 - [ ] 20-03-PLAN.md — Wave 2: lib/procurement-math.ts (deposit/balance dates + percent↔amount) — GREEN golden test
 - [ ] 20-04-PLAN.md — Wave 2: lib/cbr-rates.ts + /api/cbr-rate-sync + dispatcher branch (12:00 МСК, forward-only) — GREEN cbr test
