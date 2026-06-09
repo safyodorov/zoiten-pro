@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 21-credits 21-02-PLAN.md
-last_updated: "2026-06-09T09:47:21.476Z"
+stopped_at: Completed 21-credits 21-03-PLAN.md
+last_updated: "2026-06-09T09:50:28.231Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 21 (credits) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ Plan: 3 of 8
 | Phase 16-wb-stock-sizes P06 | 4min | 1 tasks | 2 files |
 | Phase 21-credits P01 | 99s | 2 tasks | 2 files |
 | Phase 21-credits P02 | 60s | 2 tasks | 3 files |
+| Phase 21-credits P03 | 240 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -249,6 +250,8 @@ Recent decisions affecting current work:
 - [Phase 21-credits]: D-09: статус кредита computed из LoanPayment records, не хранится полем в БД
 - [Phase 21-credits]: D-19: Decimal(14,2) для денег, Decimal(6,3) для годовой ставки процента (28.000)
 - [Phase 21-credits]: Landmark icon for Credits sidebar entry; position after SALES (/sales-plan)
+- [Phase 21-credits]: ISO 8601 week algorithm через «четверг текущей недели» — year/week по году четверга
+- [Phase 21-credits]: prisma generate required after Plan 21-01 (schema added models but client not regenerated)
 
 ### Roadmap Evolution
 
@@ -311,6 +314,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T09:47:21.471Z
-Stopped at: Completed 21-credits 21-02-PLAN.md
+Last session: 2026-06-09T09:50:28.226Z
+Stopped at: Completed 21-credits 21-03-PLAN.md
 Resume file: None

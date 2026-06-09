@@ -481,12 +481,12 @@ Plans:
 
 **Depends on:** Phase 2 (User Management — RBAC новый раздел CREDITS), справочник Company (организации Пеликан/Зойтен/Сикрет Вэй/Дрим Лайн уже существует)
 
-**Plans:** 2/8 plans executed
+**Plans:** 3/8 plans executed
 
 Plans:
 - [x] 21-01-PLAN.md — Schema + миграция (Loan/LoanPayment/Bank + ERP_SECTION.CREDITS)
 - [x] 21-02-PLAN.md — Проводка: sections.ts + section-titles + nav-items + RBAC
-- [ ] 21-03-PLAN.md — lib/loan-math + server actions (credits + bank)
+- [x] 21-03-PLAN.md — lib/loan-math + server actions (credits + bank)
 - [ ] 21-04-PLAN.md — Seed-скрипт из Кредиты.xlsx + сверка с Лист2
 - [ ] 21-05-PLAN.md — Список кредитов + фильтры + LoanModal CRUD
 - [ ] 21-06-PLAN.md — Детальная карточка (summary cards + график + line-chart)
