@@ -160,6 +160,7 @@ export async function loadSummarySchedule(
 
   const fromMs = Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate())
   const toMs = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate())
+  const asOf = new Date() // «сегодня» — для currentBalance (будущие платежи = плановые)
 
   // 3. Строки для каждого кредита
   const rows: LoanScheduleRow[] = loans.map((loan) => {
@@ -169,8 +170,8 @@ export async function loadSummarySchedule(
       interest: Number(p.interest),
     }))
 
-    // currentBalance по ВСЕМ платежам (D-04)
-    const { currentBalance } = computeLoanAggregates(Number(loan.amount), allPayments)
+    // currentBalance на сегодня (будущие плановые платежи не считаются оплаченными)
+    const { currentBalance } = computeLoanAggregates(Number(loan.amount), allPayments, asOf)
 
     // Бакетирование только платежей в окне
     const principalByPeriod: Record<string, number> = {}

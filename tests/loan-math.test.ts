@@ -97,6 +97,39 @@ describe("computeLoanAggregates", () => {
     const agg = computeLoanAggregates(1000000, [])
     expect(agg.totalPrincipalPaid).toBe(0)
   })
+
+  // asOf: будущие плановые платежи графика не считаются оплаченными.
+  // Регрессия: seed загружает ПОЛНЫЙ график (Σtело == amount) → без asOf currentBalance == 0
+  // и кредит ошибочно «погашен». С asOf учитываются только платежи с датой ≤ asOf.
+  describe("asOf (полный график амортизации)", () => {
+    const full: PaymentInput[] = [
+      { date: "2024-06-15", principal: 300000, interest: 20000 }, // прошлый
+      { date: "2026-01-15", principal: 300000, interest: 15000 }, // прошлый
+      { date: "2027-06-15", principal: 400000, interest: 10000 }, // будущий плановый
+    ]
+
+    it("без asOf: Σтело == amount → currentBalance = 0 (баг полного графика)", () => {
+      const agg = computeLoanAggregates(1000000, full)
+      expect(agg.currentBalance).toBe(0)
+      expect(agg.totalPrincipalPaid).toBe(1000000)
+    })
+
+    it("с asOf=2026-06-09: учтены только прошлые платежи → остаток 400000", () => {
+      const agg = computeLoanAggregates(1000000, full, new Date(Date.UTC(2026, 5, 9)))
+      expect(agg.totalPrincipalPaid).toBe(600000)
+      expect(agg.totalInterestPaid).toBe(35000)
+      expect(agg.currentBalance).toBe(400000)
+    })
+
+    it("платёж ровно в день asOf считается оплаченным (≤)", () => {
+      const agg = computeLoanAggregates(
+        1000000,
+        [{ date: "2026-06-09", principal: 250000, interest: 1000 }],
+        new Date(Date.UTC(2026, 5, 9))
+      )
+      expect(agg.currentBalance).toBe(750000)
+    })
+  })
 })
 
 // ──────────────────────────────────────────────────────────────────

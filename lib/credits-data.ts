@@ -49,6 +49,8 @@ export async function loadCredits(): Promise<CreditRow[]> {
     },
   })
 
+  const asOf = new Date() // «сегодня» — платежи в будущем = плановые, не оплаченные
+
   const rows: CreditRow[] = loans.map((loan) => {
     const amount = Number(loan.amount)
     const payments = loan.payments.map((p) => ({
@@ -57,7 +59,7 @@ export async function loadCredits(): Promise<CreditRow[]> {
       interest: Number(p.interest),
     }))
 
-    const agg = computeLoanAggregates(amount, payments)
+    const agg = computeLoanAggregates(amount, payments, asOf)
     const status = computeStatus(agg.currentBalance)
     const effectiveIssueDate: Date | null =
       loan.issueDate ?? (loan.payments.length > 0 ? loan.payments[0].date : null)
@@ -148,7 +150,7 @@ export async function loadCreditsDashboard(): Promise<CreditsDashboard> {
       interest: Number(p.interest),
     }))
 
-    const { currentBalance } = computeLoanAggregates(amount, payments)
+    const { currentBalance } = computeLoanAggregates(amount, payments, now)
     if (currentBalance > 0) {
       totalDebt += currentBalance
       weightedNum += currentBalance * Number(loan.annualRatePct)

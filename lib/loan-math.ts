@@ -114,18 +114,38 @@ export function computeSchedule(amount: number, payments: PaymentInput[]): Sched
 /**
  * Вычисляет накопительные агрегаты кредита (D-04).
  *
- * - totalPrincipalPaid = Σ principal
- * - totalInterestPaid = Σ interest
+ * - totalPrincipalPaid = Σ principal (оплаченных)
+ * - totalInterestPaid = Σ interest (оплаченных)
  * - currentBalance = amount − totalPrincipalPaid
  * - overpayment = totalInterestPaid (переплата = сумма уплаченных процентов)
  *
+ * `asOf` (опц.): если задан — учитываются только платежи с датой ≤ asOf (фактически
+ * оплаченные); будущие ПЛАНОВЫЕ платежи графика игнорируются. Без asOf — учитываются все
+ * платежи (полный график). ВАЖНО: LoanPayment хранит ПОЛНЫЙ график амортизации (прошлое +
+ * будущее), поэтому для «текущего остатка»/«погашено на сегодня» обязательно передавать asOf,
+ * иначе Σprincipal == amount → currentBalance == 0 (кредит выглядит полностью погашенным).
+ *
  * Guard: пустой payments[] → currentBalance = amount, totalInterestPaid = 0.
  */
-export function computeLoanAggregates(amount: number, payments: PaymentInput[]): LoanAggregates {
+export function computeLoanAggregates(
+  amount: number,
+  payments: PaymentInput[],
+  asOf?: Date
+): LoanAggregates {
+  const asOfMs =
+    asOf != null
+      ? Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate())
+      : null
+
   let totalPrincipalPaid = 0
   let totalInterestPaid = 0
 
   for (const p of payments) {
+    if (asOfMs !== null) {
+      const d = toDate(p.date)
+      const dMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+      if (dMs > asOfMs) continue // будущий плановый платёж — ещё не оплачен
+    }
     totalPrincipalPaid += p.principal
     totalInterestPaid += p.interest
   }

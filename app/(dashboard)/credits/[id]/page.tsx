@@ -42,7 +42,9 @@ export default async function CreditDetailPage({ params }: Props) {
   }))
 
   const schedule = computeSchedule(amount, payments)
-  const agg = computeLoanAggregates(amount, payments)
+  // agg на сегодня: будущие плановые платежи графика не считаются оплаченными
+  // (без asOf Σprincipal == amount → остаток 0 → кредит ошибочно «погашен»)
+  const agg = computeLoanAggregates(amount, payments, new Date())
   const status = computeStatus(agg.currentBalance)
 
   // D-07: effectiveIssueDate = issueDate ?? дата первого платежа
