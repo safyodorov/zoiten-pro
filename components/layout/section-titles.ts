@@ -20,7 +20,15 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/weekly/, title: "Недельные карточки" },
   { match: /^\/stock/, title: "Управление остатками" },
   { match: /^\/batches/, title: "Себестоимость партий" },
-  { match: /^\/purchase-plan/, title: "План закупок" },
+
+  { match: /^\/procurement\/suppliers\/[^/]+/, title: "Поставщик" },
+  { match: /^\/procurement\/suppliers/, title: "Поставщики" },
+  { match: /^\/procurement\/purchases\/[^/]+/, title: "Закупка" },
+  { match: /^\/procurement\/purchases/, title: "Закупки" },
+  { match: /^\/procurement\/plan/, title: "План закупок" },
+  { match: /^\/procurement/, title: "Управление закупками" },
+
+  { match: /^\/purchase-plan/, title: "План закупок (временный)" },
   { match: /^\/sales-plan/, title: "План продаж" },
   { match: /^\/credits\/schedule/, title: "Кредиты — сводный график" },
   { match: /^\/credits\/[^/]+/, title: "Кредит" },
