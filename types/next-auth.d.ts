@@ -28,5 +28,7 @@ declare module "next-auth/jwt" {
     role?: string
     allowedSections?: string[]
     sectionRoles?: Record<string, string>
+    /** epoch ms последнего перечитывания прав из БД (для троттлинга периодического refresh) */
+    rolesRefreshedAt?: number
   }
 }

@@ -82,7 +82,44 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.allowedSections = (user as any).allowedSections
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         token.sectionRoles = (user as any).sectionRoles
+        token.rolesRefreshedAt = Date.now()
+        return token
       }
+
+      // Периодический refresh прав из БД (не чаще раза в 60 сек на сессию).
+      // Зачем: гранты/отзывы через /admin/users и блокировка аккаунта применяются
+      // без перелогина (лаг ≤ 1 мин). Запрос — lookup по PK + sectionRoles (индекс по userId).
+      const REFRESH_INTERVAL_MS = 60_000
+      const lastRefresh = (token.rolesRefreshedAt as number | undefined) ?? 0
+      const tokenId = token.id as string | undefined
+      if (tokenId && Date.now() - lastRefresh > REFRESH_INTERVAL_MS) {
+        try {
+          const fresh = await prisma.user.findUnique({
+            where: { id: tokenId },
+            select: {
+              role: true,
+              allowedSections: true,
+              isActive: true,
+              sectionRoles: { select: { section: true, role: true } },
+            },
+          })
+
+          // Аккаунт удалён или отключён → инвалидируем сессию (форсим разлогин)
+          if (!fresh || !fresh.isActive) return null
+
+          const sectionRoles: Record<string, string> = {}
+          for (const sr of fresh.sectionRoles) sectionRoles[sr.section] = sr.role
+
+          token.role = fresh.role
+          token.allowedSections = fresh.allowedSections
+          token.sectionRoles = sectionRoles
+          token.rolesRefreshedAt = Date.now()
+        } catch {
+          // БД недоступна — не трогаем токен и НЕ разлогиниваем (без ложных вылетов).
+          // Следующий запрос попробует снова (rolesRefreshedAt не обновлён).
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
