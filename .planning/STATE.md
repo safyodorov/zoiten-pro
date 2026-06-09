@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 20-04-PLAN.md
-last_updated: "2026-06-09T14:19:41.184Z"
+stopped_at: Completed 20-05-PLAN.md
+last_updated: "2026-06-09T14:30:32.471Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 20 (procurement) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 
 ## Performance Metrics
 
@@ -113,6 +113,7 @@ Plan: 6 of 8
 | Phase 20-procurement P02 | 1 min | 2 tasks | 5 files |
 | Phase 20-procurement P03 | 1 min | 1 tasks | 1 files |
 | Phase 20-procurement P04 | 2min | 2 tasks | 4 files |
+| Phase 20 P05 | 8min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -272,6 +273,8 @@ Recent decisions affecting current work:
 - [Phase 20-procurement]: Plan 20-02: /procurement guarded via single SECTION_PATHS prefix entry; temp /purchase-plan renamed «План закупок (временный)», not deleted (kept as separate nav item until data migration)
 - [Phase 20-procurement]: Plan 20-03: lib/procurement-math.ts — pure import-free helper (D-08 deposit+3d / balance+leadTime / percent↔amount Math.round(n*100)/100 / Σ quantity×unitPrice), client+server SoT for createPurchase + modal; bodies verbatim from RESEARCH Pattern 6
 - [Phase 20-procurement]: Plan 20-04: lib/cbr-rates.ts plain Node fetch (no curl — CBR has no TLS-fingerprint block unlike WB v4); getLatestRate returns Prisma.Decimal; dispatcher cbr branch dynamic-imports ../../cbr-rate-sync/route (route at app/api, not app/api/cron); 12:00 MSK forward-only, idempotent upsert via @@unique[date,code]
+- [Phase 20-procurement]: Plan 20-05: isPrimary enforcement extracted to pure lib/supplier-primary.ts (resolvePrimaryWrites, last-wins) — vitest cannot load server action next-auth chain; createSupplier runs it after create, updateSupplier before upsert
+- [Phase 20-procurement]: Plan 20-05: supplier cascading filters named SupplierFilters (not ProcurementFilters) — name collision with existing /purchase-plan do-not-touch MVP; contacts/links/negotiations edited on detail-page tabs, SupplierModal handles only base fields
 
 ### Roadmap Evolution
 
@@ -334,6 +337,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T14:19:35.440Z
-Stopped at: Completed 20-04-PLAN.md
+Last session: 2026-06-09T14:30:22.889Z
+Stopped at: Completed 20-05-PLAN.md
 Resume file: None
