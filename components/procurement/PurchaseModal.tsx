@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -137,8 +137,35 @@ export function PurchaseModal({
     },
   })
 
-  const { fields, append, remove } = useFieldArray({ control, name: "items" })
+  const { fields, append, remove, replace } = useFieldArray({ control, name: "items" })
   const supplierId = watch("supplierId")
+  const itemsWatch = watch("items")
+
+  // Каскад D-07: товары, связанные с выбранным поставщиком (через SupplierProductLink).
+  // Пока поставщик не выбран — список пуст и селект заблокирован.
+  const availableProducts = useMemo(() => {
+    if (!supplierId) return []
+    const linked = productLinkMap[supplierId]
+    if (!linked) return []
+    return products.filter((p) => linked[p.id])
+  }, [supplierId, products, productLinkMap])
+
+  // Опции для конкретной строки: связанные товары + уже выбранный (для edit с
+  // историческими позициями, которых может не быть в текущих связках поставщика).
+  function rowOptions(idx: number): ProductOption[] {
+    const currentId = itemsWatch?.[idx]?.productId
+    if (!currentId || availableProducts.some((p) => p.id === currentId)) {
+      return availableProducts
+    }
+    const current = products.find((p) => p.id === currentId)
+    return current ? [current, ...availableProducts] : availableProducts
+  }
+
+  // Смена поставщика → сбрасываем позиции (товары прежнего поставщика невалидны).
+  function handleSupplierChange(newSupplierId: string) {
+    setValue("supplierId", newSupplierId, { shouldValidate: true })
+    replace([{ productId: "", quantity: 1, unitPrice: 0 }])
+  }
 
   useEffect(() => {
     if (!open) return
@@ -282,7 +309,11 @@ export function PurchaseModal({
                 <label className="text-xs font-medium text-muted-foreground">
                   Поставщик <span className="text-destructive">*</span>
                 </label>
-                <select {...register("supplierId")} className={inputCls}>
+                <select
+                  value={watch("supplierId")}
+                  onChange={(e) => handleSupplierChange(e.target.value)}
+                  className={inputCls}
+                >
                   <option value="">Выберите поставщика</option>
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -352,10 +383,17 @@ export function PurchaseModal({
                           <select
                             value={watch(`items.${idx}.productId`)}
                             onChange={(e) => handleProductChange(idx, e.target.value)}
-                            className="h-7 w-full rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                            disabled={!supplierId}
+                            className="h-7 w-full rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            <option value="">Выберите товар</option>
-                            {products.map((p) => (
+                            <option value="">
+                              {supplierId
+                                ? availableProducts.length
+                                  ? "Выберите товар"
+                                  : "У поставщика нет связанных товаров"
+                                : "Сначала выберите поставщика"}
+                            </option>
+                            {rowOptions(idx).map((p) => (
                               <option key={p.id} value={p.id}>
                                 {p.sku} — {p.name}
                               </option>
