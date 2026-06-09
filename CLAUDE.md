@@ -165,6 +165,18 @@ await requireSection("PRODUCTS", "MANAGE") // только MANAGE (для write-
 - Генератор: `lib/password.ts` → `generatePassword(12)` через `crypto.getRandomValues`
 - В форме кнопка `Shuffle` → генерация, `Eye` → показать/скрыть
 
+### ⚠ Чеклист при добавлении нового раздела ERP (`ERP_SECTION`)
+
+Добавление раздела затрагивает НЕСКОЛЬКО мест. Пропуск любого = баг. Обязательны:
+1. `prisma/schema.prisma` — значение в enum `ERP_SECTION` + миграция (`ALTER TYPE "ERP_SECTION" ADD VALUE`).
+2. `lib/sections.ts` — `SECTION_PATHS["/route"]` (middleware RBAC route guard).
+3. `components/layout/section-titles.ts` — заголовки раздела в Header.
+4. `components/layout/nav-items.ts` — пункт Sidebar.
+5. **`lib/section-labels.ts` → `SECTION_OPTIONS`** — ЧАЩЕ ВСЕГО ЗАБЫВАЮТ. Без этой строки раздел НЕ появляется тумблером VIEW/MANAGE в `/admin/users`, и админ не может вручную выдать/снять доступ (раздел виден только SUPERADMIN через bypass). Обязательно добавлять, чтобы доступом можно было управлять руками.
+6. (опц.) `app/(dashboard)/dashboard/page.tsx` — карточка раздела на дашборде.
+
+`app/actions/users.ts` правок НЕ требует (`sectionRoles` = `z.record(z.string(), …)` → любой новый section сохраняется после п.1). После выдачи прав получатель ОБЯЗАН перелогиниться (JWT не самообновляется).
+
 ## Синхронизация с Wildberries — ВАЖНАЯ СЕКЦИЯ
 
 ### Общая архитектура

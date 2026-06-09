@@ -4,8 +4,9 @@
 
 import { requireSection } from "@/lib/rbac"
 import { getSectionRole } from "@/lib/rbac"
-import { loadCredits, loadLendersAndCompanies } from "@/lib/credits-data"
+import { loadCredits, loadLendersAndCompanies, loadCreditsDashboard } from "@/lib/credits-data"
 import { CreditsTabs } from "@/components/credits/CreditsTabs"
+import { CreditsDashboard } from "@/components/credits/CreditsDashboard"
 import { CreditsFilters } from "@/components/credits/CreditsFilters"
 import { CreditsTable } from "@/components/credits/CreditsTable"
 import { LoanModal } from "@/components/credits/LoanModal"
@@ -28,9 +29,10 @@ export default async function CreditsPage({
   const { companies: companiesParam, lenders: lendersParam, status: statusParam } =
     await searchParams
 
-  const [allRows, { lenders, companies }] = await Promise.all([
+  const [allRows, { lenders, companies }, dashboard] = await Promise.all([
     loadCredits(),
     loadLendersAndCompanies(),
+    loadCreditsDashboard(),
   ])
 
   // Фильтрация на сервере по searchParams
@@ -69,6 +71,9 @@ export default async function CreditsPage({
           />
         )}
       </div>
+
+      {/* ── Дашборд-сводка (сверху списка) ── */}
+      <CreditsDashboard data={dashboard} />
 
       {/* ── Фильтры ── */}
       <CreditsFilters

@@ -414,12 +414,64 @@ function GrandTotalRows({
   )
 }
 
+// ── Строки остатка задолженности (на начало / конец периода) ───────────────────
+
+interface BalanceRowsProps {
+  balanceStartByPeriod: Record<string, number>
+  balanceEndByPeriod: Record<string, number>
+  columns: SummarySchedule["columns"]
+}
+
+function BalanceRows({ balanceStartByPeriod, balanceEndByPeriod, columns }: BalanceRowsProps) {
+  // bg-muted СПЛОШНОЙ (не /40) — иначе период-ячейки просвечивают сквозь sticky-блок при прокрутке.
+  const labelCls =
+    "sticky z-20 bg-muted border-b text-xs px-2 h-8 align-middle whitespace-nowrap overflow-hidden text-ellipsis font-medium"
+
+  const renderRow = (label: string, map: Record<string, number>, topBorder: boolean) => (
+    <tr className="bg-muted">
+      <td
+        className={cn(labelCls, "border-r border-r-border", topBorder && "border-t-2 border-t-border")}
+        colSpan={7}
+        style={{ left: 0 }}
+      >
+        {label}
+      </td>
+      {columns.map((col) => (
+        <td
+          key={col.key}
+          className={cn(
+            PERIOD_BASE,
+            "border-r border-r-border/30 bg-muted font-medium",
+            topBorder && "border-t-2 border-t-border"
+          )}
+        >
+          {formatMoney(Math.max(0, map[col.key] ?? 0))}
+        </td>
+      ))}
+    </tr>
+  )
+
+  return (
+    <>
+      {renderRow("Остаток задолженности на начало периода", balanceStartByPeriod, true)}
+      {renderRow("Остаток задолженности на конец периода", balanceEndByPeriod, false)}
+    </>
+  )
+}
+
 // ── Основной компонент ────────────────────────────────────────────────────────
 
 export function SummaryScheduleTable({ schedule, canManage }: Props) {
   const router = useRouter()
 
-  const { columns, groups, grandTotalPrincipalByPeriod, grandTotalInterestByPeriod } = schedule
+  const {
+    columns,
+    groups,
+    grandTotalPrincipalByPeriod,
+    grandTotalInterestByPeriod,
+    balanceStartByPeriod,
+    balanceEndByPeriod,
+  } = schedule
 
   if (groups.length === 0) {
     return (
@@ -535,6 +587,13 @@ export function SummaryScheduleTable({ schedule, canManage }: Props) {
           <GrandTotalRows
             grandTotalPrincipalByPeriod={grandTotalPrincipalByPeriod}
             grandTotalInterestByPeriod={grandTotalInterestByPeriod}
+            columns={columns}
+          />
+
+          {/* Остаток задолженности на начало / конец периода (2 строки) */}
+          <BalanceRows
+            balanceStartByPeriod={balanceStartByPeriod}
+            balanceEndByPeriod={balanceEndByPeriod}
             columns={columns}
           />
         </tbody>

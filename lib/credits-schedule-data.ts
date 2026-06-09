@@ -49,6 +49,10 @@ export interface SummarySchedule {
   groups: OrgGroup[]
   grandTotalPrincipalByPeriod: Record<string, number>
   grandTotalInterestByPeriod: Record<string, number>
+  /** Суммарный остаток основного долга по всем кредитам на начало каждого периода */
+  balanceStartByPeriod: Record<string, number>
+  /** Суммарный остаток основного долга по всем кредитам на конец каждого периода */
+  balanceEndByPeriod: Record<string, number>
 }
 
 // ── Порядок организаций (D-16) ────────────────────────────────────────────────
@@ -245,11 +249,56 @@ export async function loadSummarySchedule(
     }
   })
 
+  // 7. Running balance: суммарный остаток основного долга по всем кредитам по периодам.
+  //    Остаток на начало периода = остаток на конец предыдущего.
+  //    Старт окна = Σ (amount − principal, оплаченный ДО окна) по кредитам, выданным до окна.
+  //    Кредиты, выданные ВНУТРИ окна, добавляют amount в свой период выдачи.
+  const disbursedInPeriod: Record<string, number> = {}
+  let initialOutstanding = 0
+
+  for (const loan of loans) {
+    const amount = Number(loan.amount)
+    const effIssue: Date | null =
+      loan.issueDate ?? (loan.payments.length > 0 ? loan.payments[0].date : null)
+    const effIssueMs = effIssue
+      ? Date.UTC(effIssue.getUTCFullYear(), effIssue.getUTCMonth(), effIssue.getUTCDate())
+      : Number.NEGATIVE_INFINITY
+
+    // Principal, оплаченный строго до начала окна
+    let paidBefore = 0
+    for (const p of loan.payments) {
+      const pMs = Date.UTC(p.date.getUTCFullYear(), p.date.getUTCMonth(), p.date.getUTCDate())
+      if (pMs < fromMs) paidBefore += Number(p.principal)
+    }
+
+    if (effIssueMs < fromMs) {
+      // Выдан до окна → вносит остаток на начало окна
+      initialOutstanding += amount - paidBefore
+    } else if (effIssueMs <= toMs && effIssue) {
+      // Выдан внутри окна → amount добавляется в период выдачи
+      addToPeriodMap(disbursedInPeriod, bucketKey(effIssue, granularity), amount)
+    }
+    // Выдан после окна → не отображается
+  }
+
+  const balanceStartByPeriod: Record<string, number> = {}
+  const balanceEndByPeriod: Record<string, number> = {}
+  let running = round2(initialOutstanding)
+  for (const col of columns) {
+    balanceStartByPeriod[col.key] = Math.max(0, running)
+    const disb = disbursedInPeriod[col.key] ?? 0
+    const princ = grandTotalPrincipalByPeriod[col.key] ?? 0
+    running = round2(running + disb - princ)
+    balanceEndByPeriod[col.key] = Math.max(0, running)
+  }
+
   return {
     columns,
     groups,
     grandTotalPrincipalByPeriod,
     grandTotalInterestByPeriod,
+    balanceStartByPeriod,
+    balanceEndByPeriod,
   }
 }
 

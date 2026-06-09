@@ -13,3 +13,9 @@ node_modules/
 prisma/generated/
 tsconfig.tsbuildinfo
 image/
+
+# Кредиты — исходные данные (доставляются на VPS через scp, НЕ в репо)
+zoiten-pro.code-workspace
+/Кредиты.xlsx
+/Кредиты/
+/вводная.xlsx

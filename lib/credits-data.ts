@@ -3,7 +3,7 @@
 // Загружает кредиты с агрегатами и именем кредитора (U-03: lender.name)
 
 import { prisma } from "@/lib/prisma"
-import { computeLoanAggregates, computeStatus, type LoanStatus } from "@/lib/loan-math"
+import { computeLoanAggregates, computeStatus, round2, type LoanStatus } from "@/lib/loan-math"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +96,88 @@ export async function loadCredits(): Promise<CreditRow[]> {
   })
 
   return rows
+}
+
+// ── loadCreditsDashboard ────────────────────────────────────────────────────────
+
+export interface YearPayment {
+  year: number
+  principal: number
+  interest: number
+}
+
+export interface CreditsDashboard {
+  /** Σ текущего остатка основного долга по всем активным кредитам */
+  totalDebt: number
+  /** Средневзвешенная годовая ставка, взвешенная по текущему остатку долга (%) */
+  weightedRatePct: number
+  /** Текущий год (для лейбла «Осталось выплатить в N») */
+  currentYear: number
+  /**
+   * Будущие выплаты по годам (тело + проценты). Текущий год = только платежи
+   * с сегодняшней даты и далее («осталось выплатить»); будущие годы — все платежи года.
+   * Только годы с ненулевыми будущими выплатами, по возрастанию.
+   */
+  byYear: YearPayment[]
+}
+
+/**
+ * Агрегаты для дашборда раздела «Кредиты» (D-04-производное).
+ * - totalDebt / weightedRatePct — по текущему остатку основного долга (балансу)
+ * - byYear — будущие платежи (date >= сегодня) сгруппированные по году
+ */
+export async function loadCreditsDashboard(): Promise<CreditsDashboard> {
+  const loans = await prisma.loan.findMany({
+    where: { deletedAt: null },
+    include: { payments: { orderBy: { date: "asc" } } },
+  })
+
+  const now = new Date()
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const currentYear = now.getUTCFullYear()
+
+  let totalDebt = 0
+  let weightedNum = 0
+  const yearMap = new Map<number, { principal: number; interest: number }>()
+
+  for (const loan of loans) {
+    const amount = Number(loan.amount)
+    const payments = loan.payments.map((p) => ({
+      date: p.date,
+      principal: Number(p.principal),
+      interest: Number(p.interest),
+    }))
+
+    const { currentBalance } = computeLoanAggregates(amount, payments)
+    if (currentBalance > 0) {
+      totalDebt += currentBalance
+      weightedNum += currentBalance * Number(loan.annualRatePct)
+    }
+
+    // Будущие платежи (с сегодня и далее) по годам
+    for (const p of payments) {
+      const d = p.date instanceof Date ? p.date : new Date(p.date)
+      const dMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+      if (dMs < todayMs) continue
+      const y = d.getUTCFullYear()
+      const e = yearMap.get(y) ?? { principal: 0, interest: 0 }
+      e.principal += p.principal
+      e.interest += p.interest
+      yearMap.set(y, e)
+    }
+  }
+
+  const byYear: YearPayment[] = [...yearMap.entries()]
+    .map(([year, v]) => ({ year, principal: round2(v.principal), interest: round2(v.interest) }))
+    .filter((y) => y.principal > 0.005 || y.interest > 0.005)
+    .sort((a, b) => a.year - b.year)
+
+  return {
+    totalDebt: round2(totalDebt),
+    weightedRatePct: totalDebt > 0 ? round2(weightedNum / totalDebt) : 0,
+    currentYear,
+    byYear,
+  }
 }
 
 // ── loadLendersAndCompanies ────────────────────────────────────────────────────
