@@ -363,7 +363,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 14. Управление остатками | 7/7 | Complete    | 2026-04-22 |
 | 15. Per-cluster скорость заказов /stock/wb | 3/3 | Complete    | 2026-04-22 |
 | 16. Размерная разбивка остатков WB | 7/7 | Complete   | 2026-04-28 |
-| 21. Кредиты (Lender rename из Bank, источник Кредиты/) | 8/8 | Complete (awaiting UAT) | 2026-06-09 |
+| 21. Кредиты (Lender rename из Bank, источник Кредиты/) | 8/8 | Complete    | 2026-06-09 |
 
 
 
@@ -480,7 +480,7 @@ Plans:
 
 **Depends on:** Phase 2 (User Management — RBAC новый раздел CREDITS), справочник Company (организации Пеликан/Зойтен/Сикрет Вэй/Дрим Лайн уже существует)
 
-**Plans:** 8 plans
+**Plans:** 8/8 plans complete
 
 Plans:
 - [x] 21-01-PLAN.md — Schema + миграция (Loan/LoanPayment/Lender + ERP_SECTION.CREDITS)

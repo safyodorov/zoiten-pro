@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to execute
+status: Milestone complete
 stopped_at: Completed 21-credits 21-07-PLAN.md
-last_updated: "2026-06-09T10:12:16.334Z"
+last_updated: "2026-06-09T13:04:31.310Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 21 (credits) — EXECUTING
-Plan: 7 of 8
+Phase: 21
+Plan: Not started
 
 ## Performance Metrics
 

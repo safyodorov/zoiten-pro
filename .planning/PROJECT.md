@@ -95,7 +95,8 @@
 | PostgreSQL + Prisma | Промышленный стандарт БД + безопасный ORM с миграциями | — Pending |
 | Фото на VPS | 50-200 товаров, S3 избыточен для такого масштаба | — Pending |
 | shadcn/ui + Framer Motion | Красивый UI с анимациями, Magic MCP совместимость | — Pending |
-| NextAuth.js credentials | Простая авторизация логин/пароль, RBAC через роли | — Pending |
+| NextAuth.js credentials | Простая авторизация логин/пароль, RBAC через роли | ✓ + jwt-callback refresh прав из БД (60с), гранты без перелогина (Phase 21) |
+| Раздел Кредиты (Phase 21) | Учёт/визуализация кредитов: Loan+LoanPayment+Lender, список/карточка/сводный график, дашборд, seed из Кредиты/ | ✓ Завершён 2026-06-09, в проде (23 кредита, 12 активных) |
 
 ## Evolution
 
@@ -115,4 +116,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-21 — milestone v1.2 Управление остатками стартовал*
+*Last updated: 2026-06-09 — Phase 21 (Кредиты) завершена и в проде*
