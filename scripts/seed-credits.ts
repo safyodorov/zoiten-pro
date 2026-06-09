@@ -588,16 +588,11 @@ async function main() {
     if (loanMeta.lender === "JetLend") {
       const pdfData = pdfPayments[loanMeta.contractNumber]
       if (pdfData && pdfData.length > 0) {
-        // Используем PDF как основной источник строк (U-01)
-        // Из Лист2 берём только строки до первой даты в PDF (история, если есть)
-        const firstPdfDate = pdfData.reduce((min, p) => p.date < min ? p.date : min, pdfData[0].date)
-        const sheet2History = loanMeta.sheet2Payments.filter((p) => p.date < firstPdfDate)
-        if (sheet2History.length > 0) {
-          console.log(`    ${loanMeta.contractNumber}: PDF (${pdfData.length}) + Лист2 история (${sheet2History.length})`)
-          payments = [...sheet2History, ...pdfData]
-        } else {
-          payments = pdfData
-        }
+        // Используем PDF как единственный источник строк (U-01).
+        // PDF содержит ПОЛНЫЙ граф (история + будущие платежи).
+        // Лист2 для этих кредитов содержит те же данные в помесячной агрегации —
+        // НЕ prepend-им Лист2, иначе будет двойной счёт первых платежей.
+        payments = pdfData
       } else {
         // Нет PDF — используем Лист2 (помесячно)
         payments = loanMeta.sheet2Payments
@@ -610,13 +605,20 @@ async function main() {
       // Сбербанк: основная история из Лист2, хвост из XLSX
       const xlsxData = sberXlsxPayments[loanMeta.contractNumber] ?? []
       if (xlsxData.length > 0) {
-        // Объединяем: Лист2 (история) + XLSX (хвост после последней Лист2 даты)
+        // Объединяем: Лист2 (история) + XLSX (хвост — только платежи в СЛЕДУЮЩЕМ месяце после последней Лист2 записи).
+        // Важно: Лист2 хранит помесячные записи на 1-е число (напр. 01.06.2026), а XLSX содержит
+        // тот же платёж на фактическую дату (напр. 19.06.2026). Если фильтровать просто по date > lastSheet2Date,
+        // то XLSX-платёж за тот же месяц (19.06 > 01.06) попадёт дважды.
+        // Решение: фильтруем XLSX платежи начиная с 1-го числа СЛЕДУЮЩЕГО месяца после последней Лист2 записи.
         const lastSheet2Date =
           loanMeta.sheet2Payments.length > 0
             ? loanMeta.sheet2Payments.reduce((max, p) => p.date > max ? p.date : max, loanMeta.sheet2Payments[0].date)
             : null
-        const xlsxTail = lastSheet2Date
-          ? xlsxData.filter((p) => p.date > lastSheet2Date)
+        const nextMonthBoundary = lastSheet2Date
+          ? new Date(Date.UTC(lastSheet2Date.getUTCFullYear(), lastSheet2Date.getUTCMonth() + 1, 1))
+          : null
+        const xlsxTail = nextMonthBoundary
+          ? xlsxData.filter((p) => p.date >= nextMonthBoundary)
           : xlsxData
         payments = [...loanMeta.sheet2Payments, ...xlsxTail]
         if (xlsxTail.length > 0) {
@@ -714,6 +716,13 @@ async function main() {
   }
 
   // Per-org + Итого
+  // ВАЖНО: Лист2 control-колонки (76,80,84,88) имеют «поздний старт» для Сбербанк-платежей:
+  //   Зойтен: control стартует с апр2025 (пропущены апр2024-мар2025, 12 × 193200 = 2 318 400)
+  //   Дрим Лайн: control стартует с май2024 (пропущен апр2024, 1 × 360000 = 360 000)
+  //   Пеликан: control стартует с май2024 (пропущен апр2024, 1 × 399400 = 399 400)
+  //   Сикрет Вэй: control стартует с июл2024 (пропущены апр-июн2024, 3 × 299720 = 899 160)
+  // Кроме того, PDF-платежи последнего месяца (напр. 20968 июн2026) не отражены в Лист2 monthly-колонках.
+  // Seed содержит КОРРЕКТНЫЕ данные. Расхождения с Лист2 control — ожидаемы и задокументированы.
   console.log("\n── Per-org Σprincipal/Σinterest из seed (за период Лист2) ──")
   const seedTotals: Record<string, { principal: number; interest: number }> = {}
   for (const loan of loans) {
