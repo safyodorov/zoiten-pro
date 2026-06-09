@@ -19,6 +19,7 @@ import {
   Users,
   Settings,
   LineChart,
+  Landmark,
 } from "lucide-react"
 
 export interface NavItem {
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "COST", href: "/batches", label: "Себестоимость партий", icon: "Calculator" },
   { section: "PROCUREMENT", href: "/purchase-plan", label: "План закупок", icon: "ShoppingCart" },
   { section: "SALES", href: "/sales-plan", label: "План продаж", icon: "TrendingUp" },
+  { section: "CREDITS", href: "/credits", label: "Кредиты", icon: "Landmark" },
   { section: "FINANCE_MODELS", href: "/finance-models", label: "Финансовые модели", icon: "LineChart", public: true },
   { section: "SUPPORT", href: "/support", label: "Служба поддержки", icon: "Headphones" },
   { section: "SUPPORT", href: "/support/returns", label: "Возвраты", icon: "PackageX" },
@@ -70,4 +72,5 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Users,
   Settings,
   LineChart,
+  Landmark,
 }
