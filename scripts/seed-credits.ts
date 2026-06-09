@@ -126,16 +126,33 @@ function parseJetLendPdf(filePath: string): { contractNumber: string; payments: 
     maxBuffer: 10 * 1024 * 1024,
   })
 
-  // Первая непустая строка после trim — номер договора
+  // Извлечение № договора из текста PDF.
+  // Возможные форматы:
+  // 1. Первая непустая строка = только цифры (старый формат)
+  // 2. Строка вида «...по займу № 25397...» (актуальный формат JetLend)
   const lines = text.split("\n")
   let contractNumber = ""
+
+  // Сначала ищем паттерн «займу № NNNN» или «Договор № NNNN»
   for (const line of lines) {
-    const trimmed = line.trim()
-    if (/^\d{4,6}$/.test(trimmed)) {
-      contractNumber = trimmed
+    const m = line.match(/(?:займу|договор(?:у)?)\s*№\s*(\d{4,6})/i)
+    if (m) {
+      contractNumber = m[1]
       break
     }
   }
+
+  // Fallback: первая непустая строка содержит только цифры
+  if (!contractNumber) {
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (/^\d{4,6}$/.test(trimmed)) {
+        contractNumber = trimmed
+        break
+      }
+    }
+  }
+
   if (!contractNumber) {
     throw new Error(`Не удалось извлечь № договора из PDF: ${filePath}`)
   }
