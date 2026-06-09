@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 20-02-PLAN.md
-last_updated: "2026-06-09T14:13:51.048Z"
+stopped_at: Completed 20-03-PLAN.md
+last_updated: "2026-06-09T14:15:41.971Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 20 (procurement) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 
 ## Performance Metrics
 
@@ -111,6 +111,7 @@ Plan: 4 of 8
 | Phase 20-procurement P00 | 4min | 3 tasks | 3 files |
 | Phase 20 P01 | 4min | 2 tasks | 2 files |
 | Phase 20-procurement P02 | 1 min | 2 tasks | 5 files |
+| Phase 20-procurement P03 | 1 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -268,6 +269,7 @@ Recent decisions affecting current work:
 - [Phase 20]: Plan 20-01: ERP_SECTION untouched (PROCUREMENT already exists, no ALTER); business uniqueness (isPrimary/participant/OTHER-custom) enforced in server actions not DB
 - [Phase 20]: Plan 20-01: Purchase.supplierId + PurchaseItem.productId ON DELETE RESTRICT (protect history); SupplierProductLink.productId SET NULL; partial unique WHERE productId IS NOT NULL
 - [Phase 20-procurement]: Plan 20-02: /procurement guarded via single SECTION_PATHS prefix entry; temp /purchase-plan renamed «План закупок (временный)», not deleted (kept as separate nav item until data migration)
+- [Phase 20-procurement]: Plan 20-03: lib/procurement-math.ts — pure import-free helper (D-08 deposit+3d / balance+leadTime / percent↔amount Math.round(n*100)/100 / Σ quantity×unitPrice), client+server SoT for createPurchase + modal; bodies verbatim from RESEARCH Pattern 6
 
 ### Roadmap Evolution
 
@@ -330,6 +332,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T14:13:45.083Z
-Stopped at: Completed 20-02-PLAN.md
+Last session: 2026-06-09T14:15:35.411Z
+Stopped at: Completed 20-03-PLAN.md
 Resume file: None
