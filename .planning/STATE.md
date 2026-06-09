@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Milestone complete
-stopped_at: Completed 21-credits 21-07-PLAN.md
-last_updated: "2026-06-09T13:04:31.310Z"
+status: Ready to execute
+stopped_at: Completed 20-00-PLAN.md (Wave 0 RED stubs)
+last_updated: "2026-06-09T14:06:00.401Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 21 — credits
+**Current focus:** Phase 20 — procurement
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
+Phase: 20 (procurement) — EXECUTING
+Plan: 2 of 8
 
 ## Performance Metrics
 
@@ -108,6 +108,7 @@ Plan: Not started
 | Phase 21-credits P06 | 8 minutes | 3 tasks | 4 files |
 | Phase 21-credits P05 | 256s | 3 tasks | 6 files |
 | Phase 21-credits P07 | 288s | 3 tasks | 4 files |
+| Phase 20-procurement P00 | 4min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -259,6 +260,8 @@ Recent decisions affecting current work:
 - [Phase 21-credits]: LoanModal: zodResolver as any (zod 4.x + RHF 7.72 compat, same as PricingCalculatorDialog)
 - [Phase 21-credits]: Левый sticky-блок без rowSpan — 2 строки на кредит (Тело с инфо + % с плейсхолдерами) согласно CLAUDE.md mixed-rowSpan pattern
 - [Phase 21-credits]: generateBucketSequence итерация по cursor с шагом день/неделю/месяц с дедупликацией через Set — правильный охват крайних бакетов
+- [Phase 20-procurement]: Plan 20-00: D-02 isPrimary pinned via PURE helper @/lib/supplier-primary (resolvePrimaryWrites) — server action pulls next-auth, vitest can't load it; 20-05 must extract enforcement
+- [Phase 20-procurement]: Plan 20-00: fetchCbrRates mocked via vi.stubGlobal('fetch') — CBR uses plain Node fetch (no TLS workaround unlike WB v4)
 
 ### Roadmap Evolution
 
@@ -321,6 +324,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T10:12:16.327Z
-Stopped at: Completed 21-credits 21-07-PLAN.md
+Last session: 2026-06-09T14:06:00.396Z
+Stopped at: Completed 20-00-PLAN.md (Wave 0 RED stubs)
 Resume file: None
