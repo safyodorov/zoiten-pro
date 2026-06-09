@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 21-credits 21-05-PLAN.md
-last_updated: "2026-06-09T10:10:55.775Z"
+stopped_at: Completed 21-credits 21-07-PLAN.md
+last_updated: "2026-06-09T10:12:16.334Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 21 (credits) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 
 ## Performance Metrics
 
@@ -107,6 +107,7 @@ Plan: 6 of 8
 | Phase 21-credits P03 | 240 | 2 tasks | 4 files |
 | Phase 21-credits P06 | 8 minutes | 3 tasks | 4 files |
 | Phase 21-credits P05 | 256s | 3 tasks | 6 files |
+| Phase 21-credits P07 | 288s | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -256,6 +257,8 @@ Recent decisions affecting current work:
 - [Phase 21-credits]: prisma generate required after Plan 21-01 (schema added models but client not regenerated)
 - [Phase 21-credits]: Plan 06: LoanBalanceChart adds optional starting point (amount) for full balance curve context
 - [Phase 21-credits]: LoanModal: zodResolver as any (zod 4.x + RHF 7.72 compat, same as PricingCalculatorDialog)
+- [Phase 21-credits]: Левый sticky-блок без rowSpan — 2 строки на кредит (Тело с инфо + % с плейсхолдерами) согласно CLAUDE.md mixed-rowSpan pattern
+- [Phase 21-credits]: generateBucketSequence итерация по cursor с шагом день/неделю/месяц с дедупликацией через Set — правильный охват крайних бакетов
 
 ### Roadmap Evolution
 
@@ -318,6 +321,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T10:10:55.769Z
-Stopped at: Completed 21-credits 21-05-PLAN.md
+Last session: 2026-06-09T10:12:16.327Z
+Stopped at: Completed 21-credits 21-07-PLAN.md
 Resume file: None
