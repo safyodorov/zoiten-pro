@@ -614,5 +614,67 @@ ssh root@85.198.97.89 "cd /opt/zoiten-pro && npx tsx prisma/seed-wb-warehouses.t
 
 ---
 
-*Last updated: 2026-04-22*
-*Covers: Phase 06 deployment (Plans 01 and 02); Phase 14 v1.2 (Plans 01–07)*
+## 12. Phase 20: Управление закупками (Поставщики / Закупки / План закупок)
+
+### 12.1 Deploy Phase 20
+
+Миграция Phase 20 (`prisma/migrations/20260609_phase20_procurement/`) создана вручную и
+применяется автоматически при запуске `npx prisma migrate deploy` внутри `deploy.sh`.
+Она добавляет таблицы Supplier / SupplierContact / SupplierProductLink / Negotiation /
+NegotiationParticipant / Purchase / PurchaseItem / PurchasePayment / CurrencyRate
+(+ enum'ы PaymentType / SupplierContactType / DeliveryType / ContactMethod).
+
+Стандартный deploy с локальной машины:
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && bash deploy.sh"
+```
+
+Проверить, что миграция применилась (нет ошибки в выводе deploy + таблицы существуют):
+
+```bash
+ssh root@85.198.97.89 "cd /opt/zoiten-pro && npx prisma migrate status | tail -5"
+ssh root@85.198.97.89 'psql "$DATABASE_URL" -tAc "SELECT to_regclass('"'"'public.\"Supplier\"'"'"'), to_regclass('"'"'public.\"Purchase\"'"'"'), to_regclass('"'"'public.\"CurrencyRate\"'"'"')"'
+```
+
+Ожидается: три имени таблиц (не NULL).
+
+### 12.2 Курсы валют ЦБ РФ (CBR)
+
+- Новый `AppSetting` ключ `cbrRateSyncCronTime`, default `"12:00"` (МСК).
+- Синхронизация курсов выполняется **через существующий cron-dispatcher** (единый systemd
+  timer + `/api/cron/dispatch`) — **новый systemd unit НЕ создаётся** (см.
+  reference_cron_dispatcher pattern). Dispatcher динамически импортирует
+  `app/api/cbr-rate-sync/route`.
+- CBR API дёргается обычным Node `fetch` (без curl/TLS-обхода — у CBR нет
+  fingerprint-блокировки, в отличие от WB v4).
+- Forward-only, без бэкфилла: `@@unique([date, code])` + идемпотентный upsert.
+- Чтобы сразу засеять начальные курсы (не дожидаясь 12:00), один раз вручную:
+
+```bash
+ssh root@85.198.97.89 'curl -s -H "x-cron-secret: $CRON_SECRET" https://zoiten.pro/api/cbr-rate-sync'
+ssh root@85.198.97.89 'psql "$DATABASE_URL" -tAc "SELECT code, rate, date FROM \"CurrencyRate\" ORDER BY date DESC LIMIT 5"'
+```
+
+Ожидается: строки CurrencyRate (USD/EUR/CNY) на актуальную дату.
+
+### 12.3 RBAC — выдача доступа к разделу PROCUREMENT
+
+`PROCUREMENT` уже есть в enum `ERP_SECTION` (раздел зарегистрирован ранее). После deploy:
+
+- **SUPERADMIN** получает доступ автоматически (bypass в `requireSection`).
+- Остальным пользователям доступ нужно выдать **явно** через `/admin/users` →
+  тумблер `Просмотр / Управление` для раздела «Управление закупками».
+- После выдачи прав получатель должен **перелогиниться** или подождать ~60 сек
+  (JWT-callback подтягивает права из БД, fix d30cde6) — иначе будет 403 на `/procurement/*`.
+
+### 12.4 Что НЕ трогалось
+
+- Существующий `/purchase-plan` переименован в навигации в «План закупок (временный)» и
+  оставлен как отдельный пункт — **не удалён**. Новый `/procurement/plan` — это свежий
+  read-only MVP прогноза закупок (дефицит + срок готовности + ETA), независимый от temp-страницы.
+
+---
+
+*Last updated: 2026-06-09*
+*Covers: Phase 06 deployment (Plans 01 and 02); Phase 14 v1.2 (Plans 01–07); Phase 20 закупки (Plans 00–07)*
