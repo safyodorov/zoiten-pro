@@ -15,7 +15,7 @@ export const SECTION_OPTIONS: SectionOption[] = [
   { value: "WEEKLY_CARDS",    label: "Недельные карточки" },
   { value: "STOCK",           label: "Управление остатками" },
   { value: "COST",            label: "Себестоимость партий" },
-  { value: "PROCUREMENT",     label: "План закупок" },
+  { value: "PROCUREMENT",     label: "Управление закупками" },
   { value: "SALES",           label: "План продаж" },
   { value: "CREDITS",         label: "Кредиты" },
   { value: "SUPPORT",         label: "Служба поддержки" },

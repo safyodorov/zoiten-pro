@@ -12,7 +12,7 @@ const ALL_SECTIONS = [
   { section: "WEEKLY_CARDS", href: "/weekly", title: "Недельные карточки", description: "Еженедельная аналитика", icon: LayoutGrid },
   { section: "STOCK", href: "/stock", title: "Управление остатками", description: "Остатки на складах", icon: Boxes },
   { section: "COST", href: "/batches", title: "Себестоимость партий", description: "Расчёт себестоимости", icon: Calculator },
-  { section: "PROCUREMENT", href: "/purchase-plan", title: "План закупок", description: "Планирование закупок", icon: ShoppingCart },
+  { section: "PROCUREMENT", href: "/procurement/suppliers", title: "Управление закупками", description: "Поставщики, закупки, платежи", icon: ShoppingCart },
   { section: "SALES", href: "/sales-plan", title: "План продаж", description: "Планирование продаж", icon: TrendingUp },
   { section: "SUPPORT", href: "/support", title: "Служба поддержки", description: "Тикеты и обращения клиентов", icon: Headphones },
   { section: "EMPLOYEES", href: "/employees", title: "Сотрудники", description: "Управление персоналом", icon: UserCheck },
