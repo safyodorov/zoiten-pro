@@ -463,7 +463,7 @@ Plans:
 
 ### Phase 21: Кредиты — визуализация и учёт кредитов компании
 
-**Goal:** [To be planned in /gsd:discuss-phase + /gsd:plan-phase]
+**Goal:** Раздел `/credits` для учёта и визуализации кредитов компании: список кредитов → детальная карточка (сводные числа + график + line-chart остатка) → сводный горизонтальный график выплат с разбивкой день/неделя/месяц, группировкой по организации с подытогами и Итого. Новая БД Loan + LoanPayment + справочник Bank, новый ERP_SECTION.CREDITS + RBAC, разовый seed из Кредиты.xlsx.
 
 **Подразделы / возможности:**
 1. **Новая БД Кредиты** (`Loan` + `LoanPayment`, отдельный модуль) — по каждому кредиту: организация (Пеликан / Зойтен / Сикрет Вэй / Дрим Лайн), банк (Сбербанк и др.), номер кредитного договора (№ КД), сумма, годовая ставка %, срок (мес), дата выдачи; график погашения — тело долга + проценты по датам/периодам.
@@ -477,8 +477,18 @@ Plans:
 
 **Открытые вопросы для discuss-phase:** дата выдачи кредита явно не присутствует в Excel (графики стартуют ~апрель 2024); способ загрузки данных (ручной ввод vs импорт из Excel vs оба); нужны ли расчёты остатка/начислений или только визуализация заданных графиков.
 
-**Requirements:** TBD (будут сформулированы в /gsd:discuss-phase и /gsd:plan-phase)
+**Requirements:** D-01..D-19 (locked decisions в `.planning/phases/21-credits/21-CONTEXT.md`; формальных REQ-ID нет — трассировка по decision IDs)
 
 **Depends on:** Phase 2 (User Management — RBAC новый раздел CREDITS), справочник Company (организации Пеликан/Зойтен/Сикрет Вэй/Дрим Лайн уже существует)
 
-**Plans:** 0 plans (run `/gsd:plan-phase 21` to break down)
+**Plans:** 8 plans (4 waves)
+
+Plans:
+- [ ] 21-01-PLAN.md — Schema + миграция (Loan/LoanPayment/Bank + ERP_SECTION.CREDITS)
+- [ ] 21-02-PLAN.md — Проводка: sections.ts + section-titles + nav-items + RBAC
+- [ ] 21-03-PLAN.md — lib/loan-math + server actions (credits + bank)
+- [ ] 21-04-PLAN.md — Seed-скрипт из Кредиты.xlsx + сверка с Лист2
+- [ ] 21-05-PLAN.md — Список кредитов + фильтры + LoanModal CRUD
+- [ ] 21-06-PLAN.md — Детальная карточка (summary cards + график + line-chart)
+- [ ] 21-07-PLAN.md — Сводный горизонтальный график (день/неделя/месяц, по орг)
+- [ ] 21-08-PLAN.md — Bank settings + deploy + seed + UAT
