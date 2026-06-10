@@ -91,31 +91,30 @@ export async function persistParsedTransactions(
   }
 
   for (const [key, { inn, name }] of companyKeys) {
-    let companyId: string
+    if (!inn && !name) continue // совсем нет данных — пропускаем
 
-    if (inn) {
-      // Предпочтительный путь: по ИНН
-      const company = await prisma.company.upsert({
-        where: { inn },
-        update: {},
-        create: { inn, name: name ?? inn },
-      })
-      companyId = company.id
-    } else if (name) {
-      // Fallback: по имени
-      const existing = await prisma.company.findFirst({ where: { name } })
-      if (existing) {
-        companyId = existing.id
-      } else {
-        const created = await prisma.company.create({ data: { name } })
-        companyId = created.id
+    // Find-or-create: ищем СНАЧАЛА по ИНН, затем по имени (одна и та же компания
+    // встречается в выписках разных банков — у одного файла ИНН есть, у другого нет;
+    // create-by-name без предварительного поиска падал на @unique(name)).
+    let company =
+      (inn ? await prisma.company.findFirst({ where: { inn } }) : null) ??
+      (name ? await prisma.company.findFirst({ where: { name } }) : null)
+
+    if (company) {
+      // backfill ИНН, если он у нас есть, а в записи отсутствует
+      if (inn && !company.inn) {
+        company = await prisma.company.update({
+          where: { id: company.id },
+          data: { inn },
+        })
       }
     } else {
-      // Совсем нет данных — пропускаем
-      continue
+      company = await prisma.company.create({
+        data: { name: name ?? inn!, inn: inn ?? null },
+      })
     }
 
-    companyCache.set(key, companyId)
+    companyCache.set(key, company.id)
   }
 
   // ── Шаг 4: BankAccount (по номеру счёта) ──
