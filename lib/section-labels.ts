@@ -18,6 +18,7 @@ export const SECTION_OPTIONS: SectionOption[] = [
   { value: "PROCUREMENT",     label: "Управление закупками" },
   { value: "SALES",           label: "План продаж" },
   { value: "CREDITS",         label: "Кредиты" },
+  { value: "BANK",            label: "Банковские счета" },
   { value: "SUPPORT",         label: "Служба поддержки" },
   { value: "EMPLOYEES",       label: "Сотрудники" },
   { value: "USER_MANAGEMENT", label: "Управление пользователями" },
