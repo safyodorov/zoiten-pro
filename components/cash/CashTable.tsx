@@ -177,6 +177,7 @@ export function CashTable({
 }: CashTableProps) {
   // ── Edit dialog state ────────────────────────────────────────────────────
   const [editingEntry, setEditingEntry] = useState<CashEntryEditData | null>(null)
+  const [editRespName, setEditRespName] = useState<string | null>(null)
   const [editOpen, setEditOpen] = useState(false)
 
   function openEdit(row: CashRow) {
@@ -191,13 +192,30 @@ export function CashTable({
       responsibleEmployeeId: row.responsibleEmployeeId,
       comment: row.comment,
     })
+    setEditRespName(row.responsibleName)
     setEditOpen(true)
   }
 
   function handleEditOpenChange(open: boolean) {
     setEditOpen(open)
-    if (!open) setEditingEntry(null)
+    if (!open) {
+      setEditingEntry(null)
+      setEditRespName(null)
+    }
   }
+
+  // Для редактирования: список = действующие сотрудники + (если текущий
+  // ответственный уволен и его нет в списке) — добавляем его, чтобы не потерять.
+  const editEmployees = (() => {
+    const respId = editingEntry?.responsibleEmployeeId
+    if (!respId || employees.some((e) => e.id === respId)) return employees
+    const name = editRespName ?? "(уволен)"
+    const sp = name.split(" ")
+    return [
+      { id: respId, lastName: sp[0] ?? name, firstName: sp.slice(1).join(" ") },
+      ...employees,
+    ]
+  })()
 
   // ── Блок итогов (приход / расход / баланс) ─────────────────────────────
   const fmt = (n: number) =>
@@ -267,7 +285,7 @@ export function CashTable({
           open={editOpen}
           onOpenChange={handleEditOpenChange}
           categories={categories}
-          employees={employees}
+          employees={editEmployees}
           departments={departments}
         />
       )}

@@ -83,7 +83,7 @@ export default async function CashPage({
 
   // ── Параллельная загрузка данных ────────────────────────────────────────
 
-  const [entries, totalCount, allCategories, allEmployees, depRows, dateRows, totalsGroups] =
+  const [entries, totalCount, allCategories, allEmployees, activeEmployees, depRows, dateRows, totalsGroups] =
     await Promise.all([
       // Операции кассы (до 1000, по where)
       prisma.cashEntry.findMany({
@@ -105,8 +105,15 @@ export default async function CashPage({
         orderBy: { sortOrder: "asc" },
       }),
 
-      // Сотрудники (для фильтров + форма)
+      // Все сотрудники (для ФИЛЬТРА — включая уволенных, у них есть историч. операции)
       prisma.employee.findMany({
+        select: { id: true, lastName: true, firstName: true },
+        orderBy: { lastName: "asc" },
+      }),
+
+      // Только ДЕЙСТВУЮЩИЕ сотрудники (для формы добавления/редактирования) — fireDate null
+      prisma.employee.findMany({
+        where: { fireDate: null },
         select: { id: true, lastName: true, firstName: true },
         orderBy: { lastName: "asc" },
       }),
@@ -188,7 +195,7 @@ export default async function CashPage({
         {canManage && (
           <CashEntryForm
             categories={allCategories}
-            employees={allEmployees}
+            employees={activeEmployees}
             departments={departments}
           />
         )}
@@ -207,7 +214,7 @@ export default async function CashPage({
         <CashTable
           rows={rows}
           categories={allCategories}
-          employees={allEmployees}
+          employees={activeEmployees}
           departments={departments}
           canManage={canManage}
           totals={totals}
