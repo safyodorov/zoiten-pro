@@ -519,10 +519,10 @@ Plans:
 
 **Requirements**: BANK-01, BANK-02, BANK-03, BANK-04, BANK-05, BANK-06, BANK-07, BANK-08, BANK-09, BANK-10
 **Depends on:** Phase 2 (RBAC новый раздел BANK), справочник Company (расширяется), Phase 21 (Lender — для связи Lender→Bank)
-**Plans:** 0 plans
+**Plans:** 1/5 plans executed
 
 Plans:
-- [ ] 22-01-PLAN.md — Schema + миграция (Company реквизиты; Bank/BankAccount/Counterparty/BankTransaction/ImportBatch; enums TxDirection/TxCategory; Lender.bankId; ERP_SECTION.BANK)
+- [x] 22-01-PLAN.md — Schema + миграция (Company реквизиты; Bank/BankAccount/Counterparty/BankTransaction/ImportBatch; enums TxDirection/TxCategory; Lender.bankId; ERP_SECTION.BANK)
 - [ ] 22-02-PLAN.md — Проводка раздела (6-точечный чеклист) + RBAC + заглушка /bank
 - [ ] 22-03-PLAN.md — lib/bank-import/ pure-парсеры (detectFormat + 3 адаптера + normalize + fingerprint) + vitest golden
 - [ ] 22-04-PLAN.md — Импорт: /api/bank-import (parse→upsert→createMany skipDuplicates→ImportBatch) + categorizeTx + BankImportButton

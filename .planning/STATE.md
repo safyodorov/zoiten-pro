@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 20-06-PLAN.md
-last_updated: "2026-06-09T14:39:18.207Z"
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-06-10T08:32:50.413Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 20 — procurement
+**Current focus:** Phase 22 — bank-accounts
 
 ## Current Position
 
-Phase: 20 (procurement) — EXECUTING
-Plan: 8 of 8
+Phase: 22 (bank-accounts) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -115,6 +115,7 @@ Plan: 8 of 8
 | Phase 20-procurement P04 | 2min | 2 tasks | 4 files |
 | Phase 20 P05 | 8min | 3 tasks | 12 files |
 | Phase 20-procurement P06 | 6min | 3 tasks | 8 files |
+| Phase 22-bank-accounts P01 | 167s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -279,6 +280,7 @@ Recent decisions affecting current work:
 - [Phase 20-procurement]: Plan 20-06: createPurchase auto-generates exactly one DEPOSIT(ordinal 1)+one BALANCE(ordinal 1) in one $transaction via procurement-math; payment params resolved from selected items' SupplierProductLink (fallback 30/70/45)
 - [Phase 20-procurement]: Plan 20-06: procurement-math is single source of payment math — same recompute fns server (createPurchase/savePurchasePayments) + client (PurchasePaymentsCard live percent↔amount); OVERDUE computed live at read time, never cached; PLANNED-only hard delete (D-21); no Supplier mutation
 - [Phase 20-procurement]: Plan 20-06: PurchaseModal owns shared types (SupplierOption/ProductOption/ProductLinkMap/PurchaseForModal) imported by page+table+detail-actions; productLinkMap computed RSC (Decimal→number) passed to client for unitPrice prefill; PurchaseDetailActions client wrapper keeps detail page RSC
+- [Phase 22-bank-accounts]: Decimal(18,2) for BankTransaction.amount; fingerprint @unique for idempotent re-import; Company.inn nullable @unique; Lender.bankId nullable FK with SetNull; BankTransaction.accountId CASCADE, counterpartyId/importBatchId SET NULL
 
 ### Roadmap Evolution
 
@@ -290,6 +292,7 @@ Recent decisions affecting current work:
 - Phase 19 added (2026-05-19): Управление рекламой WB — собственная БД рекламных расходов (WbAdvertCampaign, WbAdvertTarget, WbAdvertStatDaily, WbAdvertBalanceSnapshot), отдельный WB_ADS_TOKEN, daily cron в 3:00 МСК, view-only UI /ads/wb с per-product таблицей + expandable charts + каскадные фильтры. Контекст: .planning/research/ads-sheets/FINDINGS.md
 - Phase 20 added (2026-05-20): Управление закупками — Поставщики (БД с контактами/переговорами/per-product параметрами), Закупки (статусы планируемые/текущие/завершённые, multi-payment депозит/баланс с курсами ЦБ РФ), План закупок (детали TBD). Контекст: .planning/phases/20-procurement/20-CONTEXT.md. Планирование запущено 2026-05-20 параллельно с активной Phase 19 (реклама), реализация после Phase 19.
 - Phase 21 added (2026-06-08): Кредиты — визуализация и учёт кредитов компании. Новая БД Loan + LoanPayment (орг / банк / № КД / сумма / ставка % / срок / дата выдачи / график тело+проценты). UI: список кредитов → детальная карточка с графиком → сводный горизонтальный график выплат с разбивкой день/неделя/месяц. Источник данных: Кредиты.xlsx (Лист1 дневной график тела долга + балансы; Лист2 метаданные + помесячные основной долг+проценты). Добавлена как Phase 21 вручную (gsd-tools насчитал 1000 из-за backlog 999.1).
+- Phase 22 added (2026-06-10): Банковские счета — БД банковских операций по всем компаниям группы. Новая БД BankAccount + BankTransaction + справочники Bank (по БИК) + Counterparty (дедуп по ИНН), расширение Company реквизитами (ИНН/КПП/ОГРН) + nullable FK Lender→Bank. Импорт выписок из Excel с 3 адаптерами форматов (ВТБ multi-sheet/мультивалюта, ПСБ, СберБизнес) + защита от дублирования при пересечении периодов (composite fingerprint). Read-only просмотр + базовая категоризация под будущий ДДС. Новый ERP_SECTION.BANK. Scope этапа 1: БД+импорт+дедуп+просмотр, БЕЗ связей с закупками/кредитами/ДДС. Источник: папка Выписки/ (9 XLSX за 01.01–10.06.2026). Контекст: .planning/phases/22-bank-accounts/22-CONTEXT.md. Добавлена вручную как 22 (gsd-tools насчитал 14 из-за stale milestone-парсинга ROADMAP).
 
 ### Pending Todos
 
@@ -341,6 +344,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-09T14:39:09.173Z
-Stopped at: Completed 20-06-PLAN.md
+Last session: 2026-06-10T08:32:50.408Z
+Stopped at: Completed 22-01-PLAN.md
 Resume file: None
