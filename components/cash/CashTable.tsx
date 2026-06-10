@@ -35,6 +35,7 @@ export interface CashRow {
   responsibleEmployeeId: string | null  // для предзаполнения формы редактирования
   responsibleName: string | null
   comment: string | null
+  fund: "yulya" | "pavel"            // касса/фонд (из source) — для редактирования
 }
 
 interface CashTotals {
@@ -191,6 +192,7 @@ export function CashTable({
       purpose: row.purpose,
       responsibleEmployeeId: row.responsibleEmployeeId,
       comment: row.comment,
+      fund: row.fund,
     })
     setEditRespName(row.responsibleName)
     setEditOpen(true)

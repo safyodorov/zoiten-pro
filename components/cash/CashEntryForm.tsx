@@ -46,6 +46,7 @@ export interface CashEntryEditData {
   purpose: string
   responsibleEmployeeId: string | null
   comment: string | null
+  fund: "yulya" | "pavel"            // касса/фонд (из source)
 }
 
 interface CashEntryFormBaseProps {
@@ -60,6 +61,7 @@ interface CashEntryFormCreateProps extends CashEntryFormBaseProps {
   entry?: undefined
   open?: undefined
   onOpenChange?: undefined
+  defaultFund?: "yulya" | "pavel"    // какая касса открыта сейчас → дефолт формы
 }
 
 // ── Props для EDIT (управляемый режим с entry) ─────────────────────────────
@@ -103,6 +105,8 @@ interface InnerFormProps {
   employees: EmployeeOption[]
   departments: string[]
   // field state
+  fund: string
+  setFund: (v: string) => void
   date: string
   setDate: (v: string) => void
   direction: string
@@ -131,6 +135,7 @@ function CashEntryInnerForm({
   categories,
   employees,
   departments,
+  fund, setFund,
   date, setDate,
   direction, setDirection,
   amount, setAmount,
@@ -147,6 +152,20 @@ function CashEntryInnerForm({
 }: InnerFormProps) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 pt-2">
+      {/* Касса/фонд — явно, чтобы было понятно куда попадёт операция */}
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="cash-fund">Касса</Label>
+        <select
+          id="cash-fund"
+          value={fund}
+          onChange={(e) => setFund(e.target.value)}
+          className={selectCls}
+        >
+          <option value="yulya">Касса Юли (офис)</option>
+          <option value="pavel">Касса Павла (закупки)</option>
+        </select>
+      </div>
+
       {/* Ряд: Дата + Направление */}
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
@@ -340,6 +359,9 @@ export function CashEntryForm(props: CashEntryFormProps) {
   const ivanovaId = findIvanovaId(employees)
   const entry = isEditMode ? (props as CashEntryFormEditProps).entry : undefined
 
+  const [fund, setFund] = useState<string>(() =>
+    entry ? entry.fund : ((props as CashEntryFormCreateProps).defaultFund ?? "yulya")
+  )
   const [date, setDate] = useState(() =>
     entry ? entry.date : todayIso()
   )
@@ -374,6 +396,7 @@ export function CashEntryForm(props: CashEntryFormProps) {
   }
 
   function resetCreateFields() {
+    setFund((props as CashEntryFormCreateProps).defaultFund ?? "yulya")
     setDate(todayIso())
     setDirection("EXPENSE")
     setAmount("")
@@ -404,6 +427,7 @@ export function CashEntryForm(props: CashEntryFormProps) {
       purpose: purpose.trim(),
       responsibleEmployeeId: responsibleEmployeeId || null,
       comment: comment.trim() || null,
+      fund: fund as "yulya" | "pavel",
     }
 
     startTransition(async () => {
@@ -454,6 +478,7 @@ export function CashEntryForm(props: CashEntryFormProps) {
       categories={categories}
       employees={employees}
       departments={departments}
+      fund={fund} setFund={setFund}
       date={date} setDate={setDate}
       direction={direction} setDirection={setDirection}
       amount={amount} setAmount={setAmount}

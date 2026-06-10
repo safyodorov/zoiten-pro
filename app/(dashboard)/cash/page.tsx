@@ -192,6 +192,7 @@ export default async function CashPage({
       ? `${e.responsibleEmployee.lastName} ${e.responsibleEmployee.firstName}`
       : e.responsibleNameRaw ?? null,
     comment: e.comment,
+    fund: e.source === "budget-pavel" ? ("pavel" as const) : ("yulya" as const),
   }))
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ export default async function CashPage({
             categories={allCategories}
             employees={activeEmployees}
             departments={departments}
+            defaultFund={fund === "pavel" ? "pavel" : "yulya"}
           />
         )}
       </div>

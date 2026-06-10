@@ -35,9 +35,15 @@ const EntrySchema = z.object({
   purpose: z.string().min(1, "Укажите назначение").max(2000),
   responsibleEmployeeId: z.string().nullable().optional(),
   comment: z.string().max(2000).nullable().optional(),
+  fund: z.enum(["yulya", "pavel"]).default("yulya"),  // касса/фонд
 })
 
 const UpdateEntrySchema = EntrySchema.extend({ id: z.string().min(1) })
+
+/** Касса/фонд → значение source. Юля = «manual» (попадает в yulya-вид), Павел = «budget-pavel». */
+function fundToSource(fund: "yulya" | "pavel"): string {
+  return fund === "pavel" ? "budget-pavel" : "manual"
+}
 
 // ── createCashEntry ────────────────────────────────────────────────
 
@@ -64,7 +70,7 @@ export async function createCashEntry(
         responsibleEmployeeId: parsed.responsibleEmployeeId ?? null,
         responsibleNameRaw: null,
         comment: parsed.comment ?? null,
-        source: "manual",
+        source: fundToSource(parsed.fund),
         fingerprint: null,
       },
     })
@@ -106,6 +112,7 @@ export async function updateCashEntry(
         purpose: parsed.purpose,
         responsibleEmployeeId: parsed.responsibleEmployeeId ?? null,
         comment: parsed.comment ?? null,
+        source: fundToSource(parsed.fund),
       },
     })
 
