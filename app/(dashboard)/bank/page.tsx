@@ -2,6 +2,7 @@
 // Phase 22 (22-05): RSC страница банковских операций.
 // RBAC: requireSection("BANK"); canManage через getSectionRole.
 // 6-мерный where-builder: companies/accounts/banks/direction/category/date + search.
+// Phase 22 (22-06): Dashboard-сводка сверху таблицы (остатки + приход/расход 7/30д).
 
 import { requireSection, getSectionRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
@@ -10,6 +11,8 @@ import { BankImportButton } from "@/components/bank/BankImportButton"
 import { BankFilters } from "@/components/bank/BankFilters"
 import { BankTransactionsTable } from "@/components/bank/BankTransactionsTable"
 import type { BankTxRow } from "@/components/bank/BankTransactionsTable"
+import { BankDashboard } from "@/components/bank/BankDashboard"
+import type { BankDashboardData, CompanyBalances, CompanyFlow } from "@/components/bank/BankDashboard"
 
 export default async function BankPage({
   searchParams,
@@ -87,34 +90,176 @@ export default async function BankPage({
 
   // ── Параллельная загрузка данных ────────────────────────────────────────
 
-  const [transactions, allCompanies, allAccounts, allBanks] = await Promise.all([
-    prisma.bankTransaction.findMany({
-      where,
-      include: {
-        account: {
-          include: {
-            company: true,
-            bank: true,
+  const [transactions, allCompanies, allAccounts, allBanks, dashboardAccounts, dashboardTxAnchor] =
+    await Promise.all([
+      prisma.bankTransaction.findMany({
+        where,
+        include: {
+          account: {
+            include: {
+              company: true,
+              bank: true,
+            },
           },
+          counterparty: true,
         },
-        counterparty: true,
+        orderBy: { date: "desc" },
+        take: 500,
+      }),
+      prisma.company.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.bankAccount.findMany({
+        select: { id: true, number: true, companyId: true, bankId: true },
+        orderBy: { number: "asc" },
+      }),
+      prisma.bank.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      // ── Dashboard: все счета с остатками ────────────────────────────
+      prisma.bankAccount.findMany({
+        select: {
+          currency: true,
+          closingBalance: true,
+          balanceDate: true,
+          companyId: true,
+          company: { select: { name: true } },
+        },
+      }),
+      // ── Dashboard: MAX(tx.date) как запасной anchor ──────────────────
+      prisma.bankTransaction.findFirst({
+        select: { date: true },
+        orderBy: { date: "desc" },
+      }),
+    ])
+
+  // ── Dashboard: вычисление агрегатов ──────────────────────────────────────
+
+  // 1. Anchor date = MAX(BankAccount.balanceDate) или MAX(tx.date)
+  let anchorDate: Date | null = null
+  for (const acc of dashboardAccounts) {
+    if (acc.balanceDate) {
+      if (!anchorDate || acc.balanceDate > anchorDate) {
+        anchorDate = acc.balanceDate
+      }
+    }
+  }
+  if (!anchorDate && dashboardTxAnchor?.date) {
+    anchorDate = dashboardTxAnchor.date
+  }
+
+  // 2. Остатки per-компания, разбитые по валютам
+  //    (только счета с closingBalance != null)
+  const balanceByCompany = new Map<string, Partial<Record<string, number>>>()
+  for (const acc of dashboardAccounts) {
+    if (acc.closingBalance === null || acc.closingBalance === undefined) continue
+    const companyName = acc.company.name
+    const cur = acc.currency ?? "RUR"
+    const prev = balanceByCompany.get(companyName) ?? {}
+    prev[cur] = (prev[cur] ?? 0) + Number(acc.closingBalance)
+    balanceByCompany.set(companyName, prev)
+  }
+
+  // Grand total per-currency
+  const grandTotalByCurrency: Partial<Record<string, number>> = {}
+  for (const byCur of balanceByCompany.values()) {
+    for (const [cur, v] of Object.entries(byCur)) {
+      if (v === undefined) continue
+      grandTotalByCurrency[cur] = (grandTotalByCurrency[cur] ?? 0) + v
+    }
+  }
+
+  const companyBalances: CompanyBalances[] = Array.from(balanceByCompany.entries()).map(
+    ([companyName, balancesByCurrency]) => ({ companyName, balancesByCurrency }),
+  )
+
+  // 3. Приход/расход за 7 и 30 дней — только RUR транзакции
+  //    Примечание: CNY income/expense игнорируется для v1 (мало данных, нет смысла смешивать)
+  //    Окна: (anchor - N days, anchor] — последние N дней включительно
+  let income7dByCompany = new Map<string, number>()
+  let expense7dByCompany = new Map<string, number>()
+  let income30dByCompany = new Map<string, number>()
+  let expense30dByCompany = new Map<string, number>()
+
+  if (anchorDate) {
+    const anchor = anchorDate
+    // Fetching in-memory: берём все транзакции за последние 30 дней одним запросом,
+    // потом in-memory делим на 7д vs 30д
+    const cutoff30 = new Date(anchor)
+    cutoff30.setDate(cutoff30.getDate() - 30)
+    const cutoff7 = new Date(anchor)
+    cutoff7.setDate(cutoff7.getDate() - 7)
+
+    const recentTxs = await prisma.bankTransaction.findMany({
+      where: {
+        currency: "RUR",
+        date: { gt: cutoff30, lte: anchor },
       },
-      orderBy: { date: "desc" },
-      take: 500,
-    }),
-    prisma.company.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.bankAccount.findMany({
-      select: { id: true, number: true, companyId: true, bankId: true },
-      orderBy: { number: "asc" },
-    }),
-    prisma.bank.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+      select: {
+        date: true,
+        direction: true,
+        amount: true,
+        account: {
+          select: { company: { select: { name: true } } },
+        },
+      },
+    })
+
+    for (const tx of recentTxs) {
+      const companyName = tx.account.company.name
+      const amount = Number(tx.amount)
+      const isCredit = tx.direction === "CREDIT"
+
+      // 30d окно: все записи попадают (уже отфильтровано в WHERE)
+      if (isCredit) {
+        income30dByCompany.set(companyName, (income30dByCompany.get(companyName) ?? 0) + amount)
+      } else {
+        expense30dByCompany.set(companyName, (expense30dByCompany.get(companyName) ?? 0) + amount)
+      }
+
+      // 7d окно: только даты > cutoff7
+      if (tx.date > cutoff7) {
+        if (isCredit) {
+          income7dByCompany.set(companyName, (income7dByCompany.get(companyName) ?? 0) + amount)
+        } else {
+          expense7dByCompany.set(companyName, (expense7dByCompany.get(companyName) ?? 0) + amount)
+        }
+      }
+    }
+  }
+
+  // Список всех компаний из потоков
+  const flowCompanyNames = new Set<string>([
+    ...income7dByCompany.keys(),
+    ...expense7dByCompany.keys(),
+    ...income30dByCompany.keys(),
+    ...expense30dByCompany.keys(),
   ])
+
+  const companyFlows: CompanyFlow[] = Array.from(flowCompanyNames).map((companyName) => ({
+    companyName,
+    income7d: income7dByCompany.get(companyName) ?? 0,
+    expense7d: expense7dByCompany.get(companyName) ?? 0,
+    income30d: income30dByCompany.get(companyName) ?? 0,
+    expense30d: expense30dByCompany.get(companyName) ?? 0,
+  }))
+
+  const grandFlow = {
+    income7d: companyFlows.reduce((s, c) => s + c.income7d, 0),
+    expense7d: companyFlows.reduce((s, c) => s + c.expense7d, 0),
+    income30d: companyFlows.reduce((s, c) => s + c.income30d, 0),
+    expense30d: companyFlows.reduce((s, c) => s + c.expense30d, 0),
+  }
+
+  const dashboardData: BankDashboardData = {
+    anchorDate: anchorDate ? anchorDate.toISOString().slice(0, 10) : null,
+    companyBalances,
+    grandTotalByCurrency,
+    companyFlows,
+    grandFlow,
+  }
 
   // ── Маппинг в BankTxRow[] ────────────────────────────────────────────────
 
@@ -147,6 +292,9 @@ export default async function BankPage({
         </div>
         {canManage && <BankImportButton />}
       </div>
+
+      {/* Дашборд-сводка: остатки + приход/расход (независим от фильтров) */}
+      <BankDashboard data={dashboardData} />
 
       {/* Фильтры */}
       <BankFilters
