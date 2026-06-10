@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to execute
+status: Milestone complete
 stopped_at: Completed 23-cash-payments-23-04-PLAN.md
-last_updated: "2026-06-10T13:11:02.145Z"
+last_updated: "2026-06-10T16:09:29.465Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 23 (cash-payments) — EXECUTING
-Plan: 5 of 5
+Phase: 23
+Plan: Not started
 
 ## Performance Metrics
 

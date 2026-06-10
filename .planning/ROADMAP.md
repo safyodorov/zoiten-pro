@@ -544,7 +544,7 @@ Plans:
 
 **Requirements**: CASH-01, CASH-02, CASH-03, CASH-04, CASH-05, CASH-06, CASH-07, CASH-08, CASH-09, CASH-10, CASH-11
 **Depends on:** Phase 2 (RBAC раздел CASH), справочник Employee (ответственный), Phase 22 (паттерны импорта/таблицы/категоризации)
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [x] 23-01-PLAN.md — Schema + raw SQL миграция (CashEntry/CashCategory/CashDirection + Employee relation + ERP_SECTION.CASH) + сид 24 категорий
