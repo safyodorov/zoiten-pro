@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 23-01-PLAN.md
-last_updated: "2026-06-10T12:50:32.892Z"
+stopped_at: Completed 23-02-PLAN.md
+last_updated: "2026-06-10T12:54:23.261Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 23 (cash-payments) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -121,6 +121,7 @@ Plan: 2 of 5
 | Phase 22-bank-accounts P04 | 202s | 2 tasks | 4 files |
 | Phase 22-bank-accounts P05 | 18min | 4 tasks | 5 files |
 | Phase 23-cash-payments P01 | 5min | 2 tasks | 2 files |
+| Phase 23-cash-payments P02 | 79s | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -298,6 +299,7 @@ Recent decisions affecting current work:
 - [Phase 23-cash-payments]: CashDirection отдельный enum (INCOME/EXPENSE), не переиспользование TxDirection — семантика кассы отличается от банка
 - [Phase 23-cash-payments]: fingerprint String? @unique (nullable) — ручные записи без дедупа; импортированные SHA-256 по (sheet|date|direction|amount|purpose|responsibleNameRaw)
 - [Phase 23-cash-payments]: Decimal(14,2) для CashEntry.amount (паттерн Credits Phase 21) — рубли, 14 знаков достаточно; не 18,2 как BankTransaction
+- [Phase 23-cash-payments]: Wallet icon chosen for CASH sidebar entry (Landmark=Credits, Building2=Bank)
 
 ### Roadmap Evolution
 
@@ -362,6 +364,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T12:50:32.886Z
-Stopped at: Completed 23-01-PLAN.md
+Last session: 2026-06-10T12:54:23.256Z
+Stopped at: Completed 23-02-PLAN.md
 Resume file: None
