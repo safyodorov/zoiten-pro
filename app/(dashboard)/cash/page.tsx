@@ -20,6 +20,8 @@ export default async function CashPage({
 }: {
   searchParams: Promise<{
     year?: string
+    dateFrom?: string
+    dateTo?: string
     direction?: string
     department?: string
     categories?: string
@@ -35,6 +37,8 @@ export default async function CashPage({
   // ── Парсинг фильтров ────────────────────────────────────────────────────
 
   const year = sp.year ? parseInt(sp.year, 10) : undefined
+  const dateFrom = sp.dateFrom ? new Date(sp.dateFrom + "T00:00:00.000Z") : undefined
+  const dateTo = sp.dateTo ? new Date(sp.dateTo + "T23:59:59.999Z") : undefined
   const direction = sp.direction as "INCOME" | "EXPENSE" | undefined
   const department = sp.department?.trim()
   const categoryIds = sp.categories?.split(",").filter(Boolean) ?? []
@@ -45,7 +49,12 @@ export default async function CashPage({
 
   const where: Prisma.CashEntryWhereInput = {}
 
-  if (year) {
+  // Диапазон дат (календарь) имеет приоритет; иначе — быстрый фильтр по году
+  if (dateFrom || dateTo) {
+    where.date = {}
+    if (dateFrom) (where.date as Prisma.DateTimeFilter).gte = dateFrom
+    if (dateTo) (where.date as Prisma.DateTimeFilter).lte = dateTo
+  } else if (year) {
     where.date = {
       gte: new Date(Date.UTC(year, 0, 1)),
       lt: new Date(Date.UTC(year + 1, 0, 1)),

@@ -112,6 +112,8 @@ export function CashFilters({ categories, employees, departments, years }: CashF
 
   // Читаем текущие значения из URL
   const yearFilter = searchParams.get("year") ?? ""
+  const dateFromFilter = searchParams.get("dateFrom") ?? ""
+  const dateToFilter = searchParams.get("dateTo") ?? ""
   const directionFilter = searchParams.get("direction") ?? ""
   const departmentFilter = searchParams.get("department") ?? ""
   const selectedCategories =
@@ -138,7 +140,17 @@ export function CashFilters({ categories, employees, departments, years }: CashF
   // ── Обработчики ─────────────────────────────────────────────────────
 
   function setYear(value: string) {
-    router.push(buildUrl({ year: value || undefined }))
+    // Год и диапазон дат взаимоисключающие — при выборе года чистим диапазон
+    router.push(buildUrl({ year: value || undefined, dateFrom: undefined, dateTo: undefined }))
+  }
+
+  function setDateFrom(value: string) {
+    // Диапазон дат имеет приоритет — чистим быстрый фильтр года
+    router.push(buildUrl({ dateFrom: value || undefined, year: undefined }))
+  }
+
+  function setDateTo(value: string) {
+    router.push(buildUrl({ dateTo: value || undefined, year: undefined }))
   }
 
   function setDirection(value: string) {
@@ -174,6 +186,8 @@ export function CashFilters({ categories, employees, departments, years }: CashF
 
   const hasFilters =
     !!yearFilter ||
+    !!dateFromFilter ||
+    !!dateToFilter ||
     !!directionFilter ||
     !!departmentFilter ||
     selectedCategories.length > 0 ||
@@ -205,6 +219,26 @@ export function CashFilters({ categories, employees, departments, years }: CashF
           </option>
         ))}
       </select>
+
+      {/* Диапазон дат — календарь (точность до дня/месяца) */}
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-muted-foreground">с</span>
+        <input
+          type="date"
+          value={dateFromFilter}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className={selectCls}
+          title="Дата с"
+        />
+        <span className="text-xs text-muted-foreground">по</span>
+        <input
+          type="date"
+          value={dateToFilter}
+          onChange={(e) => setDateTo(e.target.value)}
+          className={selectCls}
+          title="Дата по"
+        />
+      </div>
 
       {/* Направление — native <select> (CLAUDE.md) */}
       <select
