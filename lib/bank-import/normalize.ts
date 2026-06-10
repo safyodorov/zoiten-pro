@@ -92,6 +92,21 @@ export function extractBic(s: string | null | undefined): string | null {
 }
 
 /**
+ * Extracts the bank name from a Sber "Банк (БИК и наименование)" cell.
+ * Format: "БИК NNNNNNNNN ИМЯ БАНКА" → "ИМЯ БАНКА".
+ * Strips the leading "БИК\s*\d{9}\s*" prefix and returns the remaining trimmed text.
+ * Returns null if the input doesn't match the expected format or the name is empty.
+ * Used to populate Bank.name for counterparty banks found in Sber statements.
+ */
+export function extractBankName(s: string | null | undefined): string | null {
+  if (!s) return null
+  const m = String(s).match(/^БИК\s*\d{9}\s+(.+)$/i)
+  if (!m) return null
+  const name = m[1]!.trim()
+  return name || null
+}
+
+/**
  * Каноникализирует наименование компании из банковской выписки.
  * Разные банки пишут организационно-правовую форму по-разному
  * («ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ X» в Сбер/ВТБ vs «ООО X» в ПСБ).

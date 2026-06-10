@@ -236,6 +236,7 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): { transactions: Pars
         counterpartyName,
         counterpartyInn,
         counterpartyBic,
+        counterpartyBankName: null, // VTB не содержит наименование банка контрагента
         counterpartyAccount,
         purpose,
         sourceBank: "vtb",

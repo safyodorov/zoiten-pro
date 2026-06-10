@@ -167,6 +167,7 @@ export function parsePsbStatement(workbook: XLSX.WorkBook): { transactions: Pars
       counterpartyName,
       counterpartyInn,
       counterpartyBic,
+      counterpartyBankName: null, // PSB не содержит наименование банка контрагента
       counterpartyAccount,
       purpose,
       sourceBank: "psb",

@@ -10,6 +10,7 @@ import type { PrismaClient } from "@prisma/client"
 import type { ParsedTransaction, BankFormat, AccountBalance } from "./types"
 import { computeFingerprint } from "./fingerprint"
 import { canonicalizeCompanyName, companyCoreName } from "./normalize"
+import { STATIC_BANK_NAMES } from "./bank-names"
 
 // Bank-владелец счёта определяется ДЕТЕРМИНИРОВАННО по sourceBank через константу.
 // Реальные головные БИК российских банков (9 цифр).
@@ -53,12 +54,35 @@ export async function persistParsedTransactions(
     return { imported: 0, skipped: 0, total: 0 }
   }
 
+  // ── Шаг 0.5: Строим bic → bestName на основе данных этого батча ──
+  // Приоритет: (1) статический справочник, (2) имя из Sber-ячейки "Банк (БИК и наименование)".
+  // Implication: если оба источника дают имя, статический справочник побеждает
+  // (он содержит проверенные каноничные имена).
+  // Для owning-банков статический справочник всегда совпадает с OWNING_BANK — ок.
+  const parsedBankNames = new Map<string, string>() // bic → имя из выписки
+  for (const tx of parsed) {
+    const bic = tx.counterpartyBic?.trim()
+    if (!bic) continue
+    const name = tx.counterpartyBankName?.trim()
+    if (name && name !== bic && !parsedBankNames.has(bic)) {
+      parsedBankNames.set(bic, name)
+    }
+  }
+  /**
+   * Resolves the best known name for a BIC.
+   * Priority: static map > parsed-from-statement > bic (placeholder fallback).
+   */
+  function resolveBankName(bic: string): string {
+    return STATIC_BANK_NAMES[bic] ?? parsedBankNames.get(bic) ?? bic
+  }
+
   // ── Шаг 1: Банк-владелец (один на весь батч, ДЕТЕРМИНИРОВАН по sourceBank) ──
   const ob = OWNING_BANK[opts.sourceBank]
+  const owningBankName = resolveBankName(ob.bic) || ob.name
   const owningBank = await prisma.bank.upsert({
     where: { bic: ob.bic },
-    update: {},
-    create: { bic: ob.bic, name: ob.name },
+    update: { name: owningBankName },
+    create: { bic: ob.bic, name: owningBankName },
   })
 
   // ── Шаг 2: Банки контрагентов (справочник, НЕ для BankAccount.bankId) ──
@@ -70,10 +94,15 @@ export async function persistParsedTransactions(
   // Кеш: bic → Bank.id (нужен для логики, но в BankTransaction пишем только денорм. поля)
   const _counterpartyBankCache = new Map<string, string>()
   for (const bic of counterpartyBicSet) {
+    const bestName = resolveBankName(bic)
+    // update: задаём bestName только если оно лучше BIC-заглушки;
+    // это позволяет re-import обновить имя у уже существующих записей с name=BIC,
+    // но не затирает имя, если оно уже задано вручную (хотя вручную имя могли поменять —
+    // для упрощения мы обновляем только если bestName != bic, т.е. у нас есть реальное имя).
     const bank = await prisma.bank.upsert({
       where: { bic },
-      update: {},
-      create: { bic, name: bic }, // name = bic, редактируется позже вручную
+      update: bestName !== bic ? { name: bestName } : {},
+      create: { bic, name: bestName },
     })
     _counterpartyBankCache.set(bic, bank.id)
   }

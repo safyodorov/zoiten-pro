@@ -150,6 +150,35 @@ describe("normalize helpers", () => {
     expect(extractBic("")).toBeNull()
   })
 
+  // extractBankName
+  it("extractBankName: 'БИК 044525593 АО \"АЛЬФА-БАНК\"' → 'АО \"АЛЬФА-БАНК\"'", async () => {
+    const { extractBankName } = await import("@/lib/bank-import/normalize")
+    expect(extractBankName('БИК 044525593 АО "АЛЬФА-БАНК"')).toBe('АО "АЛЬФА-БАНК"')
+  })
+
+  it("extractBankName: 'БИК 047003608 Ивановское отд. ПАО Сбербанк' → 'Ивановское отд. ПАО Сбербанк'", async () => {
+    const { extractBankName } = await import("@/lib/bank-import/normalize")
+    expect(extractBankName("БИК 047003608 Ивановское отд. ПАО Сбербанк")).toBe("Ивановское отд. ПАО Сбербанк")
+  })
+
+  it("extractBankName: 'БИК 044525974 АО \"ТБанк\"' → 'АО \"ТБанк\"'", async () => {
+    const { extractBankName } = await import("@/lib/bank-import/normalize")
+    expect(extractBankName('БИК 044525974 АО "ТБанк"')).toBe('АО "ТБанк"')
+  })
+
+  it("extractBankName: строка без префикса БИК → null", async () => {
+    const { extractBankName } = await import("@/lib/bank-import/normalize")
+    expect(extractBankName("044525225")).toBeNull()
+    expect(extractBankName("Сбербанк")).toBeNull()
+    expect(extractBankName(null)).toBeNull()
+    expect(extractBankName("")).toBeNull()
+  })
+
+  it("extractBankName: 'БИК 044525225' (БИК без имени) → null", async () => {
+    const { extractBankName } = await import("@/lib/bank-import/normalize")
+    expect(extractBankName("БИК 044525225")).toBeNull()
+  })
+
   // buildHeaderMap
   it("buildHeaderMap: строит map заголовок → индекс", async () => {
     const { buildHeaderMap } = await import("@/lib/bank-import/normalize")
@@ -379,6 +408,7 @@ describe("parseVtbStatement", () => {
     expect(txs[0]!.currency).toBe("RUR")
     expect(txs[0]!.accountNumber).toBe("40702810800810087464")
     expect(txs[0]!.counterpartyInn).toBe("7707083893")
+    expect(txs[0]!.counterpartyBankName).toBeNull() // VTB не содержит имя банка
     expect(txs[0]!.docNumber).toBe("42")
     expect(txs[0]!.purpose).toBe("Оплата по счёту №12")
     expect(txs[0]!.sourceBank).toBe("vtb")
@@ -645,6 +675,7 @@ describe("parseSberStatement", () => {
     expect(txs[0]!.counterpartyAccount).toBe("70601810817002780299")
     expect(txs[0]!.counterpartyInn).toBe("7707083893")
     expect(txs[0]!.counterpartyBic).toBe("047003608")
+    expect(txs[0]!.counterpartyBankName).toBe("Ивановское отд. ПАО Сбербанк")
     expect(txs[0]!.docNumber).toBe("484771")
     expect(txs[0]!.purpose).toBe("Комиссия за сервис")
     expect(txs[0]!.accountNumber).toBe("40702810417002000001")

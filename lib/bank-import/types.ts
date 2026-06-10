@@ -19,6 +19,7 @@ export interface ParsedTransaction {
   counterpartyName: string | null
   counterpartyInn: string | null
   counterpartyBic: string | null
+  counterpartyBankName: string | null  // real bank name parsed from statement (Sber only; null for VTB/PSB)
   counterpartyAccount: string | null
   purpose: string
   sourceBank: BankFormat

@@ -12,7 +12,7 @@
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDateCell, parseAmount, parseBalanceAmount, parseRussianDate, extractBic, buildHeaderMap } from "./normalize"
+import { parseDateCell, parseAmount, parseBalanceAmount, parseRussianDate, extractBic, extractBankName, buildHeaderMap } from "./normalize"
 import type { ParsedTransaction, AccountBalance } from "./types"
 
 const ACCOUNT_NUMBER_RE = /(\d{20})/
@@ -222,11 +222,12 @@ export function parseSberStatement(workbook: XLSX.WorkBook): { transactions: Par
     const { account: counterpartyAccount, inn: counterpartyInn, name: counterpartyName } =
       splitAccountCell(counterpartyCell)
 
-    // Колонка "Банк (БИК и наименование)": извлечь БИК regex
+    // Колонка "Банк (БИК и наименование)": извлечь БИК и имя банка
     const bankCell = hm["Банк (БИК и наименование)"] !== undefined
       ? String(row[hm["Банк (БИК и наименование)"]!] ?? "")
       : null
     const counterpartyBic = extractBic(bankCell)
+    const counterpartyBankName = extractBankName(bankCell)
 
     const docNumber = hm["№ документа"] !== undefined
       ? String(row[hm["№ документа"]!] ?? "").trim() || null
@@ -255,6 +256,7 @@ export function parseSberStatement(workbook: XLSX.WorkBook): { transactions: Par
       counterpartyName, // 3-я строка ячейки "Счет" (ФИО для ИП / наименование)
       counterpartyInn,
       counterpartyBic,
+      counterpartyBankName,
       counterpartyAccount,
       purpose,
       sourceBank: "sber",
