@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Ready to execute
-stopped_at: Completed 22-04-PLAN.md
-last_updated: "2026-06-10T08:50:45.116Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 22-05-PLAN.md (UAT checkpoint reached)
+last_updated: "2026-06-10T09:06:11.892Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -119,6 +119,7 @@ Plan: 5 of 5
 | Phase 22-bank-accounts P02 | 3min | 2 tasks | 5 files |
 | Phase 22-bank-accounts P03 | 330 | 2 tasks | 8 files |
 | Phase 22-bank-accounts P04 | 202s | 2 tasks | 4 files |
+| Phase 22-bank-accounts P05 | 18min | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -290,6 +291,8 @@ Recent decisions affecting current work:
 - [Phase 22-bank-accounts]: Fingerprint = sha256(accountNumber|date|direction|amount|docNumber|counterpartyInn|normalizePurpose(purpose)) — no row position index
 - [Phase 22-bank-accounts]: OWNING_BANK constant with real BICs (vtb 044525411 / psb 044525555 / sber 044525225) determines owning bank deterministically; counterparty banks upserted separately by their own BIC
 - [Phase 22-bank-accounts]: persist.ts has zero next-auth/next/* imports — usable from seed script 22-05 with its own PrismaClient instance
+- [Phase 22-bank-accounts]: BankTxRow: flat serializable object (Decimal->number, Date->ISO string on server) — RSC client boundary
+- [Phase 22-bank-accounts]: CategoryCell rollback: prev value saved before optimistic update, restored on !result.ok
 
 ### Roadmap Evolution
 
@@ -353,6 +356,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T08:50:45.111Z
-Stopped at: Completed 22-04-PLAN.md
+Last session: 2026-06-10T09:06:11.886Z
+Stopped at: Completed 22-05-PLAN.md (UAT checkpoint reached)
 Resume file: None
