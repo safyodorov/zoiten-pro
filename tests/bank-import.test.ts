@@ -174,6 +174,13 @@ describe("normalize helpers", () => {
     expect(b).toBe('ООО "ГЕЙМ БЛОКС"')
     expect(c).toBe('ООО "ГЕЙМ БЛОКС"')
   })
+  it("companyCoreName: ядро имени (strip ООО/кавычки) для сопоставления", async () => {
+    const { companyCoreName } = await import("@/lib/bank-import/normalize")
+    expect(companyCoreName('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "ГЕЙМ БЛОКС"')).toBe("ГЕЙМ БЛОКС")
+    expect(companyCoreName('ООО "ГЕЙМ БЛОКС"')).toBe("ГЕЙМ БЛОКС")
+    expect(companyCoreName("ГЕЙМ БЛОКС")).toBe("ГЕЙМ БЛОКС")
+    expect(companyCoreName("")).toBeNull()
+  })
   it("canonicalizeCompanyName: ПАО/АО/ИП + пустой ввод", async () => {
     const { canonicalizeCompanyName } = await import("@/lib/bank-import/normalize")
     expect(canonicalizeCompanyName("ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО СБЕРБАНК")).toBe("ПАО СБЕРБАНК")

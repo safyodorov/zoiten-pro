@@ -9,7 +9,7 @@
 import type { PrismaClient } from "@prisma/client"
 import type { ParsedTransaction, BankFormat, AccountBalance } from "./types"
 import { computeFingerprint } from "./fingerprint"
-import { canonicalizeCompanyName } from "./normalize"
+import { canonicalizeCompanyName, companyCoreName } from "./normalize"
 
 // Bank-владелец счёта определяется ДЕТЕРМИНИРОВАННО по sourceBank через константу.
 // Реальные головные БИК российских банков (9 цифр).
@@ -96,31 +96,48 @@ export async function persistParsedTransactions(
     }
   }
 
+  // Все компании заранее — для сопоставления по «ядру имени» (strip ООО/кавычки),
+  // чтобы выписочная «ООО "ГЕЙМ БЛОКС"» нашла существующую «ГЕЙМ БЛОКС» (Кредиты/Сотрудники).
+  const existingCompanies = await prisma.company.findMany({
+    select: { id: true, name: true, inn: true },
+  })
+  const byInn = new Map<string, (typeof existingCompanies)[0]>()
+  const byCore = new Map<string, (typeof existingCompanies)[0]>()
+  for (const c of existingCompanies) {
+    if (c.inn) byInn.set(c.inn, c)
+    const core = companyCoreName(c.name)
+    if (core && !byCore.has(core)) byCore.set(core, c)
+  }
+
   for (const [key, { inn, name }] of companyKeys) {
     if (!inn && !name) continue // совсем нет данных — пропускаем
 
-    // Find-or-create: ищем СНАЧАЛА по ИНН, затем по имени (одна и та же компания
-    // встречается в выписках разных банков — у одного файла ИНН есть, у другого нет;
-    // create-by-name без предварительного поиска падал на @unique(name)).
-    let company =
-      (inn ? await prisma.company.findFirst({ where: { inn } }) : null) ??
-      (name ? await prisma.company.findFirst({ where: { name } }) : null)
+    // Find-or-create: ИНН → точное имя → ЯДРО имени (strip ООО) → create.
+    const core = companyCoreName(name)
+    let match =
+      (inn ? byInn.get(inn) : undefined) ??
+      (name ? existingCompanies.find((c) => c.name === name) : undefined) ??
+      (core ? byCore.get(core) : undefined)
 
-    if (company) {
+    let companyId: string
+    if (match) {
       // backfill ИНН, если он у нас есть, а в записи отсутствует
-      if (inn && !company.inn) {
-        company = await prisma.company.update({
-          where: { id: company.id },
-          data: { inn },
-        })
+      if (inn && !match.inn) {
+        const updated = await prisma.company.update({ where: { id: match.id }, data: { inn } })
+        match = { ...match, inn: updated.inn }
+        byInn.set(inn, match)
       }
+      companyId = match.id
     } else {
-      company = await prisma.company.create({
-        data: { name: name ?? inn!, inn: inn ?? null },
-      })
+      const created = await prisma.company.create({ data: { name: name ?? inn!, inn: inn ?? null } })
+      const rec = { id: created.id, name: created.name, inn: created.inn }
+      existingCompanies.push(rec)
+      if (created.inn) byInn.set(created.inn, rec)
+      if (core) byCore.set(core, rec)
+      companyId = created.id
     }
 
-    companyCache.set(key, company.id)
+    companyCache.set(key, companyId)
   }
 
   // ── Шаг 4: BankAccount (по номеру счёта) ──

@@ -132,6 +132,25 @@ export function canonicalizeCompanyName(
 }
 
 /**
+ * «Ядро» имени компании — без орг.-правовой формы и кавычек, UPPERCASE.
+ * 'ООО "ГЕЙМ БЛОКС"' → 'ГЕЙМ БЛОКС'; 'ГЕЙМ БЛОКС' → 'ГЕЙМ БЛОКС'.
+ * Используется для сопоставления компаний из выписок с уже существующими
+ * (короткие имена в Кредитах/Сотрудниках) — чтобы импорт не плодил дубли.
+ * Возвращает null для пустого ввода.
+ */
+export function companyCoreName(raw: string | null | undefined): string | null {
+  const canon = canonicalizeCompanyName(raw)
+  if (!canon) return null
+  const core = canon
+    .replace(/^(ООО|ПАО|АО|ЗАО|ОАО|ИП)\s+/i, "")
+    .replace(/"/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+  return core || null
+}
+
+/**
  * Robust RU/US amount parser for bank balance cells.
  * Handles mixed formats:
  *   "33,201.97"   → 33201.97 (US thousands sep + decimal dot)
