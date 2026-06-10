@@ -646,6 +646,28 @@ describe("parseSberStatement", () => {
     expect(txs[0]!.companyInn).toBe("3702268607")
   })
 
+  it("имя контрагента (ФИО ИП) из 3-й строки ячейки 'Счет'", async () => {
+    const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
+    // Реальный формат ячейки Сбера — ТРИ строки: счёт\nИНН\nФИО(для ИП).
+    const wb = makeSberWorkbook([
+      makeSberDataRow(
+        "46059.83061",
+        "40702810217000000112\n3702268607\nООО \"ЗОЙТЕН\"",        // наш счёт + ИНН + имя
+        "40802810600008277746\n381255446410\nТОКТОНОВ ВЛАДИМИР",    // контрагент ИП: счёт+ИНН+ФИО
+        "300000.00", null,
+        "113", "01",
+        "БИК 044525974 АО \"ТБанк\"",
+        "Услуги по настройке"
+      ),
+    ])
+    const { transactions: txs } = parseSberStatement(wb)
+    expect(txs).toHaveLength(1)
+    expect(txs[0]!.direction).toBe("DEBIT")
+    expect(txs[0]!.counterpartyInn).toBe("381255446410")
+    expect(txs[0]!.counterpartyName).toBe("ТОКТОНОВ ВЛАДИМИР") // ← раньше было null (баг)
+    expect(txs[0]!.counterpartyAccount).toBe("40802810600008277746")
+  })
+
   it("CREDIT строка: контрагент = debit-side (col 4), наш счёт = credit-side (col 8)", async () => {
     const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
     // CREDIT: creditAcctCol (col8) = наш счёт, debitAcctCol (col4) = контрагент

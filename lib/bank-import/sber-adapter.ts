@@ -19,15 +19,28 @@ const ACCOUNT_NUMBER_RE = /(\d{20})/
 const INN_RE = /^\d{7,12}$/
 
 /**
- * Splits a "account\nINN" cell into its parts.
- * Returns { account, inn } — either may be null.
+ * Splits a Sber "Счет" cell into its parts. Реальный формат — ТРИ строки:
+ *   "40802810600008277746\n381255446410\nТОКТОНОВ ..." → account\nINN\nИмя(ФИО для ИП).
+ * ИНН может отсутствовать (тогда 2-я строка — имя), имя может отсутствовать
+ * (служебные счета банка, напр. "70601...\n7707083" → только счёт+ИНН).
+ * Returns { account, inn, name } — любой может быть null.
  */
-function splitAccountCell(cell: string | null | undefined): { account: string | null; inn: string | null } {
-  if (!cell) return { account: null, inn: null }
+function splitAccountCell(cell: string | null | undefined): {
+  account: string | null
+  inn: string | null
+  name: string | null
+} {
+  if (!cell) return { account: null, inn: null, name: null }
   const parts = String(cell).trim().split("\n").map((p) => p.trim()).filter(Boolean)
   const account = parts[0] ?? null
-  const inn = parts[1] && INN_RE.test(parts[1]) ? parts[1] : null
-  return { account, inn }
+  let inn: string | null = null
+  let nameStart = 1
+  if (parts[1] && INN_RE.test(parts[1])) {
+    inn = parts[1]
+    nameStart = 2
+  }
+  const name = parts.slice(nameStart).join(" ").trim() || null
+  return { account, inn, name }
 }
 
 /**
@@ -206,7 +219,8 @@ export function parseSberStatement(workbook: XLSX.WorkBook): { transactions: Par
       companyInn = inn
     }
 
-    const { account: counterpartyAccount, inn: counterpartyInn } = splitAccountCell(counterpartyCell)
+    const { account: counterpartyAccount, inn: counterpartyInn, name: counterpartyName } =
+      splitAccountCell(counterpartyCell)
 
     // Колонка "Банк (БИК и наименование)": извлечь БИК regex
     const bankCell = hm["Банк (БИК и наименование)"] !== undefined
@@ -238,7 +252,7 @@ export function parseSberStatement(workbook: XLSX.WorkBook): { transactions: Par
       credit,
       direction,
       amount,
-      counterpartyName: null, // Сбер-формат не содержит отдельного поля "Контрагент"
+      counterpartyName, // 3-я строка ячейки "Счет" (ФИО для ИП / наименование)
       counterpartyInn,
       counterpartyBic,
       counterpartyAccount,

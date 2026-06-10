@@ -178,13 +178,19 @@ export async function persistParsedTransactions(
   }
 
   for (const inn of counterpartyInns) {
-    // Находим имя из первой транзакции с этим ИНН
-    const txWithInn = parsed.find((tx) => tx.counterpartyInn?.trim() === inn)
-    const name = txWithInn?.counterpartyName ?? inn
+    // Предпочитаем РЕАЛЬНОЕ имя (первая транзакция с непустым counterpartyName),
+    // а не фолбэк = ИНН. realName используется и для backfill уже существующей
+    // записи (одна организация встречается в разных файлах/банках; у Сбера имя
+    // на 3-й строке ячейки "Счет", у служебных счётов имя может отсутствовать).
+    const txWithName = parsed.find(
+      (tx) => tx.counterpartyInn?.trim() === inn && tx.counterpartyName?.trim(),
+    )
+    const realName = txWithName?.counterpartyName?.trim() || null
+    const name = realName ?? inn
 
     const cp = await prisma.counterparty.upsert({
       where: { inn },
-      update: {},
+      update: realName ? { name: realName } : {}, // backfill реальным именем, не затирая фолбэком
       create: { inn, name },
     })
     counterpartyCache.set(inn, cp.id)
