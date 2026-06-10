@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Phase complete — ready for verification
-stopped_at: Completed 22-06-PLAN.md
-last_updated: "2026-06-10T10:12:45.931Z"
+status: Ready to execute
+stopped_at: Completed 23-01-PLAN.md
+last_updated: "2026-06-10T12:50:32.892Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 22 — bank-accounts
+**Current focus:** Phase 23 — cash-payments
 
 ## Current Position
 
-Phase: 22 (bank-accounts) — EXECUTING
-Plan: 5 of 5
+Phase: 23 (cash-payments) — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -120,6 +120,7 @@ Plan: 5 of 5
 | Phase 22-bank-accounts P03 | 330 | 2 tasks | 8 files |
 | Phase 22-bank-accounts P04 | 202s | 2 tasks | 4 files |
 | Phase 22-bank-accounts P05 | 18min | 4 tasks | 5 files |
+| Phase 23-cash-payments P01 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -294,6 +295,9 @@ Recent decisions affecting current work:
 - [Phase 22-bank-accounts]: BankTxRow: flat serializable object (Decimal->number, Date->ISO string on server) — RSC client boundary
 - [Phase 22-bank-accounts]: CategoryCell rollback: prev value saved before optimistic update, restored on !result.ok
 - [Phase 22]: Bank dashboard anchor = MAX(balanceDate) with fallback to MAX(tx.date); CNY flows ignored for v1
+- [Phase 23-cash-payments]: CashDirection отдельный enum (INCOME/EXPENSE), не переиспользование TxDirection — семантика кассы отличается от банка
+- [Phase 23-cash-payments]: fingerprint String? @unique (nullable) — ручные записи без дедупа; импортированные SHA-256 по (sheet|date|direction|amount|purpose|responsibleNameRaw)
+- [Phase 23-cash-payments]: Decimal(14,2) для CashEntry.amount (паттерн Credits Phase 21) — рубли, 14 знаков достаточно; не 18,2 как BankTransaction
 
 ### Roadmap Evolution
 
@@ -305,7 +309,8 @@ Recent decisions affecting current work:
 - Phase 19 added (2026-05-19): Управление рекламой WB — собственная БД рекламных расходов (WbAdvertCampaign, WbAdvertTarget, WbAdvertStatDaily, WbAdvertBalanceSnapshot), отдельный WB_ADS_TOKEN, daily cron в 3:00 МСК, view-only UI /ads/wb с per-product таблицей + expandable charts + каскадные фильтры. Контекст: .planning/research/ads-sheets/FINDINGS.md
 - Phase 20 added (2026-05-20): Управление закупками — Поставщики (БД с контактами/переговорами/per-product параметрами), Закупки (статусы планируемые/текущие/завершённые, multi-payment депозит/баланс с курсами ЦБ РФ), План закупок (детали TBD). Контекст: .planning/phases/20-procurement/20-CONTEXT.md. Планирование запущено 2026-05-20 параллельно с активной Phase 19 (реклама), реализация после Phase 19.
 - Phase 21 added (2026-06-08): Кредиты — визуализация и учёт кредитов компании. Новая БД Loan + LoanPayment (орг / банк / № КД / сумма / ставка % / срок / дата выдачи / график тело+проценты). UI: список кредитов → детальная карточка с графиком → сводный горизонтальный график выплат с разбивкой день/неделя/месяц. Источник данных: Кредиты.xlsx (Лист1 дневной график тела долга + балансы; Лист2 метаданные + помесячные основной долг+проценты). Добавлена как Phase 21 вручную (gsd-tools насчитал 1000 из-за backlog 999.1).
-- Phase 22 added (2026-06-10): Банковские счета — БД банковских операций по всем компаниям группы. Новая БД BankAccount + BankTransaction + справочники Bank (по БИК) + Counterparty (дедуп по ИНН), расширение Company реквизитами (ИНН/КПП/ОГРН) + nullable FK Lender→Bank. Импорт выписок из Excel с 3 адаптерами форматов (ВТБ multi-sheet/мультивалюта, ПСБ, СберБизнес) + защита от дублирования при пересечении периодов (composite fingerprint). Read-only просмотр + базовая категоризация под будущий ДДС. Новый ERP_SECTION.BANK. Scope этапа 1: БД+импорт+дедуп+просмотр, БЕЗ связей с закупками/кредитами/ДДС. Источник: папка Выписки/ (9 XLSX за 01.01–10.06.2026). Контекст: .planning/phases/22-bank-accounts/22-CONTEXT.md. Добавлена вручную как 22 (gsd-tools насчитал 14 из-за stale milestone-парсинга ROADMAP).
+- Phase 22 added (2026-06-10): Банковские счета — БД банковских операций по всем компаниям группы. Новая БД BankAccount + BankTransaction + справочники Bank (по БИК) + Counterparty (дедуп по ИНН), расширение Company реквизитами (ИНН/КПП/ОГРН) + nullable FK Lender→Bank. Импорт выписок из Excel с 3 адаптерами форматов (ВТБ multi-sheet/мультивалюта, ПСБ, СберБизнес) + защита от дублирования при пересечении периодов (composite fingerprint). Read-only просмотр + базовая категоризация под будущий ДДС. Новый ERP_SECTION.BANK. Scope этапа 1: БД+импорт+дедуп+просмотр, БЕЗ связей с закупками/кредитами/ДДС. Источник: папка Выписки/ (9 XLSX за 01.01–10.06.2026). Контекст: .planning/phases/22-bank-accounts/22-CONTEXT.md. Добавлена вручную как 22 (gsd-tools насчитал 14 из-за stale milestone-парсинга ROADMAP). ВЫПОЛНЕНА+развёрнута 2026-06-10 (1910 операций, дашборд с остатками, слияние компаний по ИНН).
+- Phase 23 added (2026-06-10): Наличные расчёты — касса группы из Офис Бюджет.xlsx (Юля+Павел) за 2024-2026. CashEntry + CashCategory (≈24, авто-разнесение по ключевым словам) + CashDirection(INCOME/EXPENSE); ответственный→Employee (пусто→Иванова); приход+расход (баланс); удобная форма ручного ввода. Раздел ведёт Иванова Юлия (MANAGE). ERP_SECTION.CASH. Контекст: .planning/phases/23-cash-payments/23-CONTEXT.md. Добавлена вручную как 23 (gsd-tools насчитал 14).
 
 ### Pending Todos
 
@@ -357,6 +362,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T10:12:40.467Z
-Stopped at: Completed 22-06-PLAN.md
+Last session: 2026-06-10T12:50:32.886Z
+Stopped at: Completed 23-01-PLAN.md
 Resume file: None

@@ -544,10 +544,10 @@ Plans:
 
 **Requirements**: CASH-01, CASH-02, CASH-03, CASH-04, CASH-05, CASH-06, CASH-07, CASH-08, CASH-09, CASH-10, CASH-11
 **Depends on:** Phase 2 (RBAC раздел CASH), справочник Employee (ответственный), Phase 22 (паттерны импорта/таблицы/категоризации)
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
-- [ ] 23-01-PLAN.md — Schema + raw SQL миграция (CashEntry/CashCategory/CashDirection + Employee relation + ERP_SECTION.CASH) + сид 24 категорий
+- [x] 23-01-PLAN.md — Schema + raw SQL миграция (CashEntry/CashCategory/CashDirection + Employee relation + ERP_SECTION.CASH) + сид 24 категорий
 - [ ] 23-02-PLAN.md — Проводка раздела /cash (6 точек чеклиста + RBAC-тумблер) + стаб-страница
 - [ ] 23-03-PLAN.md — lib/cash-import/ (parse Юля+Павел + normalize + categorize keyword-map + responsible-match + fingerprint) + vitest golden + scripts/import-cash-budget.ts
 - [ ] 23-04-PLAN.md — Server actions cash.ts + удобная форма ручного ввода + read-only sticky-таблица с фильтрами и итогами/балансом
