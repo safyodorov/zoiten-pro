@@ -2,10 +2,11 @@
 // Phase 22 (22-03): VTB bank statement parser.
 // Multi-sheet: each sheet = one account. Header-driven column mapping (NOT positional).
 // RUB-only sheets have 10 columns; CNY sheets have 12.
+// Real VTB headers use commas: "Дебет, RUR" / "Кредит, RUR" — fuzzy-matched.
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDDMMYYYY, parseAmount, buildHeaderMap } from "./normalize"
+import { parseDateCell, parseAmount, buildHeaderMap } from "./normalize"
 import type { ParsedTransaction } from "./types"
 
 /**
@@ -41,6 +42,29 @@ function extractCompanyName(rows: (string | number | null)[][]): string | null {
 }
 
 /**
+ * Fuzzy-matches a debit or credit column index from the header map.
+ * Real VTB files use "Дебет, RUR" / "Кредит, RUR" (with comma + space).
+ * We match /дебет.*CUR/i and /кредит.*CUR/i, falling back to plain /дебет/i or /кредит/i.
+ */
+function findAmountColIdx(
+  hm: Record<string, number>,
+  kind: "дебет" | "кредит",
+  currency: string
+): number | undefined {
+  const currencyPat = new RegExp(`${kind}.*${currency}`, "i")
+  const anyPat = new RegExp(kind, "i")
+  // Prefer currency-specific match
+  for (const key of Object.keys(hm)) {
+    if (currencyPat.test(key)) return hm[key]
+  }
+  // Fallback: any column with the right word
+  for (const key of Object.keys(hm)) {
+    if (anyPat.test(key)) return hm[key]
+  }
+  return undefined
+}
+
+/**
  * Parses all sheets of a VTB multi-sheet workbook.
  * Sheet name = account number.
  * Header row at index 6 → header-driven column mapping.
@@ -54,6 +78,7 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
     const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
       header: 1,
       defval: null,
+      raw: false,
     })
 
     if (rows.length < 7) continue // нет заголовков — пустой лист
@@ -66,10 +91,10 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
     const headerRow = rows[6] ?? []
     const hm = buildHeaderMap(headerRow)
 
-    // Выбираем колонки суммы в зависимости от валюты листа
-    // CNY-лист имеет "Дебет CNY"/"Кредит CNY"; RUB-лист — только "Дебет RUR"/"Кредит RUR"
-    const debitKey = currency === "CNY" && hm["Дебет CNY"] !== undefined ? "Дебет CNY" : "Дебет RUR"
-    const creditKey = currency === "CNY" && hm["Кредит CNY"] !== undefined ? "Кредит CNY" : "Кредит RUR"
+    // Fuzzy-match debit/credit columns by currency.
+    // Real VTB headers: "Дебет, RUR" / "Кредит, RUR" (or "Дебет, CNY" / "Кредит, CNY").
+    const debitColIdx = findAmountColIdx(hm, "дебет", currency)
+    const creditColIdx = findAmountColIdx(hm, "кредит", currency)
 
     for (let i = 7; i < rows.length; i++) {
       const row = rows[i]!
@@ -85,11 +110,11 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
 
       // Дата
       const dateVal = hm["Дата"] !== undefined ? row[hm["Дата"]!] : null
-      const date = parseDDMMYYYY(dateVal as string | number | null)
+      const date = parseDateCell(dateVal as string | number | null)
       if (!date) continue // нет даты — пропустить
 
-      const debit = parseAmount(hm[debitKey] !== undefined ? row[hm[debitKey]!] as string | number | null : null)
-      const credit = parseAmount(hm[creditKey] !== undefined ? row[hm[creditKey]!] as string | number | null : null)
+      const debit = parseAmount(debitColIdx !== undefined ? row[debitColIdx] as string | number | null : null)
+      const credit = parseAmount(creditColIdx !== undefined ? row[creditColIdx] as string | number | null : null)
 
       // Направление: дебет (расход) > 0 → DEBIT, иначе → CREDIT
       const direction: "DEBIT" | "CREDIT" = (debit ?? 0) > 0 ? "DEBIT" : "CREDIT"

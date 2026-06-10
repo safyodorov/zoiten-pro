@@ -5,7 +5,7 @@
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDDMMYYYY, parseAmount, buildHeaderMap } from "./normalize"
+import { parseDateCell, parseAmount, buildHeaderMap } from "./normalize"
 import type { ParsedTransaction } from "./types"
 
 const ACCOUNT_NUMBER_RE = /(\d{20})/
@@ -24,6 +24,7 @@ export function parsePsbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
   const rows = XLSX.utils.sheet_to_json<(string | number | null)[]>(sheet, {
     header: 1,
     defval: null,
+    raw: false,
   })
 
   if (rows.length < 8) return []
@@ -51,7 +52,7 @@ export function parsePsbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
 
     // Дата
     const dateVal = hm["Дата"] !== undefined ? row[hm["Дата"]!] : null
-    const date = parseDDMMYYYY(dateVal as string | number | null)
+    const date = parseDateCell(dateVal as string | number | null)
     if (!date) continue
 
     const debit = parseAmount(hm["Дебет"] !== undefined ? row[hm["Дебет"]!] as string | number | null : null)

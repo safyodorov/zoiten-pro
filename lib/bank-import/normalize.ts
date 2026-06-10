@@ -14,6 +14,44 @@ export function parseDDMMYYYY(s: string | number | null | undefined): Date | nul
 }
 
 /**
+ * Converts an Excel serial date number (1900 date system) to a UTC Date.
+ * Excel serial 1 = 1900-01-01 (with the infamous 1900 leap-year bug baked in).
+ * Practical formula: Date.UTC(1899, 11, 30) + serial × 86400000.
+ * Returns null if the serial is out of plausible range (30000–80000 ≈ 1982–2118).
+ */
+export function excelSerialToDate(serial: number): Date | null {
+  const s = Math.floor(serial)
+  if (s < 30000 || s > 80000) return null
+  const d = new Date(Date.UTC(1899, 11, 30) + s * 86400000)
+  return isNaN(d.getTime()) ? null : d
+}
+
+/**
+ * Combined date cell parser: tries DD.MM.YYYY string first, then Excel serial fallback.
+ * Accepts a string that may encode a serial as a decimal number ("46024.18197").
+ * Returns null for invalid/null input.
+ */
+export function parseDateCell(v: string | number | null | undefined): Date | null {
+  if (v == null) return null
+  // Fast path: numeric value
+  if (typeof v === "number") {
+    const ddmmyyyy = parseDDMMYYYY(v)
+    if (ddmmyyyy) return ddmmyyyy
+    return excelSerialToDate(v)
+  }
+  const str = String(v).trim()
+  // Try DD.MM.YYYY first
+  const ddmmyyyy = parseDDMMYYYY(str)
+  if (ddmmyyyy) return ddmmyyyy
+  // Try Excel serial encoded as a numeric string (e.g. "46024.1819675928")
+  const n = parseFloat(str)
+  if (Number.isFinite(n) && n >= 30000 && n < 80000) {
+    return excelSerialToDate(n)
+  }
+  return null
+}
+
+/**
  * Parses an amount value that may use commas as thousands separators
  * (e.g. "6,057,806.46" → 6057806.46).
  * Returns null for empty/null/NaN input.

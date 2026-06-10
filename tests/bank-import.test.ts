@@ -57,6 +57,53 @@ describe("normalize helpers", () => {
     expect(parseDDMMYYYY(null as unknown as string)).toBeNull()
   })
 
+  // excelSerialToDate
+  it("excelSerialToDate: 46024 → 2026-01-02 (UTC)", async () => {
+    const { excelSerialToDate } = await import("@/lib/bank-import/normalize")
+    const d = excelSerialToDate(46024)
+    expect(d).not.toBeNull()
+    expect(d!.toISOString().slice(0, 10)).toBe("2026-01-02")
+  })
+
+  it("excelSerialToDate: 45658 → 2025-01-01 (UTC)", async () => {
+    const { excelSerialToDate } = await import("@/lib/bank-import/normalize")
+    const d = excelSerialToDate(45658)
+    expect(d).not.toBeNull()
+    expect(d!.toISOString().slice(0, 10)).toBe("2025-01-01")
+  })
+
+  it("excelSerialToDate: out-of-range (100) → null", async () => {
+    const { excelSerialToDate } = await import("@/lib/bank-import/normalize")
+    expect(excelSerialToDate(100)).toBeNull()
+  })
+
+  // parseDateCell
+  it("parseDateCell: '12.03.2026' (DD.MM.YYYY string) → 2026-03-12", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    const d = parseDateCell("12.03.2026")
+    expect(d!.toISOString().slice(0, 10)).toBe("2026-03-12")
+  })
+
+  it("parseDateCell: '46024.1819675928' (Excel serial string) → 2026-01-02", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    const d = parseDateCell("46024.1819675928")
+    expect(d).not.toBeNull()
+    expect(d!.toISOString().slice(0, 10)).toBe("2026-01-02")
+  })
+
+  it("parseDateCell: numeric 46024 → 2026-01-02", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    const d = parseDateCell(46024)
+    expect(d!.toISOString().slice(0, 10)).toBe("2026-01-02")
+  })
+
+  it("parseDateCell: null/invalid → null", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    expect(parseDateCell(null)).toBeNull()
+    expect(parseDateCell("abc")).toBeNull()
+    expect(parseDateCell("")).toBeNull()
+  })
+
   // parseAmount
   it("parseAmount: '6,057,806.46' (тысячные запятые) → 6057806.46", async () => {
     const { parseAmount } = await import("@/lib/bank-import/normalize")
@@ -207,8 +254,8 @@ describe("parseVtbStatement", () => {
       [null, null, null, null, null, null, null, null, null, null],                    // row 3
       ["Владелец счёта", "ООО ТЕСТ", null, null, null, null, null, null, null, null], // row 4
       [null, null, null, null, null, null, null, null, null, null],                    // row 5
-      // row 6 = заголовки (10 колонок, без CNY)
-      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет RUR", "Кредит RUR", "Назначение"],
+      // row 6 = заголовки (10 колонок, без CNY) — реальные заголовки с запятой: "Дебет, RUR"
+      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, RUR", "Кредит, RUR", "Назначение"],
       // data rows
       ...dataRows,
     ]
@@ -226,8 +273,8 @@ describe("parseVtbStatement", () => {
       [null, null, null, null, null, null, null, null, null, null, null, null],
       ["Владелец счёта", "ООО ТЕСТ", null, null, null, null, null, null, null, null, null, null],
       [null, null, null, null, null, null, null, null, null, null, null, null],
-      // row 6 = заголовки (12 колонок: + CNY pair)
-      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет CNY", "Кредит CNY", "Дебет RUR", "Кредит RUR", "Назначение"],
+      // row 6 = заголовки (12 колонок: + CNY pair) — реальные заголовки с запятой
+      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, CNY", "Кредит, CNY", "Дебет, RUR", "Кредит, RUR", "Назначение"],
       ...dataRows,
     ]
     return makeXlsxMultiSheet([{ name: accountNumber, rows }])
@@ -295,7 +342,8 @@ describe("parseVtbStatement", () => {
       ["Владелец счёта", "ООО ТЕСТ", null, null, null, null, null, null, null, null],
       [null, null, null, null, null, null, null, null, null, null],
       // Заголовки: Назначение на позиции 0, Дата на позиции 3 (поменяли местами)
-      ["Назначение", "Вид операции", "Номер", "Дата", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет RUR", "Кредит RUR"],
+      // Используем реальные заголовки с запятой: "Дебет, RUR" / "Кредит, RUR"
+      ["Назначение", "Вид операции", "Номер", "Дата", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, RUR", "Кредит, RUR"],
       // Данные в том же порядке
       ["Оплата по счёту", "Перевод", "77", "25.03.2026", "ООО Клиент", "1234567890", "044525225", "40702810500000005555", 300000, null],
     ]
@@ -324,8 +372,8 @@ describe("parseVtbStatement", () => {
       [null, null, null, null, null, null, null, null, null, null],
       ["Владелец счёта", "ООО ТЕСТ", null, null, null, null, null, null, null, null],
       [null, null, null, null, null, null, null, null, null, null],
-      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет RUR", "Кредит RUR", "Назначение"],
-      ["01.01.2026", "1", "Перевод", "ООО А", "1111111111", "044525225", "40702810500000000001", 100, null, "Платёж А"],
+      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, RUR", "Кредит, RUR", "Назначение"],
+      ["01.01.2026", "1", "Перевод", "ООО А", "1111111111", "044525225", "40702810500000000001", "100", null, "Платёж А"],
     ]
     const sheet2Rows: (string | number | null)[][] = [
       ["Номер счета", "40702810800810000002", null, null, null, null, null, null, null, null],
@@ -334,8 +382,8 @@ describe("parseVtbStatement", () => {
       [null, null, null, null, null, null, null, null, null, null],
       ["Владелец счёта", "ООО ТЕСТ", null, null, null, null, null, null, null, null],
       [null, null, null, null, null, null, null, null, null, null],
-      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет RUR", "Кредит RUR", "Назначение"],
-      ["02.01.2026", "2", "Перевод", "ООО Б", "2222222222", "044525225", "40702810500000000002", null, 200, "Платёж Б"],
+      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, RUR", "Кредит, RUR", "Назначение"],
+      ["02.01.2026", "2", "Перевод", "ООО Б", "2222222222", "044525225", "40702810500000000002", null, "200", "Платёж Б"],
     ]
     const wb = makeXlsxMultiSheet([
       { name: "40702810800810000001", rows: sheet1Rows },
@@ -417,57 +465,151 @@ describe("parsePsbStatement", () => {
 // ──────────────────────────────────────────────────────────────────
 
 describe("parseSberStatement", () => {
+  // Реальная структура СберБизнес (23 колонки):
+  //  col 0: пустой
+  //  col 1: Дата проводки (Excel serial как строка, напр. "46024.18197")
+  //  col 4: debit-side account (наш при DEBIT, контрагент при CREDIT) — "account\nINN\nName"
+  //  col 8: credit-side account (контрагент при DEBIT, наш при CREDIT) — "account\nINN\nName"
+  //  col 9: Сумма по дебету
+  //  col 13: Сумма по кредиту
+  //  col 14: № документа
+  //  col 16: ВО
+  //  col 17: Банк (БИК и наименование)
+  //  col 20: Назначение платежа
+  //
+  // Row 9 (headers): col 4 = "Счет", col 9 = "Сумма по дебету", col 13 = "Сумма по кредиту",
+  //                  col 14 = "№ документа", col 16 = "ВО", col 17 = "Банк (БИК и наименование)",
+  //                  col 20 = "Назначение платежа"
+  // Row 10 (sub-headers): col 4 = "Дебет", col 8 = "Кредит" — определяют стороны двойной записи.
   function makeSberWorkbook(dataRows: (string | number | null)[][]): XLSX.WorkBook {
     const accountNumber = "40702810417002000001"
+    // Builds a 23-element row filled with nulls, overriding specific indices
+    function r(overrides: Record<number, string | number | null>): (string | number | null)[] {
+      const row: (string | number | null)[] = Array(23).fill(null)
+      for (const [k, v] of Object.entries(overrides)) row[Number(k)] = v
+      return row
+    }
     const rows: (string | number | null)[][] = [
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 0
-      [null, "ПАО СБЕРБАНК", null, null, null, null, null, null, null, null, null, null], // row 1
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 2
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 3
-      [null, null, null, null, null, null, null, null, null, null, null, accountNumber], // row 4 — счёт в ~колонке 11
-      ["ООО ЗОЙТЕН", null, null, null, null, null, null, null, null, null, null, null],  // row 5 — наша компания
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 6
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 7
-      [null, null, null, null, null, null, null, null, null, null, null, null], // row 8
-      // row 9 = заголовки уровень 1
-      [null, "Дата проводки", "Счет", "Сумма по дебету", "Сумма по кредиту", "№ документа", "ВО", "Банк (БИК и наименование)", "Назначение платежа", null, null, null],
-      // row 10 = заголовки уровень 2 (подзаголовки, игнорируем)
-      [null, null, null, null, null, null, null, null, null, null, null, null],
+      r({}),                                                                              // row 0
+      r({ 1: "ПАО СБЕРБАНК" }),                                                           // row 1
+      r({}),                                                                              // row 2
+      r({}),                                                                              // row 3
+      r({ 11: accountNumber }),                                                           // row 4 — счёт
+      r({ 0: "ООО ЗОЙТЕН" }),                                                             // row 5 — компания
+      r({}),                                                                              // row 6
+      r({}),                                                                              // row 7
+      r({}),                                                                              // row 8
+      // row 9 = заголовки уровень 1 (реальные позиции)
+      r({ 1: "Дата проводки", 4: "Счет", 9: "Сумма по дебету", 13: "Сумма по кредиту",
+          14: "№ документа", 16: "ВО", 17: "Банк (БИК и наименование)", 20: "Назначение платежа" }),
+      // row 10 = подзаголовки — "Дебет" на col 4, "Кредит" на col 8 — определяют стороны записи
+      r({ 4: "Дебет", 8: "Кредит" }),
       // row 11+ = данные
       ...dataRows,
     ]
     return makeXlsx(rows, accountNumber)
   }
 
-  it("золотой тест: extractBic, split счёт\\nИНН, дата из «Дата проводки»", async () => {
+  // Строит строку данных в реальном формате Сбер для теста.
+  // debitAcct/creditAcct — "account\nINN"
+  function makeSberDataRow(
+    serial: string,
+    debitAcct: string | null,
+    creditAcct: string | null,
+    debitAmt: string | null,
+    creditAmt: string | null,
+    docNum: string,
+    vo: string,
+    bank: string,
+    purpose: string
+  ): (string | number | null)[] {
+    const row: (string | number | null)[] = Array(23).fill(null)
+    row[1] = serial
+    row[4] = debitAcct
+    row[8] = creditAcct
+    row[9] = debitAmt
+    row[13] = creditAmt
+    row[14] = docNum
+    row[16] = vo
+    row[17] = bank
+    row[20] = purpose
+    return row
+  }
+
+  it("золотой тест DEBIT: дата из Excel serial, контрагент = credit-side (col 8)", async () => {
+    const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
+    // DEBIT: debitAcctCol (col4) = наш счёт, creditAcctCol (col8) = контрагент
+    const wb = makeSberWorkbook([
+      makeSberDataRow(
+        "46024.1819675928",                            // Дата проводки — Excel serial
+        "40702810217000000112\n3702268607",            // col 4 — наш счёт + ИНН
+        "70601810817002780299\n7707083893",            // col 8 — контрагент + ИНН
+        "990.00", null,                                // debit amount
+        "484771", "17",
+        "БИК 047003608 Ивановское отд. ПАО Сбербанк",
+        "Комиссия за сервис"
+      ),
+    ])
+    const txs = parseSberStatement(wb)
+    expect(txs).toHaveLength(1)
+    expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-01-02")
+    expect(txs[0]!.direction).toBe("DEBIT")
+    expect(txs[0]!.amount).toBeCloseTo(990)
+    // Контрагент = credit-side (col 8)
+    expect(txs[0]!.counterpartyAccount).toBe("70601810817002780299")
+    expect(txs[0]!.counterpartyInn).toBe("7707083893")
+    expect(txs[0]!.counterpartyBic).toBe("047003608")
+    expect(txs[0]!.docNumber).toBe("484771")
+    expect(txs[0]!.purpose).toBe("Комиссия за сервис")
+    expect(txs[0]!.accountNumber).toBe("40702810417002000001")
+    expect(txs[0]!.sourceBank).toBe("sber")
+    // companyInn извлечён из debit-side (наш счёт)
+    expect(txs[0]!.companyInn).toBe("3702268607")
+  })
+
+  it("CREDIT строка: контрагент = debit-side (col 4), наш счёт = credit-side (col 8)", async () => {
+    const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
+    // CREDIT: creditAcctCol (col8) = наш счёт, debitAcctCol (col4) = контрагент
+    const wb = makeSberWorkbook([
+      makeSberDataRow(
+        "46024.19000",
+        "40702810500000001111\n5010012345",            // col 4 — контрагент при CREDIT
+        "40702810417002000001\n3702268607",            // col 8 — наш счёт при CREDIT
+        null, "1200000.00",                            // credit amount
+        "SB-002", "02",
+        "БИК 044525225 Банк ВТБ",
+        "Поступление оплаты"
+      ),
+    ])
+    const txs = parseSberStatement(wb)
+    expect(txs).toHaveLength(1)
+    expect(txs[0]!.direction).toBe("CREDIT")
+    expect(txs[0]!.amount).toBeCloseTo(1200000)
+    // Контрагент = debit-side (col 4)
+    expect(txs[0]!.counterpartyAccount).toBe("40702810500000001111")
+    expect(txs[0]!.counterpartyInn).toBe("5010012345")
+    expect(txs[0]!.counterpartyBic).toBe("044525225")
+    // companyInn извлечён из credit-side (наш счёт)
+    expect(txs[0]!.companyInn).toBe("3702268607")
+  })
+
+  it("дата DD.MM.YYYY в строке тоже парсится (parseDateCell fallback)", async () => {
     const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
     const wb = makeSberWorkbook([
-      // Составной id | Дата проводки | Счет\nИНН | Дебет | Кредит | №doc | ВО | Банк(БИК) | Назначение
-      [46024.18197, "10.03.2026", "40702810500000009999\n7707083893", "5,571,064.72", null, "SB-001", "01", "БИК 047003608 Ивановское отд. ПАО Сбербанк", "Оплата товара"],
+      makeSberDataRow(
+        "10.03.2026",                                  // DD.MM.YYYY (не serial)
+        "40702810217000000112\n3702268607",
+        "40702810500000009999\n7707083893",
+        "5571064.72", null,
+        "SB-001", "01",
+        "БИК 047003608 Ивановское отд. ПАО Сбербанк",
+        "Оплата товара"
+      ),
     ])
     const txs = parseSberStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-03-10")
-    expect(txs[0]!.direction).toBe("DEBIT")
     expect(txs[0]!.amount).toBeCloseTo(5571064.72)
-    expect(txs[0]!.counterpartyAccount).toBe("40702810500000009999")
-    expect(txs[0]!.counterpartyInn).toBe("7707083893")
-    expect(txs[0]!.counterpartyBic).toBe("047003608")
-    expect(txs[0]!.docNumber).toBe("SB-001")
-    expect(txs[0]!.purpose).toBe("Оплата товара")
-    expect(txs[0]!.accountNumber).toBe("40702810417002000001")
-    expect(txs[0]!.sourceBank).toBe("sber")
-  })
-
-  it("CREDIT строка: direction CREDIT", async () => {
-    const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
-    const wb = makeSberWorkbook([
-      [46024.19000, "15.04.2026", "40702810500000001111\n5010012345", null, "1,200,000.00", "SB-002", "02", "БИК 044525225 Банк ВТБ", "Поступление оплаты"],
-    ])
-    const txs = parseSberStatement(wb)
-    expect(txs[0]!.direction).toBe("CREDIT")
-    expect(txs[0]!.amount).toBeCloseTo(1200000)
-    expect(txs[0]!.counterpartyBic).toBe("044525225")
   })
 })
 

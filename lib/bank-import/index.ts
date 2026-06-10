@@ -13,7 +13,7 @@ import type { BankFormat, ParseResult } from "./types"
 
 export * from "./types"
 export { computeFingerprint, buildFingerprintFields } from "./fingerprint"
-export { parseDDMMYYYY, parseAmount, normalizePurpose, extractBic, buildHeaderMap } from "./normalize"
+export { parseDDMMYYYY, excelSerialToDate, parseDateCell, parseAmount, normalizePurpose, extractBic, buildHeaderMap } from "./normalize"
 export { parseVtbStatement, parsePsbStatement, parseSberStatement }
 
 /**

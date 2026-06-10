@@ -2,16 +2,32 @@
 // Phase 22 (22-03): СберБизнес bank statement parser.
 // Single sheet. Merged cells → read raw:false. Headers at rows 9-10, data from row 11.
 // Account number: sheet name OR row 4 ~col 11 regex.
-// "Счет" column: счёт\nИНН split by \n.
+// "Счет" column: DOUBLE-ENTRY — col 4 = debit-side acct, col 8 = credit-side acct.
+//   Sub-header row 10 has "Дебет" at the debit-side index, "Кредит" at the credit-side index.
+//   For DEBIT (outgoing): our acct = debit side, counterparty = credit side.
+//   For CREDIT (incoming): our acct = credit side, counterparty = debit side.
+// "Дата проводки": Excel serial-date (e.g. "46024.18197") — parsed via parseDateCell.
 // "Банк" column: extractBic via /БИК\s+(\d{9})/.
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDDMMYYYY, parseAmount, extractBic, buildHeaderMap } from "./normalize"
+import { parseDateCell, parseAmount, extractBic, buildHeaderMap } from "./normalize"
 import type { ParsedTransaction } from "./types"
 
 const ACCOUNT_NUMBER_RE = /(\d{20})/
 const INN_RE = /^\d{7,12}$/
+
+/**
+ * Splits a "account\nINN" cell into its parts.
+ * Returns { account, inn } — either may be null.
+ */
+function splitAccountCell(cell: string | null | undefined): { account: string | null; inn: string | null } {
+  if (!cell) return { account: null, inn: null }
+  const parts = String(cell).trim().split("\n").map((p) => p.trim()).filter(Boolean)
+  const account = parts[0] ?? null
+  const inn = parts[1] && INN_RE.test(parts[1]) ? parts[1] : null
+  return { account, inn }
+}
 
 /**
  * Parses a СберБизнес single-sheet workbook.
@@ -19,11 +35,15 @@ const INN_RE = /^\d{7,12}$/
  * Row 4: account number (~col 11)
  * Row 5: company name (col 0)
  * Row 9: primary headers
- * Row 10: sub-headers (ignored)
+ * Row 10: sub-headers — "Дебет" and "Кредит" mark the two account sub-columns
  * Rows 11+: transaction data
  *
- * First data column = composite serial id (e.g. "46024.18197") — IGNORED for date.
- * Date is parsed from "Дата проводки" column.
+ * The "Счет" merged header spans two sub-columns:
+ *   debitAcctCol  (row10 index of "Дебет",  fallback 4) = debit-side account (our account on outgoing)
+ *   creditAcctCol (row10 index "Кредит", fallback 8) = credit-side account (counterparty on outgoing)
+ * Direction logic:
+ *   "Сумма по дебету" set  → DEBIT,  counterparty = creditAcctCol
+ *   "Сумма по кредиту" set → CREDIT, counterparty = debitAcctCol
  */
 export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[] {
   const sheetName = workbook.SheetNames[0]!
@@ -64,6 +84,17 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
   const headerRow9 = rows[9] ?? []
   const hm = buildHeaderMap(headerRow9)
 
+  // Sub-header row 10: find debit-side and credit-side account column indices.
+  // "Дебет" marks our-acct column for outgoing; "Кредит" marks counterparty column for outgoing.
+  const subHeaderRow10 = rows[10] ?? []
+  let debitAcctCol = 4  // fallback
+  let creditAcctCol = 8 // fallback
+  for (let idx = 0; idx < subHeaderRow10.length; idx++) {
+    const cell = String(subHeaderRow10[idx] ?? "").trim()
+    if (/^дебет$/i.test(cell)) debitAcctCol = idx
+    else if (/^кредит$/i.test(cell)) creditAcctCol = idx
+  }
+
   const result: ParsedTransaction[] = []
 
   // Данные с строки 11
@@ -73,11 +104,12 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
     // Пропустить полностью пустые строки
     if (row.every((c) => c == null || String(c).trim() === "")) continue
 
-    // Дата — из колонки "Дата проводки", НЕ из первой ячейки (служебный id)
+    // Дата — из колонки "Дата проводки".
+    // Value is an Excel serial like "46024.1819675928" (General format, raw:false gives it as string).
     const dateVal = hm["Дата проводки"] !== undefined
       ? row[hm["Дата проводки"]!]
       : null
-    const date = parseDDMMYYYY(dateVal as string | null)
+    const date = parseDateCell(dateVal as string | number | null)
     if (!date) continue
 
     const debit = parseAmount(
@@ -92,15 +124,26 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
 
     if (amount === 0 && debit == null && credit == null) continue
 
-    // Колонка "Счет": счёт контрагента + ИНН через \n
-    let counterpartyAccount: string | null = null
-    let counterpartyInn: string | null = null
-    if (hm["Счет"] !== undefined) {
-      const accountCell = String(row[hm["Счет"]!] ?? "").trim()
-      const parts = accountCell.split("\n").map((p) => p.trim()).filter(Boolean)
-      if (parts.length >= 1) counterpartyAccount = parts[0]!
-      if (parts.length >= 2 && INN_RE.test(parts[1]!)) counterpartyInn = parts[1]!
+    // Double-entry counterparty logic:
+    //   DEBIT (outgoing): our acct = debitAcctCol, counterparty acct = creditAcctCol
+    //   CREDIT (incoming): our acct = creditAcctCol, counterparty acct = debitAcctCol
+    const debitCell = String(row[debitAcctCol] ?? "").trim()
+    const creditCell = String(row[creditAcctCol] ?? "").trim()
+
+    let counterpartyCell: string
+    let companyInn: string | null = null
+
+    if (direction === "DEBIT") {
+      counterpartyCell = creditCell
+      const { inn } = splitAccountCell(debitCell) // our side INN
+      companyInn = inn
+    } else {
+      counterpartyCell = debitCell
+      const { inn } = splitAccountCell(creditCell) // our side INN
+      companyInn = inn
     }
+
+    const { account: counterpartyAccount, inn: counterpartyInn } = splitAccountCell(counterpartyCell)
 
     // Колонка "Банк (БИК и наименование)": извлечь БИК regex
     const bankCell = hm["Банк (БИК и наименование)"] !== undefined
@@ -122,7 +165,7 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
 
     result.push({
       companyName,
-      companyInn: null,
+      companyInn,
       accountNumber,
       currency: "RUR", // СберБизнес — рублёвые счета
       date,
