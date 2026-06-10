@@ -82,10 +82,17 @@ export function parseYulyaSheet(wb: XLSX.WorkBook): ParsedCashEntry[] {
  *   Дата=0 | Назначение=1 | Сумма=2
  * All entries = EXPENSE. Default responsible = Иванова (normalizeResponsibleSurname(null)).
  * Filters to years 2024-2026; skips rows with no valid date or no amount.
+ *
+ * Фонд Павла: в файле только расходы, пополнений нет. По решению пользователя
+ * (2026-06-10) «расходы Павла = пополнения Павла» — на каждый расход добавляем
+ * зеркальное ПОПОЛНЕНИЕ (INCOME) той же суммы/даты, чтобы фонд нетил в ~0
+ * (пока не появятся реальные пополнения). Назначение пополнения ссылается на
+ * исходное → уникальный fingerprint (INCOME+EXPENSE и так различаются direction'ом).
  */
 export function parsePavelSheet(wb: XLSX.WorkBook): ParsedCashEntry[] {
   const rows = rowsOf(wb, "Павел")
   const out: ParsedCashEntry[] = []
+  const defaultResp = normalizeResponsibleSurname(null) // пусто → "Иванова"
   for (let i = 1; i < rows.length; i++) {
     const r = rows[i]!
     const date = parseDateCell(r[0] as never)
@@ -105,8 +112,20 @@ export function parsePavelSheet(wb: XLSX.WorkBook): ParsedCashEntry[] {
       amount,
       department: null,
       purpose,
-      responsibleNameRaw: normalizeResponsibleSurname(null), // пусто → "Иванова"
+      responsibleNameRaw: defaultResp,
       categoryName: categorize(purpose),
+      source: "budget-pavel",
+    })
+    // Зеркальное пополнение фонда (приход = расход)
+    out.push({
+      sheet: "pavel",
+      date,
+      direction: "INCOME",
+      amount,
+      department: null,
+      purpose: `Пополнение фонда (Павел): ${purpose}`,
+      responsibleNameRaw: defaultResp,
+      categoryName: "Пополнение кассы",
       source: "budget-pavel",
     })
   }
