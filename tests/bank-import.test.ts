@@ -193,6 +193,51 @@ describe("normalize helpers", () => {
     const { parseDateCell } = await import("@/lib/bank-import/normalize")
     expect(parseDateCell("12.03.2026")?.toISOString().slice(0, 10)).toBe("2026-03-12")
   })
+
+  // parseBalanceAmount
+  it("parseBalanceAmount: '33,201.97' (US thousands + decimal dot) → 33201.97", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount("33,201.97")).toBeCloseTo(33201.97)
+  })
+  it("parseBalanceAmount: '217 568,45' (RU space-thousands + decimal comma) → 217568.45", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount("217 568,45")).toBeCloseTo(217568.45)
+  })
+  it("parseBalanceAmount: '159 576,11' → 159576.11", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount("159 576,11")).toBeCloseTo(159576.11)
+  })
+  it("parseBalanceAmount: '62 066,92' → 62066.92", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount("62 066,92")).toBeCloseTo(62066.92)
+  })
+  it("parseBalanceAmount: number 1234.5 → 1234.5", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount(1234.5)).toBe(1234.5)
+  })
+  it("parseBalanceAmount: '' → null, null → null", async () => {
+    const { parseBalanceAmount } = await import("@/lib/bank-import/normalize")
+    expect(parseBalanceAmount("")).toBeNull()
+    expect(parseBalanceAmount(null)).toBeNull()
+  })
+
+  // parseRussianDate
+  it("parseRussianDate: '10 июня 2026' → 2026-06-10", async () => {
+    const { parseRussianDate } = await import("@/lib/bank-import/normalize")
+    const d = parseRussianDate("10 июня 2026")
+    expect(d?.toISOString().slice(0, 10)).toBe("2026-06-10")
+  })
+  it("parseRussianDate: '01 января 2026 г.' → 2026-01-01", async () => {
+    const { parseRussianDate } = await import("@/lib/bank-import/normalize")
+    const d = parseRussianDate("01 января 2026 г.")
+    expect(d?.toISOString().slice(0, 10)).toBe("2026-01-01")
+  })
+  it("parseRussianDate: bad input → null", async () => {
+    const { parseRussianDate } = await import("@/lib/bank-import/normalize")
+    expect(parseRussianDate("10.06.2026")).toBeNull()
+    expect(parseRussianDate(null)).toBeNull()
+    expect(parseRussianDate("")).toBeNull()
+  })
 })
 
 describe("computeFingerprint", () => {
@@ -319,7 +364,7 @@ describe("parseVtbStatement", () => {
     const wb = makeVtbRubSheet("40702810800810087464", [
       ["12.03.2026", "42", "Перевод", "ООО Контрагент", "7707083893", "044525225", "40702810500000001234", 150000, null, "Оплата по счёту №12"],
     ])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-03-12")
     expect(txs[0]!.direction).toBe("DEBIT")
@@ -337,7 +382,7 @@ describe("parseVtbStatement", () => {
     const wb = makeVtbRubSheet("40702810800810087464", [
       ["15.03.2026", "55", "Перевод", "ООО Покупатель", "5010012345", "044525225", "40702810500000009999", null, 200000, "Оплата за товар"],
     ])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs[0]!.direction).toBe("CREDIT")
     expect(txs[0]!.amount).toBe(200000)
   })
@@ -348,7 +393,7 @@ describe("parseVtbStatement", () => {
       ["12.03.2026", "42", "Перевод", "ООО Контрагент", "7707083893", "044525225", "40702810500000001234", 150000, null, "Оплата"],
       ["ИТОГО:", null, null, null, null, null, null, 150000, null, null], // должна быть пропущена
     ])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(1)
   })
 
@@ -357,7 +402,7 @@ describe("parseVtbStatement", () => {
     const wb = makeVtbCnySheet("40702840500810087000", [
       ["20.03.2026", "10", "Перевод CNY", "Китайская компания", "91234567890", "044525225", "40702840500000001000", 50000, null, null, null, "Оплата CNY"],
     ])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.currency).toBe("CNY")
     expect(txs[0]!.amount).toBe(50000)
@@ -382,7 +427,7 @@ describe("parseVtbStatement", () => {
       ["Оплата по счёту", "Перевод", "77", "25.03.2026", "ООО Клиент", "1234567890", "044525225", "40702810500000005555", 300000, null],
     ]
     const wb = makeXlsxMultiSheet([{ name: accountNumber, rows }])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-03-25")
     expect(txs[0]!.purpose).toBe("Оплата по счёту")
@@ -393,7 +438,7 @@ describe("parseVtbStatement", () => {
   it("лист без операций (только шапка) → 0 транзакций", async () => {
     const { parseVtbStatement } = await import("@/lib/bank-import/vtb-adapter")
     const wb = makeVtbRubSheet("40702810800810087000", [])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(0)
   })
 
@@ -423,7 +468,7 @@ describe("parseVtbStatement", () => {
       { name: "40702810800810000001", rows: sheet1Rows },
       { name: "40702810800810000002", rows: sheet2Rows },
     ])
-    const txs = parseVtbStatement(wb)
+    const { transactions: txs } = parseVtbStatement(wb)
     expect(txs).toHaveLength(2)
     expect(txs[0]!.accountNumber).toBe("40702810800810000001")
     expect(txs[1]!.accountNumber).toBe("40702810800810000002")
@@ -458,7 +503,7 @@ describe("parsePsbStatement", () => {
     const wb = makePsbWorkbook([
       ["05.03.2026", "01", "P-001", "044525225", "40702810500000009876", "30101810400000000225", 75000, null, "Оплата услуг", "ООО ПОСТАВЩИК", "5010012345"],
     ])
-    const txs = parsePsbStatement(wb)
+    const { transactions: txs } = parsePsbStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-03-05")
     expect(txs[0]!.direction).toBe("DEBIT")
@@ -478,7 +523,7 @@ describe("parsePsbStatement", () => {
     const wb = makePsbWorkbook([
       ["10.04.2026", "01", "R-100", "044525225", "40702810500000099999", "30101810400000000225", null, 120000, "Поступление от покупателя", "ООО КЛИЕНТ", "7707123456"],
     ])
-    const txs = parsePsbStatement(wb)
+    const { transactions: txs } = parsePsbStatement(wb)
     expect(txs[0]!.direction).toBe("CREDIT")
     expect(txs[0]!.amount).toBe(120000)
   })
@@ -488,7 +533,7 @@ describe("parsePsbStatement", () => {
     const wb = makePsbWorkbook([
       ["01.02.2026", "01", "X-01", "044525225", "40702810500000001111", "30101810400000000225", 10000, null, "Тест", "ООО А", "1234567890"],
     ])
-    const txs = parsePsbStatement(wb)
+    const { transactions: txs } = parsePsbStatement(wb)
     // Только 1 транзакция — входящее сальдо не попало
     expect(txs).toHaveLength(1)
   })
@@ -584,7 +629,7 @@ describe("parseSberStatement", () => {
         "Комиссия за сервис"
       ),
     ])
-    const txs = parseSberStatement(wb)
+    const { transactions: txs } = parseSberStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-01-02")
     expect(txs[0]!.direction).toBe("DEBIT")
@@ -615,7 +660,7 @@ describe("parseSberStatement", () => {
         "Поступление оплаты"
       ),
     ])
-    const txs = parseSberStatement(wb)
+    const { transactions: txs } = parseSberStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.direction).toBe("CREDIT")
     expect(txs[0]!.amount).toBeCloseTo(1200000)
@@ -640,7 +685,7 @@ describe("parseSberStatement", () => {
         "Оплата товара"
       ),
     ])
-    const txs = parseSberStatement(wb)
+    const { transactions: txs } = parseSberStatement(wb)
     expect(txs).toHaveLength(1)
     expect(txs[0]!.date.toISOString().slice(0, 10)).toBe("2026-03-10")
     expect(txs[0]!.amount).toBeCloseTo(5571064.72)
@@ -753,5 +798,119 @@ describe("fingerprint dedup", () => {
     const h1 = computeFingerprint(makeTx({ purpose: "Оплата по счёту" }))
     const h2 = computeFingerprint(makeTx({ purpose: "ОПЛАТА ПО СЧЁТУ" }))
     expect(h1).toBe(h2)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// Task 22-06: Balance extraction — in-memory fixtures per adapter
+// ──────────────────────────────────────────────────────────────────
+
+describe("balance extraction — VTB", () => {
+  function makeVtbWithBalance(accountNumber: string): XLSX.WorkBook {
+    // Minimal VTB header rows 0-6 matching real structure
+    const rows: (string | number | null)[][] = [
+      ["ВЫПИСКА", null, null, null, null, null, null, null, null, null],
+      ["Номер счета:", accountNumber, "Валюта:", "Валюта 643, Российский рубль", null, "Владелец счёта:", "ООО ТЕСТ", null, null, null],
+      ["Начальная дата: ", "01.01.2026", "Конечная дата: ", "09.06.2026", null, null, null, null, null, null],
+      ["Входящий остаток RUB:", "33,201.97", "Исходящий остаток RUB:", "20,000.00", null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null, null],
+      ["Дата", "Номер", "Вид операции", "Контрагент", "ИНН контрагента", "БИК банка контрагента", "Счет контрагента", "Дебет, RUR", "Кредит, RUR", "Назначение"],
+      // no data rows
+    ]
+    return makeXlsxMultiSheet([{ name: accountNumber, rows }])
+  }
+
+  it("VTB: extracts openingBalance, closingBalance, balanceDate from header", async () => {
+    const { parseVtbStatement } = await import("@/lib/bank-import/vtb-adapter")
+    const wb = makeVtbWithBalance("40702810500810086998")
+    const { balances } = parseVtbStatement(wb)
+    expect(balances).toHaveLength(1)
+    const b = balances[0]!
+    expect(b.accountNumber).toBe("40702810500810086998")
+    expect(b.openingBalance).toBeCloseTo(33201.97)
+    expect(b.closingBalance).toBeCloseTo(20000.00)
+    expect(b.balanceDate?.toISOString().slice(0, 10)).toBe("2026-06-09")
+  })
+})
+
+describe("balance extraction — PSB", () => {
+  function makePsbWithBalance(): XLSX.WorkBook {
+    const rows: (string | number | null)[][] = [
+      ["ЯРОСЛАВСКИЙ Ф-Л ПАО \"Банк ПСБ\"", null, null, null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null, null, null],
+      ["Выписка из лицевого счета 40702810902000139975 с 01.01.2026 по 10.06.2026      Валюта: RUR", null, null, null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null, null, null],
+      ["ООО \"ЗОЙТЕН\"", null, null, null, null, null, null, null, null, null, null],
+      [null, null, null, null, null, null, null, null, null, null, null],
+      ["Дата", "РО", "Док.", "КБ", "Внеш.счет", "Счет", "Дебет", "Кредит", "Назначение", "Контрагент", "Контр. ИНН"],
+      // row 7 — Входящее сальдо
+      ["  30.12.2025 Входящее сальдо кредит: 217 568,45", null, null, null, null, null, null, null, null, null, null],
+      // some data row (skipped by balance extraction, date would fail parsing)
+      ["14.01.2026", "01", "315", "044525974", "40802810800008831649", "30101810300000000760", "74785.60", null, "Тест", "ИП ДЕНИСОВА А.Д.", "507804927088"],
+      // Итог оборотов
+      ["Итог оборотов дебет: 59 156 925,74 кредит: 59 098 933,4", null, null, null, null, null, null, null, null, null, null],
+      // Исходящее сальдо
+      ["10.06.2026 Исходящее сальдо дебет: 0 кредит: 159 576,11", null, null, null, null, null, null, null, null, null, null],
+    ]
+    return makeXlsx(rows, "Отчет 1")
+  }
+
+  it("PSB: extracts openingBalance from row 7, closingBalance + balanceDate from trailing row", async () => {
+    const { parsePsbStatement } = await import("@/lib/bank-import/psb-adapter")
+    const wb = makePsbWithBalance()
+    const { balances } = parsePsbStatement(wb)
+    expect(balances).toHaveLength(1)
+    const b = balances[0]!
+    expect(b.accountNumber).toBe("40702810902000139975")
+    expect(b.openingBalance).toBeCloseTo(217568.45)
+    expect(b.closingBalance).toBeCloseTo(159576.11)
+    expect(b.balanceDate?.toISOString().slice(0, 10)).toBe("2026-06-10")
+  })
+})
+
+describe("balance extraction — Sber", () => {
+  function makeSberWithBalance(accountNumber: string): XLSX.WorkBook {
+    // Minimal Sber structure with 23 columns; real balance rows at the tail
+    function r(overrides: Record<number, string | number | null>): (string | number | null)[] {
+      const row: (string | number | null)[] = Array(23).fill(null)
+      for (const [k, v] of Object.entries(overrides)) row[Number(k)] = v
+      return row
+    }
+    const rows: (string | number | null)[][] = [
+      r({}),                                                                              // row 0
+      r({ 1: "ПАО СБЕРБАНК" }),                                                           // row 1
+      r({}),                                                                              // row 2
+      r({}),                                                                              // row 3
+      r({ 11: accountNumber }),                                                           // row 4 — счёт
+      r({ 0: "ООО ДРИМ ЛАЙН" }),                                                          // row 5 — компания
+      r({}),                                                                              // row 6
+      r({}),                                                                              // row 7
+      r({}),                                                                              // row 8
+      // row 9 = заголовки
+      r({ 1: "Дата проводки", 4: "Счет", 9: "Сумма по дебету", 13: "Сумма по кредиту",
+          14: "№ документа", 16: "ВО", 17: "Банк (БИК и наименование)", 20: "Назначение платежа" }),
+      // row 10 = подзаголовки
+      r({ 4: "Дебет", 8: "Кредит" }),
+      // row 11+ = one dummy data row
+      r({ 1: "46182.72338", 4: `${accountNumber}\n3702259264`, 8: "40702810000000001234\n7707083893", 9: "100.00", 14: "1", 16: "01", 20: "тест" }),
+      // balance rows (matching real Sber structure)
+      r({ 1: "Входящий остаток", 7: "0,00", 11: "62 066,92", 17: "(П)", 19: "01 января 2026 г." }),
+      r({}),
+      r({ 1: "Исходящий остаток", 7: "0,00", 11: "107 489,58", 17: "(П)", 19: "10 июня 2026 г." }),
+    ]
+    return makeXlsx(rows, accountNumber)
+  }
+
+  it("Sber: extracts openingBalance, closingBalance + balanceDate from trailing summary rows", async () => {
+    const { parseSberStatement } = await import("@/lib/bank-import/sber-adapter")
+    const wb = makeSberWithBalance("40702810517000007284")
+    const { balances } = parseSberStatement(wb)
+    expect(balances).toHaveLength(1)
+    const b = balances[0]!
+    expect(b.accountNumber).toBe("40702810517000007284")
+    expect(b.openingBalance).toBeCloseTo(62066.92)
+    expect(b.closingBalance).toBeCloseTo(107489.58)
+    expect(b.balanceDate?.toISOString().slice(0, 10)).toBe("2026-06-10")
   })
 })
