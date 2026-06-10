@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 22-03-PLAN.md
-last_updated: "2026-06-10T08:44:13.268Z"
+stopped_at: Completed 22-04-PLAN.md
+last_updated: "2026-06-10T08:50:45.116Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 22 (bank-accounts) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -118,6 +118,7 @@ Plan: 4 of 5
 | Phase 22-bank-accounts P01 | 167s | 2 tasks | 2 files |
 | Phase 22-bank-accounts P02 | 3min | 2 tasks | 5 files |
 | Phase 22-bank-accounts P03 | 330 | 2 tasks | 8 files |
+| Phase 22-bank-accounts P04 | 202s | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -287,6 +288,8 @@ Recent decisions affecting current work:
 - [Phase 22-bank-accounts]: BANK stub page minimal — full table deferred to 22-05; UserSectionRole provisioning deferred to 22-05 after deploy
 - [Phase 22-bank-accounts]: VTB header-driven: buildHeaderMap(row[6]) — not positional — handles 10-col RUB and 12-col CNY sheets
 - [Phase 22-bank-accounts]: Fingerprint = sha256(accountNumber|date|direction|amount|docNumber|counterpartyInn|normalizePurpose(purpose)) — no row position index
+- [Phase 22-bank-accounts]: OWNING_BANK constant with real BICs (vtb 044525411 / psb 044525555 / sber 044525225) determines owning bank deterministically; counterparty banks upserted separately by their own BIC
+- [Phase 22-bank-accounts]: persist.ts has zero next-auth/next/* imports — usable from seed script 22-05 with its own PrismaClient instance
 
 ### Roadmap Evolution
 
@@ -350,6 +353,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T08:44:13.263Z
-Stopped at: Completed 22-03-PLAN.md
+Last session: 2026-06-10T08:50:45.111Z
+Stopped at: Completed 22-04-PLAN.md
 Resume file: None
