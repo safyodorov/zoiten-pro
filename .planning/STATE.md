@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 22-01-PLAN.md
-last_updated: "2026-06-10T08:32:50.413Z"
+stopped_at: Completed 22-02-PLAN.md
+last_updated: "2026-06-10T08:36:34.355Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 22 (bank-accounts) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 
 ## Performance Metrics
 
@@ -116,6 +116,7 @@ Plan: 2 of 5
 | Phase 20 P05 | 8min | 3 tasks | 12 files |
 | Phase 20-procurement P06 | 6min | 3 tasks | 8 files |
 | Phase 22-bank-accounts P01 | 167s | 2 tasks | 2 files |
+| Phase 22-bank-accounts P02 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -281,6 +282,8 @@ Recent decisions affecting current work:
 - [Phase 20-procurement]: Plan 20-06: procurement-math is single source of payment math — same recompute fns server (createPurchase/savePurchasePayments) + client (PurchasePaymentsCard live percent↔amount); OVERDUE computed live at read time, never cached; PLANNED-only hard delete (D-21); no Supplier mutation
 - [Phase 20-procurement]: Plan 20-06: PurchaseModal owns shared types (SupplierOption/ProductOption/ProductLinkMap/PurchaseForModal) imported by page+table+detail-actions; productLinkMap computed RSC (Decimal→number) passed to client for unitPrice prefill; PurchaseDetailActions client wrapper keeps detail page RSC
 - [Phase 22-bank-accounts]: Decimal(18,2) for BankTransaction.amount; fingerprint @unique for idempotent re-import; Company.inn nullable @unique; Lender.bankId nullable FK with SetNull; BankTransaction.accountId CASCADE, counterpartyId/importBatchId SET NULL
+- [Phase 22-bank-accounts]: Building2 icon for BANK section (Landmark taken by CREDITS)
+- [Phase 22-bank-accounts]: BANK stub page minimal — full table deferred to 22-05; UserSectionRole provisioning deferred to 22-05 after deploy
 
 ### Roadmap Evolution
 
@@ -344,6 +347,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T08:32:50.408Z
-Stopped at: Completed 22-01-PLAN.md
+Last session: 2026-06-10T08:36:34.348Z
+Stopped at: Completed 22-02-PLAN.md
 Resume file: None
