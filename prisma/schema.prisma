@@ -1583,6 +1583,7 @@ model BankTransaction {
   counterpartyBic     String?
   counterpartyAccount String?
   category            TxCategory?   @default(UNCATEGORIZED) // базовая разметка под ДДС
+  comment             String?       @db.Text // ручной комментарий для управленческого учёта
   // Дедуп + провенанс
   fingerprint         String        @unique // SHA-256 от (account|date|direction|amount|docNumber|counterpartyInn|purpose)
   importBatchId       String?

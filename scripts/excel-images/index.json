@@ -1,0 +1,422 @@
+[
+  {
+    "file": "r006_150.png",
+    "row": 6,
+    "article": "150",
+    "supplier": "温州鸿寅电子科技有限公司 / Wenzhou Hongyin Electroni",
+    "group": ""
+  },
+  {
+    "file": "r007_100.png",
+    "row": 7,
+    "article": "100",
+    "supplier": "Hebei Renqiu Jinsheng Optoelectronic Pro",
+    "group": ""
+  },
+  {
+    "file": "r008_105.png",
+    "row": 8,
+    "article": "105",
+    "supplier": "Hebei Renqiu Jinsheng Optoelectronic Pro",
+    "group": ""
+  },
+  {
+    "file": "r009_200.png",
+    "row": 9,
+    "article": "200",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r010_250.png",
+    "row": 10,
+    "article": "250",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r011_300.png",
+    "row": 11,
+    "article": "300",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r012_350.png",
+    "row": 12,
+    "article": "350",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r013_5005.png",
+    "row": 13,
+    "article": "500/5кн",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r014_400.png",
+    "row": 14,
+    "article": "400",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r015_450.png",
+    "row": 15,
+    "article": "450",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r016_550.jpg",
+    "row": 16,
+    "article": "Т550",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r017_600.jpg",
+    "row": 17,
+    "article": "600",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r018_700.png",
+    "row": 18,
+    "article": "700",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r019_950.jpg",
+    "row": 19,
+    "article": "950",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r020_1000.jpg",
+    "row": 20,
+    "article": "1000",
+    "supplier": null,
+    "group": ""
+  },
+  {
+    "file": "r023_noart.png",
+    "row": 23,
+    "article": null,
+    "supplier": "Общий",
+    "group": "20 см"
+  },
+  {
+    "file": "r028_noart.png",
+    "row": 28,
+    "article": null,
+    "supplier": "Общий",
+    "group": "28 см"
+  },
+  {
+    "file": "r033_noart.jpg",
+    "row": 33,
+    "article": null,
+    "supplier": "Общий",
+    "group": "набор 12+"
+  },
+  {
+    "file": "r039_noart.png",
+    "row": 39,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r044_noart.png",
+    "row": 44,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r049_noart.png",
+    "row": 49,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r054_noart.png",
+    "row": 54,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r059_noart.png",
+    "row": 59,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r064_noart.png",
+    "row": 64,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Мясорубки"
+  },
+  {
+    "file": "r069_650.png",
+    "row": 69,
+    "article": "650",
+    "supplier": "Ningbo Goodfriends Electric Appliance Co",
+    "group": "Электрочайники"
+  },
+  {
+    "file": "r070_550.png",
+    "row": 70,
+    "article": "550",
+    "supplier": "A",
+    "group": "Электрочайники"
+  },
+  {
+    "file": "r072_GR-500.png",
+    "row": 72,
+    "article": "GR-500",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r073_GR-600.png",
+    "row": 73,
+    "article": "GR-600",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r074_GRILL7M.png",
+    "row": 74,
+    "article": "GRILL7/ M",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r075_GRILL8S.png",
+    "row": 75,
+    "article": "GRILL8/ S",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r076_GRILL12L.png",
+    "row": 76,
+    "article": "GRILL12/ L",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r077_GRILLXL.jpg",
+    "row": 77,
+    "article": "GRILL XL",
+    "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,",
+    "group": "Аэрогрили"
+  },
+  {
+    "file": "r079_GM-500.png",
+    "row": 79,
+    "article": "GM-500",
+    "supplier": "TOPLINE ELECTRIC CO., LIMITED",
+    "group": "Кофемашины"
+  },
+  {
+    "file": "r080_GM-300.png",
+    "row": 80,
+    "article": "GM-300",
+    "supplier": "TOPLINE ELECTRIC CO., LIMITED",
+    "group": "Кофемашины"
+  },
+  {
+    "file": "r081_GM-300.png",
+    "row": 81,
+    "article": "GM-300",
+    "supplier": "TOPLINE ELECTRIC CO., LIMITED",
+    "group": "Кофемашины"
+  },
+  {
+    "file": "r082_GM-500.png",
+    "row": 82,
+    "article": "GM-500",
+    "supplier": "TOPLINE ELECTRIC CO., LIMITED",
+    "group": "Кофемашины"
+  },
+  {
+    "file": "r083_noart.png",
+    "row": 83,
+    "article": null,
+    "supplier": "TOPLINE ELECTRIC CO., LIMITED",
+    "group": "Кофемашины"
+  },
+  {
+    "file": "r086_noart.png",
+    "row": 86,
+    "article": null,
+    "supplier": "Общий",
+    "group": "Грили"
+  },
+  {
+    "file": "r092_ZMop-280.jpg",
+    "row": 92,
+    "article": "ZMop-280",
+    "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L",
+    "group": "Паровые швабры"
+  },
+  {
+    "file": "r093_ZMop-450.png",
+    "row": 93,
+    "article": "ZMop-450",
+    "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L",
+    "group": "Паровые швабры"
+  },
+  {
+    "file": "r094_ZMop-800.png",
+    "row": 94,
+    "article": "ZMop-800",
+    "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L",
+    "group": "Паровые швабры"
+  },
+  {
+    "file": "r095_ZMop-700.png",
+    "row": 95,
+    "article": "ZMop-700",
+    "supplier": "Ningbo Norjia Bell Electric Appliance Co",
+    "group": "Паровые швабры"
+  },
+  {
+    "file": "r096_ZMop-500.jpg",
+    "row": 96,
+    "article": "ZMop-500",
+    "supplier": "Ningbo Norjia Bell Electric Appliance Co",
+    "group": "Паровые швабры"
+  },
+  {
+    "file": "r098_700.png",
+    "row": 98,
+    "article": "700",
+    "supplier": "Changzhou Dajue Technology Co., LTD",
+    "group": "Моющие пылесосы для пола"
+  },
+  {
+    "file": "r099_900Pfau.jpg",
+    "row": 99,
+    "article": "900 (Pfau)",
+    "supplier": "Ningbo Electrical Appliance Co.,Ltd",
+    "group": "Моющие пылесосы для пола"
+  },
+  {
+    "file": "r101_Steam-500.jpg",
+    "row": 101,
+    "article": "Steam-500",
+    "supplier": "Yongkang Aohu Industry and Trade Co.,Ltd",
+    "group": "Пароочистители"
+  },
+  {
+    "file": "r102_PO-1101.png",
+    "row": 102,
+    "article": "PO-1101",
+    "supplier": "A",
+    "group": "Пароочистители"
+  },
+  {
+    "file": "r104_Zauber.jpg",
+    "row": 104,
+    "article": "Zauber",
+    "supplier": "NINGHAI KAITELI ELECTRONIC APPLIANCE CO.",
+    "group": "Моющие пылесосы для мебели"
+  },
+  {
+    "file": "r106_Wind.png",
+    "row": 106,
+    "article": "Wind",
+    "supplier": "Changzhou Dajue Technology Co., LTD",
+    "group": "Сухие пылесосы"
+  },
+  {
+    "file": "r107_VC3.png",
+    "row": 107,
+    "article": "VC3",
+    "supplier": "温州鸿寅电子科技有限公司 / Wenzhou Hongyin Electroni",
+    "group": "Сухие пылесосы"
+  },
+  {
+    "file": "r109_300.jpg",
+    "row": 109,
+    "article": "300",
+    "supplier": null,
+    "group": "Отпариватели портативные"
+  },
+  {
+    "file": "r110_Nebel.jpg",
+    "row": 110,
+    "article": "Nebel",
+    "supplier": null,
+    "group": "Отпариватели портативные"
+  },
+  {
+    "file": "r111_150.jpg",
+    "row": 111,
+    "article": "150",
+    "supplier": null,
+    "group": "Отпариватели портативные"
+  },
+  {
+    "file": "r114_NEWFM250.jpg",
+    "row": 114,
+    "article": "NEWFM250",
+    "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co.",
+    "group": "Массажеры для ног"
+  },
+  {
+    "file": "r115_FM250.jpg",
+    "row": 115,
+    "article": "FM250 серый",
+    "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co.",
+    "group": "Массажеры для ног"
+  },
+  {
+    "file": "r116_Stein.jpg",
+    "row": 116,
+    "article": "Stein",
+    "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co.",
+    "group": "Массажеры для ног"
+  },
+  {
+    "file": "r130_HS-65200.png",
+    "row": 130,
+    "article": "HS-65200",
+    "supplier": "QingTianMingHui Electronics co.LTD",
+    "group": "Паровые выпрямители для волос"
+  },
+  {
+    "file": "r131_HI-400.png",
+    "row": 131,
+    "article": "HI-400",
+    "supplier": "QingTianMingHui Electronics co.LTD",
+    "group": "Паровые выпрямители для волос"
+  },
+  {
+    "file": "r132_HI-350.png",
+    "row": 132,
+    "article": "HI-350",
+    "supplier": "WENZHOU RONGLI ELECTRICAL CO.,LTD",
+    "group": "Паровые выпрямители для волос"
+  },
+  {
+    "file": "r135_Glatt.png",
+    "row": 135,
+    "article": "Glatt",
+    "supplier": "QingTianMingHui Electronics co.LTD",
+    "group": "Плойка серая/315020634"
+  }
+]

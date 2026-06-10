@@ -1,0 +1,647 @@
+{
+  "Вакууматор": {
+    "excel": [
+      {
+        "file": "r006_150.png",
+        "article": "150",
+        "supplier": "温州鸿寅电子科技有限公司 / Wenzhou Hongyin Electroni"
+      },
+      {
+        "file": "r007_100.png",
+        "article": "100",
+        "supplier": "Hebei Renqiu Jinsheng Optoelectronic Pro"
+      },
+      {
+        "file": "r008_105.png",
+        "article": "105",
+        "supplier": "Hebei Renqiu Jinsheng Optoelectronic Pro"
+      },
+      {
+        "file": "r009_200.png",
+        "article": "200",
+        "supplier": null
+      },
+      {
+        "file": "r010_250.png",
+        "article": "250",
+        "supplier": null
+      },
+      {
+        "file": "r011_300.png",
+        "article": "300",
+        "supplier": null
+      },
+      {
+        "file": "r012_350.png",
+        "article": "350",
+        "supplier": null
+      },
+      {
+        "file": "r013_5005.png",
+        "article": "500/5кн",
+        "supplier": null
+      },
+      {
+        "file": "r014_400.png",
+        "article": "400",
+        "supplier": null
+      },
+      {
+        "file": "r015_450.png",
+        "article": "450",
+        "supplier": null
+      },
+      {
+        "file": "r016_550.jpg",
+        "article": "Т550",
+        "supplier": null
+      },
+      {
+        "file": "r017_600.jpg",
+        "article": "600",
+        "supplier": null
+      },
+      {
+        "file": "r018_700.png",
+        "article": "700",
+        "supplier": null
+      },
+      {
+        "file": "r019_950.jpg",
+        "article": "950",
+        "supplier": null
+      },
+      {
+        "file": "r020_1000.jpg",
+        "article": "1000",
+        "supplier": null
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000004_Вакууматор.jpg",
+        "sku": "УКТ-000004",
+        "article": "150",
+        "name": "Вакууматор 150"
+      },
+      {
+        "file": "УКТ-000019_Вакууматор.jpg",
+        "sku": "УКТ-000019",
+        "article": "450",
+        "name": "Вакууматор 450"
+      },
+      {
+        "file": "УКТ-000018_Вакууматор.jpg",
+        "sku": "УКТ-000018",
+        "article": "500",
+        "name": "Вакууматор 500"
+      },
+      {
+        "file": "УКТ-000017_Вакууматор.jpg",
+        "sku": "УКТ-000017",
+        "article": "700",
+        "name": "Вакууматор 700"
+      },
+      {
+        "file": "УКТ-000068_Вакууматор.jpg",
+        "sku": "УКТ-000068",
+        "article": "Вакууматор арт 100",
+        "name": "Вакууматор Вакууматор арт 100"
+      },
+      {
+        "file": "УКТ-000073_Вакууматор.jpg",
+        "sku": "УКТ-000073",
+        "article": "Вакууматор арт 1000",
+        "name": "Вакууматор Вакууматор арт 1000"
+      },
+      {
+        "file": "УКТ-000067_Вакууматор.jpg",
+        "sku": "УКТ-000067",
+        "article": "Вакууматор арт 100 белый",
+        "name": "Вакууматор Вакууматор арт 100 белый"
+      },
+      {
+        "file": "УКТ-000072_Вакууматор.jpg",
+        "sku": "УКТ-000072",
+        "article": "Вакууматор арт 105",
+        "name": "Вакууматор Вакууматор арт 105"
+      },
+      {
+        "file": "УКТ-000074_Вакууматор.jpg",
+        "sku": "УКТ-000074",
+        "article": "Вакууматор арт 1100",
+        "name": "Вакууматор Вакууматор арт 1100"
+      },
+      {
+        "file": "УКТ-000080_Вакууматор.jpg",
+        "sku": "УКТ-000080",
+        "article": "Вакууматор арт 200",
+        "name": "Вакууматор Вакууматор арт 200"
+      },
+      {
+        "file": "УКТ-000082_Вакууматор.jpg",
+        "sku": "УКТ-000082",
+        "article": "Вакууматор арт 250",
+        "name": "Вакууматор Вакууматор арт 250"
+      },
+      {
+        "file": "УКТ-000079_Вакууматор.jpg",
+        "sku": "УКТ-000079",
+        "article": "Вакууматор арт 300",
+        "name": "Вакууматор Вакууматор арт 300"
+      },
+      {
+        "file": "УКТ-000081_Вакууматор.jpg",
+        "sku": "УКТ-000081",
+        "article": "Вакууматор арт 350",
+        "name": "Вакууматор Вакууматор арт 350"
+      },
+      {
+        "file": "УКТ-000070_Вакууматор.jpg",
+        "sku": "УКТ-000070",
+        "article": "Вакууматор арт 400",
+        "name": "Вакууматор Вакууматор арт 400"
+      },
+      {
+        "file": "УКТ-000078_Вакууматор.jpg",
+        "sku": "УКТ-000078",
+        "article": "Вакууматор арт 550",
+        "name": "Вакууматор Вакууматор арт 550"
+      },
+      {
+        "file": "УКТ-000069_Вакууматор.jpg",
+        "sku": "УКТ-000069",
+        "article": "Вакууматор арт 600",
+        "name": "Вакууматор Вакууматор арт 600"
+      },
+      {
+        "file": "УКТ-000071_Вакууматор.jpg",
+        "sku": "УКТ-000071",
+        "article": "Вакууматор арт 950",
+        "name": "Вакууматор Вакууматор арт 950"
+      },
+      {
+        "file": "УКТ-000020_Вакууматор.jpg",
+        "sku": "УКТ-000020",
+        "article": "пакеты 12+",
+        "name": "Вакууматор пакеты 12+"
+      }
+    ]
+  },
+  "Чайник": {
+    "excel": [
+      {
+        "file": "r069_650.png",
+        "article": "650",
+        "supplier": "Ningbo Goodfriends Electric Appliance Co"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000014_Чайник.jpg",
+        "sku": "УКТ-000014",
+        "article": "550",
+        "name": "Чайник 550"
+      },
+      {
+        "file": "УКТ-000022_Чайник.jpg",
+        "sku": "УКТ-000022",
+        "article": "650",
+        "name": "Чайник 650"
+      },
+      {
+        "file": "УКТ-000012_Чайник.jpg",
+        "sku": "УКТ-000012",
+        "article": "700",
+        "name": "Чайник 700"
+      },
+      {
+        "file": "УКТ-000023_Чайник.jpg",
+        "sku": "УКТ-000023",
+        "article": "800",
+        "name": "Чайник 800"
+      }
+    ]
+  },
+  "Аэрогриль": {
+    "excel": [
+      {
+        "file": "r072_GR-500.png",
+        "article": "GR-500",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      },
+      {
+        "file": "r073_GR-600.png",
+        "article": "GR-600",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      },
+      {
+        "file": "r074_GRILL7M.png",
+        "article": "GRILL7/ M",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      },
+      {
+        "file": "r075_GRILL8S.png",
+        "article": "GRILL8/ S",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      },
+      {
+        "file": "r076_GRILL12L.png",
+        "article": "GRILL12/ L",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      },
+      {
+        "file": "r077_GRILLXL.jpg",
+        "article": "GRILL XL",
+        "supplier": "NINGBO HIKING INTERNATIONAL TRADING CO.,"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000001_Аэрогриль.jpg",
+        "sku": "УКТ-000001",
+        "article": "GR-500",
+        "name": "Аэрогриль GR-500"
+      },
+      {
+        "file": "УКТ-000005_Аэрогриль.jpg",
+        "sku": "УКТ-000005",
+        "article": "GR-600",
+        "name": "Аэрогриль GR-600"
+      }
+    ]
+  },
+  "Кофемашина": {
+    "excel": [
+      {
+        "file": "r079_GM-500.png",
+        "article": "GM-500",
+        "supplier": "TOPLINE ELECTRIC CO., LIMITED"
+      },
+      {
+        "file": "r080_GM-300.png",
+        "article": "GM-300",
+        "supplier": "TOPLINE ELECTRIC CO., LIMITED"
+      },
+      {
+        "file": "r081_GM-300.png",
+        "article": "GM-300",
+        "supplier": "TOPLINE ELECTRIC CO., LIMITED"
+      },
+      {
+        "file": "r082_GM-500.png",
+        "article": "GM-500",
+        "supplier": "TOPLINE ELECTRIC CO., LIMITED"
+      },
+      {
+        "file": "r083_noart.png",
+        "article": null,
+        "supplier": "TOPLINE ELECTRIC CO., LIMITED"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000003_Кофемашина.jpg",
+        "sku": "УКТ-000003",
+        "article": "GM-300",
+        "name": "Кофемашина GM-300"
+      },
+      {
+        "file": "УКТ-000009_Кофемашина.jpg",
+        "sku": "УКТ-000009",
+        "article": "GM-500",
+        "name": "Кофемашина GM-500"
+      },
+      {
+        "file": "УКТ-000093_Кофемашина.jpg",
+        "sku": "УКТ-000093",
+        "article": "Кофемашина арт GutenZoiten",
+        "name": "Кофемашина Кофемашина арт GutenZoiten"
+      }
+    ]
+  },
+  "Паровая швабра": {
+    "excel": [
+      {
+        "file": "r092_ZMop-280.jpg",
+        "article": "ZMop-280",
+        "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L"
+      },
+      {
+        "file": "r093_ZMop-450.png",
+        "article": "ZMop-450",
+        "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L"
+      },
+      {
+        "file": "r094_ZMop-800.png",
+        "article": "ZMop-800",
+        "supplier": "YUYAO MOBADI ELECTRICAL APPLIANCE CO., L"
+      },
+      {
+        "file": "r095_ZMop-700.png",
+        "article": "ZMop-700",
+        "supplier": "Ningbo Norjia Bell Electric Appliance Co"
+      },
+      {
+        "file": "r096_ZMop-500.jpg",
+        "article": "ZMop-500",
+        "supplier": "Ningbo Norjia Bell Electric Appliance Co"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000026_Пароваяшвабра.jpg",
+        "sku": "УКТ-000026",
+        "article": "1000",
+        "name": "Паровая швабра 1000"
+      },
+      {
+        "file": "УКТ-000002_Пароваяшвабра.jpg",
+        "sku": "УКТ-000002",
+        "article": "450",
+        "name": "Паровая швабра 450"
+      },
+      {
+        "file": "УКТ-000025_Пароваяшвабра.jpg",
+        "sku": "УКТ-000025",
+        "article": "800",
+        "name": "Паровая швабра 800"
+      },
+      {
+        "file": "УКТ-000077_Пароваяшвабра.jpg",
+        "sku": "УКТ-000077",
+        "article": "Паровая швабра арт 280",
+        "name": "Паровая швабра Паровая швабра арт 280"
+      },
+      {
+        "file": "УКТ-000098_Пароваяшвабра.jpg",
+        "sku": "УКТ-000098",
+        "article": "Паровая швабра арт 500",
+        "name": "Паровая швабра Паровая швабра арт 500"
+      },
+      {
+        "file": "УКТ-000099_Пароваяшвабра.jpg",
+        "sku": "УКТ-000099",
+        "article": "Паровая швабра арт 700",
+        "name": "Паровая швабра Паровая швабра арт 700"
+      }
+    ]
+  },
+  "Пылесос моющий вертикальный": {
+    "excel": [
+      {
+        "file": "r098_700.png",
+        "article": "700",
+        "supplier": "Changzhou Dajue Technology Co., LTD"
+      },
+      {
+        "file": "r099_900Pfau.jpg",
+        "article": "900 (Pfau)",
+        "supplier": "Ningbo Electrical Appliance Co.,Ltd"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000046_Пылесосмоющийвертикальны.jpg",
+        "sku": "УКТ-000046",
+        "article": "700",
+        "name": "Пылесос моющий вертикальный 700"
+      },
+      {
+        "file": "УКТ-000048_Пылесосмоющийвертикальны.jpg",
+        "sku": "УКТ-000048",
+        "article": "900",
+        "name": "Пылесос моющий вертикальный 900"
+      }
+    ]
+  },
+  "Пароочиститель": {
+    "excel": [
+      {
+        "file": "r101_Steam-500.jpg",
+        "article": "Steam-500",
+        "supplier": "Yongkang Aohu Industry and Trade Co.,Ltd"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000027_Пароочиститель.jpg",
+        "sku": "УКТ-000027",
+        "article": "корзинка",
+        "name": "Пароочиститель корзинка"
+      },
+      {
+        "file": "УКТ-000100_Пароочиститель.jpg",
+        "sku": "УКТ-000100",
+        "article": "Пароочиститель арт ПарПистолетBLACK",
+        "name": "Пароочиститель Пароочиститель арт ПарПистолетBLACK"
+      },
+      {
+        "file": "УКТ-000016_Пароочиститель.jpg",
+        "sku": "УКТ-000016",
+        "article": "пистолет",
+        "name": "Пароочиститель пистолет"
+      }
+    ]
+  },
+  "Пылесос": {
+    "excel": [
+      {
+        "file": "r104_Zauber.jpg",
+        "article": "Zauber",
+        "supplier": "NINGHAI KAITELI ELECTRONIC APPLIANCE CO."
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000047_Пылесос.jpg",
+        "sku": "УКТ-000047",
+        "article": "ZAUBER",
+        "name": "Пылесос ZAUBER"
+      },
+      {
+        "file": "УКТ-000104_Пылесос.jpg",
+        "sku": "УКТ-000104",
+        "article": "Гибкий пылесос арт. VC-3_БЕЛО_БИРЮЗ",
+        "name": "Пылесос Гибкий пылесос арт. VC-3_БЕЛО_БИРЮЗ"
+      },
+      {
+        "file": "УКТ-000105_Пылесос.jpg",
+        "sku": "УКТ-000105",
+        "article": "Гибкий пылесос арт. VC-3_БЕЛО-ОРАНЖ",
+        "name": "Пылесос Гибкий пылесос арт. VC-3_БЕЛО-ОРАНЖ"
+      },
+      {
+        "file": "УКТ-000106_Пылесос.jpg",
+        "sku": "УКТ-000106",
+        "article": "Гибкий пылесос арт. VC-3_ЧЕРНО-СЕР",
+        "name": "Пылесос Гибкий пылесос арт. VC-3_ЧЕРНО-СЕР"
+      }
+    ]
+  },
+  "Пылесос сухой вертикальный": {
+    "excel": [
+      {
+        "file": "r106_Wind.png",
+        "article": "Wind",
+        "supplier": "Changzhou Dajue Technology Co., LTD"
+      },
+      {
+        "file": "r107_VC3.png",
+        "article": "VC3",
+        "supplier": "温州鸿寅电子科技有限公司 / Wenzhou Hongyin Electroni"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000051_Пылесоссухойвертикальный.jpg",
+        "sku": "УКТ-000051",
+        "article": "VC-3 Blue",
+        "name": "Пылесос сухой вертикальный VC-3 Blue"
+      },
+      {
+        "file": "УКТ-000050_Пылесоссухойвертикальный.jpg",
+        "sku": "УКТ-000050",
+        "article": "VC-3 Gray",
+        "name": "Пылесос сухой вертикальный VC-3 Gray"
+      },
+      {
+        "file": "УКТ-000052_Пылесоссухойвертикальный.jpg",
+        "sku": "УКТ-000052",
+        "article": "VC-3 Orange",
+        "name": "Пылесос сухой вертикальный VC-3 Orange"
+      },
+      {
+        "file": "УКТ-000049_Пылесоссухойвертикальный.jpg",
+        "sku": "УКТ-000049",
+        "article": "WIND",
+        "name": "Пылесос сухой вертикальный WIND"
+      }
+    ]
+  },
+  "Массажёр для ног": {
+    "excel": [
+      {
+        "file": "r114_NEWFM250.jpg",
+        "article": "NEWFM250",
+        "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co."
+      },
+      {
+        "file": "r115_FM250.jpg",
+        "article": "FM250 серый",
+        "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co."
+      },
+      {
+        "file": "r116_Stein.jpg",
+        "article": "Stein",
+        "supplier": "福安市睿立电子有限公司/ Fu'an Ruili Electronics Co."
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000006_Массажрдляног.jpg",
+        "sku": "УКТ-000006",
+        "article": "250",
+        "name": "Массажёр для ног 250"
+      },
+      {
+        "file": "УКТ-000011_Массажрдляног.jpg",
+        "sku": "УКТ-000011",
+        "article": "Stein",
+        "name": "Массажёр для ног Stein"
+      },
+      {
+        "file": "УКТ-000091_Массажрдляног.jpg",
+        "sku": "УКТ-000091",
+        "article": "Массажер для ног арт FM250Gray",
+        "name": "Массажёр для ног Массажер для ног арт FM250Gray"
+      },
+      {
+        "file": "УКТ-000090_Массажрдляног.jpg",
+        "sku": "УКТ-000090",
+        "article": "Массажер для ног арт FM450",
+        "name": "Массажёр для ног Массажер для ног арт FM450"
+      },
+      {
+        "file": "УКТ-000092_Массажрдляног.jpg",
+        "sku": "УКТ-000092",
+        "article": "Перкуссионный массажер арт PM900",
+        "name": "Массажёр для ног Перкуссионный массажер арт PM900"
+      }
+    ]
+  },
+  "Выпрямитель для волос": {
+    "excel": [
+      {
+        "file": "r130_HS-65200.png",
+        "article": "HS-65200",
+        "supplier": "QingTianMingHui Electronics co.LTD"
+      },
+      {
+        "file": "r131_HI-400.png",
+        "article": "HI-400",
+        "supplier": "QingTianMingHui Electronics co.LTD"
+      },
+      {
+        "file": "r132_HI-350.png",
+        "article": "HI-350",
+        "supplier": "WENZHOU RONGLI ELECTRICAL CO.,LTD"
+      },
+      {
+        "file": "r135_Glatt.png",
+        "article": "Glatt",
+        "supplier": "QingTianMingHui Electronics co.LTD"
+      }
+    ],
+    "db": [
+      {
+        "file": "УКТ-000040_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000040",
+        "article": "белый паровой",
+        "name": "Выпрямитель для волос белый паровой"
+      },
+      {
+        "file": "УКТ-000038_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000038",
+        "article": "красный паровой",
+        "name": "Выпрямитель для волос красный паровой"
+      },
+      {
+        "file": "УКТ-000083_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000083",
+        "article": "Паровой выпрямитель серый",
+        "name": "Выпрямитель для волос Паровой выпрямитель серый"
+      },
+      {
+        "file": "УКТ-000086_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000086",
+        "article": "Плойка для локонов белая",
+        "name": "Выпрямитель для волос Плойка для локонов белая"
+      },
+      {
+        "file": "УКТ-000085_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000085",
+        "article": "Плойка для локонов розовая",
+        "name": "Выпрямитель для волос Плойка для локонов розовая"
+      },
+      {
+        "file": "УКТ-000041_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000041",
+        "article": "серый не паровой",
+        "name": "Выпрямитель для волос серый не паровой"
+      },
+      {
+        "file": "УКТ-000084_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000084",
+        "article": "Утюжок для волос синий",
+        "name": "Выпрямитель для волос Утюжок для волос синий"
+      },
+      {
+        "file": "УКТ-000039_Выпрямительдляволос.jpg",
+        "sku": "УКТ-000039",
+        "article": "черный паровой",
+        "name": "Выпрямитель для волос черный паровой"
+      }
+    ]
+  }
+}

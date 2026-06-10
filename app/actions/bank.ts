@@ -66,3 +66,32 @@ export async function categorizeTx(id: string, category: string): Promise<Action
     return { ok: false, error: "Ошибка сервера" }
   }
 }
+
+// ── updateTxComment ──────────────────────────────────────────────
+
+/**
+ * Сохраняет ручной комментарий банковской операции (управленческий учёт).
+ * Пустая строка → null. Требует роль MANAGE в разделе BANK.
+ */
+export async function updateTxComment(id: string, comment: string): Promise<ActionResult> {
+  try {
+    await requireSection("BANK", "MANAGE")
+
+    const trimmed = comment.trim()
+    await prisma.bankTransaction.update({
+      where: { id },
+      data: { comment: trimmed === "" ? null : trimmed },
+    })
+
+    revalidatePath("/bank")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Операция не найдена" }
+    }
+    console.error("updateTxComment error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}

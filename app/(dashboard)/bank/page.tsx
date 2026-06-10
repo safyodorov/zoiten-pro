@@ -12,7 +12,7 @@ import { BankFilters } from "@/components/bank/BankFilters"
 import { BankTransactionsTable } from "@/components/bank/BankTransactionsTable"
 import type { BankTxRow } from "@/components/bank/BankTransactionsTable"
 import { BankDashboard } from "@/components/bank/BankDashboard"
-import type { BankDashboardData, CompanyBalances, CompanyFlow } from "@/components/bank/BankDashboard"
+import type { BankDashboardData, CompanyRow } from "@/components/bank/BankDashboard"
 
 export default async function BankPage({
   searchParams,
@@ -118,14 +118,16 @@ export default async function BankPage({
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       }),
-      // ── Dashboard: все счета с остатками ────────────────────────────
+      // ── Dashboard: все счета с остатками + банк/номер (для разбивки) ──
       prisma.bankAccount.findMany({
         select: {
+          number: true,
           currency: true,
           closingBalance: true,
           balanceDate: true,
           companyId: true,
           company: { select: { name: true } },
+          bank: { select: { name: true } },
         },
       }),
       // ── Dashboard: MAX(tx.date) как запасной anchor ──────────────────
@@ -150,47 +152,38 @@ export default async function BankPage({
     anchorDate = dashboardTxAnchor.date
   }
 
-  // 2. Остатки per-компания, разбитые по валютам
-  //    (только счета с closingBalance != null)
-  const balanceByCompany = new Map<string, Partial<Record<string, number>>>()
+  // 2. Инфо по всем счетам (для разбивки «развернуть счета»)
+  type AcctInfo = {
+    bankName: string
+    accountNumber: string
+    currency: string
+    companyName: string
+    closingBalance: number | null
+  }
+  const acctInfo = new Map<string, AcctInfo>() // accountNumber → info
   for (const acc of dashboardAccounts) {
-    if (acc.closingBalance === null || acc.closingBalance === undefined) continue
-    const companyName = acc.company.name
-    const cur = acc.currency ?? "RUR"
-    const prev = balanceByCompany.get(companyName) ?? {}
-    prev[cur] = (prev[cur] ?? 0) + Number(acc.closingBalance)
-    balanceByCompany.set(companyName, prev)
+    acctInfo.set(acc.number, {
+      bankName: acc.bank.name,
+      accountNumber: acc.number,
+      currency: acc.currency ?? "RUR",
+      companyName: acc.company.name,
+      closingBalance: acc.closingBalance != null ? Number(acc.closingBalance) : null,
+    })
   }
 
-  // Grand total per-currency
-  const grandTotalByCurrency: Partial<Record<string, number>> = {}
-  for (const byCur of balanceByCompany.values()) {
-    for (const [cur, v] of Object.entries(byCur)) {
-      if (v === undefined) continue
-      grandTotalByCurrency[cur] = (grandTotalByCurrency[cur] ?? 0) + v
-    }
-  }
-
-  const companyBalances: CompanyBalances[] = Array.from(balanceByCompany.entries()).map(
-    ([companyName, balancesByCurrency]) => ({ companyName, balancesByCurrency }),
-  )
-
-  // 3. Приход/расход за 7 и 30 дней — только RUR транзакции
-  //    Примечание: CNY income/expense игнорируется для v1 (мало данных, нет смысла смешивать)
-  //    Окна: (anchor - N days, anchor] — последние N дней включительно
-  let income7dByCompany = new Map<string, number>()
-  let expense7dByCompany = new Map<string, number>()
-  let income30dByCompany = new Map<string, number>()
-  let expense30dByCompany = new Map<string, number>()
+  // 3. Приход/расход за 7 и 30 дней — только RUR, per-счёт, ТОЛЬКО внешние контрагенты
+  //    Окна: (anchor - N days, anchor]
+  type Flow = { income7d: number; expense7d: number; income30d: number; expense30d: number }
+  const zeroFlow = (): Flow => ({ income7d: 0, expense7d: 0, income30d: 0, expense30d: 0 })
+  const flowByAccount = new Map<string, Flow>() // accountNumber → flow
 
   if (anchorDate) {
     const anchor = anchorDate
 
     // ── Детектор внутренних переводов (между нашими компаниями/счетами) ──
-    // Приход/расход дашборда учитывает ТОЛЬКО внешних контрагентов.
-    // Операция внутренняя, если счёт контрагента входит в наши счета ИЛИ
-    // ИНН контрагента входит в наши ИНН. Наши ИНН бутстрапим: ИНН, чьи операции
-    // имеют счёт контрагента из наших счетов — тоже наши (+ Company.inn наших компаний).
+    // Приход/расход учитывает ТОЛЬКО внешних контрагентов. Операция внутренняя,
+    // если счёт контрагента входит в наши счета ИЛИ ИНН контрагента — наш
+    // (бутстрап: ИНН со счётом из наших + Company.inn наших компаний).
     const ourAccountNumbers = new Set(allAccounts.map((a) => a.number))
 
     const [innFromOurAccounts, ownCompanyInns] = await Promise.all([
@@ -212,84 +205,97 @@ export default async function BankPage({
       (counterpartyAccount != null && ourAccountNumbers.has(counterpartyAccount)) ||
       (counterpartyInn != null && ourInns.has(counterpartyInn))
 
-    // Fetching in-memory: берём все транзакции за последние 30 дней одним запросом,
-    // потом in-memory делим на 7д vs 30д
     const cutoff30 = new Date(anchor)
     cutoff30.setDate(cutoff30.getDate() - 30)
     const cutoff7 = new Date(anchor)
     cutoff7.setDate(cutoff7.getDate() - 7)
 
     const recentTxs = await prisma.bankTransaction.findMany({
-      where: {
-        currency: "RUR",
-        date: { gt: cutoff30, lte: anchor },
-      },
+      where: { currency: "RUR", date: { gt: cutoff30, lte: anchor } },
       select: {
         date: true,
         direction: true,
         amount: true,
         counterpartyAccount: true,
         counterpartyInn: true,
-        account: {
-          select: { company: { select: { name: true } } },
-        },
+        account: { select: { number: true } },
       },
     })
 
     for (const tx of recentTxs) {
-      // Пропускаем внутренние переводы между нашими компаниями/счетами
-      if (isInternal(tx.counterpartyAccount, tx.counterpartyInn)) continue
+      if (isInternal(tx.counterpartyAccount, tx.counterpartyInn)) continue // внутренний перевод
 
-      const companyName = tx.account.company.name
+      const acctNum = tx.account.number
       const amount = Number(tx.amount)
       const isCredit = tx.direction === "CREDIT"
+      const in7 = tx.date > cutoff7
 
-      // 30d окно: все записи попадают (уже отфильтровано в WHERE)
-      if (isCredit) {
-        income30dByCompany.set(companyName, (income30dByCompany.get(companyName) ?? 0) + amount)
-      } else {
-        expense30dByCompany.set(companyName, (expense30dByCompany.get(companyName) ?? 0) + amount)
-      }
-
-      // 7d окно: только даты > cutoff7
-      if (tx.date > cutoff7) {
-        if (isCredit) {
-          income7dByCompany.set(companyName, (income7dByCompany.get(companyName) ?? 0) + amount)
-        } else {
-          expense7dByCompany.set(companyName, (expense7dByCompany.get(companyName) ?? 0) + amount)
-        }
-      }
+      let f = flowByAccount.get(acctNum)
+      if (!f) { f = zeroFlow(); flowByAccount.set(acctNum, f) }
+      if (isCredit) { f.income30d += amount; if (in7) f.income7d += amount }
+      else { f.expense30d += amount; if (in7) f.expense7d += amount }
     }
   }
 
-  // Список всех компаний из потоков
-  const flowCompanyNames = new Set<string>([
-    ...income7dByCompany.keys(),
-    ...expense7dByCompany.keys(),
-    ...income30dByCompany.keys(),
-    ...expense30dByCompany.keys(),
-  ])
+  // 4. Собираем CompanyRow[] с разбивкой по счетам (accounts)
+  const companyMap = new Map<string, CompanyRow>()
+  for (const info of acctInfo.values()) {
+    let row = companyMap.get(info.companyName)
+    if (!row) {
+      row = {
+        companyName: info.companyName,
+        balancesByCurrency: {},
+        income7d: 0, expense7d: 0, income30d: 0, expense30d: 0,
+        accounts: [],
+      }
+      companyMap.set(info.companyName, row)
+    }
+    const f = flowByAccount.get(info.accountNumber) ?? zeroFlow()
+    if (info.closingBalance != null) {
+      row.balancesByCurrency[info.currency] =
+        (row.balancesByCurrency[info.currency] ?? 0) + info.closingBalance
+    }
+    row.income7d += f.income7d
+    row.expense7d += f.expense7d
+    row.income30d += f.income30d
+    row.expense30d += f.expense30d
+    row.accounts.push({
+      bankName: info.bankName,
+      accountNumber: info.accountNumber,
+      currency: info.currency,
+      closingBalance: info.closingBalance,
+      ...f,
+    })
+  }
 
-  const companyFlows: CompanyFlow[] = Array.from(flowCompanyNames).map((companyName) => ({
-    companyName,
-    income7d: income7dByCompany.get(companyName) ?? 0,
-    expense7d: expense7dByCompany.get(companyName) ?? 0,
-    income30d: income30dByCompany.get(companyName) ?? 0,
-    expense30d: expense30dByCompany.get(companyName) ?? 0,
-  }))
+  const companies: CompanyRow[] = Array.from(companyMap.values()).sort((a, b) =>
+    a.companyName.localeCompare(b.companyName, "ru"),
+  )
+  for (const c of companies) {
+    c.accounts.sort(
+      (a, b) => a.bankName.localeCompare(b.bankName, "ru") || a.accountNumber.localeCompare(b.accountNumber),
+    )
+  }
 
+  // Grand totals
+  const grandTotalByCurrency: Partial<Record<string, number>> = {}
+  for (const c of companies) {
+    for (const [cur, v] of Object.entries(c.balancesByCurrency)) {
+      if (v === undefined) continue
+      grandTotalByCurrency[cur] = (grandTotalByCurrency[cur] ?? 0) + v
+    }
+  }
   const grandFlow = {
-    income7d: companyFlows.reduce((s, c) => s + c.income7d, 0),
-    expense7d: companyFlows.reduce((s, c) => s + c.expense7d, 0),
-    income30d: companyFlows.reduce((s, c) => s + c.income30d, 0),
-    expense30d: companyFlows.reduce((s, c) => s + c.expense30d, 0),
+    income7d: companies.reduce((s, c) => s + c.income7d, 0),
+    expense7d: companies.reduce((s, c) => s + c.expense7d, 0),
+    income30d: companies.reduce((s, c) => s + c.income30d, 0),
+    expense30d: companies.reduce((s, c) => s + c.expense30d, 0),
   }
 
   const dashboardData: BankDashboardData = {
     anchorDate: anchorDate ? anchorDate.toISOString().slice(0, 10) : null,
-    companyBalances,
+    companies,
     grandTotalByCurrency,
-    companyFlows,
     grandFlow,
   }
 
@@ -308,6 +314,7 @@ export default async function BankPage({
     counterpartyName: t.counterpartyName,
     counterpartyInn: t.counterpartyInn,
     category: t.category ?? "UNCATEGORIZED",
+    comment: t.comment,
     companyName: t.account.company.name,
     accountNumber: t.account.number,
     bankName: t.account.bank.name,

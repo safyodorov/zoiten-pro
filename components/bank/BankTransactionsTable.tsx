@@ -10,7 +10,7 @@
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
 import { TableBody, TableRow, TableCell } from "@/components/ui/table"
-import { categorizeTx } from "@/app/actions/bank"
+import { categorizeTx, updateTxComment } from "@/app/actions/bank"
 import { CATEGORY_LABELS, CATEGORY_OPTIONS, DIRECTION_LABELS } from "@/lib/bank-labels"
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ export interface BankTxRow {
   counterpartyName: string | null
   counterpartyInn: string | null
   category: string      // TxCategory value
+  comment: string | null // ручной комментарий (управленческий учёт)
   companyName: string
   accountNumber: string
   bankName: string
@@ -83,6 +84,59 @@ function CategoryCell({
   )
 }
 
+// ── CommentCell ──────────────────────────────────────────────────────────────
+
+function CommentCell({
+  txId,
+  current,
+  canManage,
+}: {
+  txId: string
+  current: string | null
+  canManage: boolean
+}) {
+  const [value, setValue] = useState(current ?? "")
+  const [saved, setSaved] = useState(current ?? "")
+  const [, startTransition] = useTransition()
+
+  if (!canManage) {
+    return current ? (
+      <span className="text-xs" title={current}>{current}</span>
+    ) : (
+      <span className="text-xs text-muted-foreground">—</span>
+    )
+  }
+
+  function commit() {
+    if (value === saved) return // нет изменений
+    const prev = saved
+    setSaved(value)
+    startTransition(async () => {
+      const result = await updateTxComment(txId, value)
+      if (!result.ok) {
+        toast.error(result.error)
+        setValue(prev) // откат
+        setSaved(prev)
+      }
+    })
+  }
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder="—"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+        if (e.key === "Escape") { setValue(saved); (e.target as HTMLInputElement).blur() }
+      }}
+      className="h-7 w-full min-w-[140px] rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+    />
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────
 
 export function BankTransactionsTable({ rows, canManage }: BankTransactionsTableProps) {
@@ -128,14 +182,17 @@ export function BankTransactionsTable({ rows, canManage }: BankTransactionsTable
             <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
               № doc
             </th>
-            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap min-w-[180px]">
+            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap w-[110px]">
               Контрагент
             </th>
-            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap max-w-[300px]">
+            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap max-w-[240px]">
               Назначение
             </th>
             <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
               Категория
+            </th>
+            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+              Комментарий
             </th>
           </tr>
         </thead>
@@ -194,18 +251,23 @@ export function BankTransactionsTable({ rows, canManage }: BankTransactionsTable
                 {row.docNumber ?? "—"}
               </TableCell>
 
-              {/* Контрагент: имя + ИНН */}
-              <TableCell className="px-3 py-2 min-w-[180px]">
-                <div className="text-xs">{row.counterpartyName ?? "—"}</div>
+              {/* Контрагент: имя + ИНН — узкая колонка, усечение + полный текст в title */}
+              <TableCell className="px-3 py-2 w-[110px] max-w-[110px]">
+                <div
+                  className="text-xs overflow-hidden text-ellipsis whitespace-nowrap"
+                  title={`${row.counterpartyName ?? "—"}${row.counterpartyInn ? ` · ИНН ${row.counterpartyInn}` : ""}`}
+                >
+                  {row.counterpartyName ?? "—"}
+                </div>
                 {row.counterpartyInn && (
-                  <div className="text-xs text-muted-foreground font-mono">
-                    ИНН {row.counterpartyInn}
+                  <div className="text-[10px] text-muted-foreground font-mono overflow-hidden text-ellipsis whitespace-nowrap">
+                    {row.counterpartyInn}
                   </div>
                 )}
               </TableCell>
 
               {/* Назначение — усечённое с полным текстом через title */}
-              <TableCell className="px-3 py-2 max-w-[300px]">
+              <TableCell className="px-3 py-2 max-w-[240px]">
                 <span
                   className="block text-xs whitespace-nowrap overflow-hidden text-ellipsis"
                   title={row.purpose}
@@ -217,6 +279,11 @@ export function BankTransactionsTable({ rows, canManage }: BankTransactionsTable
               {/* Категория — inline-select (canManage) или текст */}
               <TableCell className="px-3 py-2 whitespace-nowrap">
                 <CategoryCell txId={row.id} current={row.category} canManage={canManage} />
+              </TableCell>
+
+              {/* Комментарий — редактируемый текст (управленческий учёт) */}
+              <TableCell className="px-3 py-2 min-w-[160px]">
+                <CommentCell txId={row.id} current={row.comment} canManage={canManage} />
               </TableCell>
             </TableRow>
           ))}
