@@ -23,3 +23,19 @@ zoiten-pro.code-workspace
 # Выписки (Phase 22) — банковские выписки, исходные данные (scp на VPS, НЕ в репо)
 /Выписки/
 /БД поставщики.xlsx
+
+# scripts/ — рабочие данные/скрипты сопоставления (НЕ в репо)
+scripts/_xlsx/
+scripts/db-images/
+scripts/excel-images/
+scripts/db-appliances.json
+scripts/db-catalog.json
+scripts/comments-parsed.json
+scripts/match-clusters.json
+scripts/match-results.json
+scripts/product-matches.json
+scripts/suppliers-parsed.json
+scripts/build-match-agents.cjs
+scripts/parse-comments.cjs
+scripts/parse-suppliers-xlsx.cjs
+scripts/seed-suppliers.cjs
