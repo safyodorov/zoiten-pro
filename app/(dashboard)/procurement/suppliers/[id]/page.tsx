@@ -155,11 +155,38 @@ export default async function SupplierDetailPage({ params }: Props) {
             </>
           )}
         </div>
-        {supplier.cooperationSummary && (
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
-            {supplier.cooperationSummary}
-          </p>
-        )}
+        {supplier.cooperationSummary &&
+          (() => {
+            const MARKER = "📍 Адрес:"
+            const raw = supplier.cooperationSummary
+            const i = raw.indexOf(MARKER)
+            const text = (i >= 0 ? raw.slice(0, i) : raw).trim()
+            const addr = i >= 0 ? raw.slice(i + MARKER.length).trim() : ""
+            const mapsUrl = addr
+              ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  addr.replace(/\s+/g, " ").trim()
+                )}`
+              : null
+            return (
+              <div className="mt-1 space-y-1.5">
+                {text && (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{text}</p>
+                )}
+                {addr && mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Открыть на Google Картах"
+                    className="flex items-start gap-1.5 w-fit text-sm text-primary hover:underline"
+                  >
+                    <span aria-hidden className="leading-5">📍</span>
+                    <span className="whitespace-pre-wrap">{addr}</span>
+                  </a>
+                )}
+              </div>
+            )
+          })()}
       </div>
 
       <SupplierDetailTabs
