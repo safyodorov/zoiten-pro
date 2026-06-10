@@ -40,13 +40,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const workbook =
       format === "sber" ? XLSX.read(buffer, { type: "buffer", raw: false }) : probe
 
-    const { transactions } = parseStatement(format, workbook)
+    const { transactions, balances } = parseStatement(format, workbook)
 
     const result = await persistParsedTransactions(prisma, transactions, {
       fileName: file.name,
       sourceBank: format,
       importedById: session.user.id ?? null,
-    })
+    }, balances)
 
     return NextResponse.json({
       imported: result.imported,

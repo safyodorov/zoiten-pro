@@ -3,11 +3,12 @@
 // Multi-sheet: each sheet = one account. Header-driven column mapping (NOT positional).
 // RUB-only sheets have 10 columns; CNY sheets have 12.
 // Real VTB headers use commas: "Дебет, RUR" / "Кредит, RUR" — fuzzy-matched.
+// Phase 22 (22-06): extracts opening/closing balances from header rows 2-3.
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDateCell, parseAmount, buildHeaderMap } from "./normalize"
-import type { ParsedTransaction } from "./types"
+import { parseDateCell, parseAmount, parseBalanceAmount, buildHeaderMap } from "./normalize"
+import type { ParsedTransaction, AccountBalance } from "./types"
 
 /**
  * Determines currency from the header rows (rows 0-5).
@@ -65,13 +66,72 @@ function findAmountColIdx(
 }
 
 /**
+ * Extracts the balance date (closing / "Конечная дата") from header rows 0-5.
+ * Row 2 structure: ["Начальная дата: ", "01.01.2026", "Конечная дата: ", "09.06.2026", ...]
+ * Returns null if not found.
+ */
+function extractVtbBalanceDate(rows: (string | number | null)[][]): Date | null {
+  for (const row of rows.slice(0, 6)) {
+    for (let i = 0; i < row.length - 1; i++) {
+      const cell = String(row[i] ?? "").trim()
+      if (/конечная дата/i.test(cell)) {
+        // Next non-null cell is the date value
+        for (let j = i + 1; j < row.length; j++) {
+          if (row[j] != null && String(row[j]).trim() !== "") {
+            return parseDateCell(row[j] as string | number | null)
+          }
+        }
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Extracts opening and closing balances from VTB header rows 0-5.
+ * Row 3 structure (RUB): ["Входящий остаток RUB:", "33,201.97", "Исходящий остаток RUB:", "20,000.00"]
+ * Row 3 structure (CNY): ["Входящий остаток CNY:", "0.00", "Исходящий остаток CNY:", "0.00"]
+ * Returns { opening, closing } — either may be null.
+ */
+function extractVtbBalances(rows: (string | number | null)[][]): { opening: number | null; closing: number | null } {
+  let opening: number | null = null
+  let closing: number | null = null
+  for (const row of rows.slice(0, 6)) {
+    for (let i = 0; i < row.length; i++) {
+      const cell = String(row[i] ?? "").trim()
+      if (/входящий остаток/i.test(cell)) {
+        // Next non-null cell to the right
+        for (let j = i + 1; j < row.length; j++) {
+          if (row[j] != null && String(row[j]).trim() !== "") {
+            opening = parseBalanceAmount(row[j] as string | number | null)
+            break
+          }
+        }
+      }
+      if (/исходящий остаток/i.test(cell)) {
+        // Next non-null cell to the right
+        for (let j = i + 1; j < row.length; j++) {
+          if (row[j] != null && String(row[j]).trim() !== "") {
+            closing = parseBalanceAmount(row[j] as string | number | null)
+            break
+          }
+        }
+      }
+    }
+  }
+  return { opening, closing }
+}
+
+/**
  * Parses all sheets of a VTB multi-sheet workbook.
  * Sheet name = account number.
  * Header row at index 6 → header-driven column mapping.
  * Data rows start at index 7; stops/skips "ИТОГО:" rows.
+ * Returns { transactions, balances } per Phase 22 (22-06).
  */
-export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] {
-  const result: ParsedTransaction[] = []
+export function parseVtbStatement(workbook: XLSX.WorkBook): { transactions: ParsedTransaction[]; balances: AccountBalance[] } {
+  const transactions: ParsedTransaction[] = []
+  const balances: AccountBalance[] = []
 
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName]!
@@ -86,6 +146,17 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
     const accountNumber = sheetName
     const currency = detectSheetCurrency(rows)
     const companyName = extractCompanyName(rows)
+
+    // Extract balances from header area
+    const { opening, closing } = extractVtbBalances(rows)
+    const balanceDate = extractVtbBalanceDate(rows)
+    balances.push({
+      accountNumber,
+      currency,
+      openingBalance: opening,
+      closingBalance: closing,
+      balanceDate,
+    })
 
     // Строка 6 — заголовки
     const headerRow = rows[6] ?? []
@@ -150,7 +221,7 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
         ? String(row[hm["Назначение"]!] ?? "").trim()
         : ""
 
-      result.push({
+      transactions.push({
         companyName,
         companyInn: null, // ВТБ-шапка не содержит ИНН нашей компании
         accountNumber,
@@ -173,5 +244,5 @@ export function parseVtbStatement(workbook: XLSX.WorkBook): ParsedTransaction[] 
     }
   }
 
-  return result
+  return { transactions, balances }
 }

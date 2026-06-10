@@ -7,7 +7,7 @@
 //               Counterparty → createMany BankTransaction (skipDuplicates) → ImportBatch update.
 
 import type { PrismaClient } from "@prisma/client"
-import type { ParsedTransaction, BankFormat } from "./types"
+import type { ParsedTransaction, BankFormat, AccountBalance } from "./types"
 import { computeFingerprint } from "./fingerprint"
 import { canonicalizeCompanyName } from "./normalize"
 
@@ -35,6 +35,7 @@ export async function persistParsedTransactions(
   prisma: PrismaClient,
   parsed: ParsedTransaction[],
   opts: PersistOptions,
+  balances: AccountBalance[] = [],
 ): Promise<PersistResult> {
   if (parsed.length === 0) {
     // Ничего не импортировать, создаём пустой ImportBatch
@@ -140,14 +141,29 @@ export async function persistParsedTransactions(
       continue
     }
 
+    // Find matching balance for this account (if any provided)
+    const bal = balances.find((b) => b.accountNumber === number)
+
     const account = await prisma.bankAccount.upsert({
       where: { number },
-      update: { currency: txForAccount.currency },
+      update: {
+        currency: txForAccount.currency,
+        ...(bal
+          ? {
+              openingBalance: bal.openingBalance ?? undefined,
+              closingBalance: bal.closingBalance ?? undefined,
+              balanceDate: bal.balanceDate ?? undefined,
+            }
+          : {}),
+      },
       create: {
         number,
         currency: txForAccount.currency,
         companyId,
         bankId: owningBank.id,
+        openingBalance: bal?.openingBalance ?? undefined,
+        closingBalance: bal?.closingBalance ?? undefined,
+        balanceDate: bal?.balanceDate ?? undefined,
       },
     })
     accountCache.set(number, account.id)

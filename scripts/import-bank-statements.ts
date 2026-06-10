@@ -58,13 +58,13 @@ async function main() {
       const workbook =
         format === "sber" ? XLSX.read(buffer, { type: "buffer", raw: false }) : probe
 
-      const { transactions } = parseStatement(format, workbook)
+      const { transactions, balances } = parseStatement(format, workbook)
 
       const r = await persistParsedTransactions(prisma, transactions, {
         fileName: file,
         sourceBank: format,
         importedById: null, // системный скрипт, не привязан к пользователю
-      })
+      }, balances)
 
       console.log(
         `${file} [${format}]: total=${r.total} imported=${r.imported} skipped=${r.skipped}`,

@@ -13,7 +13,7 @@ import type { BankFormat, ParseResult } from "./types"
 
 export * from "./types"
 export { computeFingerprint, buildFingerprintFields } from "./fingerprint"
-export { parseDDMMYYYY, excelSerialToDate, parseDateCell, parseAmount, normalizePurpose, extractBic, buildHeaderMap } from "./normalize"
+export { parseDDMMYYYY, excelSerialToDate, parseDateCell, parseAmount, parseBalanceAmount, parseRussianDate, normalizePurpose, extractBic, buildHeaderMap } from "./normalize"
 export { parseVtbStatement, parsePsbStatement, parseSberStatement }
 
 /**
@@ -51,13 +51,14 @@ export function detectFormat(fileName: string, workbook: XLSX.WorkBook): BankFor
 
 /**
  * Parses a bank statement workbook using the detected format adapter.
+ * Returns { format, transactions, balances }.
  */
 export function parseStatement(format: BankFormat, workbook: XLSX.WorkBook): ParseResult {
-  const transactions =
+  const { transactions, balances } =
     format === "vtb"
       ? parseVtbStatement(workbook)
       : format === "psb"
         ? parsePsbStatement(workbook)
         : parseSberStatement(workbook)
-  return { format, transactions }
+  return { format, transactions, balances }
 }

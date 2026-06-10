@@ -132,6 +132,78 @@ export function canonicalizeCompanyName(
 }
 
 /**
+ * Robust RU/US amount parser for bank balance cells.
+ * Handles mixed formats:
+ *   "33,201.97"   → 33201.97 (US thousands sep + decimal dot)
+ *   "217 568,45"  → 217568.45 (RU space-thousands sep + decimal comma)
+ *   "159 576,11"  → 159576.11
+ *   1234.5 (number) → 1234.5
+ * Returns null for empty/null/NaN.
+ */
+export function parseBalanceAmount(s: string | number | null | undefined): number | null {
+  if (s == null || s === "") return null
+  if (typeof s === "number") return Number.isFinite(s) ? s : null
+  // Strip regular spaces and non-breaking spaces ( )
+  let str = String(s).replace(/[\s ]/g, "")
+  if (str === "") return null
+
+  const hasComma = str.includes(",")
+  const hasDot = str.includes(".")
+
+  if (hasComma && hasDot) {
+    // Both present: last-occurring separator is decimal, the other is thousands
+    const lastComma = str.lastIndexOf(",")
+    const lastDot = str.lastIndexOf(".")
+    if (lastComma > lastDot) {
+      // Comma is decimal: remove dots (thousands), replace comma with dot
+      str = str.replace(/\./g, "").replace(",", ".")
+    } else {
+      // Dot is decimal: remove commas (thousands)
+      str = str.replace(/,/g, "")
+    }
+  } else if (hasComma) {
+    // Comma-only: treat as decimal separator (RU format)
+    str = str.replace(",", ".")
+  }
+  // else dot-only or neither: already correct
+
+  const n = parseFloat(str)
+  return Number.isFinite(n) ? n : null
+}
+
+/** RU month name → 1-based month number (genitive forms used in written dates) */
+const RU_MONTH_MAP: Record<string, number> = {
+  январь: 1, января: 1,
+  февраль: 2, февраля: 2,
+  март: 3, марта: 3,
+  апрель: 4, апреля: 4,
+  май: 5, мая: 5,
+  июнь: 6, июня: 6,
+  июль: 7, июля: 7,
+  август: 8, августа: 8,
+  сентябрь: 9, сентября: 9,
+  октябрь: 10, октября: 10,
+  ноябрь: 11, ноября: 11,
+  декабрь: 12, декабря: 12,
+}
+
+/**
+ * Parses a Russian written date like "10 июня 2026" or "01 января 2026 г." → UTC Date.
+ * Returns null if no match or month is unknown.
+ */
+export function parseRussianDate(s: string | null | undefined): Date | null {
+  if (s == null) return null
+  const m = String(s).trim().match(/(\d{1,2})\s+([а-яё]+)\s+(\d{4})/i)
+  if (!m) return null
+  const day = parseInt(m[1]!, 10)
+  const monthName = m[2]!.toLowerCase()
+  const year = parseInt(m[3]!, 10)
+  const month = RU_MONTH_MAP[monthName]
+  if (!month) return null
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+/**
  * Builds a header→column-index map from a header row array.
  * Skips null/empty cells.
  */

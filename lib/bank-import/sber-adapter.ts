@@ -8,11 +8,12 @@
 //   For CREDIT (incoming): our acct = credit side, counterparty = debit side.
 // "Дата проводки": Excel serial-date (e.g. "46024.18197") — parsed via parseDateCell.
 // "Банк" column: extractBic via /БИК\s+(\d{9})/.
+// Phase 22 (22-06): extracts opening/closing balances from trailing summary rows.
 // NO imports of next-auth, next/*, or Prisma — vitest must run this without env.
 
 import * as XLSX from "xlsx"
-import { parseDateCell, parseAmount, extractBic, buildHeaderMap } from "./normalize"
-import type { ParsedTransaction } from "./types"
+import { parseDateCell, parseAmount, parseBalanceAmount, parseRussianDate, extractBic, buildHeaderMap } from "./normalize"
+import type { ParsedTransaction, AccountBalance } from "./types"
 
 const ACCOUNT_NUMBER_RE = /(\d{20})/
 const INN_RE = /^\d{7,12}$/
@@ -37,6 +38,10 @@ function splitAccountCell(cell: string | null | undefined): { account: string | 
  * Row 9: primary headers
  * Row 10: sub-headers — "Дебет" and "Кредит" mark the two account sub-columns
  * Rows 11+: transaction data
+ * Trailing summary rows contain "Входящий остаток" and "Исходящий остаток":
+ *   ["","Входящий остаток","","","","","","0,00","","","","62,066.92","","","","","","(П)","","01 января 2026 г.","","",""]
+ *   The balance is the value with the largest absolute value (the "0,00" is the zero side).
+ *   The date cell matches /\d{1,2}\s+[а-яё]+\s+\d{4}/i (Russian written date).
  *
  * The "Счет" merged header spans two sub-columns:
  *   debitAcctCol  (row10 index of "Дебет",  fallback 4) = debit-side account (our account on outgoing)
@@ -44,8 +49,9 @@ function splitAccountCell(cell: string | null | undefined): { account: string | 
  * Direction logic:
  *   "Сумма по дебету" set  → DEBIT,  counterparty = creditAcctCol
  *   "Сумма по кредиту" set → CREDIT, counterparty = debitAcctCol
+ * Returns { transactions, balances } per Phase 22 (22-06).
  */
-export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[] {
+export function parseSberStatement(workbook: XLSX.WorkBook): { transactions: ParsedTransaction[]; balances: AccountBalance[] } {
   const sheetName = workbook.SheetNames[0]!
   const sheet = workbook.Sheets[sheetName]!
 
@@ -56,7 +62,7 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
     raw: false,
   })
 
-  if (rows.length < 12) return []
+  if (rows.length < 12) return { transactions: [], balances: [] }
 
   // Попытаться найти номер счёта из строки 4 (~колонка 11)
   let accountNumber = sheetName
@@ -95,7 +101,64 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
     else if (/^кредит$/i.test(cell)) creditAcctCol = idx
   }
 
-  const result: ParsedTransaction[] = []
+  // ── Балансы: сканируем все строки для "Входящий остаток" / "Исходящий остаток" ──
+  // Real structure:
+  // ["","Входящий остаток","","","","","","0,00","","","","62,066.92","","","","","","(П)","","01 января 2026 г.","","",""]
+  // ["","Исходящий остаток","","","","","","0,00","","","","107,489.58","","","","","","(П)","","10 июня 2026 г.","","",""]
+  // Strategy: for each остаток row, collect all numeric cell values; use the largest absolute value as balance.
+  // Date: find cell matching /\d{1,2}\s+[а-яё]+\s+\d{4}/i
+  let openingBalance: number | null = null
+  let closingBalance: number | null = null
+  let balanceDate: Date | null = null
+
+  for (const row of rows) {
+    // Find the label cell
+    let labelIdx = -1
+    let labelKind: "opening" | "closing" | null = null
+    for (let ci = 0; ci < row.length; ci++) {
+      const cell = String(row[ci] ?? "").trim()
+      if (/^входящий остаток$/i.test(cell)) { labelIdx = ci; labelKind = "opening"; break }
+      if (/^исходящий остаток$/i.test(cell)) { labelIdx = ci; labelKind = "closing"; break }
+    }
+    if (labelIdx === -1 || labelKind === null) continue
+
+    // Collect numeric cells in this row (exclude the label cell itself)
+    let maxAbs = 0
+    let dominantBalance: number | null = null
+    let rowDate: Date | null = null
+
+    for (let ci = 0; ci < row.length; ci++) {
+      if (ci === labelIdx) continue
+      const cell = row[ci]
+      if (cell == null) continue
+      const cellStr = String(cell).trim()
+      if (cellStr === "") continue
+
+      // Try to parse as Russian date
+      const ruDate = parseRussianDate(cellStr)
+      if (ruDate) { rowDate = ruDate; continue }
+
+      // Try to parse as amount
+      const amt = parseBalanceAmount(cellStr)
+      if (amt !== null && Math.abs(amt) > maxAbs) {
+        maxAbs = Math.abs(amt)
+        dominantBalance = amt
+      }
+    }
+
+    if (labelKind === "opening") openingBalance = dominantBalance
+    if (labelKind === "closing") { closingBalance = dominantBalance; balanceDate = rowDate }
+  }
+
+  const balances: AccountBalance[] = [{
+    accountNumber,
+    currency: "RUR",
+    openingBalance,
+    closingBalance,
+    balanceDate,
+  }]
+
+  const transactions: ParsedTransaction[] = []
 
   // Данные с строки 11
   for (let i = 11; i < rows.length; i++) {
@@ -163,7 +226,7 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
       ? String(row[hm["Назначение платежа"]!] ?? "").trim()
       : ""
 
-    result.push({
+    transactions.push({
       companyName,
       companyInn,
       accountNumber,
@@ -185,5 +248,5 @@ export function parseSberStatement(workbook: XLSX.WorkBook): ParsedTransaction[]
     })
   }
 
-  return result
+  return { transactions, balances }
 }

@@ -25,7 +25,16 @@ export interface ParsedTransaction {
   rawRow: unknown
 }
 
+export interface AccountBalance {
+  accountNumber: string
+  currency: string
+  openingBalance: number | null
+  closingBalance: number | null
+  balanceDate: Date | null   // дата исходящего остатка (конец периода выписки)
+}
+
 export interface ParseResult {
   format: BankFormat
   transactions: ParsedTransaction[]
+  balances: AccountBalance[]
 }
