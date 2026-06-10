@@ -1535,15 +1535,18 @@ model Bank {
 
 // Расчётный счёт компании в банке. Создаётся авто при первом импорте выписки.
 model BankAccount {
-  id           String            @id @default(cuid())
-  number       String            @unique // номер расчётного счёта (40702…)
-  companyId    String
-  company      Company           @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  bankId       String
-  bank         Bank              @relation(fields: [bankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  currency     String            @default("RUR") // RUR | CNY | …
-  transactions BankTransaction[]
-  createdAt    DateTime          @default(now())
+  id              String            @id @default(cuid())
+  number          String            @unique // номер расчётного счёта (40702…)
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  bankId          String
+  bank            Bank              @relation(fields: [bankId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  currency        String            @default("RUR") // RUR | CNY | …
+  openingBalance  Decimal?          @db.Decimal(18, 2)
+  closingBalance  Decimal?          @db.Decimal(18, 2)
+  balanceDate     DateTime?         @db.Date
+  transactions    BankTransaction[]
+  createdAt       DateTime          @default(now())
 
   @@index([companyId])
   @@index([bankId])
