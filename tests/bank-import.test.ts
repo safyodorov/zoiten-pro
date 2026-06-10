@@ -159,6 +159,40 @@ describe("normalize helpers", () => {
     expect(map["Назначение"]).toBe(3)
     expect(Object.keys(map)).not.toContain("")
   })
+
+  // canonicalizeCompanyName
+  it("canonicalizeCompanyName: 'ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ \"ЗОЙТЕН\"' → 'ООО \"ЗОЙТЕН\"'", async () => {
+    const { canonicalizeCompanyName } = await import("@/lib/bank-import/normalize")
+    expect(canonicalizeCompanyName('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "ЗОЙТЕН"')).toBe('ООО "ЗОЙТЕН"')
+  })
+  it("canonicalizeCompanyName: варианты Сбер/ВТБ/ПСБ одной компании сходятся к одному ключу", async () => {
+    const { canonicalizeCompanyName } = await import("@/lib/bank-import/normalize")
+    const a = canonicalizeCompanyName('ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ "ГЕЙМ БЛОКС"')
+    const b = canonicalizeCompanyName('ООО "ГЕЙМ БЛОКС"')
+    const c = canonicalizeCompanyName('ООО «ГЕЙМ БЛОКС»')
+    expect(a).toBe('ООО "ГЕЙМ БЛОКС"')
+    expect(b).toBe('ООО "ГЕЙМ БЛОКС"')
+    expect(c).toBe('ООО "ГЕЙМ БЛОКС"')
+  })
+  it("canonicalizeCompanyName: ПАО/АО/ИП + пустой ввод", async () => {
+    const { canonicalizeCompanyName } = await import("@/lib/bank-import/normalize")
+    expect(canonicalizeCompanyName("ПУБЛИЧНОЕ АКЦИОНЕРНОЕ ОБЩЕСТВО СБЕРБАНК")).toBe("ПАО СБЕРБАНК")
+    expect(canonicalizeCompanyName("АКЦИОНЕРНОЕ ОБЩЕСТВО ТБАНК")).toBe("АО ТБАНК")
+    expect(canonicalizeCompanyName("ИНДИВИДУАЛЬНЫЙ ПРЕДПРИНИМАТЕЛЬ ИВАНОВ И.И.")).toBe("ИП ИВАНОВ И.И.")
+    expect(canonicalizeCompanyName("")).toBeNull()
+    expect(canonicalizeCompanyName(null)).toBeNull()
+  })
+
+  // parseDateCell (Excel serial)
+  it("parseDateCell: серийный номер Excel '46024.18197' → 2026-01-02", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    const d = parseDateCell("46024.1819675928")
+    expect(d?.toISOString().slice(0, 10)).toBe("2026-01-02")
+  })
+  it("parseDateCell: 'DD.MM.YYYY' строка тоже парсится", async () => {
+    const { parseDateCell } = await import("@/lib/bank-import/normalize")
+    expect(parseDateCell("12.03.2026")?.toISOString().slice(0, 10)).toBe("2026-03-12")
+  })
 })
 
 describe("computeFingerprint", () => {

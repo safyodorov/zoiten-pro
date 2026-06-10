@@ -9,6 +9,7 @@
 import type { PrismaClient } from "@prisma/client"
 import type { ParsedTransaction, BankFormat } from "./types"
 import { computeFingerprint } from "./fingerprint"
+import { canonicalizeCompanyName } from "./normalize"
 
 // Bank-владелец счёта определяется ДЕТЕРМИНИРОВАННО по sourceBank через константу.
 // Реальные головные БИК российских банков (9 цифр).
@@ -82,11 +83,15 @@ export async function persistParsedTransactions(
   const companyCache = new Map<string, string>() // ключ → Company.id
 
   // Собираем уникальные (companyInn || companyName) пары
+  // Имя компании каноникализируем (орг.-правовая форма → аббревиатура), чтобы
+  // «ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ X» и «ООО X» из разных банков
+  // указывали на ОДНУ запись Company.
   const companyKeys = new Map<string, { inn: string | null; name: string | null }>()
   for (const tx of parsed) {
-    const key = tx.companyInn ?? tx.companyName ?? "unknown"
+    const canonName = canonicalizeCompanyName(tx.companyName)
+    const key = tx.companyInn ?? canonName ?? "unknown"
     if (!companyKeys.has(key)) {
-      companyKeys.set(key, { inn: tx.companyInn, name: tx.companyName })
+      companyKeys.set(key, { inn: tx.companyInn, name: canonName })
     }
   }
 
@@ -125,7 +130,8 @@ export async function persistParsedTransactions(
   for (const number of accountNumbers) {
     // Определяем companyId для этого счёта (из первой транзакции с этим номером)
     const txForAccount = parsed.find((tx) => tx.accountNumber === number)!
-    const companyKey = txForAccount.companyInn ?? txForAccount.companyName ?? "unknown"
+    const companyKey =
+      txForAccount.companyInn ?? canonicalizeCompanyName(txForAccount.companyName) ?? "unknown"
     const companyId = companyCache.get(companyKey)
 
     if (!companyId) {
