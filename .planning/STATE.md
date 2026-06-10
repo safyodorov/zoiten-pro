@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Ready to execute
-stopped_at: Completed 23-02-PLAN.md
-last_updated: "2026-06-10T12:54:23.261Z"
+stopped_at: Completed 23-cash-payments-23-03-PLAN.md
+last_updated: "2026-06-10T13:01:11.995Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 23 (cash-payments) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 
 ## Performance Metrics
 
@@ -122,6 +122,7 @@ Plan: 3 of 5
 | Phase 22-bank-accounts P05 | 18min | 4 tasks | 5 files |
 | Phase 23-cash-payments P01 | 5min | 2 tasks | 2 files |
 | Phase 23-cash-payments P02 | 79s | 2 tasks | 5 files |
+| Phase 23-cash-payments P03 | 10m | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -300,6 +301,8 @@ Recent decisions affecting current work:
 - [Phase 23-cash-payments]: fingerprint String? @unique (nullable) — ручные записи без дедупа; импортированные SHA-256 по (sheet|date|direction|amount|purpose|responsibleNameRaw)
 - [Phase 23-cash-payments]: Decimal(14,2) для CashEntry.amount (паттерн Credits Phase 21) — рубли, 14 знаков достаточно; не 18,2 как BankTransaction
 - [Phase 23-cash-payments]: Wallet icon chosen for CASH sidebar entry (Landmark=Credits, Building2=Bank)
+- [Phase 23-cash-payments]: categorize() match-order independent of display sortOrder: Пополнение кассы before Зарплата/авансы prevents avanс-shadow on 'аванс на склад'
+- [Phase 23-cash-payments]: normalizeResponsibleSurname: ё→е ONLY for SURNAME_FIXES lookup key, return value preserves ё; persist.ts uses (prisma as any) cast for vitest-safe type-only import
 
 ### Roadmap Evolution
 
@@ -364,6 +367,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T12:54:23.256Z
-Stopped at: Completed 23-02-PLAN.md
+Last session: 2026-06-10T13:01:11.990Z
+Stopped at: Completed 23-cash-payments-23-03-PLAN.md
 Resume file: None
