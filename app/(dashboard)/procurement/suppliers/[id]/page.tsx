@@ -32,7 +32,9 @@ export default async function SupplierDetailPage({ params }: Props) {
       buyer: { select: { id: true, lastName: true, firstName: true } },
       contacts: { orderBy: { createdAt: "asc" } },
       productLinks: {
-        include: { product: { select: { id: true, name: true } } },
+        include: {
+          product: { select: { id: true, name: true, sku: true, photoUrl: true } },
+        },
         orderBy: { createdAt: "asc" },
       },
       negotiations: {
@@ -85,6 +87,9 @@ export default async function SupplierDetailPage({ params }: Props) {
     id: l.id,
     productId: l.productId,
     productNameFallback: l.productNameFallback ?? "",
+    productPhotoUrl: l.product?.photoUrl ?? null,
+    productName: l.product?.name ?? null,
+    productSku: l.product?.sku ?? null,
     leadTimeDays: l.leadTimeDays != null ? String(l.leadTimeDays) : "",
     leadTimeComment: l.leadTimeComment ?? "",
     unitPrice: decStr(l.unitPrice),

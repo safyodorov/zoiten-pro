@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Package } from "lucide-react"
 import { CreatableCombobox } from "@/components/combobox/CreatableCombobox"
 import { saveSupplierProductLinks } from "@/app/actions/suppliers"
 import { toast } from "sonner"
@@ -16,6 +16,10 @@ export interface ProductLinkEntry {
   id: string | null
   productId: string | null
   productNameFallback: string
+  // Read-only данные связанного товара из нашей БД (для миниатюры). null если товар по тексту.
+  productPhotoUrl?: string | null
+  productName?: string | null
+  productSku?: string | null
   leadTimeDays: string
   leadTimeComment: string
   unitPrice: string
@@ -50,6 +54,9 @@ function emptyLink(): ProductLinkEntry {
     id: null,
     productId: null,
     productNameFallback: "",
+    productPhotoUrl: null,
+    productName: null,
+    productSku: null,
     leadTimeDays: "",
     leadTimeComment: "",
     unitPrice: "",
@@ -80,6 +87,32 @@ function intOrNull(v: string): number | null {
   if (!t) return null
   const n = parseInt(t, 10)
   return isNaN(n) ? null : n
+}
+
+// ── Миниатюра товара (вертикальная 3:4) ────────────────────────────
+
+function ProductThumb({
+  photoUrl,
+  name,
+}: {
+  photoUrl?: string | null
+  name?: string | null
+}) {
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={name ?? "Фото товара"}
+        className="h-14 w-[42px] shrink-0 rounded-md border object-cover bg-muted"
+      />
+    )
+  }
+  return (
+    <div className="h-14 w-[42px] shrink-0 rounded-md border bg-muted flex items-center justify-center text-muted-foreground">
+      <Package className="h-5 w-5" />
+    </div>
+  )
 }
 
 // ── Main ───────────────────────────────────────────────────────────
@@ -163,26 +196,32 @@ export function SupplierProductsTab({
 
       {links.map((l, idx) => (
         <div key={idx} className="rounded-lg border bg-muted/20 p-3 space-y-2">
-          {/* Товар */}
-          <div className="flex flex-col gap-1">
-            <label className={labelCls}>Товар</label>
-            <CreatableCombobox
-              options={productOptions}
-              value={l.productId}
-              onValueChange={(v) => update(idx, "productId", v)}
-              placeholder="Выберите товар..."
-              disabled={!canManage}
-            />
-            {!l.productId && (
-              <input
-                type="text"
-                value={l.productNameFallback}
-                onChange={(e) => update(idx, "productNameFallback", e.target.value)}
+          {/* Товар: миниатюра + селектор */}
+          <div className="flex items-start gap-3">
+            <ProductThumb photoUrl={l.productPhotoUrl} name={l.productName} />
+            <div className="flex flex-col gap-1 flex-1 min-w-0">
+              <label className={labelCls}>Товар</label>
+              <CreatableCombobox
+                options={productOptions}
+                value={l.productId}
+                onValueChange={(v) => update(idx, "productId", v)}
+                placeholder="Выберите товар..."
                 disabled={!canManage}
-                placeholder="Текстовое имя товара (если нет в базе)"
-                className={fieldCls + " mt-1"}
               />
-            )}
+              {!l.productId && (
+                <input
+                  type="text"
+                  value={l.productNameFallback}
+                  onChange={(e) => update(idx, "productNameFallback", e.target.value)}
+                  disabled={!canManage}
+                  placeholder="Текстовое имя товара (если нет в базе)"
+                  className={fieldCls + " mt-1"}
+                />
+              )}
+              {l.productSku && (
+                <span className="text-xs text-muted-foreground mt-0.5">{l.productSku}</span>
+              )}
+            </div>
           </div>
 
           {/* Срок + цена */}
