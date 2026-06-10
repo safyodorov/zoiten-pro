@@ -185,6 +185,33 @@ export default async function BankPage({
 
   if (anchorDate) {
     const anchor = anchorDate
+
+    // ── Детектор внутренних переводов (между нашими компаниями/счетами) ──
+    // Приход/расход дашборда учитывает ТОЛЬКО внешних контрагентов.
+    // Операция внутренняя, если счёт контрагента входит в наши счета ИЛИ
+    // ИНН контрагента входит в наши ИНН. Наши ИНН бутстрапим: ИНН, чьи операции
+    // имеют счёт контрагента из наших счетов — тоже наши (+ Company.inn наших компаний).
+    const ourAccountNumbers = new Set(allAccounts.map((a) => a.number))
+
+    const [innFromOurAccounts, ownCompanyInns] = await Promise.all([
+      prisma.bankTransaction.findMany({
+        where: { counterpartyAccount: { in: Array.from(ourAccountNumbers) } },
+        select: { counterpartyInn: true },
+        distinct: ["counterpartyInn"],
+      }),
+      prisma.company.findMany({
+        where: { accounts: { some: {} }, inn: { not: null } },
+        select: { inn: true },
+      }),
+    ])
+    const ourInns = new Set<string>()
+    for (const r of innFromOurAccounts) if (r.counterpartyInn) ourInns.add(r.counterpartyInn)
+    for (const c of ownCompanyInns) if (c.inn) ourInns.add(c.inn)
+
+    const isInternal = (counterpartyAccount: string | null, counterpartyInn: string | null) =>
+      (counterpartyAccount != null && ourAccountNumbers.has(counterpartyAccount)) ||
+      (counterpartyInn != null && ourInns.has(counterpartyInn))
+
     // Fetching in-memory: берём все транзакции за последние 30 дней одним запросом,
     // потом in-memory делим на 7д vs 30д
     const cutoff30 = new Date(anchor)
@@ -201,6 +228,8 @@ export default async function BankPage({
         date: true,
         direction: true,
         amount: true,
+        counterpartyAccount: true,
+        counterpartyInn: true,
         account: {
           select: { company: { select: { name: true } } },
         },
@@ -208,6 +237,9 @@ export default async function BankPage({
     })
 
     for (const tx of recentTxs) {
+      // Пропускаем внутренние переводы между нашими компаниями/счетами
+      if (isInternal(tx.counterpartyAccount, tx.counterpartyInn)) continue
+
       const companyName = tx.account.company.name
       const amount = Number(tx.amount)
       const isCredit = tx.direction === "CREDIT"
