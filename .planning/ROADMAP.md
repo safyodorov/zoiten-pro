@@ -414,7 +414,7 @@ Plans:
 
 **Тесты:** `tests/wb-cooldown.test.ts` — 13 тестов get/set/cleanup + max-логика. Расширены `wb-fetch-rate-limit.test.ts` и `wb-support-api.test.ts`.
 
-**Plans:** 0 plans (выполнено inline без формального плана).
+**Plans:** 5 plans (выполнено inline без формального плана).
 
 ### Phase 19: Управление рекламой WB
 
@@ -501,3 +501,29 @@ Plans:
 - [x] 21-06-PLAN.md — Детальная карточка (summary cards + график + line-chart)
 - [x] 21-07-PLAN.md — Сводный горизонтальный график (день/неделя/месяц, по орг)
 - [x] 21-08-PLAN.md — Lender settings + deploy (poppler) + seed + UAT
+
+### Phase 22: Банковские счета — БД банковских операций
+
+**Goal:** Раздел `/bank` для учёта всех банковских операций группы компаний. Новая БД: `BankAccount`, `BankTransaction`, справочники `Bank` (по БИК) и `Counterparty` (дедуп по ИНН), расширение существующей `Company` реквизитами (ИНН/КПП/ОГРН). Импорт выписок из Excel с тремя адаптерами форматов (ВТБ multi-sheet/мультивалюта, ПСБ, СберБизнес) и защитой от дублирования операций при пересечении периодов выписок (idempotent re-import). Read-only таблица просмотра с фильтрами + базовая ручная разметка/категоризация операций под будущий ДДС. Новый `ERP_SECTION.BANK` + RBAC.
+
+**Ключевые решения (discuss 2026-06-10):**
+1. **Company** — расширяем существующую (не новая модель): добавляем ИНН/реквизиты, `BankAccount → Company`. Пересекается с компаниями Кредитов автоматически.
+2. **Bank** — новый справочник по БИК (держатели счетов + банки контрагентов). `Lender` не трогаем, но добавляем nullable FK `Lender → Bank` для будущей связки.
+3. **Counterparty** — отдельный справочник, дедуп по ИНН, операции ссылаются FK.
+4. **Дедуп операций** — composite fingerprint (счёт + дата + сумма + дебет/кредит + № документа + назначение/контрагент hash); re-import пересекающихся выписок не плодит дубли.
+5. **Scope** — БД + импорт + дедуп + read-only просмотр + базовая категоризация. БЕЗ связей с закупками/кредитами/ДДС (следующие этапы).
+6. **Мультивалютность** — `BankTransaction` хранит currency + amount (ВТБ имеет CNY-счета).
+7. **Provenance** — хранить источник (имя файла/банк/строка) для аудита и идемпотентности.
+
+**Источник данных:** `C:\Users\User\zoiten-pro\Выписки\` (untracked) — 9 XLSX за 01.01.2026–10.06.2026: 2× ВТБ (multi-sheet), 2× ПСБ, 5× СберБизнес.
+
+**Requirements**: BANK-01, BANK-02, BANK-03, BANK-04, BANK-05, BANK-06, BANK-07, BANK-08, BANK-09, BANK-10
+**Depends on:** Phase 2 (RBAC новый раздел BANK), справочник Company (расширяется), Phase 21 (Lender — для связи Lender→Bank)
+**Plans:** 0 plans
+
+Plans:
+- [ ] 22-01-PLAN.md — Schema + миграция (Company реквизиты; Bank/BankAccount/Counterparty/BankTransaction/ImportBatch; enums TxDirection/TxCategory; Lender.bankId; ERP_SECTION.BANK)
+- [ ] 22-02-PLAN.md — Проводка раздела (6-точечный чеклист) + RBAC + заглушка /bank
+- [ ] 22-03-PLAN.md — lib/bank-import/ pure-парсеры (detectFormat + 3 адаптера + normalize + fingerprint) + vitest golden
+- [ ] 22-04-PLAN.md — Импорт: /api/bank-import (parse→upsert→createMany skipDuplicates→ImportBatch) + categorizeTx + BankImportButton
+- [ ] 22-05-PLAN.md — Read-only /bank (sticky-таблица + фильтры + поиск) + inline категоризация + scripts/import-bank-statements + импорт 9 файлов + UAT
