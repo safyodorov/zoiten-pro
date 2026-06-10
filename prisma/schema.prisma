@@ -32,6 +32,7 @@ enum ERP_SECTION {
   USER_MANAGEMENT
   CREDITS
   BANK
+  CASH
 }
 
 enum AbcStatus {
@@ -55,6 +56,12 @@ enum TxCategory {
   TAX
   LOAN
   OTHER
+}
+
+// Phase 23: Наличные расчёты — направление операции
+enum CashDirection {
+  INCOME  // приход
+  EXPENSE // расход
 }
 
 enum Availability {
@@ -546,6 +553,8 @@ model Employee {
   // Phase 20: procurement back-relations
   supplierBuyers            Supplier[]
   negotiationParticipations NegotiationParticipant[]
+  // Phase 23: cash back-relation
+  cashEntries               CashEntry[]
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 }
@@ -1608,4 +1617,44 @@ model ImportBatch {
   importedById String? // userId, nullable — может быть системный скрипт
   createdAt    DateTime          @default(now())
   transactions BankTransaction[]
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 23: Наличные расчёты
+// ──────────────────────────────────────────────────────────────────
+
+// Справочник категорий наличных операций (редактируемый). Seed 24 строк в миграции.
+model CashCategory {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  sortOrder Int         @default(0)
+  entries   CashEntry[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+// Операция наличной кассы. fingerprint @unique обеспечивает идемпотентность
+// повторного импорта (skipDuplicates). Ручные записи — fingerprint null.
+model CashEntry {
+  id                    String        @id @default(cuid())
+  date                  DateTime      @db.Date
+  direction             CashDirection
+  amount                Decimal       @db.Decimal(14, 2)
+  department            String?
+  categoryId            String?
+  category              CashCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  purpose               String        @db.Text // назначение (исходный текст)
+  responsibleEmployeeId String?
+  responsibleEmployee   Employee?     @relation(fields: [responsibleEmployeeId], references: [id], onDelete: SetNull)
+  responsibleNameRaw    String? // исходная фамилия из файла
+  comment               String?       @db.Text
+  source                String        @default("manual") // 'budget-yulya' | 'budget-pavel' | 'manual'
+  fingerprint           String?       @unique // дедуп импорта
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([date])
+  @@index([categoryId])
+  @@index([responsibleEmployeeId])
+  @@index([direction])
 }
