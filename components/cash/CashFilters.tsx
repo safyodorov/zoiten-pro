@@ -111,6 +111,7 @@ export function CashFilters({ categories, employees, departments, years }: CashF
   const searchParams = useSearchParams()
 
   // Читаем текущие значения из URL
+  const fundFilter = searchParams.get("fund") ?? "yulya"
   const yearFilter = searchParams.get("year") ?? ""
   const dateFromFilter = searchParams.get("dateFrom") ?? ""
   const dateToFilter = searchParams.get("dateTo") ?? ""
@@ -138,6 +139,11 @@ export function CashFilters({ categories, employees, departments, years }: CashF
   }
 
   // ── Обработчики ─────────────────────────────────────────────────────
+
+  function setFund(value: string) {
+    // "yulya" — значение по умолчанию → чистим параметр (URL остаётся коротким)
+    router.push(buildUrl({ fund: value === "yulya" ? undefined : value }))
+  }
 
   function setYear(value: string) {
     // Год и диапазон дат взаимоисключающие — при выборе года чистим диапазон
@@ -185,6 +191,7 @@ export function CashFilters({ categories, employees, departments, years }: CashF
   }
 
   const hasFilters =
+    fundFilter !== "yulya" ||
     !!yearFilter ||
     !!dateFromFilter ||
     !!dateToFilter ||
@@ -206,6 +213,18 @@ export function CashFilters({ categories, employees, departments, years }: CashF
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {/* Касса/фонд — Юля (офис-касса) по умолчанию, Павел отдельно */}
+      <select
+        value={fundFilter}
+        onChange={(e) => setFund(e.target.value)}
+        className={`${selectCls} ${fundFilter !== "yulya" ? "border-primary text-primary" : ""}`}
+        title="Касса / фонд"
+      >
+        <option value="yulya">Касса: Юля</option>
+        <option value="pavel">Касса: Павел</option>
+        <option value="all">Касса: все</option>
+      </select>
+
       {/* Год — native <select> (CLAUDE.md) */}
       <select
         value={yearFilter}

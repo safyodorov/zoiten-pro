@@ -19,6 +19,7 @@ export default async function CashPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    fund?: string          // "yulya" (по умолч.) | "pavel" | "all" — касса/фонд
     year?: string
     dateFrom?: string
     dateTo?: string
@@ -48,6 +49,16 @@ export default async function CashPage({
   // ── Where-builder ────────────────────────────────────────────────────────
 
   const where: Prisma.CashEntryWhereInput = {}
+
+  // Касса/фонд: по умолчанию «Юля» (офис-касса) — чтобы обороты не раздувались
+  // фондом Павла. yulya = budget-yulya + ручные; pavel = budget-pavel; all = всё.
+  const fund = sp.fund ?? "yulya"
+  if (fund === "yulya") {
+    where.source = { in: ["budget-yulya", "manual"] }
+  } else if (fund === "pavel") {
+    where.source = "budget-pavel"
+  }
+  // fund === "all" — без фильтра по source
 
   // Диапазон дат (календарь) имеет приоритет; иначе — быстрый фильтр по году
   if (dateFrom || dateTo) {
