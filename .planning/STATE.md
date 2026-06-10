@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Phase complete — ready for verification
-stopped_at: Completed 22-05-PLAN.md (UAT checkpoint reached)
-last_updated: "2026-06-10T09:06:11.892Z"
+stopped_at: Completed 22-06-PLAN.md
+last_updated: "2026-06-10T10:12:45.931Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -293,6 +293,7 @@ Recent decisions affecting current work:
 - [Phase 22-bank-accounts]: persist.ts has zero next-auth/next/* imports — usable from seed script 22-05 with its own PrismaClient instance
 - [Phase 22-bank-accounts]: BankTxRow: flat serializable object (Decimal->number, Date->ISO string on server) — RSC client boundary
 - [Phase 22-bank-accounts]: CategoryCell rollback: prev value saved before optimistic update, restored on !result.ok
+- [Phase 22]: Bank dashboard anchor = MAX(balanceDate) with fallback to MAX(tx.date); CNY flows ignored for v1
 
 ### Roadmap Evolution
 
@@ -356,6 +357,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T09:06:11.886Z
-Stopped at: Completed 22-05-PLAN.md (UAT checkpoint reached)
+Last session: 2026-06-10T10:12:40.467Z
+Stopped at: Completed 22-06-PLAN.md
 Resume file: None
