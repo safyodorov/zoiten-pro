@@ -11,6 +11,7 @@ import { requireSection, getSectionRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { CashEntryForm } from "@/components/cash/CashEntryForm"
+import { CashExportButton } from "@/components/cash/CashExportButton"
 import { CashFilters } from "@/components/cash/CashFilters"
 import { CashTable } from "@/components/cash/CashTable"
 import type { CashRow } from "@/components/cash/CashTable"
@@ -204,14 +205,17 @@ export default async function CashPage({
         <div className="text-sm text-muted-foreground">
           Операций: {totalCount}
         </div>
-        {canManage && (
-          <CashEntryForm
-            categories={allCategories}
-            employees={activeEmployees}
-            departments={departments}
-            defaultFund={fund === "pavel" ? "pavel" : "yulya"}
-          />
-        )}
+        <div className="flex items-center gap-2">
+          <CashExportButton />
+          {canManage && (
+            <CashEntryForm
+              categories={allCategories}
+              employees={activeEmployees}
+              departments={departments}
+              defaultFund={fund === "pavel" ? "pavel" : "yulya"}
+            />
+          )}
+        </div>
       </div>
 
       {/* Фильтры */}
