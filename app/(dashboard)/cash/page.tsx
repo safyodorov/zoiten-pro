@@ -169,6 +169,7 @@ export default async function CashPage({
     categoryId: e.categoryId,
     categoryName: e.category?.name ?? null,
     purpose: e.purpose,
+    responsibleEmployeeId: e.responsibleEmployeeId,
     responsibleName: e.responsibleEmployee
       ? `${e.responsibleEmployee.lastName} ${e.responsibleEmployee.firstName}`
       : e.responsibleNameRaw ?? null,
@@ -206,6 +207,8 @@ export default async function CashPage({
         <CashTable
           rows={rows}
           categories={allCategories}
+          employees={allEmployees}
+          departments={departments}
           canManage={canManage}
           totals={totals}
           totalCount={totalCount}

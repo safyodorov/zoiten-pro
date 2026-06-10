@@ -9,12 +9,15 @@
 // Блок итогов сверху: приход (зел.) / расход (кр.) / баланс.
 // Индикатор усечения: «Показаны первые 1000 из N — уточните фильтры».
 // Inline CategoryCell (native select) + CommentCell (input) с canManage gating.
+// Edit button (Pencil) per-row → EditCashEntryDialog (только canManage).
 
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
+import { SquarePen } from "lucide-react"
 import { TableBody, TableRow, TableCell } from "@/components/ui/table"
 import { categorizeCashEntry, updateCashComment } from "@/app/actions/cash"
 import { DIRECTION_LABELS } from "@/lib/cash-labels"
+import { CashEntryForm, type CashEntryEditData } from "@/components/cash/CashEntryForm"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -22,13 +25,14 @@ import { DIRECTION_LABELS } from "@/lib/cash-labels"
  *  Decimal → number и Date → ISO string выполняются на сервере в page.tsx. */
 export interface CashRow {
   id: string
-  date: string             // ISO date string YYYY-MM-DD
-  direction: string        // "INCOME" | "EXPENSE"
-  amount: number           // Decimal → number на сервере
+  date: string                       // ISO date string YYYY-MM-DD
+  direction: string                  // "INCOME" | "EXPENSE"
+  amount: number                     // Decimal → number на сервере
   department: string | null
   categoryId: string | null
   categoryName: string | null
   purpose: string
+  responsibleEmployeeId: string | null  // для предзаполнения формы редактирования
   responsibleName: string | null
   comment: string | null
 }
@@ -42,6 +46,8 @@ interface CashTotals {
 interface CashTableProps {
   rows: CashRow[]
   categories: { id: string; name: string }[]
+  employees: { id: string; lastName: string; firstName: string }[]
+  departments: string[]
   canManage: boolean
   totals: CashTotals
   totalCount: number
@@ -160,7 +166,39 @@ function CommentCell({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export function CashTable({ rows, categories, canManage, totals, totalCount }: CashTableProps) {
+export function CashTable({
+  rows,
+  categories,
+  employees,
+  departments,
+  canManage,
+  totals,
+  totalCount,
+}: CashTableProps) {
+  // ── Edit dialog state ────────────────────────────────────────────────────
+  const [editingEntry, setEditingEntry] = useState<CashEntryEditData | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+
+  function openEdit(row: CashRow) {
+    setEditingEntry({
+      id: row.id,
+      date: row.date,
+      direction: row.direction,
+      amount: row.amount,
+      department: row.department,
+      categoryId: row.categoryId,
+      purpose: row.purpose,
+      responsibleEmployeeId: row.responsibleEmployeeId,
+      comment: row.comment,
+    })
+    setEditOpen(true)
+  }
+
+  function handleEditOpenChange(open: boolean) {
+    setEditOpen(open)
+    if (!open) setEditingEntry(null)
+  }
+
   // ── Блок итогов (приход / расход / баланс) ─────────────────────────────
   const fmt = (n: number) =>
     n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -221,6 +259,19 @@ export function CashTable({ rows, categories, canManage, totals, totalCount }: C
     <div className="flex flex-col gap-2 h-full">
       {totalsBlock}
 
+      {/* Edit dialog — controlled, монтируется один раз, открывается по кнопке */}
+      {canManage && editingEntry && (
+        <CashEntryForm
+          key={editingEntry.id}
+          entry={editingEntry}
+          open={editOpen}
+          onOpenChange={handleEditOpenChange}
+          categories={categories}
+          employees={employees}
+          departments={departments}
+        />
+      )}
+
       {/* CLAUDE.md sticky data-table: единственный scroll-контейнер, без shadcn Table-wrapper */}
       <div className="overflow-auto flex-1 rounded-lg border">
         <table className="w-full border-separate border-spacing-0 text-sm">
@@ -251,6 +302,9 @@ export function CashTable({ rows, categories, canManage, totals, totalCount }: C
               <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                 Комментарий
               </th>
+              {canManage && (
+                <th className="sticky top-0 z-20 bg-background border-b px-2 py-2 text-xs font-semibold text-muted-foreground whitespace-nowrap w-8" />
+              )}
             </tr>
           </thead>
           <TableBody>
@@ -322,6 +376,20 @@ export function CashTable({ rows, categories, canManage, totals, totalCount }: C
                 <TableCell className="px-3 py-2 min-w-[160px]">
                   <CommentCell entryId={row.id} current={row.comment} canManage={canManage} />
                 </TableCell>
+
+                {/* Edit button — только canManage */}
+                {canManage && (
+                  <TableCell className="px-2 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(row)}
+                      title="Редактировать"
+                      className="inline-flex items-center justify-center h-6 w-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    >
+                      <SquarePen className="h-3.5 w-3.5" />
+                    </button>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
