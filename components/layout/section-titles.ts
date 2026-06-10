@@ -34,6 +34,7 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/credits\/[^/]+/, title: "Кредит" },
   { match: /^\/credits/, title: "Кредиты" },
   { match: /^\/bank/, title: "Банковские счета" },
+  { match: /^\/cash/, title: "Наличные расчёты" },
   { match: /^\/finance-models/, title: "Финансовые модели" },
   { match: /^\/support\/stats/, title: "Статистика службы поддержки" },
   { match: /^\/support\/templates\/new/, title: "Новый шаблон ответа" },

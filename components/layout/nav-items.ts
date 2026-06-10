@@ -23,6 +23,7 @@ import {
   LineChart,
   Landmark,
   Building2,
+  Wallet,
 } from "lucide-react"
 
 export interface NavItem {
@@ -49,6 +50,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "SALES", href: "/sales-plan", label: "План продаж", icon: "TrendingUp" },
   { section: "CREDITS", href: "/credits", label: "Кредиты", icon: "Landmark" },
   { section: "BANK", href: "/bank", label: "Банковские счета", icon: "Building2" },
+  { section: "CASH", href: "/cash", label: "Наличные расчёты", icon: "Wallet" },
   { section: "FINANCE_MODELS", href: "/finance-models", label: "Финансовые модели", icon: "LineChart", public: true },
   { section: "SUPPORT", href: "/support", label: "Служба поддержки", icon: "Headphones" },
   { section: "SUPPORT", href: "/support/returns", label: "Возвраты", icon: "PackageX" },
@@ -83,4 +85,5 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   LineChart,
   Landmark,
   Building2,
+  Wallet,
 }
