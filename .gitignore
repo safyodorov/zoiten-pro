@@ -24,6 +24,9 @@ zoiten-pro.code-workspace
 /Выписки/
 /БД поставщики.xlsx
 
+# Офис Бюджет (Phase 23) — наличная касса, исходные данные (scp на VPS, НЕ в репо)
+/Офис Бюджет.xlsx
+
 # scripts/ — рабочие данные/скрипты сопоставления (НЕ в репо)
 scripts/_xlsx/
 scripts/db-images/
