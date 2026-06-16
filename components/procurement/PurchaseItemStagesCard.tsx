@@ -6,21 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Package } from "lucide-react"
 import { toast } from "sonner"
 import { savePurchaseItemStages } from "@/app/actions/purchases"
+import {
+  STAGE_ORDER,
+  STAGE_LABELS,
+  STAGE_FILL_CLASS,
+  BASELINE_LABEL,
+  stageIndex,
+  type StageKey,
+} from "@/lib/purchase-stages"
 
-// ── Этапы движения товара по позиции закупки ────────────────────────
-// Заказано → Производство → Готов к инспекции → Готов к отгрузке → В пути → Принят.
-// Кол-во на каждом этапе по умолчанию = предыдущему, но может быть скорректировано
-// (частичная готовность/отгрузка/приёмка) с комментарием.
-
-export const STAGES = [
-  { key: "PRODUCTION", label: "Производство" },
-  { key: "INSPECTION", label: "Готов к инспекции" },
-  { key: "SHIPMENT", label: "Готов к отгрузке" },
-  { key: "TRANSIT", label: "В пути" },
-  { key: "WAREHOUSE", label: "Принят на складе" },
-] as const
-
-export type StageKey = (typeof STAGES)[number]["key"]
+// Реэкспорт для обратной совместимости с [id]/page.tsx
+export type { StageKey } from "@/lib/purchase-stages"
 
 export interface ItemStageData {
   itemId: string
@@ -45,9 +41,9 @@ function buildDraft(items: ItemStageData[]): Draft {
   const d: Draft = {}
   for (const it of items) {
     d[it.itemId] = {} as Record<StageKey, { qty: string; comment: string }>
-    for (const s of STAGES) {
-      const v = it.stages[s.key]
-      d[it.itemId][s.key] = {
+    for (const key of STAGE_ORDER) {
+      const v = it.stages[key]
+      d[it.itemId][key] = {
         qty: v ? String(v.quantity) : "",
         comment: v?.comment ?? "",
       }
@@ -57,23 +53,57 @@ function buildDraft(items: ItemStageData[]): Draft {
 }
 
 // Эффективное (с учётом наследования от предыдущего этапа) значение для placeholder.
+// Семантика сохранена: идём по STAGE_ORDER; берём последнее заданное qty до и включая upTo;
+// иначе ordered.
 function effectiveAt(
   ordered: number,
   cells: Record<StageKey, { qty: string; comment: string }>,
   upTo: StageKey
 ): number {
   let eff = ordered
-  for (const s of STAGES) {
-    const raw = cells[s.key].qty.trim()
+  for (const key of STAGE_ORDER) {
+    const raw = cells[key].qty.trim()
     if (raw !== "" && !isNaN(Number(raw))) eff = Number(raw)
-    if (s.key === upTo) break
+    if (key === upTo) break
   }
   return eff
+}
+
+// Самый дальний этап с заданным qty в draft для конкретной позиции.
+function farthestReachedKey(
+  cells: Record<StageKey, { qty: string; comment: string }>
+): StageKey | null {
+  let best: StageKey | null = null
+  let bestIdx = -1
+  for (const key of STAGE_ORDER) {
+    const raw = cells[key].qty.trim()
+    if (raw !== "" && !isNaN(Number(raw))) {
+      const idx = stageIndex(key)
+      if (idx > bestIdx) {
+        bestIdx = idx
+        best = key
+      }
+    }
+  }
+  return best
 }
 
 export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(() => buildDraft(items))
+  // Текущий выбранный (активный) этап per позиция (null = Заказано)
+  const [activeStage, setActiveStage] = useState<Record<string, StageKey | null>>(() => {
+    const m: Record<string, StageKey | null> = {}
+    for (const it of items) {
+      const cells = {} as Record<StageKey, { qty: string; comment: string }>
+      for (const key of STAGE_ORDER) {
+        const v = it.stages[key]
+        cells[key] = { qty: v ? String(v.quantity) : "", comment: v?.comment ?? "" }
+      }
+      m[it.itemId] = farthestReachedKey(cells)
+    }
+    return m
+  })
   const [saving, setSaving] = useState(false)
 
   if (items.length === 0) return null
@@ -88,6 +118,38 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
     }))
   }
 
+  // Клик по сегменту stepper'а: делает его текущим достигнутым.
+  // Автозаполняет qty по цепочке (наследованное значение), очищает более поздние.
+  function handleStageClick(itemId: string, clickedKey: StageKey) {
+    if (!canManage) return
+    const it = items.find((x) => x.itemId === itemId)
+    if (!it) return
+    const clickedIdx = stageIndex(clickedKey)
+    const prevCells = draft[itemId]
+
+    // Вычислим унаследованные кол-ва для всех этапов до кликнутого (включительно).
+    // Для этапов после кликнутого — очистить qty.
+    const newCells = { ...prevCells }
+    for (const key of STAGE_ORDER) {
+      const idx = stageIndex(key)
+      if (idx <= clickedIdx) {
+        // Если qty пустой — заполнить унаследованным значением (effectiveAt до данного этапа)
+        const raw = newCells[key].qty.trim()
+        if (raw === "" || isNaN(Number(raw))) {
+          // effectiveAt вычисляется из prevCells (до кликнутого), чтобы не создавать цикл
+          const eff = effectiveAt(it.ordered, prevCells, key)
+          newCells[key] = { ...newCells[key], qty: String(eff) }
+        }
+      } else {
+        // Этапы после кликнутого — очистить
+        newCells[key] = { ...newCells[key], qty: "" }
+      }
+    }
+
+    setDraft((prev) => ({ ...prev, [itemId]: newCells }))
+    setActiveStage((prev) => ({ ...prev, [itemId]: clickedKey }))
+  }
+
   async function save() {
     setSaving(true)
     try {
@@ -95,17 +157,17 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
         []
       for (const it of items) {
         const cells = draft[it.itemId]
-        for (const s of STAGES) {
-          const cell = cells[s.key]
+        for (const key of STAGE_ORDER) {
+          const cell = cells[key]
           const raw = cell.qty.trim()
           const hasQty = raw !== "" && !isNaN(Number(raw))
           const hasComment = cell.comment.trim() !== ""
           if (!hasQty && !hasComment) continue
           // если задан только комментарий — берём унаследованное эффективное кол-во
-          const quantity = hasQty ? Number(raw) : effectiveAt(it.ordered, cells, s.key)
+          const quantity = hasQty ? Number(raw) : effectiveAt(it.ordered, cells, key)
           entries.push({
             itemId: it.itemId,
-            stage: s.key,
+            stage: key,
             quantity,
             comment: hasComment ? cell.comment.trim() : null,
           })
@@ -126,7 +188,7 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
   }
 
   const cellInput =
-    "h-7 w-16 rounded border border-input bg-background px-1.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
+    "h-7 w-20 rounded border border-input bg-background px-1.5 text-xs text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
   const commentInput =
     "h-6 w-full rounded border border-input bg-background px-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
 
@@ -140,93 +202,124 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
           </Button>
         )}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-separate border-spacing-0">
-          <thead>
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b sticky left-0 bg-background z-10">
-                Товар
-              </th>
-              <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground border-b whitespace-nowrap">
-                Заказано
-              </th>
-              {STAGES.map((s) => (
-                <th
-                  key={s.key}
-                  className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground border-b whitespace-nowrap"
-                >
-                  {s.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((it) => {
-              const cells = draft[it.itemId]
-              return (
-                <tr key={it.itemId} className="align-top">
-                  <td className="px-3 py-2 border-b sticky left-0 bg-background z-10">
-                    <div className="flex items-center gap-2 min-w-[180px]">
-                      {it.productPhotoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={it.productPhotoUrl}
-                          alt={it.productName}
-                          className="h-10 w-[30px] shrink-0 rounded border object-cover bg-muted"
+
+      <div className="divide-y">
+        {items.map((it) => {
+          const cells = draft[it.itemId]
+          const curKey = activeStage[it.itemId] ?? farthestReachedKey(cells)
+          const curIdx = curKey ? stageIndex(curKey) : -1
+
+          return (
+            <div key={it.itemId} className="p-3 space-y-3">
+              {/* Шапка позиции: фото + название + SKU + Заказано */}
+              <div className="flex items-center gap-3">
+                {it.productPhotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={it.productPhotoUrl}
+                    alt={it.productName}
+                    className="h-10 w-[30px] shrink-0 rounded border object-cover bg-muted"
+                  />
+                ) : (
+                  <div className="h-10 w-[30px] shrink-0 rounded border bg-muted flex items-center justify-center text-muted-foreground">
+                    <Package className="h-4 w-4" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium" title={it.productName}>
+                    {it.productName}
+                  </div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{it.productSku}</div>
+                </div>
+                <div className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                  {BASELINE_LABEL}: <span className="font-semibold tabular-nums">{it.ordered}</span>
+                </div>
+              </div>
+
+              {/* Горизонтальный stepper */}
+              <div className="flex items-center gap-0 w-full select-none">
+                {STAGE_ORDER.map((key, idx) => {
+                  const isReached = stageIndex(key) <= curIdx && curIdx >= 0
+                  const isCurrent = key === curKey
+                  const isLast = idx === STAGE_ORDER.length - 1
+
+                  return (
+                    <div key={key} className="flex items-center flex-1 min-w-0">
+                      {/* Сегмент */}
+                      <button
+                        type="button"
+                        title={STAGE_LABELS[key]}
+                        disabled={!canManage}
+                        onClick={() => handleStageClick(it.itemId, key)}
+                        className={[
+                          "flex-1 min-w-0 flex flex-col items-center justify-center py-2 px-1 rounded-md text-[10px] font-medium transition-colors",
+                          "disabled:cursor-default",
+                          isReached
+                            ? `${STAGE_FILL_CLASS[key]} text-white`
+                            : "bg-muted text-muted-foreground hover:bg-muted/80",
+                          isCurrent ? "ring-2 ring-primary ring-offset-1" : "",
+                          canManage && !isReached ? "cursor-pointer" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        <span className="leading-tight text-center line-clamp-2 w-full">
+                          {STAGE_LABELS[key]}
+                        </span>
+                      </button>
+                      {/* Соединительная линия между сегментами */}
+                      {!isLast && (
+                        <div
+                          className={`h-0.5 w-2 shrink-0 ${
+                            stageIndex(key) < curIdx && curIdx >= 0
+                              ? STAGE_FILL_CLASS[STAGE_ORDER[idx + 1]]
+                              : "bg-muted"
+                          }`}
                         />
-                      ) : (
-                        <div className="h-10 w-[30px] shrink-0 rounded border bg-muted flex items-center justify-center text-muted-foreground">
-                          <Package className="h-4 w-4" />
-                        </div>
                       )}
-                      <div className="min-w-0">
-                        <div className="truncate max-w-[220px]" title={it.productName}>
-                          {it.productName}
-                        </div>
-                        <div className="font-mono text-[11px] text-muted-foreground">
-                          {it.productSku}
-                        </div>
-                      </div>
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums border-b font-medium">
-                    {it.ordered}
-                  </td>
-                  {STAGES.map((s) => {
-                    const inherited = effectiveAt(it.ordered, cells, s.key)
-                    return (
-                      <td key={s.key} className="px-2 py-2 border-b">
-                        <div className="flex flex-col items-center gap-1">
-                          <input
-                            type="number"
-                            min="0"
-                            value={cells[s.key].qty}
-                            onChange={(e) => setCell(it.itemId, s.key, "qty", e.target.value)}
-                            disabled={!canManage}
-                            placeholder={String(inherited)}
-                            className={cellInput}
-                          />
-                          <input
-                            type="text"
-                            value={cells[s.key].comment}
-                            onChange={(e) => setCell(it.itemId, s.key, "comment", e.target.value)}
-                            disabled={!canManage}
-                            placeholder="коммент."
-                            className={commentInput}
-                          />
-                        </div>
-                      </td>
-                    )
-                  })}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                  )
+                })}
+              </div>
+
+              {/* Поля для текущего (самого дальнего) этапа */}
+              {curKey && (
+                <div className="flex items-start gap-3 pt-1">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground font-medium">
+                      Кол-во ({STAGE_LABELS[curKey]})
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={cells[curKey].qty}
+                      onChange={(e) => setCell(it.itemId, curKey, "qty", e.target.value)}
+                      disabled={!canManage}
+                      placeholder={String(effectiveAt(it.ordered, cells, curKey))}
+                      className={cellInput}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1 flex-1">
+                    <label className="text-[11px] text-muted-foreground font-medium">Комментарий</label>
+                    <input
+                      type="text"
+                      value={cells[curKey].comment}
+                      onChange={(e) => setCell(it.itemId, curKey, "comment", e.target.value)}
+                      disabled={!canManage}
+                      placeholder="необязательно"
+                      className={commentInput}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
+
       <p className="px-3 py-2 text-[11px] text-muted-foreground border-t">
-        По умолчанию подставляется кол-во с предыдущего этапа (серым). Введите число, если на
-        этапе прошла только часть товара, и при необходимости комментарий.
+        Кликните по этапу, чтобы отметить его достигнутым — кол-во подставится с предыдущего.
+        Скорректируйте кол-во для частичной партии и при необходимости добавьте комментарий.
       </p>
     </div>
   )

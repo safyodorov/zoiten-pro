@@ -14,6 +14,7 @@ import type {
 } from "@/components/procurement/PurchaseModal"
 import type { Prisma, PurchaseStatus } from "@prisma/client"
 import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
+import { currentStageOf } from "@/lib/purchase-stages"
 
 export default async function PurchasesPage({
   searchParams,
@@ -80,8 +81,10 @@ export default async function PurchasesPage({
           group: { select: { id: true, name: true } },
           items: {
             select: {
+              id: true,
               quantity: true,
               unitPrice: true,
+              stages: { select: { stage: true, quantity: true } },
               product: {
                 select: {
                   name: true,
@@ -224,12 +227,23 @@ export default async function PurchasesPage({
       groupId: p.group?.id ?? null,
       weightKg: hasWeight ? weightKg : null,
       volumeM3: hasVolume ? volumeM3 : null,
-      items: p.items.map((i) => ({
-        name: i.product.name,
-        sku: i.product.sku,
-        photoUrl: i.product.photoUrl,
-        quantity: i.quantity,
-      })),
+      items: p.items.map((i) => {
+        const reached = i.stages.map((s) => s.stage)
+        const cur = currentStageOf(reached) // StageKey | null
+        // кол-во на текущем этапе: quantity записи прогресса для cur, иначе baseline i.quantity
+        const curQty = cur
+          ? (i.stages.find((s) => s.stage === cur)?.quantity ?? i.quantity)
+          : i.quantity
+        return {
+          id: i.id,
+          name: i.product.name,
+          sku: i.product.sku,
+          photoUrl: i.product.photoUrl,
+          quantity: i.quantity,
+          currentStage: cur,
+          currentStageQty: curQty,
+        }
+      }),
     }
   })
 
