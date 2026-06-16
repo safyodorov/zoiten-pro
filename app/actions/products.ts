@@ -42,6 +42,8 @@ const ProductSchema = z.object({
   name: z.string().max(255).optional(),
   nameOverridden: z.boolean().optional().default(false),
   photoUrl: z.string().nullable().optional(),
+  // Quick 260616-v5x: флаг ручного override фото
+  photoOverridden: z.boolean().optional().default(false),
   brandId: z.string().min(1),
   categoryId: z.string().optional(),
   subcategoryId: z.string().optional(),
@@ -142,6 +144,46 @@ async function regenerateProductName(
   }
 }
 
+// ── Quick 260616-v5x: resolveProductPhoto ──────────────────────────
+// Если photoOverridden=true → не трогаем. Иначе Product.photoUrl = photoUrl
+// первой (sortOrder=0) WB-карточки. Вызывать внутри tx после пересоздания articles.
+
+async function resolveProductPhoto(
+  tx: Prisma.TransactionClient,
+  productId: string
+): Promise<void> {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: { photoOverridden: true, photoUrl: true },
+  })
+  if (!product || product.photoOverridden) return
+
+  const wbMarketplace = await tx.marketplace.findUnique({
+    where: { slug: "wb" },
+    select: { id: true },
+  })
+  if (!wbMarketplace) return
+
+  const article = await tx.marketplaceArticle.findFirst({
+    where: { productId, marketplaceId: wbMarketplace.id },
+    orderBy: { sortOrder: "asc" },
+    select: { article: true },
+  })
+  if (!article) return
+
+  const nmId = parseInt(article.article, 10)
+  if (Number.isNaN(nmId)) return
+
+  const card = await tx.wbCard.findUnique({
+    where: { nmId },
+    select: { photoUrl: true },
+  })
+  const newPhoto = card?.photoUrl ?? null
+  if (newPhoto !== product.photoUrl) {
+    await tx.product.update({ where: { id: productId }, data: { photoUrl: newPhoto } })
+  }
+}
+
 // ── createProduct ─────────────────────────────────────────────────
 
 export async function createProduct(
@@ -172,7 +214,10 @@ export async function createProduct(
           // юзер прислал manual name — берём как есть.
           name: parsed.nameOverridden ? (parsed.name ?? parsed.article) : parsed.article,
           nameOverridden: parsed.nameOverridden ?? false,
-          photoUrl: parsed.photoUrl ?? null,
+          // Quick 260616-v5x: если photoOverridden=true — берём URL как есть;
+          // иначе null (resolveProductPhoto подтянет из WbCard после создания articles).
+          photoUrl: parsed.photoOverridden ? (parsed.photoUrl ?? null) : null,
+          photoOverridden: parsed.photoOverridden ?? false,
           brandId: parsed.brandId,
           categoryId: parsed.categoryId ?? null,
           subcategoryId: parsed.subcategoryId ?? null,
@@ -207,6 +252,8 @@ export async function createProduct(
       // propertyValues и subcategory ещё пустые для нового товара — name = article.
       // Финальный пересчёт делает saveProductProperties после первого save.
       await regenerateProductName(tx, created.id)
+      // Quick 260616-v5x: перевывести фото из первой WB-карточки (no-op если override)
+      await resolveProductPhoto(tx, created.id)
       return created
     })
 
@@ -247,7 +294,9 @@ export async function updateProduct(
       // прислан manual override. Иначе name пересчитывается через regenerateProductName.
       const updateData: Prisma.ProductUpdateInput = {
         article: parsed.article,
-        photoUrl: parsed.photoUrl ?? null,
+        // Quick 260616-v5x: photoUrl и photoOverridden обрабатываются ниже после
+        // nameOverridden блока (photoUrl перевыведется через resolveProductPhoto
+        // после пересоздания articles, если не override).
         brand: { connect: { id: parsed.brandId } },
         category: parsed.categoryId
           ? { connect: { id: parsed.categoryId } }
@@ -269,6 +318,14 @@ export async function updateProduct(
       } else {
         // Юзер сбросил override (или не трогал) → пересчитать ниже
         updateData.nameOverridden = false
+      }
+      // Quick 260616-v5x: фото override логика
+      if (parsed.photoOverridden) {
+        updateData.photoUrl = parsed.photoUrl ?? null
+        updateData.photoOverridden = true
+      } else {
+        updateData.photoOverridden = false
+        // photoUrl перевыведется через resolveProductPhoto после пересоздания articles
       }
       await tx.product.update({ where: { id: parsed.id }, data: updateData })
 
@@ -313,6 +370,8 @@ export async function updateProduct(
 
       // Phase 18: если override не включен — пересчитать составное name по актуальным данным
       await regenerateProductName(tx, parsed.id)
+      // Quick 260616-v5x: перевывести фото из первой WB-карточки (ПОСЛЕ пересоздания articles)
+      await resolveProductPhoto(tx, parsed.id)
     })
 
     revalidatePath("/products")
@@ -457,7 +516,8 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
           article: original.article,
           name: original.article,
           nameOverridden: false,
-          photoUrl: null, // Per D-26: photo is NOT copied
+          photoUrl: null, // Per D-26: photo is NOT copied (resolveProductPhoto подтянет из WbCard)
+          photoOverridden: false,
           brandId: original.brandId,
           categoryId: original.categoryId ?? null,
           subcategoryId: original.subcategoryId ?? null,
@@ -480,6 +540,8 @@ export async function duplicateProduct(id: string): Promise<CreateResult> {
       })
       // Phase 18: пересчитать составное name для дубля
       await regenerateProductName(tx, duplicated.id)
+      // Quick 260616-v5x: перевывести фото из первой WB-карточки дубля
+      await resolveProductPhoto(tx, duplicated.id)
       return duplicated
     })
 

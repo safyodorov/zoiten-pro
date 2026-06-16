@@ -171,11 +171,14 @@ export async function POST(): Promise<NextResponse> {
 
     let synced = 0
     const errors: string[] = []
+    // Quick 260616-v5x: собираем map nmId→photoUrl по ходу upsert для batch-перевывода
+    const cardPhotoByNmId = new Map<number, string | null>()
 
     // Обрабатываем каждую карточку
     for (const raw of rawCards) {
       try {
         const card = parseCard(raw)
+        cardPhotoByNmId.set(card.nmId, card.photoUrl ?? null)
         const iuComm = card.category ? iuMap.get(card.category) : undefined
 
         // Базовые поля из Content API — всегда присутствуют (fetchAllCards не упал)
@@ -584,6 +587,66 @@ export async function POST(): Promise<NextResponse> {
       }
     }
 
+    // ── Quick 260616-v5x: перевывод Product.photoUrl из первой WB-карточки ──
+    // Для всех товаров с photoOverridden=false: photoUrl = photoUrl первого
+    // (min sortOrder) WB-артикула. no-FK: WbCard.nmId ↔ MarketplaceArticle.article (string).
+    let productPhotosUpdated = 0
+    try {
+      const wbMarketplaceForPhoto = await prisma.marketplace.findUnique({
+        where: { slug: "wb" },
+        select: { id: true },
+      })
+      if (wbMarketplaceForPhoto) {
+        // Все WB-артикулы товаров с photoOverridden=false, отсортированы по продукту+sortOrder.
+        const articles = await prisma.marketplaceArticle.findMany({
+          where: {
+            marketplaceId: wbMarketplaceForPhoto.id,
+            product: { photoOverridden: false, deletedAt: null },
+          },
+          orderBy: [{ productId: "asc" }, { sortOrder: "asc" }],
+          select: { productId: true, article: true },
+        })
+        // Первый (min sortOrder) артикул на продукт.
+        const firstArticleByProduct = new Map<string, string>()
+        for (const a of articles) {
+          if (!firstArticleByProduct.has(a.productId)) {
+            firstArticleByProduct.set(a.productId, a.article)
+          }
+        }
+        // Текущие photoUrl продуктов (чтобы писать только при отличии).
+        const productIds = Array.from(firstArticleByProduct.keys())
+        const products = await prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, photoUrl: true },
+        })
+        const currentPhotoById = new Map(products.map((p) => [p.id, p.photoUrl]))
+
+        for (const [productId, articleStr] of firstArticleByProduct) {
+          const nmId = parseInt(articleStr, 10)
+          if (Number.isNaN(nmId)) continue
+          // Фото из синхронизированной карточки (если была в ответе), иначе из БД.
+          let newPhoto: string | null | undefined = cardPhotoByNmId.get(nmId)
+          if (newPhoto === undefined) {
+            const dbCard = await prisma.wbCard.findUnique({
+              where: { nmId },
+              select: { photoUrl: true },
+            })
+            newPhoto = dbCard?.photoUrl ?? null
+          }
+          if (newPhoto !== currentPhotoById.get(productId)) {
+            await prisma.product.update({
+              where: { id: productId },
+              data: { photoUrl: newPhoto ?? null },
+            })
+            productPhotosUpdated++
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[wb-sync] product photo resolve failed:", e)
+      errors.push(`product-photo-resolve: ${(e as Error).message}`)
+    }
+
     return NextResponse.json({
       synced,
       total: rawCards.length,
@@ -591,6 +654,7 @@ export async function POST(): Promise<NextResponse> {
       discountsLoaded: discountMap.size,
       warehouseStocksUpdated: stocksPerWarehouse.size,
       warehouseOrdersUpdated,
+      productPhotosUpdated,
       failures: failures.length > 0 ? failures : undefined,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
     })
