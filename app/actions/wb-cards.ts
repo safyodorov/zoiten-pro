@@ -168,6 +168,7 @@ export async function createProductFromCards(
           name: firstCard.name,
           nameOverridden: false,
           photoUrl: firstCard.photoUrl,
+          photoOverridden: false, // Quick 260616-v5x: explicit (schema default, photo from WB)
           brandId,
           weightKg: firstCard.weightKg,
           heightCm: firstCard.heightCm,
