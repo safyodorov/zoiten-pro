@@ -133,6 +133,8 @@ interface ProductData {
   name?: string
   nameOverridden?: boolean
   photoUrl?: string | null
+  // Quick 260616-v5x
+  photoOverridden?: boolean
   brandId?: string
   categoryId?: string | null
   subcategoryId?: string | null
@@ -168,6 +170,8 @@ const formSchema = z.object({
   article: z.string().min(1, "Введите артикул").max(100, "Максимум 100 символов"),
   name: z.string().max(255, "Максимум 255 символов").optional(),
   nameOverridden: z.boolean(),
+  // Quick 260616-v5x: флаг ручного override фото
+  photoOverridden: z.boolean(),
   brandId: z.string().min(1, "Выберите бренд"),
   categoryId: z.string().nullable().optional(),
   subcategoryId: z.string().nullable().optional(),
@@ -262,6 +266,7 @@ export function ProductForm({
       article: product?.article ?? "",
       name: product?.name ?? "",
       nameOverridden: product?.nameOverridden ?? false,
+      photoOverridden: product?.photoOverridden ?? false,
       brandId: product?.brandId ?? "",
       categoryId: product?.categoryId ?? null,
       subcategoryId: product?.subcategoryId ?? null,
@@ -877,9 +882,36 @@ export function ProductForm({
           </section>
         )}
 
-        {/* Section 2: Фото */}
+        {/* Section 2: Фото (Quick 260616-v5x: с override UI) */}
         <section className="space-y-4">
-          <h2 className="text-lg font-medium border-b pb-2">Фото</h2>
+          <div className="flex items-center justify-between border-b pb-2">
+            <h2 className="text-lg font-medium">
+              Фото
+              {form.watch("photoOverridden") ? (
+                <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                  (загружено вручную)
+                </span>
+              ) : (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  (авто из первой карточки WB)
+                </span>
+              )}
+            </h2>
+            {form.watch("photoOverridden") ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  form.setValue("photoOverridden", false, { shouldDirty: true })
+                  form.setValue("photoUrl", null, { shouldDirty: true })
+                  // photoUrl перевыведется на сервере из карточки WB при сохранении
+                }}
+              >
+                Вернуть авто из WB
+              </Button>
+            ) : null}
+          </div>
 
           <FormField
             control={form.control}
@@ -890,9 +922,18 @@ export function ProductForm({
                   <PhotoUploadField
                     productId={product?.id}
                     currentPhotoUrl={field.value ?? null}
-                    onUploadComplete={(url) => field.onChange(url)}
+                    onUploadComplete={(url) => {
+                      field.onChange(url || null)
+                      // Ручная загрузка/очистка → фиксируем override
+                      form.setValue("photoOverridden", true, { shouldDirty: true })
+                    }}
                   />
                 </FormControl>
+                {!form.watch("photoOverridden") && (
+                  <p className="text-xs text-muted-foreground">
+                    Фото берётся из первой (основной) WB-карточки и обновляется при синхронизации. Загрузите своё фото, чтобы зафиксировать его.
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
