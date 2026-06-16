@@ -96,7 +96,11 @@ export default async function PurchaseDetailPage({ params }: Props) {
   const itemStages: ItemStageData[] = purchase.items.map((i) => {
     const stages: ItemStageData["stages"] = {}
     for (const sp of i.stages) {
-      stages[sp.stage as StageKey] = { quantity: sp.quantity, comment: sp.comment ?? "" }
+      stages[sp.stage as StageKey] = {
+        quantity: sp.quantity,
+        comment: sp.comment ?? "",
+        date: sp.date ? sp.date.toISOString().split("T")[0] : null,
+      }
     }
     return {
       itemId: i.id,

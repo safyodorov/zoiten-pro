@@ -1525,6 +1525,7 @@ model PurchaseItemStageProgress {
   stage     PurchaseItemStage
   quantity  Int
   comment   String?
+  date      DateTime?
   updatedAt DateTime          @updatedAt
 
   @@unique([itemId, stage])

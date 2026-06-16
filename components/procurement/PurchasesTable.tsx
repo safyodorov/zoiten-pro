@@ -30,6 +30,11 @@ export interface PurchaseItemMini {
   quantity: number              // заказано
   currentStage?: string | null  // StageKey | null (null = Заказано)
   currentStageQty?: number      // кол-во на текущем этапе
+  sum?: number                  // сумма в валюте закупки (заказанное кол-во)
+  sumRub?: number | null        // сумма в рублях (null если курса нет)
+  currency?: string             // валюта закупки
+  weightKg?: number | null      // вес позиции (кг), null если нет данных по товару
+  volumeM3?: number | null      // объём позиции (м³), null если нет данных по товару
 }
 
 export interface PurchaseRow {
@@ -423,6 +428,24 @@ export function PurchasesTable({
                 </span>
                 <span className="text-xs tabular-nums text-muted-foreground shrink-0">
                   {qty} шт
+                </span>
+                {it.sum != null && (
+                  <span className="text-xs tabular-nums shrink-0 whitespace-nowrap">
+                    {it.sumRub != null && it.currency !== "RUB" ? (
+                      <>
+                        {formatRub(it.sumRub)}
+                        <span className="text-muted-foreground"> · {formatMoney(it.sum, it.currency ?? "")}</span>
+                      </>
+                    ) : (
+                      formatMoney(it.sum, it.currency ?? "")
+                    )}
+                  </span>
+                )}
+                <span className="text-xs tabular-nums text-muted-foreground shrink-0 whitespace-nowrap">
+                  {formatWeight(it.weightKg ?? null)}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground shrink-0 whitespace-nowrap">
+                  {formatVolume(it.volumeM3 ?? null)}
                 </span>
               </div>
             </TableCell>

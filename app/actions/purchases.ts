@@ -522,6 +522,7 @@ const StageEntrySchema = z.object({
   stage: z.enum(STAGE_VALUES),
   quantity: z.number().int().min(0),
   comment: z.string().nullable().optional(),
+  date: z.string().nullable().optional(),
 })
 
 // Полная перезапись этапов для всех позиций закупки: клиент присылает только
@@ -555,6 +556,7 @@ export async function savePurchaseItemStages(
           stage: e.stage,
           quantity: e.quantity,
           comment: e.comment?.trim() || null,
+          date: parseDate(e.date),
         })),
       }),
     ])
