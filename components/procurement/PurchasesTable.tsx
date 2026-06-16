@@ -4,8 +4,9 @@ import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { TableBody, TableRow, TableCell } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Plus, Link2, Link2Off, Pencil, X } from "lucide-react"
+import { Plus, Link2, Link2Off, Pencil, X, ChevronRight, ChevronDown, Package } from "lucide-react"
 import { toast } from "sonner"
+import { currentStageLabel, currentStageBadgeClass } from "@/lib/purchase-stages"
 import {
   createPurchaseGroup,
   renamePurchaseGroup,
@@ -22,10 +23,13 @@ import {
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface PurchaseItemMini {
+  id?: string
   name: string
   sku: string
   photoUrl: string | null
-  quantity: number
+  quantity: number              // заказано
+  currentStage?: string | null  // StageKey | null (null = Заказано)
+  currentStageQty?: number      // кол-во на текущем этапе
 }
 
 export interface PurchaseRow {
@@ -188,6 +192,16 @@ export function PurchasesTable({
   const [busy, setBusy] = useState(false)
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   // колонки: [чекбокс] Товары·Сумма·Вес·Объём·Закупщик·Статус·Платёж·Дата·Поставщик
   const colCount = canManage ? 10 : 9
@@ -233,6 +247,7 @@ export function PurchasesTable({
   }
 
   function renderDataRow(row: PurchaseRow, isMember: boolean) {
+    const isOpen = expanded.has(row.id)
     return (
       <TableRow
         key={row.id}
@@ -265,7 +280,19 @@ export function PurchasesTable({
           </TableCell>
         )}
         <TableCell className="px-3 py-2">
-          <ItemsThumbs items={row.items} />
+          <div className="flex items-center gap-1.5">
+            {row.items.length > 0 && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleExpand(row.id) }}
+                className="text-muted-foreground hover:text-foreground shrink-0"
+                title={isOpen ? "Свернуть" : "Развернуть позиции"}
+              >
+                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            )}
+            <ItemsThumbs items={row.items} />
+          </div>
         </TableCell>
         <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
           {row.totalRub != null && row.currency !== "RUB" ? (
@@ -359,6 +386,51 @@ export function PurchasesTable({
       }
     }
     bodyRows.push(renderDataRow(row, !!row.groupId))
+
+    // Раскрытые под-строки позиций
+    if (expanded.has(row.id) && row.items.length > 0) {
+      for (let idx = 0; idx < row.items.length; idx++) {
+        const it = row.items[idx]
+        const stageArr = it.currentStage ? [it.currentStage] : []
+        const badgeClass = currentStageBadgeClass(stageArr)
+        const stageText = currentStageLabel(stageArr)
+        const qty = it.currentStageQty ?? it.quantity
+        bodyRows.push(
+          <TableRow key={`${row.id}-item-${idx}`} className="bg-muted/20 hover:bg-muted/30">
+            <TableCell colSpan={colCount} className="px-3 py-1.5 border-l-2 border-l-primary/40">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {it.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={it.photoUrl}
+                    alt={it.name}
+                    className="h-[30px] w-[22px] shrink-0 rounded border object-cover bg-muted"
+                  />
+                ) : (
+                  <div className="h-[30px] w-[22px] shrink-0 rounded border bg-muted flex items-center justify-center text-muted-foreground">
+                    <Package className="h-3 w-3" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-medium truncate" title={it.name}>{it.name}</span>
+                  {" "}
+                  <span className="font-mono text-[11px] text-muted-foreground">{it.sku}</span>
+                </div>
+                <span
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${badgeClass}`}
+                >
+                  {stageText}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+                  {qty} шт
+                </span>
+              </div>
+            </TableCell>
+          </TableRow>
+        )
+      }
+    }
+
     prevGroup = row.groupId
   }
 
