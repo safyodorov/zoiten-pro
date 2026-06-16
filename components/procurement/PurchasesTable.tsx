@@ -71,10 +71,10 @@ function formatRub(n: number): string {
 // Компактная лента миниатюр товаров закупки (до 4 + счётчик остатка).
 function ItemsThumbs({ items }: { items: PurchaseItemMini[] }) {
   if (items.length === 0) return <span className="text-muted-foreground text-xs">—</span>
-  const shown = items.slice(0, 4)
+  const shown = items.slice(0, 6)
   const rest = items.length - shown.length
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       {shown.map((it, idx) =>
         it.photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -83,18 +83,18 @@ function ItemsThumbs({ items }: { items: PurchaseItemMini[] }) {
             src={it.photoUrl}
             alt={it.name}
             title={`${it.name} — ${it.quantity} шт`}
-            className="h-9 w-7 shrink-0 rounded border object-cover bg-muted"
+            className="h-[72px] w-[54px] shrink-0 rounded-md border object-cover bg-muted"
           />
         ) : (
           <div
             key={idx}
             title={`${it.name} — ${it.quantity} шт`}
-            className="h-9 w-7 shrink-0 rounded border bg-muted"
+            className="h-[72px] w-[54px] shrink-0 rounded-md border bg-muted"
           />
         )
       )}
       {rest > 0 && (
-        <span className="text-xs text-muted-foreground" title={items.slice(4).map((i) => i.name).join(", ")}>
+        <span className="text-xs text-muted-foreground" title={items.slice(6).map((i) => i.name).join(", ")}>
           +{rest}
         </span>
       )}
@@ -176,19 +176,13 @@ export function PurchasesTable({
             <thead className="bg-background">
               <tr>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Поставщик
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Закупщик
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Товары
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Валюта
                 </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Сумма
+                </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Закупщик
                 </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Статус
@@ -196,11 +190,11 @@ export function PurchasesTable({
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Ближайший платёж
                 </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Просрочка
-                </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Дата создания
+                </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Поставщик
                 </th>
               </tr>
             </thead>
@@ -211,17 +205,8 @@ export function PurchasesTable({
                   className="cursor-pointer hover:bg-muted/40"
                   onClick={() => router.push(`/procurement/purchases/${row.id}`)}
                 >
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {row.supplierName}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {row.buyerName ?? "—"}
-                  </TableCell>
                   <TableCell className="px-3 py-2">
                     <ItemsThumbs items={row.items} />
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-center whitespace-nowrap font-mono text-xs">
-                    {row.currency}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
                     <div>{formatMoney(row.total, row.currency)}</div>
@@ -229,23 +214,20 @@ export function PurchasesTable({
                       <div className="text-xs text-muted-foreground">≈ {formatRub(row.totalRub)}</div>
                     )}
                   </TableCell>
+                  <TableCell className="px-3 py-2 whitespace-nowrap">
+                    {row.buyerName ?? "—"}
+                  </TableCell>
                   <TableCell className="px-3 py-2 text-center">
                     <StatusBadge status={row.status} />
                   </TableCell>
                   <TableCell className="px-3 py-2 text-center whitespace-nowrap">
                     {formatDate(row.nearestDueDate)}
                   </TableCell>
-                  <TableCell className="px-3 py-2 text-center">
-                    {row.hasOverdue ? (
-                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                        Просрочено
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </TableCell>
                   <TableCell className="px-3 py-2 whitespace-nowrap">
                     {formatDate(row.createdAt)}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 whitespace-nowrap">
+                    {row.supplierName}
                   </TableCell>
                 </TableRow>
               ))}
