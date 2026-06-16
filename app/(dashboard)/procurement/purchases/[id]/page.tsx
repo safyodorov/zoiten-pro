@@ -13,6 +13,11 @@ import {
   PurchasePaymentsCard,
   type PaymentDraft,
 } from "@/components/procurement/PurchasePaymentsCard"
+import {
+  PurchaseItemStagesCard,
+  type ItemStageData,
+  type StageKey,
+} from "@/components/procurement/PurchaseItemStagesCard"
 import type {
   PurchaseForModal,
   SupplierOption,
@@ -67,6 +72,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
       items: {
         include: {
           product: { select: { id: true, name: true, sku: true, photoUrl: true } },
+          stages: true,
         },
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
@@ -85,6 +91,22 @@ export default async function PurchaseDetailPage({ params }: Props) {
   const rateRow =
     purchase.currency !== "RUB" ? await getLatestRate(purchase.currency, prisma) : null
   const rateToRub = rateRow ? Number(rateRow.rateToRub) : null
+
+  // ── Этапы движения товара по позициям ──
+  const itemStages: ItemStageData[] = purchase.items.map((i) => {
+    const stages: ItemStageData["stages"] = {}
+    for (const sp of i.stages) {
+      stages[sp.stage as StageKey] = { quantity: sp.quantity, comment: sp.comment ?? "" }
+    }
+    return {
+      itemId: i.id,
+      productName: i.product.name,
+      productSku: i.product.sku,
+      productPhotoUrl: i.product.photoUrl,
+      ordered: i.quantity,
+      stages,
+    }
+  })
 
   // ── Платежи → drafts ──
   const initialPayments: PaymentDraft[] = purchase.payments.map((p) => ({
@@ -272,6 +294,13 @@ export default async function PurchaseDetailPage({ params }: Props) {
           </tfoot>
         </table>
       </div>
+
+      {/* Этапы движения товара */}
+      <PurchaseItemStagesCard
+        purchaseId={purchase.id}
+        items={itemStages}
+        canManage={canManage}
+      />
 
       {/* Multi-payment editor (D-08, D-16) */}
       <PurchasePaymentsCard

@@ -512,3 +512,63 @@ export async function removePurchaseFromGroup(purchaseId: string): Promise<Actio
     return { ok: false, error: "Ошибка сервера" }
   }
 }
+
+// ── Этапы движения товара по позициям (производство → … → склад) ──
+
+const STAGE_VALUES = ["PRODUCTION", "INSPECTION", "SHIPMENT", "TRANSIT", "WAREHOUSE"] as const
+
+const StageEntrySchema = z.object({
+  itemId: z.string().min(1),
+  stage: z.enum(STAGE_VALUES),
+  quantity: z.number().int().min(0),
+  comment: z.string().nullable().optional(),
+})
+
+// Полная перезапись этапов для всех позиций закупки: клиент присылает только
+// «достигнутые» этапы (с кол-вом), остальные удаляются. quantity на каждом этапе
+// может быть меньше предыдущего (частичная готовность/отгрузка/приёмка).
+export async function savePurchaseItemStages(
+  purchaseId: string,
+  entriesRaw: unknown
+): Promise<ActionResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    const entries = z.array(StageEntrySchema).parse(entriesRaw)
+
+    const items = await prisma.purchaseItem.findMany({
+      where: { purchaseId },
+      select: { id: true },
+    })
+    const validIds = new Set(items.map((i) => i.id))
+    if (validIds.size === 0) return { ok: false, error: "В закупке нет позиций" }
+    if (entries.some((e) => !validIds.has(e.itemId))) {
+      return { ok: false, error: "Позиция не принадлежит закупке" }
+    }
+
+    await prisma.$transaction([
+      prisma.purchaseItemStageProgress.deleteMany({
+        where: { itemId: { in: [...validIds] } },
+      }),
+      prisma.purchaseItemStageProgress.createMany({
+        data: entries.map((e) => ({
+          itemId: e.itemId,
+          stage: e.stage,
+          quantity: e.quantity,
+          comment: e.comment?.trim() || null,
+        })),
+      }),
+    ])
+
+    revalidatePath("/procurement/purchases")
+    revalidatePath(`/procurement/purchases/${purchaseId}`)
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if (e instanceof z.ZodError) {
+      return { ok: false, error: e.issues[0]?.message ?? "Некорректные данные" }
+    }
+    console.error("savePurchaseItemStages error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}

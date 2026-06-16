@@ -1496,15 +1496,39 @@ model PurchaseGroup {
 
 // Позиции закупки — multi-product (D-06).
 model PurchaseItem {
-  id         String   @id @default(cuid())
+  id         String                      @id @default(cuid())
   purchaseId String
-  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  purchase   Purchase                    @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   productId  String
-  product    Product  @relation(fields: [productId], references: [id])
+  product    Product                     @relation(fields: [productId], references: [id])
   quantity   Int
-  unitPrice  Decimal  @db.Decimal(14, 4)
+  unitPrice  Decimal                     @db.Decimal(14, 4)
+  stages     PurchaseItemStageProgress[]
 
   @@index([purchaseId])
+}
+
+// Этапы движения товара по позиции закупки. Кол-во на каждом этапе может быть
+// меньше предыдущего (частичная готовность/отгрузка/приёмка) + комментарий.
+enum PurchaseItemStage {
+  PRODUCTION // запущен в производство
+  INSPECTION // готов к инспекции
+  SHIPMENT // готов к отгрузке
+  TRANSIT // в пути
+  WAREHOUSE // принят на складе компании
+}
+
+model PurchaseItemStageProgress {
+  id        String            @id @default(cuid())
+  itemId    String
+  item      PurchaseItem      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  stage     PurchaseItemStage
+  quantity  Int
+  comment   String?
+  updatedAt DateTime          @updatedAt
+
+  @@unique([itemId, stage])
+  @@index([itemId])
 }
 
 // Платежи по закупке — депозит/баланс, multi-payment (D-08).
