@@ -234,14 +234,27 @@ export default async function PurchasesPage({
         const curQty = cur
           ? (i.stages.find((s) => s.stage === cur)?.quantity ?? i.quantity)
           : i.quantity
+        const pr = i.product
+        const sum = i.quantity * Number(i.unitPrice)              // в валюте закупки, ЗАКАЗАННОЕ кол-во
+        const sumRub = rate != null ? sum * rate : null           // через тот же rate что закупка
+        const itemWeightKg = pr.weightKg != null ? i.quantity * pr.weightKg : null
+        const itemVolumeM3 =
+          pr.heightCm != null && pr.widthCm != null && pr.depthCm != null
+            ? (i.quantity * pr.heightCm * pr.widthCm * pr.depthCm) / 1_000_000
+            : null
         return {
           id: i.id,
-          name: i.product.name,
-          sku: i.product.sku,
-          photoUrl: i.product.photoUrl,
+          name: pr.name,
+          sku: pr.sku,
+          photoUrl: pr.photoUrl,
           quantity: i.quantity,
           currentStage: cur,
           currentStageQty: curQty,
+          sum,
+          sumRub,
+          currency: p.currency,
+          weightKg: itemWeightKg,
+          volumeM3: itemVolumeM3,
         }
       }),
     }
