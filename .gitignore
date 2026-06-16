@@ -42,3 +42,6 @@ scripts/build-match-agents.cjs
 scripts/parse-comments.cjs
 scripts/parse-suppliers-xlsx.cjs
 scripts/seed-suppliers.cjs
+
+# Claude Code personal settings (this machine)
+.claude/settings.local.json
