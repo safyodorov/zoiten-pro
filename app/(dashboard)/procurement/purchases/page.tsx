@@ -77,6 +77,7 @@ export default async function PurchasesPage({
               buyer: { select: { lastName: true, firstName: true } },
             },
           },
+          group: { select: { id: true, name: true } },
           items: {
             select: {
               quantity: true,
@@ -157,6 +158,7 @@ export default async function PurchasesPage({
     return {
       id: p.id,
       createdAt: p.createdAt.toISOString(),
+      supplierId: p.supplierId,
       supplierName: p.supplier.nameEnglish,
       buyerName: p.supplier.buyer
         ? `${p.supplier.buyer.lastName} ${p.supplier.buyer.firstName}`.trim()
@@ -167,6 +169,7 @@ export default async function PurchasesPage({
       status: p.status,
       nearestDueDate,
       hasOverdue,
+      groupId: p.group?.id ?? null,
       items: p.items.map((i) => ({
         name: i.product.name,
         sku: i.product.sku,
@@ -175,6 +178,50 @@ export default async function PurchasesPage({
       })),
     }
   })
+
+  // ── Группы инвойсов: агрегаты + кластеризация строк ──
+  const groupMeta = new Map(
+    purchases.filter((p) => p.group).map((p) => [p.group!.id, p.group!.name])
+  )
+  const groups: Record<
+    string,
+    { name: string; totalRub: number | null; byCurrency: { currency: string; total: number }[] }
+  > = {}
+  for (const [gid, name] of groupMeta) {
+    const members = rows.filter((r) => r.groupId === gid)
+    const byCurrencyMap: Record<string, number> = {}
+    let rubSum = 0
+    let rubComplete = true
+    for (const m of members) {
+      byCurrencyMap[m.currency] = (byCurrencyMap[m.currency] ?? 0) + m.total
+      if (m.totalRub != null) rubSum += m.totalRub
+      else rubComplete = false
+    }
+    groups[gid] = {
+      name,
+      totalRub: rubComplete ? rubSum : null,
+      byCurrency: Object.entries(byCurrencyMap).map(([currency, total]) => ({ currency, total })),
+    }
+  }
+
+  // Кластеризация: члены группы идут подряд, группа встаёт на позицию самого
+  // свежего своего члена (rows уже отсортированы createdAt desc).
+  const orderedRows: PurchaseRow[] = []
+  const emitted = new Set<string>()
+  for (const r of rows) {
+    if (emitted.has(r.id)) continue
+    if (r.groupId) {
+      for (const m of rows.filter((x) => x.groupId === r.groupId)) {
+        if (!emitted.has(m.id)) {
+          orderedRows.push(m)
+          emitted.add(m.id)
+        }
+      }
+    } else {
+      orderedRows.push(r)
+      emitted.add(r.id)
+    }
+  }
 
   const supplierFilterOptions = suppliersForFilter.map((s) => ({
     id: s.id,
@@ -222,7 +269,8 @@ export default async function PurchasesPage({
       />
       <div className="flex-1 min-h-0">
         <PurchasesTable
-          rows={rows}
+          rows={orderedRows}
+          groups={groups}
           canManage={canManage}
           suppliers={supplierOptions}
           products={productOptions}

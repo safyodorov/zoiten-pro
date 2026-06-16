@@ -1,10 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { TableBody, TableRow, TableCell } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Plus } from "lucide-react"
+import { Plus, Link2, Link2Off, Pencil, X } from "lucide-react"
+import { toast } from "sonner"
+import {
+  createPurchaseGroup,
+  renamePurchaseGroup,
+  ungroupPurchaseGroup,
+  removePurchaseFromGroup,
+} from "@/app/actions/purchases"
 import {
   PurchaseModal,
   type SupplierOption,
@@ -24,6 +31,7 @@ export interface PurchaseItemMini {
 export interface PurchaseRow {
   id: string
   createdAt: string // ISO
+  supplierId: string
   supplierName: string
   buyerName: string | null
   currency: string
@@ -32,11 +40,19 @@ export interface PurchaseRow {
   status: "PLANNED" | "ACTIVE" | "COMPLETED"
   nearestDueDate: string | null // ISO ближайшего неоплаченного платежа
   hasOverdue: boolean
+  groupId: string | null
   items: PurchaseItemMini[]
+}
+
+export interface GroupAgg {
+  name: string
+  totalRub: number | null
+  byCurrency: { currency: string; total: number }[]
 }
 
 interface PurchasesTableProps {
   rows: PurchaseRow[]
+  groups: Record<string, GroupAgg>
   canManage: boolean
   suppliers: SupplierOption[]
   products: ProductOption[]
@@ -131,8 +147,15 @@ function StatusBadge({ status }: { status: PurchaseRow["status"] }) {
 
 // ── Main ───────────────────────────────────────────────────────────
 
+function groupSubtotalText(g: GroupAgg): string {
+  return g.byCurrency
+    .map((c) => formatMoney(c.total, c.currency))
+    .join(" + ")
+}
+
 export function PurchasesTable({
   rows,
+  groups,
   canManage,
   suppliers,
   products,
@@ -140,11 +163,210 @@ export function PurchasesTable({
 }: PurchasesTableProps) {
   const router = useRouter()
   const [createOpen, setCreateOpen] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+
+  const colCount = canManage ? 8 : 7
+
+  // Выбранные строки (только не сгруппированные участвуют в объединении).
+  const selectedRows = rows.filter((r) => selected.has(r.id))
+  const sameSupplier =
+    selectedRows.length > 0 && new Set(selectedRows.map((r) => r.supplierId)).size === 1
+  const canMerge = selectedRows.length >= 2 && sameSupplier
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function run(action: Promise<{ ok: boolean; error?: string }>, okMsg?: string) {
+    setBusy(true)
+    try {
+      const res = await action
+      if (res.ok) {
+        if (okMsg) toast.success(okMsg)
+        setSelected(new Set())
+        router.refresh()
+      } else {
+        toast.error(res.error ?? "Ошибка")
+      }
+    } catch {
+      toast.error("Ошибка сервера")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitRename(groupId: string) {
+    const name = editName.trim()
+    setEditingGroup(null)
+    if (!name || name === groups[groupId]?.name) return
+    await run(renamePurchaseGroup(groupId, name))
+  }
+
+  function renderDataRow(row: PurchaseRow, isMember: boolean) {
+    return (
+      <TableRow
+        key={row.id}
+        className={`cursor-pointer hover:bg-muted/40 ${isMember ? "bg-muted/20" : ""}`}
+        onClick={() => router.push(`/procurement/purchases/${row.id}`)}
+      >
+        {canManage && (
+          <TableCell
+            className={`px-2 py-2 text-center ${isMember ? "border-l-2 border-l-primary/50" : ""}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {isMember ? (
+              <button
+                type="button"
+                title="Убрать из группы"
+                disabled={busy}
+                onClick={() => run(removePurchaseFromGroup(row.id))}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <input
+                type="checkbox"
+                checked={selected.has(row.id)}
+                onChange={() => toggle(row.id)}
+                className="h-3.5 w-3.5 accent-primary"
+              />
+            )}
+          </TableCell>
+        )}
+        <TableCell className="px-3 py-2">
+          <ItemsThumbs items={row.items} />
+        </TableCell>
+        <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+          {row.totalRub != null && row.currency !== "RUB" ? (
+            <>
+              <div>{formatRub(row.totalRub)}</div>
+              <div className="text-xs text-muted-foreground">
+                {formatMoney(row.total, row.currency)}
+              </div>
+            </>
+          ) : (
+            <div>{formatMoney(row.total, row.currency)}</div>
+          )}
+        </TableCell>
+        <TableCell className="px-3 py-2 whitespace-nowrap">{row.buyerName ?? "—"}</TableCell>
+        <TableCell className="px-3 py-2 text-center">
+          <StatusBadge status={row.status} />
+        </TableCell>
+        <TableCell className="px-3 py-2 text-center whitespace-nowrap">
+          {formatDate(row.nearestDueDate)}
+        </TableCell>
+        <TableCell className="px-3 py-2 whitespace-nowrap">{formatDate(row.createdAt)}</TableCell>
+        <TableCell className="px-3 py-2 whitespace-nowrap">{row.supplierName}</TableCell>
+      </TableRow>
+    )
+  }
+
+  // Тело: вставляем строку-заголовок перед первым участником каждой группы.
+  const bodyRows: ReactNode[] = []
+  let prevGroup: string | null = null
+  for (const row of rows) {
+    if (row.groupId && row.groupId !== prevGroup) {
+      const g = groups[row.groupId]
+      if (g) {
+        bodyRows.push(
+          <TableRow key={`g-${row.groupId}`} className="bg-muted hover:bg-muted">
+            <TableCell colSpan={colCount} className="px-3 py-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link2 className="h-4 w-4 text-primary shrink-0" />
+                {editingGroup === row.groupId ? (
+                  <input
+                    autoFocus
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onBlur={() => submitRename(row.groupId!)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitRename(row.groupId!)
+                      if (e.key === "Escape") setEditingGroup(null)
+                    }}
+                    className="h-7 rounded border border-input bg-background px-2 text-sm font-medium"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="group/name inline-flex items-center gap-1 font-semibold"
+                    onClick={() => {
+                      setEditName(g.name)
+                      setEditingGroup(row.groupId)
+                    }}
+                  >
+                    {g.name}
+                    <Pencil className="h-3 w-3 opacity-0 group-hover/name:opacity-60" />
+                  </button>
+                )}
+                <span className="text-xs text-muted-foreground">·</span>
+                <span className="text-sm font-medium">
+                  {g.totalRub != null ? formatRub(g.totalRub) : "— ₽"}
+                </span>
+                <span className="text-xs text-muted-foreground">({groupSubtotalText(g)})</span>
+                {canManage && (
+                  <button
+                    type="button"
+                    title="Разгруппировать"
+                    disabled={busy}
+                    onClick={() => run(ungroupPurchaseGroup(row.groupId!))}
+                    className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    <Link2Off className="h-3.5 w-3.5" />
+                    Разгруппировать
+                  </button>
+                )}
+              </div>
+            </TableCell>
+          </TableRow>
+        )
+      }
+    }
+    bodyRows.push(renderDataRow(row, !!row.groupId))
+    prevGroup = row.groupId
+  }
 
   return (
     <div className="h-full flex flex-col gap-3">
       {canManage && (
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                disabled={!canMerge || busy}
+                onClick={() => run(createPurchaseGroup([...selected]), "Закупки объединены в группу")}
+                title={
+                  !sameSupplier
+                    ? "Можно объединять только закупки одного поставщика"
+                    : "Объединить выбранные в группу"
+                }
+              >
+                <Link2 className="h-4 w-4" />
+                Объединить в группу ({selected.size})
+              </Button>
+              {!sameSupplier && selectedRows.length >= 2 && (
+                <span className="text-xs text-destructive">разные поставщики</span>
+              )}
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setSelected(new Set())}
+              >
+                Сбросить
+              </button>
+            </div>
+          )}
           <Button size="sm" className="ml-auto gap-1.5" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" />
             Новая закупка
@@ -175,6 +397,9 @@ export function PurchasesTable({
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead className="bg-background">
               <tr>
+                {canManage && (
+                  <th className="sticky top-0 z-20 bg-background border-b px-2 py-2 w-8" />
+                )}
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Товары
                 </th>
@@ -198,46 +423,7 @@ export function PurchasesTable({
                 </th>
               </tr>
             </thead>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className="cursor-pointer hover:bg-muted/40"
-                  onClick={() => router.push(`/procurement/purchases/${row.id}`)}
-                >
-                  <TableCell className="px-3 py-2">
-                    <ItemsThumbs items={row.items} />
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                    {row.totalRub != null && row.currency !== "RUB" ? (
-                      <>
-                        <div>{formatRub(row.totalRub)}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatMoney(row.total, row.currency)}
-                        </div>
-                      </>
-                    ) : (
-                      <div>{formatMoney(row.total, row.currency)}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {row.buyerName ?? "—"}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-center">
-                    <StatusBadge status={row.status} />
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-center whitespace-nowrap">
-                    {formatDate(row.nearestDueDate)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {formatDate(row.createdAt)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {row.supplierName}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
+            <TableBody>{bodyRows}</TableBody>
           </table>
         </div>
       )}

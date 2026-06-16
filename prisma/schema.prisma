@@ -1474,11 +1474,24 @@ model Purchase {
   logisticsComment   String?
   items              PurchaseItem[]
   payments           PurchasePayment[]
+  groupId            String?
+  group              PurchaseGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
   @@index([supplierId])
   @@index([status])
+  @@index([groupId])
+}
+
+// Группа инвойсов: искусственно раздробленные закупки одного поставщика,
+// объединённые для совокупного учёта (валютный контроль). Один поставщик на группу.
+model PurchaseGroup {
+  id        String     @id @default(cuid())
+  name      String
+  purchases Purchase[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 // Позиции закупки — multi-product (D-06).

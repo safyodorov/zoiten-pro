@@ -392,3 +392,123 @@ export async function deletePurchase(id: string): Promise<ActionResult> {
     return { ok: false, error: "Ошибка сервера" }
   }
 }
+
+// ── Группы инвойсов (объединение искусственно раздробленных закупок) ──
+
+function ruDate(d: Date): string {
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+}
+
+// Объединить закупки в новую группу. Только один поставщик на группу.
+// Имя генерируется автоматически: «Группа · {поставщик} · {дата}».
+export async function createPurchaseGroup(
+  purchaseIds: string[]
+): Promise<CreateResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    const ids = [...new Set(purchaseIds.filter(Boolean))]
+    if (ids.length < 2) return { ok: false, error: "Выберите хотя бы две закупки" }
+
+    const purchases = await prisma.purchase.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        groupId: true,
+        supplierId: true,
+        supplier: { select: { nameEnglish: true, nameForeign: true } },
+      },
+    })
+    if (purchases.length !== ids.length) {
+      return { ok: false, error: "Некоторые закупки не найдены" }
+    }
+    if (purchases.some((p) => p.groupId)) {
+      return { ok: false, error: "Некоторые закупки уже в группе" }
+    }
+    const supplierIds = new Set(purchases.map((p) => p.supplierId))
+    if (supplierIds.size > 1) {
+      return { ok: false, error: "В группу можно объединять только закупки одного поставщика" }
+    }
+
+    const sup = purchases[0].supplier
+    const name = `Группа · ${sup.nameEnglish || sup.nameForeign} · ${ruDate(new Date())}`
+
+    const group = await prisma.purchaseGroup.create({ data: { name } })
+    await prisma.purchase.updateMany({
+      where: { id: { in: ids } },
+      data: { groupId: group.id },
+    })
+
+    revalidatePath("/procurement/purchases")
+    return { ok: true, id: group.id }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("createPurchaseGroup error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// Переименовать группу.
+export async function renamePurchaseGroup(
+  groupId: string,
+  name: string
+): Promise<ActionResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    const trimmed = name.trim()
+    if (!trimmed) return { ok: false, error: "Название не может быть пустым" }
+    await prisma.purchaseGroup.update({ where: { id: groupId }, data: { name: trimmed } })
+    revalidatePath("/procurement/purchases")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if ((e as { code?: string })?.code === "P2025") {
+      return { ok: false, error: "Группа не найдена" }
+    }
+    console.error("renamePurchaseGroup error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// Разгруппировать: снять groupId со всех закупок и удалить группу.
+export async function ungroupPurchaseGroup(groupId: string): Promise<ActionResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    await prisma.purchase.updateMany({ where: { groupId }, data: { groupId: null } })
+    await prisma.purchaseGroup.delete({ where: { id: groupId } }).catch(() => {})
+    revalidatePath("/procurement/purchases")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("ungroupPurchaseGroup error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+// Убрать одну закупку из группы. Если в группе осталось < 2 закупок — группа распускается.
+export async function removePurchaseFromGroup(purchaseId: string): Promise<ActionResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      select: { groupId: true },
+    })
+    if (!purchase?.groupId) return { ok: true } // уже вне группы
+    const groupId = purchase.groupId
+    await prisma.purchase.update({ where: { id: purchaseId }, data: { groupId: null } })
+    const remaining = await prisma.purchase.count({ where: { groupId } })
+    if (remaining < 2) {
+      await prisma.purchase.updateMany({ where: { groupId }, data: { groupId: null } })
+      await prisma.purchaseGroup.delete({ where: { id: groupId } }).catch(() => {})
+    }
+    revalidatePath("/procurement/purchases")
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    console.error("removePurchaseFromGroup error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
