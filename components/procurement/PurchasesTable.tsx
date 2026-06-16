@@ -41,6 +41,8 @@ export interface PurchaseRow {
   nearestDueDate: string | null // ISO ближайшего неоплаченного платежа
   hasOverdue: boolean
   groupId: string | null
+  weightKg: number | null
+  volumeM3: number | null
   items: PurchaseItemMini[]
 }
 
@@ -50,9 +52,17 @@ export interface GroupAgg {
   byCurrency: { currency: string; total: number }[]
 }
 
+export interface GrandTotals {
+  totalRub: number | null
+  byCurrency: { currency: string; total: number }[]
+  weightKg: number
+  volumeM3: number
+}
+
 interface PurchasesTableProps {
   rows: PurchaseRow[]
   groups: Record<string, GroupAgg>
+  grandTotals: GrandTotals
   canManage: boolean
   suppliers: SupplierOption[]
   products: ProductOption[]
@@ -82,6 +92,16 @@ function formatMoney(n: number, currency: string): string {
 
 function formatRub(n: number): string {
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) + " ₽"
+}
+
+function formatWeight(n: number | null): string {
+  if (n == null) return "—"
+  return n.toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + " кг"
+}
+
+function formatVolume(n: number | null): string {
+  if (n == null) return "—"
+  return n.toLocaleString("ru-RU", { maximumFractionDigits: 3 }) + " м³"
 }
 
 // Компактная лента миниатюр товаров закупки (до 4 + счётчик остатка).
@@ -156,6 +176,7 @@ function groupSubtotalText(g: GroupAgg): string {
 export function PurchasesTable({
   rows,
   groups,
+  grandTotals,
   canManage,
   suppliers,
   products,
@@ -168,7 +189,8 @@ export function PurchasesTable({
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
 
-  const colCount = canManage ? 8 : 7
+  // колонки: [чекбокс] Товары·Сумма·Вес·Объём·Закупщик·Статус·Платёж·Дата·Поставщик
+  const colCount = canManage ? 10 : 9
 
   // Выбранные строки (только не сгруппированные участвуют в объединении).
   const selectedRows = rows.filter((r) => selected.has(r.id))
@@ -256,6 +278,12 @@ export function PurchasesTable({
           ) : (
             <div>{formatMoney(row.total, row.currency)}</div>
           )}
+        </TableCell>
+        <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+          {formatWeight(row.weightKg)}
+        </TableCell>
+        <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+          {formatVolume(row.volumeM3)}
         </TableCell>
         <TableCell className="px-3 py-2 whitespace-nowrap">{row.buyerName ?? "—"}</TableCell>
         <TableCell className="px-3 py-2 text-center">
@@ -406,6 +434,12 @@ export function PurchasesTable({
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Сумма
                 </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Вес
+                </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Объём
+                </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Закупщик
                 </th>
@@ -424,6 +458,35 @@ export function PurchasesTable({
               </tr>
             </thead>
             <TableBody>{bodyRows}</TableBody>
+            <tfoot>
+              <tr className="font-semibold">
+                {canManage && (
+                  <td className="sticky bottom-0 bg-muted border-t px-2 py-2" />
+                )}
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 whitespace-nowrap">
+                  Итого
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  <div>
+                    {grandTotals.totalRub != null ? formatRub(grandTotals.totalRub) : "— ₽"}
+                  </div>
+                  {grandTotals.byCurrency.length > 0 && (
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {grandTotals.byCurrency
+                        .map((c) => formatMoney(c.total, c.currency))
+                        .join(" + ")}
+                    </div>
+                  )}
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  {formatWeight(grandTotals.weightKg)}
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  {formatVolume(grandTotals.volumeM3)}
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2" colSpan={5} />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}

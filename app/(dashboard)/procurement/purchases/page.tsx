@@ -82,7 +82,23 @@ export default async function PurchasesPage({
             select: {
               quantity: true,
               unitPrice: true,
-              product: { select: { name: true, sku: true, photoUrl: true } },
+              product: {
+                select: {
+                  name: true,
+                  sku: true,
+                  photoUrl: true,
+                  weightKg: true,
+                  heightCm: true,
+                  widthCm: true,
+                  depthCm: true,
+                  brand: {
+                    select: {
+                      sortOrder: true,
+                      direction: { select: { id: true, name: true, sortOrder: true } },
+                    },
+                  },
+                },
+              },
             },
           },
           payments: {
@@ -137,6 +153,11 @@ export default async function PurchasesPage({
     })
   )
 
+  const NULL_DIR = 99_999_999
+  // Доли направлений по стоимости на закупку (для сортировки и кластеризации групп).
+  type DirCost = Record<string, { name: string; sortOrder: number; cost: number }>
+  const dirCostById = new Map<string, DirCost>()
+
   // ── Преобразование закупок в строки ──
   const rows: PurchaseRow[] = purchases.map((p) => {
     const total = p.items.reduce(
@@ -145,6 +166,37 @@ export default async function PurchasesPage({
     )
     const rate = p.currency === "RUB" ? 1 : rateMap[p.currency] ?? null
     const totalRub = rate != null ? total * rate : null
+
+    // Вес (кг) и объём (м³) из БД Товары: qty × per-unit.
+    let weightKg = 0
+    let volumeM3 = 0
+    let hasWeight = false
+    let hasVolume = false
+    // Главное направление закупки = с наибольшей долей в стоимости (₽/валюта).
+    const dirCost: Record<string, { name: string; sortOrder: number; cost: number }> = {}
+    for (const i of p.items) {
+      const cost = i.quantity * Number(i.unitPrice)
+      const pr = i.product
+      if (pr.weightKg != null) {
+        weightKg += i.quantity * pr.weightKg
+        hasWeight = true
+      }
+      if (pr.heightCm != null && pr.widthCm != null && pr.depthCm != null) {
+        volumeM3 += (i.quantity * pr.heightCm * pr.widthCm * pr.depthCm) / 1_000_000
+        hasVolume = true
+      }
+      const dir = pr.brand?.direction
+      const key = dir?.id ?? "—"
+      if (!dirCost[key]) {
+        dirCost[key] = {
+          name: dir?.name ?? "Без направления",
+          sortOrder: dir?.sortOrder ?? NULL_DIR,
+          cost: 0,
+        }
+      }
+      dirCost[key].cost += cost
+    }
+    dirCostById.set(p.id, dirCost)
     // OVERDUE live: любой платёж dueDate < now, не оплачен.
     const hasOverdue = p.payments.some(
       (pay) => pay.status !== "PAID" && !pay.paidDate && pay.dueDate < now
@@ -170,6 +222,8 @@ export default async function PurchasesPage({
       nearestDueDate,
       hasOverdue,
       groupId: p.group?.id ?? null,
+      weightKg: hasWeight ? weightKg : null,
+      volumeM3: hasVolume ? volumeM3 : null,
       items: p.items.map((i) => ({
         name: i.product.name,
         sku: i.product.sku,
@@ -204,23 +258,62 @@ export default async function PurchasesPage({
     }
   }
 
-  // Кластеризация: члены группы идут подряд, группа встаёт на позицию самого
-  // свежего своего члена (rows уже отсортированы createdAt desc).
-  const orderedRows: PurchaseRow[] = []
-  const emitted = new Set<string>()
+  // ── Сортировка по направлениям (как в /prices/wb) + кластеризация групп ──
+  // Кластер = отдельная закупка ИЛИ группа (члены идут подряд). Главное направление
+  // кластера = с наибольшей долей в стоимости; при разных направлениях внутри
+  // закупки/группы берётся доминирующее по ₽-стоимости.
+  type Cluster = { key: string; members: PurchaseRow[]; dirSort: number; recent: number }
+  const clusterMap = new Map<string, Cluster>()
   for (const r of rows) {
-    if (emitted.has(r.id)) continue
-    if (r.groupId) {
-      for (const m of rows.filter((x) => x.groupId === r.groupId)) {
-        if (!emitted.has(m.id)) {
-          orderedRows.push(m)
-          emitted.add(m.id)
-        }
-      }
-    } else {
-      orderedRows.push(r)
-      emitted.add(r.id)
+    const ckey = r.groupId ? `g:${r.groupId}` : `p:${r.id}`
+    let c = clusterMap.get(ckey)
+    if (!c) {
+      c = { key: ckey, members: [], dirSort: NULL_DIR, recent: 0 }
+      clusterMap.set(ckey, c)
     }
+    c.members.push(r)
+    c.recent = Math.max(c.recent, new Date(r.createdAt).getTime())
+  }
+  // главное направление кластера — агрегируем dirCost всех членов
+  for (const c of clusterMap.values()) {
+    const agg: Record<string, { sortOrder: number; cost: number }> = {}
+    for (const m of c.members) {
+      const dc = dirCostById.get(m.id)
+      if (!dc) continue
+      for (const k of Object.keys(dc)) {
+        if (!agg[k]) agg[k] = { sortOrder: dc[k].sortOrder, cost: 0 }
+        agg[k].cost += dc[k].cost
+      }
+    }
+    const best = Object.values(agg).sort((a, b) => b.cost - a.cost)[0]
+    c.dirSort = best?.sortOrder ?? NULL_DIR
+  }
+  const orderedRows: PurchaseRow[] = [...clusterMap.values()]
+    .sort((a, b) => a.dirSort - b.dirSort || b.recent - a.recent)
+    .flatMap((c) =>
+      [...c.members].sort(
+        (x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime()
+      )
+    )
+
+  // ── Итого по списку (Σ ₽ + по валютам + вес + объём) ──
+  const grandByCurrency: Record<string, number> = {}
+  let grandRub = 0
+  let grandRubComplete = true
+  let grandWeight = 0
+  let grandVolume = 0
+  for (const r of rows) {
+    grandByCurrency[r.currency] = (grandByCurrency[r.currency] ?? 0) + r.total
+    if (r.totalRub != null) grandRub += r.totalRub
+    else grandRubComplete = false
+    if (r.weightKg != null) grandWeight += r.weightKg
+    if (r.volumeM3 != null) grandVolume += r.volumeM3
+  }
+  const grandTotals = {
+    totalRub: grandRubComplete ? grandRub : null,
+    byCurrency: Object.entries(grandByCurrency).map(([currency, total]) => ({ currency, total })),
+    weightKg: grandWeight,
+    volumeM3: grandVolume,
   }
 
   const supplierFilterOptions = suppliersForFilter.map((s) => ({
@@ -271,6 +364,7 @@ export default async function PurchasesPage({
         <PurchasesTable
           rows={orderedRows}
           groups={groups}
+          grandTotals={grandTotals}
           canManage={canManage}
           suppliers={supplierOptions}
           products={productOptions}
