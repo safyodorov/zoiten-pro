@@ -209,9 +209,15 @@ export function PurchasesTable({
                     <ItemsThumbs items={row.items} />
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                    <div>{formatMoney(row.total, row.currency)}</div>
-                    {row.totalRub != null && row.currency !== "RUB" && (
-                      <div className="text-xs text-muted-foreground">≈ {formatRub(row.totalRub)}</div>
+                    {row.totalRub != null && row.currency !== "RUB" ? (
+                      <>
+                        <div>{formatRub(row.totalRub)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatMoney(row.total, row.currency)}
+                        </div>
+                      </>
+                    ) : (
+                      <div>{formatMoney(row.total, row.currency)}</div>
                     )}
                   </TableCell>
                   <TableCell className="px-3 py-2 whitespace-nowrap">
