@@ -25,7 +25,7 @@ export interface ItemStageData {
   productPhotoUrl: string | null
   ordered: number
   // по этапам: фактическое введённое значение (если этап достигнут)
-  stages: Partial<Record<StageKey, { quantity: number; comment: string }>>
+  stages: Partial<Record<StageKey, { quantity: number; comment: string; date: string | null }>>
 }
 
 interface Props {
@@ -35,21 +35,28 @@ interface Props {
 }
 
 // Локальное состояние редактора: для каждого этапа qty как строка ("" = не задано)
-type Draft = Record<string, Record<StageKey, { qty: string; comment: string }>>
+type Draft = Record<string, Record<StageKey, { qty: string; comment: string; date: string }>>
 
 function buildDraft(items: ItemStageData[]): Draft {
   const d: Draft = {}
   for (const it of items) {
-    d[it.itemId] = {} as Record<StageKey, { qty: string; comment: string }>
+    d[it.itemId] = {} as Record<StageKey, { qty: string; comment: string; date: string }>
     for (const key of STAGE_ORDER) {
       const v = it.stages[key]
       d[it.itemId][key] = {
         qty: v ? String(v.quantity) : "",
         comment: v?.comment ?? "",
+        date: v?.date ?? "",
       }
     }
   }
   return d
+}
+
+// Сегодня в Moscow tz как yyyy-mm-dd для <input type="date">.
+// en-CA даёт YYYY-MM-DD; timeZone сдвигает на МСК.
+function todayMoscow(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Moscow" })
 }
 
 // Эффективное (с учётом наследования от предыдущего этапа) значение для placeholder.
@@ -57,7 +64,7 @@ function buildDraft(items: ItemStageData[]): Draft {
 // иначе ordered.
 function effectiveAt(
   ordered: number,
-  cells: Record<StageKey, { qty: string; comment: string }>,
+  cells: Record<StageKey, { qty: string; comment: string; date: string }>,
   upTo: StageKey
 ): number {
   let eff = ordered
@@ -71,7 +78,7 @@ function effectiveAt(
 
 // Самый дальний этап с заданным qty в draft для конкретной позиции.
 function farthestReachedKey(
-  cells: Record<StageKey, { qty: string; comment: string }>
+  cells: Record<StageKey, { qty: string; comment: string; date: string }>
 ): StageKey | null {
   let best: StageKey | null = null
   let bestIdx = -1
@@ -95,10 +102,10 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
   const [activeStage, setActiveStage] = useState<Record<string, StageKey | null>>(() => {
     const m: Record<string, StageKey | null> = {}
     for (const it of items) {
-      const cells = {} as Record<StageKey, { qty: string; comment: string }>
+      const cells = {} as Record<StageKey, { qty: string; comment: string; date: string }>
       for (const key of STAGE_ORDER) {
         const v = it.stages[key]
-        cells[key] = { qty: v ? String(v.quantity) : "", comment: v?.comment ?? "" }
+        cells[key] = { qty: v ? String(v.quantity) : "", comment: v?.comment ?? "", date: v?.date ?? "" }
       }
       m[it.itemId] = farthestReachedKey(cells)
     }
@@ -108,7 +115,7 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
 
   if (items.length === 0) return null
 
-  function setCell(itemId: string, stage: StageKey, field: "qty" | "comment", value: string) {
+  function setCell(itemId: string, stage: StageKey, field: "qty" | "comment" | "date", value: string) {
     setDraft((prev) => ({
       ...prev,
       [itemId]: {
@@ -120,6 +127,7 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
 
   // Клик по сегменту stepper'а: делает его текущим достигнутым.
   // Автозаполняет qty по цепочке (наследованное значение), очищает более поздние.
+  // Проставляет date=сегодня (МСК) для всех этапов ≤ кликнутого где date пустая.
   function handleStageClick(itemId: string, clickedKey: StageKey) {
     if (!canManage) return
     const it = items.find((x) => x.itemId === itemId)
@@ -128,21 +136,24 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
     const prevCells = draft[itemId]
 
     // Вычислим унаследованные кол-ва для всех этапов до кликнутого (включительно).
-    // Для этапов после кликнутого — очистить qty.
+    // Для этапов после кликнутого — очистить qty и date.
     const newCells = { ...prevCells }
     for (const key of STAGE_ORDER) {
       const idx = stageIndex(key)
       if (idx <= clickedIdx) {
         // Если qty пустой — заполнить унаследованным значением (effectiveAt до данного этапа)
-        const raw = newCells[key].qty.trim()
-        if (raw === "" || isNaN(Number(raw))) {
-          // effectiveAt вычисляется из prevCells (до кликнутого), чтобы не создавать цикл
+        const rawQty = newCells[key].qty.trim()
+        if (rawQty === "" || isNaN(Number(rawQty))) {
           const eff = effectiveAt(it.ordered, prevCells, key)
           newCells[key] = { ...newCells[key], qty: String(eff) }
         }
+        // Если date пустая — проставить сегодня (МСК)
+        if (!newCells[key].date) {
+          newCells[key] = { ...newCells[key], date: todayMoscow() }
+        }
       } else {
-        // Этапы после кликнутого — очистить
-        newCells[key] = { ...newCells[key], qty: "" }
+        // Этапы после кликнутого — очистить qty и date
+        newCells[key] = { ...newCells[key], qty: "", date: "" }
       }
     }
 
@@ -153,8 +164,13 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
   async function save() {
     setSaving(true)
     try {
-      const entries: { itemId: string; stage: StageKey; quantity: number; comment: string | null }[] =
-        []
+      const entries: {
+        itemId: string
+        stage: StageKey
+        quantity: number
+        comment: string | null
+        date: string | null
+      }[] = []
       for (const it of items) {
         const cells = draft[it.itemId]
         for (const key of STAGE_ORDER) {
@@ -170,6 +186,7 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
             stage: key,
             quantity,
             comment: hasComment ? cell.comment.trim() : null,
+            date: cell.date.trim() || null,
           })
         }
       }
@@ -266,6 +283,15 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
                         <span className="leading-tight text-center line-clamp-2 w-full">
                           {STAGE_LABELS[key]}
                         </span>
+                        {isReached && (
+                          <span className="mt-0.5 text-[9px] leading-none opacity-90 text-center">
+                            {cells[key].date
+                              ? cells[key].date.split("-").reverse().join(".")
+                              : "—"}
+                            {" · "}
+                            {cells[key].qty || effectiveAt(it.ordered, cells, key)} шт
+                          </span>
+                        )}
                       </button>
                       {/* Соединительная линия между сегментами */}
                       {!isLast && (
@@ -299,6 +325,16 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
                       className={cellInput}
                     />
                   </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground font-medium">Дата</label>
+                    <input
+                      type="date"
+                      value={cells[curKey].date}
+                      onChange={(e) => setCell(it.itemId, curKey, "date", e.target.value)}
+                      disabled={!canManage}
+                      className="h-7 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60"
+                    />
+                  </div>
                   <div className="flex flex-col gap-1 flex-1">
                     <label className="text-[11px] text-muted-foreground font-medium">Комментарий</label>
                     <input
@@ -319,6 +355,7 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
 
       <p className="px-3 py-2 text-[11px] text-muted-foreground border-t">
         Кликните по этапу, чтобы отметить его достигнутым — кол-во подставится с предыдущего.
+        Дата этапа ставится сегодняшней при клике — измените при необходимости.
         Скорректируйте кол-во для частичной партии и при необходимости добавьте комментарий.
       </p>
     </div>
