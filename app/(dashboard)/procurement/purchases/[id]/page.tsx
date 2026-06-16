@@ -65,7 +65,9 @@ export default async function PurchaseDetailPage({ params }: Props) {
         },
       },
       items: {
-        include: { product: { select: { id: true, name: true, sku: true } } },
+        include: {
+          product: { select: { id: true, name: true, sku: true, photoUrl: true } },
+        },
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
     },
@@ -227,7 +229,21 @@ export default async function PurchaseDetailPage({ params }: Props) {
           <tbody className="divide-y">
             {purchase.items.map((i) => (
               <tr key={i.id}>
-                <td className="px-3 py-2">{i.product.name}</td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2.5">
+                    {i.product.photoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={i.product.photoUrl}
+                        alt={i.product.name}
+                        className="h-12 w-9 shrink-0 rounded border object-cover bg-muted"
+                      />
+                    ) : (
+                      <div className="h-12 w-9 shrink-0 rounded border bg-muted" />
+                    )}
+                    <span>{i.product.name}</span>
+                  </div>
+                </td>
                 <td className="px-3 py-2 font-mono text-xs">{i.product.sku}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{i.quantity}</td>
                 <td className="px-3 py-2 text-right tabular-nums">

@@ -14,6 +14,13 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────
 
+export interface PurchaseItemMini {
+  name: string
+  sku: string
+  photoUrl: string | null
+  quantity: number
+}
+
 export interface PurchaseRow {
   id: string
   createdAt: string // ISO
@@ -21,9 +28,11 @@ export interface PurchaseRow {
   buyerName: string | null
   currency: string
   total: number
+  totalRub: number | null // ≈ в рублях по курсу ЦБ (null если курса нет)
   status: "PLANNED" | "ACTIVE" | "COMPLETED"
   nearestDueDate: string | null // ISO ближайшего неоплаченного платежа
   hasOverdue: boolean
+  items: PurchaseItemMini[]
 }
 
 interface PurchasesTableProps {
@@ -52,6 +61,44 @@ function formatMoney(n: number, currency: string): string {
     n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
     " " +
     currency
+  )
+}
+
+function formatRub(n: number): string {
+  return n.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) + " ₽"
+}
+
+// Компактная лента миниатюр товаров закупки (до 4 + счётчик остатка).
+function ItemsThumbs({ items }: { items: PurchaseItemMini[] }) {
+  if (items.length === 0) return <span className="text-muted-foreground text-xs">—</span>
+  const shown = items.slice(0, 4)
+  const rest = items.length - shown.length
+  return (
+    <div className="flex items-center gap-1">
+      {shown.map((it, idx) =>
+        it.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={idx}
+            src={it.photoUrl}
+            alt={it.name}
+            title={`${it.name} — ${it.quantity} шт`}
+            className="h-9 w-7 shrink-0 rounded border object-cover bg-muted"
+          />
+        ) : (
+          <div
+            key={idx}
+            title={`${it.name} — ${it.quantity} шт`}
+            className="h-9 w-7 shrink-0 rounded border bg-muted"
+          />
+        )
+      )}
+      {rest > 0 && (
+        <span className="text-xs text-muted-foreground" title={items.slice(4).map((i) => i.name).join(", ")}>
+          +{rest}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -129,13 +176,13 @@ export function PurchasesTable({
             <thead className="bg-background">
               <tr>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Дата создания
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Поставщик
                 </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Закупщик
+                </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Товары
                 </th>
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Валюта
@@ -152,6 +199,9 @@ export function PurchasesTable({
                 <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
                   Просрочка
                 </th>
+                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                  Дата создания
+                </th>
               </tr>
             </thead>
             <TableBody>
@@ -162,19 +212,22 @@ export function PurchasesTable({
                   onClick={() => router.push(`/procurement/purchases/${row.id}`)}
                 >
                   <TableCell className="px-3 py-2 whitespace-nowrap">
-                    {formatDate(row.createdAt)}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 whitespace-nowrap">
                     {row.supplierName}
                   </TableCell>
                   <TableCell className="px-3 py-2 whitespace-nowrap">
                     {row.buyerName ?? "—"}
                   </TableCell>
+                  <TableCell className="px-3 py-2">
+                    <ItemsThumbs items={row.items} />
+                  </TableCell>
                   <TableCell className="px-3 py-2 text-center whitespace-nowrap font-mono text-xs">
                     {row.currency}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                    {formatMoney(row.total, row.currency)}
+                    <div>{formatMoney(row.total, row.currency)}</div>
+                    {row.totalRub != null && row.currency !== "RUB" && (
+                      <div className="text-xs text-muted-foreground">≈ {formatRub(row.totalRub)}</div>
+                    )}
                   </TableCell>
                   <TableCell className="px-3 py-2 text-center">
                     <StatusBadge status={row.status} />
@@ -190,6 +243,9 @@ export function PurchasesTable({
                     ) : (
                       <span className="text-muted-foreground text-xs">—</span>
                     )}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 whitespace-nowrap">
+                    {formatDate(row.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}

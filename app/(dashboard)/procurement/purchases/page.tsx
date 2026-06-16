@@ -4,6 +4,7 @@
 // OVERDUE вычисляется live на read time (RESEARCH Open Questions #2).
 import { requireSection, getSectionRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
+import { getLatestRate } from "@/lib/cbr-rates"
 import { PurchaseFilters } from "@/components/procurement/PurchaseFilters"
 import { PurchasesTable, type PurchaseRow } from "@/components/procurement/PurchasesTable"
 import type {
@@ -76,7 +77,13 @@ export default async function PurchasesPage({
               buyer: { select: { lastName: true, firstName: true } },
             },
           },
-          items: { select: { quantity: true, unitPrice: true } },
+          items: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              product: { select: { name: true, sku: true, photoUrl: true } },
+            },
+          },
           payments: {
             select: { dueDate: true, paidDate: true, status: true },
           },
@@ -119,12 +126,24 @@ export default async function PurchasesPage({
       }),
     ])
 
+  // ── Курсы ЦБ для пересчёта в рубли (по уникальным валютам списка) ──
+  const currencies = [...new Set(purchases.map((p) => p.currency).filter((c) => c !== "RUB"))]
+  const rateMap: Record<string, number> = {}
+  await Promise.all(
+    currencies.map(async (c) => {
+      const r = await getLatestRate(c, prisma)
+      if (r) rateMap[c] = Number(r.rateToRub)
+    })
+  )
+
   // ── Преобразование закупок в строки ──
   const rows: PurchaseRow[] = purchases.map((p) => {
     const total = p.items.reduce(
       (sum, i) => sum + i.quantity * Number(i.unitPrice),
       0
     )
+    const rate = p.currency === "RUB" ? 1 : rateMap[p.currency] ?? null
+    const totalRub = rate != null ? total * rate : null
     // OVERDUE live: любой платёж dueDate < now, не оплачен.
     const hasOverdue = p.payments.some(
       (pay) => pay.status !== "PAID" && !pay.paidDate && pay.dueDate < now
@@ -144,9 +163,16 @@ export default async function PurchasesPage({
         : null,
       currency: p.currency,
       total,
+      totalRub,
       status: p.status,
       nearestDueDate,
       hasOverdue,
+      items: p.items.map((i) => ({
+        name: i.product.name,
+        sku: i.product.sku,
+        photoUrl: i.product.photoUrl,
+        quantity: i.quantity,
+      })),
     }
   })
 
