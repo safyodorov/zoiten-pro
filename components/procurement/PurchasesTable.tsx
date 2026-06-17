@@ -105,12 +105,14 @@ function formatRub(n: number): string {
 
 function formatWeight(n: number | null): string {
   if (n == null) return "—"
-  return n.toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + " кг"
+  // Целое, округление вверх (по требованию — без дробной части)
+  return Math.ceil(n).toLocaleString("ru-RU") + " кг"
 }
 
 function formatVolume(n: number | null): string {
   if (n == null) return "—"
-  return n.toLocaleString("ru-RU", { maximumFractionDigits: 3 }) + " м³"
+  // Целое, округление вверх
+  return Math.ceil(n).toLocaleString("ru-RU") + " м³"
 }
 
 // Компактная лента миниатюр товаров закупки (до 4 + счётчик остатка).
