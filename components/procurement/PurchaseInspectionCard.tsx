@@ -3,8 +3,14 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Upload, FileText, X, Plus, Video } from "lucide-react"
+import { Upload, FileText, X, Plus, Video, Download } from "lucide-react"
 import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { saveInspection } from "@/app/actions/purchases"
 
 export interface InspectionFile {
@@ -88,13 +94,13 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
   const [videos, setVideos] = useState(data.videos)
   const [videoBusy, setVideoBusy] = useState(false)
   const videoRef = useRef<HTMLInputElement | null>(null)
+  const [playing, setPlaying] = useState<{ id: string; fileName: string } | null>(null)
 
-  async function addVideo(file: File) {
+  async function uploadOneVideo(file: File): Promise<boolean> {
     if (file.size > MAX_VIDEO_INPUT) {
-      toast.error("Файл больше 200 МБ — не принимается")
-      return
+      toast.error(`«${file.name}» больше 200 МБ — пропущено`)
+      return false
     }
-    setVideoBusy(true)
     try {
       const res = await fetch(
         `/api/procurement/inspection/videos?purchaseId=${purchaseId}&name=${encodeURIComponent(file.name)}`,
@@ -106,13 +112,25 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
           ...prev,
           { id: json.id, fileName: json.fileName, sizeBytes: json.sizeBytes },
         ])
-        toast.success("Видео загружено")
-      } else toast.error(json.error ?? "Ошибка загрузки видео")
+        return true
+      }
+      toast.error(json.error ?? `Ошибка загрузки «${file.name}»`)
+      return false
     } catch {
-      toast.error("Ошибка сервера")
-    } finally {
-      setVideoBusy(false)
+      toast.error(`Ошибка загрузки «${file.name}»`)
+      return false
     }
+  }
+
+  // Последовательная загрузка (одно сжатие ffmpeg за раз — бережём CPU/память VPS).
+  async function addVideos(files: FileList) {
+    setVideoBusy(true)
+    let ok = 0
+    for (const f of Array.from(files)) {
+      if (await uploadOneVideo(f)) ok++
+    }
+    setVideoBusy(false)
+    if (ok > 0) toast.success(`Видео загружено: ${ok}`)
   }
 
   async function removeVideo(id: string) {
@@ -446,16 +464,23 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
                   className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 pl-2 pr-1 py-1 text-xs"
                 >
                   <Video className="h-3.5 w-3.5 text-muted-foreground" />
-                  <a
-                    href={`/api/procurement/inspection/videos/${v.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate max-w-[220px] hover:underline"
-                    title={v.fileName}
+                  <button
+                    type="button"
+                    onClick={() => setPlaying({ id: v.id, fileName: v.fileName })}
+                    className="truncate max-w-[220px] hover:underline text-left"
+                    title={`Смотреть «${v.fileName}»`}
                   >
                     {v.fileName}
-                  </a>
+                  </button>
                   <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
+                  <a
+                    href={`/api/procurement/inspection/videos/${v.id}`}
+                    download
+                    className="text-muted-foreground hover:text-foreground"
+                    title="Скачать"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </a>
                   {canManage && (
                     <button
                       type="button"
@@ -475,9 +500,10 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
                   ref={videoRef}
                   type="file"
                   accept="video/*"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    if (e.target.files?.[0]) addVideo(e.target.files[0])
+                    if (e.target.files?.length) addVideos(e.target.files)
                     e.target.value = ""
                   }}
                 />
@@ -597,6 +623,34 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
           )}
         </div>
       </div>
+
+      {/* Модалка просмотра видео */}
+      <Dialog open={!!playing} onOpenChange={(o) => !o && setPlaying(null)}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">{playing?.fileName}</DialogTitle>
+          </DialogHeader>
+          {playing && (
+            <div className="space-y-2">
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+              <video
+                src={`/api/procurement/inspection/videos/${playing.id}`}
+                controls
+                autoPlay
+                className="w-full max-h-[70vh] rounded-md bg-black"
+              />
+              <a
+                href={`/api/procurement/inspection/videos/${playing.id}`}
+                download
+                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+              >
+                <Download className="h-4 w-4" />
+                Скачать
+              </a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
