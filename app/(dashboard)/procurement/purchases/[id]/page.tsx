@@ -86,7 +86,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
       documents: { orderBy: [{ category: "asc" }, { createdAt: "asc" }] },
-      inspection: { include: { contacts: true } },
+      inspection: { include: { contacts: true, photos: { orderBy: { sortOrder: "asc" } } } },
     },
   })
 
@@ -144,6 +144,8 @@ export default async function PurchaseDetailPage({ params }: Props) {
     })),
     techSpec: { name: insp?.techSpecName ?? null, size: insp?.techSpecSize ?? null },
     report: { name: insp?.reportName ?? null, size: insp?.reportSize ?? null },
+    reportSummary: insp?.reportSummary ?? "",
+    photos: (insp?.photos ?? []).map((p) => ({ id: p.id })),
   }
 
   // ── Платежи → drafts ──

@@ -20,6 +20,32 @@ export interface InspectionData {
   contacts: { phone: string; wechat: string }[]
   techSpec: InspectionFile
   report: InspectionFile
+  reportSummary: string
+  photos: { id: string }[]
+}
+
+const MAX_PHOTOS = 300
+
+// Сжатие фото на клиенте перед загрузкой: max 1280px, jpeg 0.7 (учёт EXIF-ориентации).
+async function compressImage(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" })
+  const maxDim = 1280
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+  const w = Math.round(bitmap.width * scale)
+  const h = Math.round(bitmap.height * scale)
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext("2d")
+  ctx?.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close?.()
+  return await new Promise<Blob>((resolve, reject) =>
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+      "image/jpeg",
+      0.7
+    )
+  )
 }
 
 interface Props {
@@ -47,6 +73,74 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
   const techRef = useRef<HTMLInputElement | null>(null)
   const reportRef = useRef<HTMLInputElement | null>(null)
   const [uploading, setUploading] = useState<"techspec" | "report" | null>(null)
+
+  // Генерация отчёта
+  const [genOpen, setGenOpen] = useState(false)
+  const [summary, setSummary] = useState(data.reportSummary)
+  const [photos, setPhotos] = useState<{ id: string }[]>(data.photos)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const photoRef = useRef<HTMLInputElement | null>(null)
+
+  async function addPhotos(files: FileList) {
+    const room = MAX_PHOTOS - photos.length
+    if (room <= 0) {
+      toast.error(`Лимит ${MAX_PHOTOS} фото`)
+      return
+    }
+    const list = Array.from(files).slice(0, room)
+    setPhotoBusy(true)
+    let ok = 0
+    for (const f of list) {
+      try {
+        const blob = await compressImage(f)
+        const fd = new FormData()
+        fd.append("file", new File([blob], "photo.jpg", { type: "image/jpeg" }))
+        fd.append("purchaseId", purchaseId)
+        const res = await fetch("/api/procurement/inspection/photos", { method: "POST", body: fd })
+        const json = await res.json()
+        if (res.ok && json.ok) {
+          setPhotos((prev) => [...prev, { id: json.id }])
+          ok++
+        } else toast.error(json.error ?? "Ошибка загрузки фото")
+      } catch {
+        toast.error("Не удалось обработать фото")
+      }
+    }
+    setPhotoBusy(false)
+    if (ok > 0) toast.success(`Добавлено фото: ${ok}`)
+  }
+
+  async function removePhoto(id: string) {
+    try {
+      const res = await fetch(`/api/procurement/inspection/photos?id=${id}`, { method: "DELETE" })
+      if (res.ok) setPhotos((prev) => prev.filter((p) => p.id !== id))
+      else toast.error("Ошибка удаления фото")
+    } catch {
+      toast.error("Ошибка сервера")
+    }
+  }
+
+  async function generateReport() {
+    setGenerating(true)
+    try {
+      const res = await fetch("/api/procurement/inspection/report-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purchaseId, summary }),
+      })
+      const json = await res.json()
+      if (res.ok && json.ok) {
+        toast.success("Отчёт сгенерирован")
+        setGenOpen(false)
+        router.refresh()
+      } else toast.error(json.error ?? "Ошибка генерации")
+    } catch {
+      toast.error("Ошибка сервера")
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   async function save() {
     setSaving(true)
@@ -296,11 +390,98 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
 
         <div className="space-y-2 pt-1 border-t">
           <FileRow kind="techspec" label="Техзадание на инспекцию" file={data.techSpec} inputRef={techRef} />
-          <FileRow kind="report" label="Отчёт по инспекции" file={data.report} inputRef={reportRef} />
-          <p className="text-[11px] text-muted-foreground">
-            Генерация отчёта (резюме + фото → PDF) — в следующем обновлении; пока отчёт можно
-            прикрепить файлом.
-          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <FileRow kind="report" label="Отчёт по инспекции" file={data.report} inputRef={reportRef} />
+            {canManage && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="gap-1.5"
+                onClick={() => setGenOpen((v) => !v)}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {genOpen ? "Скрыть генерацию" : "Сгенерировать отчёт"}
+              </Button>
+            )}
+          </div>
+
+          {canManage && genOpen && (
+            <div className="rounded-md border bg-muted/20 p-3 space-y-3">
+              <div className="flex flex-col gap-1">
+                <label className={labelCls}>Резюме инспекции</label>
+                <textarea
+                  value={summary}
+                  onChange={(e) => setSummary(e.target.value)}
+                  rows={5}
+                  placeholder="Текстовое резюме по результатам инспекции..."
+                  className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={labelCls}>
+                    Фото отчёта ({photos.length}/{MAX_PHOTOS})
+                  </span>
+                  <input
+                    ref={photoRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.length) addPhotos(e.target.files)
+                      e.target.value = ""
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={photoBusy || photos.length >= MAX_PHOTOS}
+                    onClick={() => photoRef.current?.click()}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {photoBusy ? "Загрузка..." : "Добавить фото"}
+                  </Button>
+                </div>
+                {photos.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {photos.map((p) => (
+                      <span key={p.id} className="relative group/ph">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`/api/procurement/inspection/photos/${p.id}`}
+                          alt=""
+                          className="h-16 w-16 rounded border object-cover bg-muted"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(p.id)}
+                          className="absolute -top-1.5 -right-1.5 rounded-full bg-background border text-muted-foreground hover:text-destructive opacity-0 group-hover/ph:opacity-100 transition-opacity"
+                          title="Удалить фото"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" onClick={generateReport} disabled={generating}>
+                  {generating ? "Генерация..." : "Сгенерировать отчёт (PDF)"}
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  PDF: инфо о закупке → резюме → фото по 4 на странице (итог ≤ 20 МБ). Появится в
+                  поле «Отчёт по инспекции».
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

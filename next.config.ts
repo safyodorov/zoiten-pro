@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   // поэтому повторную проверку в сборке отключаем — убирает пик памяти.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // pdfkit/sharp — нативные/с data-файлами: не бандлим, тянем из node_modules в рантайме
+  // (иначе pdfkit не находит свои .afm/шрифтовые данные в standalone).
+  serverExternalPackages: ["pdfkit", "sharp"],
   async redirects() {
     return [
       {
