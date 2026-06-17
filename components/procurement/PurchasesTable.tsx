@@ -30,6 +30,7 @@ export interface PurchaseItemMini {
   quantity: number              // заказано
   currentStage?: string | null  // StageKey | null (null = Заказано)
   currentStageQty?: number      // кол-во на текущем этапе
+  currentStageDate?: string | null // ISO даты достижения текущего этапа
   sum?: number                  // сумма в валюте закупки (заказанное кол-во)
   sumRub?: number | null        // сумма в рублях (null если курса нет)
   currency?: string             // валюта закупки
@@ -430,12 +431,19 @@ export function PurchasesTable({
                   </span>
                   <span className="font-mono text-[11px] text-muted-foreground">{it.sku}</span>
                 </div>
-                {/* Статус + кол-во — справа в ячейке Товары, т.е. слева от столбца Сумма */}
+                {/* Статус (+ дата этапа) + кол-во — справа в ячейке Товары, слева от столбца Сумма */}
                 <div className="flex items-center gap-2 shrink-0 pl-2">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
-                  >
-                    {stageText}
+                  <span className="inline-flex flex-col items-center gap-0.5">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                    >
+                      {stageText}
+                    </span>
+                    {it.currentStageDate && (
+                      <span className="text-[10px] tabular-nums text-muted-foreground whitespace-nowrap">
+                        {formatDate(it.currentStageDate)}
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs tabular-nums text-muted-foreground whitespace-nowrap">
                     {qty} шт

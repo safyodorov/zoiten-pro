@@ -84,7 +84,7 @@ export default async function PurchasesPage({
               id: true,
               quantity: true,
               unitPrice: true,
-              stages: { select: { stage: true, quantity: true } },
+              stages: { select: { stage: true, quantity: true, date: true } },
               product: {
                 select: {
                   name: true,
@@ -231,9 +231,10 @@ export default async function PurchasesPage({
         const reached = i.stages.map((s) => s.stage)
         const cur = currentStageOf(reached) // StageKey | null
         // кол-во на текущем этапе: quantity записи прогресса для cur, иначе baseline i.quantity
-        const curQty = cur
-          ? (i.stages.find((s) => s.stage === cur)?.quantity ?? i.quantity)
-          : i.quantity
+        const curStageRow = cur ? i.stages.find((s) => s.stage === cur) : undefined
+        const curQty = curStageRow?.quantity ?? i.quantity
+        // дата достижения текущего этапа (когда товар, напр., стал готов)
+        const curStageDate = curStageRow?.date ? curStageRow.date.toISOString() : null
         const pr = i.product
         const sum = i.quantity * Number(i.unitPrice)              // в валюте закупки, ЗАКАЗАННОЕ кол-во
         const sumRub = rate != null ? sum * rate : null           // через тот же rate что закупка
@@ -250,6 +251,7 @@ export default async function PurchasesPage({
           quantity: i.quantity,
           currentStage: cur,
           currentStageQty: curQty,
+          currentStageDate: curStageDate,
           sum,
           sumRub,
           currency: p.currency,
