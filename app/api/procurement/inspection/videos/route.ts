@@ -197,7 +197,9 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
     include: { inspection: { select: { purchaseId: true } } },
   })
   if (!video) return NextResponse.json({ ok: true })
-  await unlink(join(videoDir(video.inspection.purchaseId), video.storedName)).catch(() => {})
+  const dir = videoDir(video.inspection.purchaseId)
+  await unlink(join(dir, video.storedName)).catch(() => {})
+  await unlink(join(dir, `${video.storedName}.thumb.jpg`)).catch(() => {})
   await prisma.inspectionVideo.delete({ where: { id } })
   return NextResponse.json({ ok: true })
 }

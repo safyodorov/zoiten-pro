@@ -3,7 +3,16 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Upload, FileText, X, Plus, Video, Download } from "lucide-react"
+import {
+  Upload,
+  FileText,
+  X,
+  Plus,
+  Download,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -94,7 +103,7 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
   const [videos, setVideos] = useState(data.videos)
   const [videoBusy, setVideoBusy] = useState(false)
   const videoRef = useRef<HTMLInputElement | null>(null)
-  const [playing, setPlaying] = useState<{ id: string; fileName: string } | null>(null)
+  const [playingIndex, setPlayingIndex] = useState<number | null>(null)
 
   async function uploadOneVideo(file: File): Promise<boolean> {
     if (file.size > MAX_VIDEO_INPUT) {
@@ -454,44 +463,41 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
         <div className="space-y-2 pt-1 border-t">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`${labelCls} w-44 shrink-0`}>Видео инспекции</span>
-            <div className="flex-1 min-w-0 flex flex-wrap gap-1.5">
+            <div className="flex-1 min-w-0 flex flex-wrap gap-2">
               {videos.length === 0 && (
                 <span className="text-xs text-muted-foreground pt-1">— нет</span>
               )}
-              {videos.map((v) => (
-                <span
-                  key={v.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 pl-2 pr-1 py-1 text-xs"
-                >
-                  <Video className="h-3.5 w-3.5 text-muted-foreground" />
+              {videos.map((v, idx) => (
+                <div key={v.id} className="relative group/vid">
                   <button
                     type="button"
-                    onClick={() => setPlaying({ id: v.id, fileName: v.fileName })}
-                    className="truncate max-w-[220px] hover:underline text-left"
-                    title={`Смотреть «${v.fileName}»`}
+                    onClick={() => setPlayingIndex(idx)}
+                    title={`Смотреть «${v.fileName}» (${formatSize(v.sizeBytes)})`}
+                    className="block h-20 w-28 rounded-md border overflow-hidden bg-muted relative"
                   >
-                    {v.fileName}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/api/procurement/inspection/videos/${v.id}/thumb`}
+                      alt={v.fileName}
+                      className="h-full w-full object-cover"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="rounded-full bg-black/50 p-1.5">
+                        <Play className="h-4 w-4 text-white fill-white" />
+                      </span>
+                    </span>
                   </button>
-                  <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
-                  <a
-                    href={`/api/procurement/inspection/videos/${v.id}`}
-                    download
-                    className="text-muted-foreground hover:text-foreground"
-                    title="Скачать"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </a>
                   {canManage && (
                     <button
                       type="button"
                       onClick={() => removeVideo(v.id)}
-                      className="text-muted-foreground hover:text-destructive"
                       title="Удалить"
+                      className="absolute -top-1.5 -right-1.5 rounded-full bg-background border text-muted-foreground hover:text-destructive opacity-0 group-hover/vid:opacity-100 transition-opacity"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   )}
-                </span>
+                </div>
               ))}
             </div>
             {canManage && (
@@ -624,30 +630,60 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
         </div>
       </div>
 
-      {/* Модалка просмотра видео */}
-      <Dialog open={!!playing} onOpenChange={(o) => !o && setPlaying(null)}>
+      {/* Модалка просмотра видео с перелистыванием */}
+      <Dialog open={playingIndex !== null} onOpenChange={(o) => !o && setPlayingIndex(null)}>
         <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="truncate pr-6">{playing?.fileName}</DialogTitle>
-          </DialogHeader>
-          {playing && (
-            <div className="space-y-2">
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-              <video
-                src={`/api/procurement/inspection/videos/${playing.id}`}
-                controls
-                autoPlay
-                className="w-full max-h-[70vh] rounded-md bg-black"
-              />
+          {playingIndex !== null && videos[playingIndex] && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="truncate pr-6">
+                  {videos[playingIndex].fileName}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {playingIndex + 1} / {videos.length}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={playingIndex === 0}
+                  onClick={() => setPlayingIndex((i) => (i !== null ? i - 1 : i))}
+                  title="Предыдущее"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+                {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                <video
+                  key={videos[playingIndex].id}
+                  src={`/api/procurement/inspection/videos/${videos[playingIndex].id}`}
+                  controls
+                  autoPlay
+                  className="flex-1 min-w-0 max-h-[70vh] rounded-md bg-black"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={playingIndex === videos.length - 1}
+                  onClick={() => setPlayingIndex((i) => (i !== null ? i + 1 : i))}
+                  title="Следующее"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </div>
               <a
-                href={`/api/procurement/inspection/videos/${playing.id}`}
+                href={`/api/procurement/inspection/videos/${videos[playingIndex].id}`}
                 download
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline w-fit"
               >
                 <Download className="h-4 w-4" />
                 Скачать
               </a>
-            </div>
+            </>
           )}
         </DialogContent>
       </Dialog>
