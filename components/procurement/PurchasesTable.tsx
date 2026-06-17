@@ -93,11 +93,8 @@ function formatDate(iso: string | null): string {
 }
 
 function formatMoney(n: number, currency: string): string {
-  return (
-    n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-    " " +
-    currency
-  )
+  // В таблице закупок суммы в валюте контракта показываем целыми (без копеек/фыней).
+  return n.toLocaleString("ru-RU", { maximumFractionDigits: 0 }) + " " + currency
 }
 
 function formatRub(n: number): string {
