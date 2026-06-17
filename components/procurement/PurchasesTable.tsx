@@ -402,53 +402,66 @@ export function PurchasesTable({
         const qty = it.currentStageQty ?? it.quantity
         bodyRows.push(
           <TableRow key={`${row.id}-item-${idx}`} className="bg-muted/20 hover:bg-muted/30">
-            <TableCell colSpan={colCount} className="px-3 py-1.5 border-l-2 border-l-primary/40">
+            {/* Колонки выровнены с основной строкой: [чекбокс] Товары·Сумма·Вес·Объём + хвост */}
+            {canManage && (
+              <TableCell className="px-2 py-1.5 border-l-2 border-l-primary/40" />
+            )}
+            <TableCell
+              className={`px-3 py-1.5 ${canManage ? "" : "border-l-2 border-l-primary/40"}`}
+            >
               <div className="flex items-center gap-2.5 min-w-0">
                 {it.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={it.photoUrl}
                     alt={it.name}
-                    className="h-[30px] w-[22px] shrink-0 rounded border object-cover bg-muted"
+                    className="h-[60px] w-[44px] shrink-0 rounded border object-cover bg-muted"
                   />
                 ) : (
-                  <div className="h-[30px] w-[22px] shrink-0 rounded border bg-muted flex items-center justify-center text-muted-foreground">
-                    <Package className="h-3 w-3" />
+                  <div className="h-[60px] w-[44px] shrink-0 rounded border bg-muted flex items-center justify-center text-muted-foreground">
+                    <Package className="h-5 w-5" />
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <span className="text-xs font-medium truncate" title={it.name}>{it.name}</span>
-                  {" "}
+                  <span className="block truncate text-xs font-medium" title={it.name}>
+                    {it.name}
+                  </span>
                   <span className="font-mono text-[11px] text-muted-foreground">{it.sku}</span>
                 </div>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${badgeClass}`}
-                >
-                  {stageText}
-                </span>
-                <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-                  {qty} шт
-                </span>
-                {it.sum != null && (
-                  <span className="text-xs tabular-nums shrink-0 whitespace-nowrap">
-                    {it.sumRub != null && it.currency !== "RUB" ? (
-                      <>
-                        {formatRub(it.sumRub)}
-                        <span className="text-muted-foreground"> · {formatMoney(it.sum, it.currency ?? "")}</span>
-                      </>
-                    ) : (
-                      formatMoney(it.sum, it.currency ?? "")
-                    )}
+                {/* Статус + кол-во — справа в ячейке Товары, т.е. слева от столбца Сумма */}
+                <div className="flex items-center gap-2 shrink-0 pl-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                  >
+                    {stageText}
                   </span>
-                )}
-                <span className="text-xs tabular-nums text-muted-foreground shrink-0 whitespace-nowrap">
-                  {formatWeight(it.weightKg ?? null)}
-                </span>
-                <span className="text-xs tabular-nums text-muted-foreground shrink-0 whitespace-nowrap">
-                  {formatVolume(it.volumeM3 ?? null)}
-                </span>
+                  <span className="text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                    {qty} шт
+                  </span>
+                </div>
               </div>
             </TableCell>
+            <TableCell className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums text-xs">
+              {it.sum != null ? (
+                it.sumRub != null && it.currency !== "RUB" ? (
+                  <>
+                    <div>{formatRub(it.sumRub)}</div>
+                    <div className="text-muted-foreground">{formatMoney(it.sum, it.currency ?? "")}</div>
+                  </>
+                ) : (
+                  <div>{formatMoney(it.sum, it.currency ?? "")}</div>
+                )
+              ) : (
+                "—"
+              )}
+            </TableCell>
+            <TableCell className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums text-xs text-muted-foreground">
+              {formatWeight(it.weightKg ?? null)}
+            </TableCell>
+            <TableCell className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums text-xs text-muted-foreground">
+              {formatVolume(it.volumeM3 ?? null)}
+            </TableCell>
+            <TableCell colSpan={5} className="px-3 py-1.5" />
           </TableRow>
         )
       }
