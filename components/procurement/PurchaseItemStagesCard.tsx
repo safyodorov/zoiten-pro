@@ -152,8 +152,9 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
           newCells[key] = { ...newCells[key], date: todayMoscow() }
         }
       } else {
-        // Этапы после кликнутого — очистить qty и date
-        newCells[key] = { ...newCells[key], qty: "", date: "" }
+        // Этапы после кликнутого — очистить qty, date И комментарий
+        // (иначе оставшийся комментарий «воскрешал» этап при сохранении).
+        newCells[key] = { ...newCells[key], qty: "", date: "", comment: "" }
       }
     }
 
@@ -177,15 +178,15 @@ export function PurchaseItemStagesCard({ purchaseId, items, canManage }: Props) 
           const cell = cells[key]
           const raw = cell.qty.trim()
           const hasQty = raw !== "" && !isNaN(Number(raw))
-          const hasComment = cell.comment.trim() !== ""
-          if (!hasQty && !hasComment) continue
-          // если задан только комментарий — берём унаследованное эффективное кол-во
-          const quantity = hasQty ? Number(raw) : effectiveAt(it.ordered, cells, key)
+          // Этап считается достигнутым ТОЛЬКО при заданном кол-ве. Комментарий —
+          // метаданные достигнутого этапа (вводится лишь для активного этапа),
+          // сам по себе этап не создаёт — иначе откат не сохранялся бы.
+          if (!hasQty) continue
           entries.push({
             itemId: it.itemId,
             stage: key,
-            quantity,
-            comment: hasComment ? cell.comment.trim() : null,
+            quantity: Number(raw),
+            comment: cell.comment.trim() || null,
             date: cell.date.trim() || null,
           })
         }

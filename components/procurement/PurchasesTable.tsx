@@ -342,8 +342,10 @@ export function PurchasesTable({
       if (g) {
         bodyRows.push(
           <TableRow key={`g-${row.groupId}`} className="bg-muted hover:bg-muted">
-            <TableCell colSpan={colCount} className="px-3 py-2">
-              <div className="flex items-center gap-2 flex-wrap">
+            {canManage && <TableCell className="px-2 py-2" />}
+            {/* Товары: иконка + название (редактируемое) + разгруппировать */}
+            <TableCell className="px-3 py-2">
+              <div className="flex items-center gap-2">
                 <Link2 className="h-4 w-4 text-primary shrink-0" />
                 {editingGroup === row.groupId ? (
                   <input
@@ -370,18 +372,13 @@ export function PurchasesTable({
                     <Pencil className="h-3 w-3 opacity-0 group-hover/name:opacity-60" />
                   </button>
                 )}
-                <span className="text-xs text-muted-foreground">·</span>
-                <span className="text-sm font-medium">
-                  {g.totalRub != null ? formatRub(g.totalRub) : "— ₽"}
-                </span>
-                <span className="text-xs text-muted-foreground">({groupSubtotalText(g)})</span>
                 {canManage && (
                   <button
                     type="button"
                     title="Разгруппировать"
                     disabled={busy}
                     onClick={() => run(ungroupPurchaseGroup(row.groupId!))}
-                    className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
                   >
                     <Link2Off className="h-3.5 w-3.5" />
                     Разгруппировать
@@ -389,6 +386,16 @@ export function PurchasesTable({
                 )}
               </div>
             </TableCell>
+            {/* Сумма группы — выровнена с колонкой Сумма */}
+            <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums font-medium">
+              <div>{g.totalRub != null ? formatRub(g.totalRub) : "— ₽"}</div>
+              {g.byCurrency.length > 0 && (
+                <div className="text-xs font-normal text-muted-foreground">
+                  {groupSubtotalText(g)}
+                </div>
+              )}
+            </TableCell>
+            <TableCell className="px-3 py-2" colSpan={colCount - (canManage ? 3 : 2)} />
           </TableRow>
         )
       }
