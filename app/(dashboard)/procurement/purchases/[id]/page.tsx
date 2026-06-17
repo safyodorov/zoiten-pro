@@ -86,7 +86,13 @@ export default async function PurchaseDetailPage({ params }: Props) {
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
       documents: { orderBy: [{ category: "asc" }, { createdAt: "asc" }] },
-      inspection: { include: { contacts: true, photos: { orderBy: { sortOrder: "asc" } } } },
+      inspection: {
+        include: {
+          contacts: true,
+          photos: { orderBy: { sortOrder: "asc" } },
+          videos: { orderBy: { createdAt: "asc" } },
+        },
+      },
     },
   })
 
@@ -146,6 +152,11 @@ export default async function PurchaseDetailPage({ params }: Props) {
     report: { name: insp?.reportName ?? null, size: insp?.reportSize ?? null },
     reportSummary: insp?.reportSummary ?? "",
     photos: (insp?.photos ?? []).map((p) => ({ id: p.id })),
+    videos: (insp?.videos ?? []).map((v) => ({
+      id: v.id,
+      fileName: v.fileName,
+      sizeBytes: v.sizeBytes,
+    })),
   }
 
   // ── Платежи → drafts ──

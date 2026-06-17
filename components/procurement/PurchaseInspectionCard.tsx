@@ -3,7 +3,7 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Upload, FileText, X, Plus } from "lucide-react"
+import { Upload, FileText, X, Plus, Video } from "lucide-react"
 import { toast } from "sonner"
 import { saveInspection } from "@/app/actions/purchases"
 
@@ -22,9 +22,11 @@ export interface InspectionData {
   report: InspectionFile
   reportSummary: string
   photos: { id: string }[]
+  videos: { id: string; fileName: string; sizeBytes: number }[]
 }
 
 const MAX_PHOTOS = 300
+const MAX_VIDEO_INPUT = 200 * 1024 * 1024
 
 // Сжатие фото на клиенте перед загрузкой: max 1280px, jpeg 0.7 (учёт EXIF-ориентации).
 async function compressImage(file: File): Promise<Blob> {
@@ -81,6 +83,48 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
   const [photoBusy, setPhotoBusy] = useState(false)
   const [generating, setGenerating] = useState(false)
   const photoRef = useRef<HTMLInputElement | null>(null)
+
+  // Видео инспекции
+  const [videos, setVideos] = useState(data.videos)
+  const [videoBusy, setVideoBusy] = useState(false)
+  const videoRef = useRef<HTMLInputElement | null>(null)
+
+  async function addVideo(file: File) {
+    if (file.size > MAX_VIDEO_INPUT) {
+      toast.error("Файл больше 200 МБ — не принимается")
+      return
+    }
+    setVideoBusy(true)
+    try {
+      const res = await fetch(
+        `/api/procurement/inspection/videos?purchaseId=${purchaseId}&name=${encodeURIComponent(file.name)}`,
+        { method: "POST", headers: { "Content-Type": file.type || "video/mp4" }, body: file }
+      )
+      const json = await res.json()
+      if (res.ok && json.ok) {
+        setVideos((prev) => [
+          ...prev,
+          { id: json.id, fileName: json.fileName, sizeBytes: json.sizeBytes },
+        ])
+        toast.success("Видео загружено")
+      } else toast.error(json.error ?? "Ошибка загрузки видео")
+    } catch {
+      toast.error("Ошибка сервера")
+    } finally {
+      setVideoBusy(false)
+    }
+  }
+
+  async function removeVideo(id: string) {
+    if (!window.confirm("Удалить видео?")) return
+    try {
+      const res = await fetch(`/api/procurement/inspection/videos?id=${id}`, { method: "DELETE" })
+      if (res.ok) setVideos((prev) => prev.filter((v) => v.id !== id))
+      else toast.error("Ошибка удаления")
+    } catch {
+      toast.error("Ошибка сервера")
+    }
+  }
 
   async function addPhotos(files: FileList) {
     const room = MAX_PHOTOS - photos.length
@@ -386,6 +430,75 @@ export function PurchaseInspectionCard({ purchaseId, data, canManage }: Props) {
               </Button>
             )}
           </div>
+        </div>
+
+        {/* Видео инспекции */}
+        <div className="space-y-2 pt-1 border-t">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`${labelCls} w-44 shrink-0`}>Видео инспекции</span>
+            <div className="flex-1 min-w-0 flex flex-wrap gap-1.5">
+              {videos.length === 0 && (
+                <span className="text-xs text-muted-foreground pt-1">— нет</span>
+              )}
+              {videos.map((v) => (
+                <span
+                  key={v.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border bg-muted/40 pl-2 pr-1 py-1 text-xs"
+                >
+                  <Video className="h-3.5 w-3.5 text-muted-foreground" />
+                  <a
+                    href={`/api/procurement/inspection/videos/${v.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="truncate max-w-[220px] hover:underline"
+                    title={v.fileName}
+                  >
+                    {v.fileName}
+                  </a>
+                  <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(v.id)}
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Удалить"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+            {canManage && (
+              <div className="shrink-0">
+                <input
+                  ref={videoRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) addVideo(e.target.files[0])
+                    e.target.value = ""
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  disabled={videoBusy}
+                  onClick={() => videoRef.current?.click()}
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {videoBusy ? "Загрузка/сжатие..." : "Видео"}
+                </Button>
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Приём до 200 МБ; если файл больше 20 МБ — автоматически сжимается до ≤20 МБ
+            (загрузка большого файла может занять время).
+          </p>
         </div>
 
         <div className="space-y-2 pt-1 border-t">

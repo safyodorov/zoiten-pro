@@ -1535,6 +1535,7 @@ model PurchaseInspection {
   reportSize    Int?
   contacts      InspectionContact[]
   photos        InspectionPhoto[]
+  videos        InspectionVideo[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 }
@@ -1557,6 +1558,20 @@ model InspectionPhoto {
   inspection   PurchaseInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   storedName   String
   sortOrder    Int                @default(0)
+  createdAt    DateTime           @default(now())
+
+  @@index([inspectionId])
+}
+
+// Видео инспекции (если >20МБ — сжимается ffmpeg до ≤20МБ при загрузке).
+model InspectionVideo {
+  id           String             @id @default(cuid())
+  inspectionId String
+  inspection   PurchaseInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  fileName     String
+  storedName   String
+  mimeType     String
+  sizeBytes    Int
   createdAt    DateTime           @default(now())
 
   @@index([inspectionId])
