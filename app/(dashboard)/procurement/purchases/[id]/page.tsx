@@ -18,6 +18,11 @@ import {
   type ItemStageData,
   type StageKey,
 } from "@/components/procurement/PurchaseItemStagesCard"
+import {
+  PurchaseDocumentsCard,
+  type DocItem,
+} from "@/components/procurement/PurchaseDocumentsCard"
+import type { DocCategory } from "@/lib/purchase-documents"
 import type {
   PurchaseForModal,
   SupplierOption,
@@ -76,6 +81,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
         },
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
+      documents: { orderBy: [{ category: "asc" }, { createdAt: "asc" }] },
     },
   })
 
@@ -111,6 +117,14 @@ export default async function PurchaseDetailPage({ params }: Props) {
       stages,
     }
   })
+
+  // ── Документы ──
+  const docItems: DocItem[] = purchase.documents.map((d) => ({
+    id: d.id,
+    category: d.category as DocCategory,
+    fileName: d.fileName,
+    sizeBytes: d.sizeBytes,
+  }))
 
   // ── Платежи → drafts ──
   const initialPayments: PaymentDraft[] = purchase.payments.map((p) => ({
@@ -313,6 +327,13 @@ export default async function PurchaseDetailPage({ params }: Props) {
         total={total}
         rateToRub={rateToRub}
         initialPayments={initialPayments}
+        canManage={canManage}
+      />
+
+      {/* Документы (таможня + прочие) */}
+      <PurchaseDocumentsCard
+        purchaseId={purchase.id}
+        documents={docItems}
         canManage={canManage}
       />
     </div>

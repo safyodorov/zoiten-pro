@@ -1475,6 +1475,7 @@ model Purchase {
   logisticsComment   String?
   items              PurchaseItem[]
   payments           PurchasePayment[]
+  documents          PurchaseDocument[]
   groupId            String?
   group              PurchaseGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt          DateTime          @default(now())
@@ -1483,6 +1484,31 @@ model Purchase {
   @@index([supplierId])
   @@index([status])
   @@index([groupId])
+}
+
+// Документы закупки. Таможенные — по категориям; прочие — без структуры (OTHER).
+enum PurchaseDocCategory {
+  INVOICE // Инвойсы
+  CONTRACT // Контракты
+  CERTIFICATION // Сертификация
+  PACKING_LIST // Упаковочные листы
+  PAYMENT // Платёжки
+  CUSTOMS_OTHER // Прочие (в составе таможенных)
+  OTHER // Документы прочие (без структуры)
+}
+
+model PurchaseDocument {
+  id         String              @id @default(cuid())
+  purchaseId String
+  purchase   Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  category   PurchaseDocCategory
+  fileName   String // оригинальное имя файла
+  storedName String // имя на диске (cuid + ext)
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime            @default(now())
+
+  @@index([purchaseId])
 }
 
 // Группа инвойсов: искусственно раздробленные закупки одного поставщика,
