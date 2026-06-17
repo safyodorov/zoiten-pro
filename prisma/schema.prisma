@@ -1476,6 +1476,7 @@ model Purchase {
   items              PurchaseItem[]
   payments           PurchasePayment[]
   documents          PurchaseDocument[]
+  inspection         PurchaseInspection?
   groupId            String?
   group              PurchaseGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
   createdAt          DateTime          @default(now())
@@ -1509,6 +1510,56 @@ model PurchaseDocument {
   createdAt  DateTime            @default(now())
 
   @@index([purchaseId])
+}
+
+// Инспекция закупки (1:1). Даты, стоимость, инспектор + контакты, ТЗ-файл,
+// отчёт-файл (загруженный или сгенерированный PDF) + резюме и фото для генерации.
+model PurchaseInspection {
+  id            String              @id @default(cuid())
+  purchaseId    String              @unique
+  purchase      Purchase            @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  plannedDate   DateTime?
+  actualDate    DateTime?
+  costRub       Decimal?            @db.Decimal(14, 2)
+  inspectorName String?
+  reportSummary String? // текст резюме для генерации отчёта (персистится)
+  // Техзадание (один файл)
+  techSpecName  String?
+  techSpecStored String?
+  techSpecMime  String?
+  techSpecSize  Int?
+  // Отчёт (один файл — загруженный или сгенерированный PDF)
+  reportName    String?
+  reportStored  String?
+  reportMime    String?
+  reportSize    Int?
+  contacts      InspectionContact[]
+  photos        InspectionPhoto[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+// Контакт инспектора (под одним именем может быть несколько: тел + вичат).
+model InspectionContact {
+  id           String             @id @default(cuid())
+  inspectionId String
+  inspection   PurchaseInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  phone        String?
+  wechat       String?
+
+  @@index([inspectionId])
+}
+
+// Фото для генерации отчёта (уже сжатые при загрузке).
+model InspectionPhoto {
+  id           String             @id @default(cuid())
+  inspectionId String
+  inspection   PurchaseInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  storedName   String
+  sortOrder    Int                @default(0)
+  createdAt    DateTime           @default(now())
+
+  @@index([inspectionId])
 }
 
 // Группа инвойсов: искусственно раздробленные закупки одного поставщика,

@@ -23,6 +23,10 @@ import {
   type DocItem,
 } from "@/components/procurement/PurchaseDocumentsCard"
 import type { DocCategory } from "@/lib/purchase-documents"
+import {
+  PurchaseInspectionCard,
+  type InspectionData,
+} from "@/components/procurement/PurchaseInspectionCard"
 import type {
   PurchaseForModal,
   SupplierOption,
@@ -82,6 +86,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
       },
       payments: { orderBy: [{ type: "asc" }, { ordinal: "asc" }] },
       documents: { orderBy: [{ category: "asc" }, { createdAt: "asc" }] },
+      inspection: { include: { contacts: true } },
     },
   })
 
@@ -125,6 +130,21 @@ export default async function PurchaseDetailPage({ params }: Props) {
     fileName: d.fileName,
     sizeBytes: d.sizeBytes,
   }))
+
+  // ── Инспекция ──
+  const insp = purchase.inspection
+  const inspectionData: InspectionData = {
+    plannedDate: insp?.plannedDate ? toDateInput(insp.plannedDate) : "",
+    actualDate: insp?.actualDate ? toDateInput(insp.actualDate) : "",
+    costRub: insp?.costRub != null ? String(insp.costRub) : "",
+    inspectorName: insp?.inspectorName ?? "",
+    contacts: (insp?.contacts ?? []).map((c) => ({
+      phone: c.phone ?? "",
+      wechat: c.wechat ?? "",
+    })),
+    techSpec: { name: insp?.techSpecName ?? null, size: insp?.techSpecSize ?? null },
+    report: { name: insp?.reportName ?? null, size: insp?.reportSize ?? null },
+  }
 
   // ── Платежи → drafts ──
   const initialPayments: PaymentDraft[] = purchase.payments.map((p) => ({
@@ -334,6 +354,13 @@ export default async function PurchaseDetailPage({ params }: Props) {
       <PurchaseDocumentsCard
         purchaseId={purchase.id}
         documents={docItems}
+        canManage={canManage}
+      />
+
+      {/* Инспекция */}
+      <PurchaseInspectionCard
+        purchaseId={purchase.id}
+        data={inspectionData}
         canManage={canManage}
       />
     </div>

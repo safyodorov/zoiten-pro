@@ -574,3 +574,68 @@ export async function savePurchaseItemStages(
     return { ok: false, error: "Ошибка сервера" }
   }
 }
+
+// ── Инспекция: метаданные (даты, стоимость, инспектор + контакты) ──
+
+const InspectionContactSchema = z.object({
+  phone: z.string().nullable().optional(),
+  wechat: z.string().nullable().optional(),
+})
+
+const InspectionSchema = z.object({
+  plannedDate: z.string().nullable().optional(),
+  actualDate: z.string().nullable().optional(),
+  costRub: z.number().nullable().optional(),
+  inspectorName: z.string().nullable().optional(),
+  contacts: z.array(InspectionContactSchema).default([]),
+})
+
+export async function saveInspection(
+  purchaseId: string,
+  dataRaw: unknown
+): Promise<ActionResult> {
+  try {
+    await requireSection("PROCUREMENT", "MANAGE")
+    const data = InspectionSchema.parse(dataRaw)
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      select: { id: true },
+    })
+    if (!purchase) return { ok: false, error: "Закупка не найдена" }
+
+    const scalars = {
+      plannedDate: parseDate(data.plannedDate ?? null),
+      actualDate: parseDate(data.actualDate ?? null),
+      costRub: data.costRub ?? null,
+      inspectorName: data.inspectorName?.trim() || null,
+    }
+    const contactRows = data.contacts
+      .map((c) => ({ phone: c.phone?.trim() || null, wechat: c.wechat?.trim() || null }))
+      .filter((c) => c.phone || c.wechat)
+
+    const insp = await prisma.purchaseInspection.upsert({
+      where: { purchaseId },
+      create: { purchaseId, ...scalars },
+      update: scalars,
+      select: { id: true },
+    })
+    await prisma.inspectionContact.deleteMany({ where: { inspectionId: insp.id } })
+    if (contactRows.length) {
+      await prisma.inspectionContact.createMany({
+        data: contactRows.map((c) => ({ inspectionId: insp.id, ...c })),
+      })
+    }
+
+    revalidatePath(`/procurement/purchases/${purchaseId}`)
+    return { ok: true }
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    if (e instanceof z.ZodError) {
+      return { ok: false, error: e.issues[0]?.message ?? "Некорректные данные" }
+    }
+    console.error("saveInspection error:", e)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
