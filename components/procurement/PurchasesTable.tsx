@@ -47,6 +47,10 @@ export interface PurchaseRow {
   currency: string
   total: number
   totalRub: number | null // ≈ в рублях по курсу ЦБ (null если курса нет)
+  paid: number // оплачено, в валюте закупки
+  paidRub: number | null
+  remaining: number // осталось оплатить, в валюте закупки
+  remainingRub: number | null
   status: "PLANNED" | "ACTIVE" | "COMPLETED"
   nearestDueDate: string | null // ISO ближайшего неоплаченного платежа
   hasOverdue: boolean
@@ -56,15 +60,22 @@ export interface PurchaseRow {
   items: PurchaseItemMini[]
 }
 
-export interface GroupAgg {
-  name: string
-  totalRub: number | null
+export interface MoneyAgg {
+  rub: number | null
   byCurrency: { currency: string; total: number }[]
 }
 
+export interface GroupAgg {
+  name: string
+  cost: MoneyAgg
+  paid: MoneyAgg
+  remaining: MoneyAgg
+}
+
 export interface GrandTotals {
-  totalRub: number | null
-  byCurrency: { currency: string; total: number }[]
+  cost: MoneyAgg
+  paid: MoneyAgg
+  remaining: MoneyAgg
   weightKg: number
   volumeM3: number
 }
@@ -174,13 +185,44 @@ function StatusBadge({ status }: { status: PurchaseRow["status"] }) {
   )
 }
 
-// ── Main ───────────────────────────────────────────────────────────
+// ── Money cells ─────────────────────────────────────────────────────
 
-function groupSubtotalText(g: GroupAgg): string {
-  return g.byCurrency
-    .map((c) => formatMoney(c.total, c.currency))
-    .join(" + ")
+// Денежная ячейка строки: ₽ основная + валюта контракта второй строкой.
+function MoneyCell({
+  rub,
+  amount,
+  currency,
+}: {
+  rub: number | null
+  amount: number
+  currency: string
+}) {
+  if (rub != null && currency !== "RUB") {
+    return (
+      <>
+        <div>{formatRub(rub)}</div>
+        <div className="text-xs text-muted-foreground">{formatMoney(amount, currency)}</div>
+      </>
+    )
+  }
+  return <div>{formatMoney(amount, currency)}</div>
 }
+
+// Агрегированная денежная ячейка (группа/итого): ₽ + суммы по валютам.
+function MoneyAggCell({ agg }: { agg: MoneyAgg }) {
+  return (
+    <>
+      <div>{agg.rub != null ? formatRub(agg.rub) : "— ₽"}</div>
+      {agg.byCurrency.length > 0 && (
+        <div className="text-xs font-normal text-muted-foreground">
+          {agg.byCurrency.map((c) => formatMoney(c.total, c.currency)).join(" + ")}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Main ───────────────────────────────────────────────────────────
 
 export function PurchasesTable({
   rows,
@@ -208,8 +250,9 @@ export function PurchasesTable({
     })
   }
 
-  // колонки: [чекбокс] Товары·Сумма·Вес·Объём·Закупщик·Статус·Платёж·Дата·Поставщик
-  const colCount = canManage ? 10 : 9
+  // колонки: [чекбокс] Товары · Стоимость(Сумма·Оплачено·Осталось) · Вес · Объём ·
+  //          Закупщик · Статус · Платёж · Дата · Поставщик
+  const colCount = canManage ? 12 : 11
 
   // Выбранные строки (только не сгруппированные участвуют в объединении).
   const selectedRows = rows.filter((r) => selected.has(r.id))
@@ -300,16 +343,13 @@ export function PurchasesTable({
           </div>
         </TableCell>
         <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
-          {row.totalRub != null && row.currency !== "RUB" ? (
-            <>
-              <div>{formatRub(row.totalRub)}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatMoney(row.total, row.currency)}
-              </div>
-            </>
-          ) : (
-            <div>{formatMoney(row.total, row.currency)}</div>
-          )}
+          <MoneyCell rub={row.totalRub} amount={row.total} currency={row.currency} />
+        </TableCell>
+        <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+          <MoneyCell rub={row.paidRub} amount={row.paid} currency={row.currency} />
+        </TableCell>
+        <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+          <MoneyCell rub={row.remainingRub} amount={row.remaining} currency={row.currency} />
         </TableCell>
         <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
           {formatWeight(row.weightKg)}
@@ -383,16 +423,17 @@ export function PurchasesTable({
                 )}
               </div>
             </TableCell>
-            {/* Сумма группы — выровнена с колонкой Сумма */}
+            {/* Подытоги группы — выровнены с колонками Сумма/Оплачено/Осталось */}
             <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums font-medium">
-              <div>{g.totalRub != null ? formatRub(g.totalRub) : "— ₽"}</div>
-              {g.byCurrency.length > 0 && (
-                <div className="text-xs font-normal text-muted-foreground">
-                  {groupSubtotalText(g)}
-                </div>
-              )}
+              <MoneyAggCell agg={g.cost} />
             </TableCell>
-            <TableCell className="px-3 py-2" colSpan={colCount - (canManage ? 3 : 2)} />
+            <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums font-medium">
+              <MoneyAggCell agg={g.paid} />
+            </TableCell>
+            <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums font-medium">
+              <MoneyAggCell agg={g.remaining} />
+            </TableCell>
+            <TableCell className="px-3 py-2" colSpan={colCount - (canManage ? 5 : 4)} />
           </TableRow>
         )
       }
@@ -469,6 +510,9 @@ export function PurchasesTable({
                 "—"
               )}
             </TableCell>
+            {/* Оплачено/Осталось — на уровне позиции не применимо (платежи на закупку) */}
+            <TableCell className="px-3 py-1.5" />
+            <TableCell className="px-3 py-1.5" />
             <TableCell className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums text-xs text-muted-foreground">
               {formatWeight(it.weightKg ?? null)}
             </TableCell>
@@ -546,38 +590,51 @@ export function PurchasesTable({
         <div className="overflow-auto h-full rounded-lg border">
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead className="bg-background">
-              <tr>
-                {canManage && (
-                  <th className="sticky top-0 z-20 bg-background border-b px-2 py-2 w-8" />
-                )}
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Товары
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Сумма
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Вес
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Объём
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Закупщик
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Статус
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Ближайший платёж
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Дата создания
-                </th>
-                <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                  Поставщик
-                </th>
-              </tr>
+              {(() => {
+                const th1 =
+                  "sticky top-0 z-20 bg-background border-b px-3 py-2 text-xs font-semibold text-muted-foreground whitespace-nowrap"
+                const th2 =
+                  "sticky top-[33px] z-20 bg-background border-b px-3 py-1.5 text-right text-[11px] font-semibold text-muted-foreground whitespace-nowrap"
+                return (
+                  <>
+                    <tr>
+                      {canManage && <th rowSpan={2} className={`${th1} w-8 px-2`} />}
+                      <th rowSpan={2} className={`${th1} text-left`}>
+                        Товары
+                      </th>
+                      <th colSpan={3} className={`${th1} text-center`}>
+                        Стоимость товара
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-right`}>
+                        Вес
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-right`}>
+                        Объём
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-left`}>
+                        Закупщик
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-center`}>
+                        Статус
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-center`}>
+                        Ближайший платёж
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-left`}>
+                        Дата создания
+                      </th>
+                      <th rowSpan={2} className={`${th1} text-left`}>
+                        Поставщик
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className={th2}>Сумма</th>
+                      <th className={th2}>Оплачено</th>
+                      <th className={th2}>Осталось оплатить</th>
+                    </tr>
+                  </>
+                )
+              })()}
             </thead>
             <TableBody>{bodyRows}</TableBody>
             <tfoot>
@@ -589,16 +646,13 @@ export function PurchasesTable({
                   Итого
                 </td>
                 <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
-                  <div>
-                    {grandTotals.totalRub != null ? formatRub(grandTotals.totalRub) : "— ₽"}
-                  </div>
-                  {grandTotals.byCurrency.length > 0 && (
-                    <div className="text-xs font-normal text-muted-foreground">
-                      {grandTotals.byCurrency
-                        .map((c) => formatMoney(c.total, c.currency))
-                        .join(" + ")}
-                    </div>
-                  )}
+                  <MoneyAggCell agg={grandTotals.cost} />
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  <MoneyAggCell agg={grandTotals.paid} />
+                </td>
+                <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  <MoneyAggCell agg={grandTotals.remaining} />
                 </td>
                 <td className="sticky bottom-0 bg-muted border-t px-3 py-2 text-right whitespace-nowrap tabular-nums">
                   {formatWeight(grandTotals.weightKg)}

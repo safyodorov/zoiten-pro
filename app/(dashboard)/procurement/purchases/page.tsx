@@ -105,7 +105,7 @@ export default async function PurchasesPage({
             },
           },
           payments: {
-            select: { dueDate: true, paidDate: true, status: true },
+            select: { dueDate: true, paidDate: true, status: true, amount: true },
           },
         },
       }),
@@ -170,6 +170,14 @@ export default async function PurchasesPage({
     const rate = p.currency === "RUB" ? 1 : rateMap[p.currency] ?? null
     const totalRub = rate != null ? total * rate : null
 
+    // Оплачено / осталось оплатить (в валюте закупки + ₽).
+    const paid = p.payments
+      .filter((pay) => pay.status === "PAID")
+      .reduce((s, pay) => s + Number(pay.amount), 0)
+    const remaining = total - paid
+    const paidRub = rate != null ? paid * rate : null
+    const remainingRub = rate != null ? remaining * rate : null
+
     // Вес (кг) и объём (м³) из БД Товары: qty × per-unit.
     let weightKg = 0
     let volumeM3 = 0
@@ -221,6 +229,10 @@ export default async function PurchasesPage({
       currency: p.currency,
       total,
       totalRub,
+      paid,
+      paidRub,
+      remaining,
+      remainingRub,
       status: p.status,
       nearestDueDate,
       hasOverdue,
@@ -262,28 +274,42 @@ export default async function PurchasesPage({
     }
   })
 
-  // ── Группы инвойсов: агрегаты + кластеризация строк ──
+  // ── Группы инвойсов: агрегаты (стоимость/оплачено/осталось) + кластеризация ──
+  type MoneyAgg = { rub: number | null; byCurrency: { currency: string; total: number }[] }
+  function moneyAgg(
+    members: PurchaseRow[],
+    amt: (r: PurchaseRow) => number,
+    rub: (r: PurchaseRow) => number | null
+  ): MoneyAgg {
+    const byCurrencyMap: Record<string, number> = {}
+    let rubSum = 0
+    let complete = true
+    for (const m of members) {
+      byCurrencyMap[m.currency] = (byCurrencyMap[m.currency] ?? 0) + amt(m)
+      const v = rub(m)
+      if (v != null) rubSum += v
+      else complete = false
+    }
+    return {
+      rub: complete ? rubSum : null,
+      byCurrency: Object.entries(byCurrencyMap).map(([currency, total]) => ({ currency, total })),
+    }
+  }
+
   const groupMeta = new Map(
     purchases.filter((p) => p.group).map((p) => [p.group!.id, p.group!.name])
   )
   const groups: Record<
     string,
-    { name: string; totalRub: number | null; byCurrency: { currency: string; total: number }[] }
+    { name: string; cost: MoneyAgg; paid: MoneyAgg; remaining: MoneyAgg }
   > = {}
   for (const [gid, name] of groupMeta) {
     const members = rows.filter((r) => r.groupId === gid)
-    const byCurrencyMap: Record<string, number> = {}
-    let rubSum = 0
-    let rubComplete = true
-    for (const m of members) {
-      byCurrencyMap[m.currency] = (byCurrencyMap[m.currency] ?? 0) + m.total
-      if (m.totalRub != null) rubSum += m.totalRub
-      else rubComplete = false
-    }
     groups[gid] = {
       name,
-      totalRub: rubComplete ? rubSum : null,
-      byCurrency: Object.entries(byCurrencyMap).map(([currency, total]) => ({ currency, total })),
+      cost: moneyAgg(members, (r) => r.total, (r) => r.totalRub),
+      paid: moneyAgg(members, (r) => r.paid, (r) => r.paidRub),
+      remaining: moneyAgg(members, (r) => r.remaining, (r) => r.remainingRub),
     }
   }
 
@@ -325,22 +351,17 @@ export default async function PurchasesPage({
       )
     )
 
-  // ── Итого по списку (Σ ₽ + по валютам + вес + объём) ──
-  const grandByCurrency: Record<string, number> = {}
-  let grandRub = 0
-  let grandRubComplete = true
+  // ── Итого по списку (стоимость/оплачено/осталось + вес + объём) ──
   let grandWeight = 0
   let grandVolume = 0
   for (const r of rows) {
-    grandByCurrency[r.currency] = (grandByCurrency[r.currency] ?? 0) + r.total
-    if (r.totalRub != null) grandRub += r.totalRub
-    else grandRubComplete = false
     if (r.weightKg != null) grandWeight += r.weightKg
     if (r.volumeM3 != null) grandVolume += r.volumeM3
   }
   const grandTotals = {
-    totalRub: grandRubComplete ? grandRub : null,
-    byCurrency: Object.entries(grandByCurrency).map(([currency, total]) => ({ currency, total })),
+    cost: moneyAgg(rows, (r) => r.total, (r) => r.totalRub),
+    paid: moneyAgg(rows, (r) => r.paid, (r) => r.paidRub),
+    remaining: moneyAgg(rows, (r) => r.remaining, (r) => r.remainingRub),
     weightKg: grandWeight,
     volumeM3: grandVolume,
   }
