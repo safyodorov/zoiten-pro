@@ -74,7 +74,7 @@
 - На VPS (85.198.97.89) уже работает CantonFairBot (/opt/CantonFairBot/)
 - PostgreSQL нужно установить на VPS
 - Домен zoiten.pro пока не привязан к серверу
-- Слоган: "Время для жизни, свобода от рутины"
+- Слоган: "Время для жизни, свобода для мечты"
 - Суперадмин: sergey.fyodorov@gmail.com
 - GitHub: safyodorov/zoiten-pro (private)
 - Служба поддержки берётся из существующего проекта github.com/safyodorov/ai-cs-zoiten

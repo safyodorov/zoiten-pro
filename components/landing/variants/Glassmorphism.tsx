@@ -148,7 +148,7 @@ export function GlassmorphismLanding({ user }: Props) {
             ZOITEN
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400 italic font-light">
-            Время для жизни, свобода от рутины
+            Время для жизни, свобода для мечты
           </p>
         </motion.div>
       </div>

@@ -9,7 +9,7 @@ export default function LoginPage() {
       <CardHeader>
         <CardTitle className="text-2xl text-center">Zoiten ERP</CardTitle>
         <p className="text-sm text-muted-foreground text-center">
-          Время для жизни, свобода от рутины
+          Время для жизни, свобода для мечты
         </p>
       </CardHeader>
       <CardContent>

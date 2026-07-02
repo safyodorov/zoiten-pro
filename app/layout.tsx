@@ -9,7 +9,7 @@ const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "Zoiten ERP",
-  description: "Время для жизни, свобода от рутины",
+  description: "Время для жизни, свобода для мечты",
 }
 
 export default function RootLayout({
