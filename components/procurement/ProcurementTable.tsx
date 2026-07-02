@@ -1,5 +1,8 @@
 "use client"
 
+// Количество «Заказано» read-only (авто из открытых закупок PLANNED+ACTIVE,
+// quick 260702-j52) — ручной ввод закрыт. Дата прихода и план продаж редактируемы.
+
 import { useEffect, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -74,46 +77,23 @@ function ProcurementRow({
   row: ProcurementRowData
   canManage: boolean
 }) {
-  const [qtyStr, setQtyStr] = useState<string>(String(row.orderedQty ?? 0))
   const [dateStr, setDateStr] = useState<string>(row.expectedDate ?? "")
   const [salesStr, setSalesStr] = useState<string>(
     row.plannedSalesPerDay !== null ? String(row.plannedSalesPerDay) : "",
   )
-  const [savingQty, setSavingQty] = useState(false)
   const [savingDate, setSavingDate] = useState(false)
   const [savingSales, setSavingSales] = useState(false)
   const [, startTransition] = useTransition()
-  const qtyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const dateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const salesTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Если данные с сервера обновились (revalidatePath) — синхронизируем формы.
-  useEffect(() => {
-    setQtyStr(String(row.orderedQty ?? 0))
-  }, [row.orderedQty])
   useEffect(() => {
     setDateStr(row.expectedDate ?? "")
   }, [row.expectedDate])
   useEffect(() => {
     setSalesStr(row.plannedSalesPerDay !== null ? String(row.plannedSalesPerDay) : "")
   }, [row.plannedSalesPerDay])
-
-  function saveQty(rawValue: string) {
-    const parsed = rawValue === "" ? 0 : parseInt(rawValue, 10)
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      toast.error("Невалидное число")
-      return
-    }
-    setSavingQty(true)
-    startTransition(async () => {
-      const result = await upsertProductIncoming({
-        productId: row.id,
-        orderedQty: parsed,
-      })
-      setSavingQty(false)
-      if (!result.ok) toast.error(result.error)
-    })
-  }
 
   function saveDate(rawValue: string) {
     setSavingDate(true)
@@ -149,13 +129,6 @@ function ProcurementRow({
       setSavingSales(false)
       if (!result.ok) toast.error(result.error)
     })
-  }
-
-  function handleQtyChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value
-    setQtyStr(value)
-    if (qtyTimer.current) clearTimeout(qtyTimer.current)
-    qtyTimer.current = setTimeout(() => saveQty(value), 500)
   }
 
   function handleDateChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -206,16 +179,12 @@ function ProcurementRow({
         )}
       </TableCell>
       <TableCell>
-        <Input
-          type="number"
-          min={0}
-          step={1}
-          inputMode="numeric"
-          value={qtyStr}
-          onChange={handleQtyChange}
-          disabled={!canManage}
-          className={`h-8 ${savingQty ? "border-primary" : ""}`}
-        />
+        {/* Read-only: количество считается автоматически из открытых закупок */}
+        <span
+          className={`tabular-nums ${(row.orderedQty ?? 0) === 0 ? "text-muted-foreground" : ""}`}
+        >
+          {row.orderedQty ?? 0}
+        </span>
       </TableCell>
       <TableCell>
         <Input

@@ -3,8 +3,12 @@
 //
 // Экспортирует:
 // - upsertIvanovoStock: импорт остатков Иваново из Excel-preview (Plan 14-04)
-// - updateProductionStock: inline-редактирование Производство (Plan 14-05, STOCK-13)
+// - updateProductionArrivalDate: inline-редактирование даты прихода Производства
+// - updateIvanovoStock: inline-редактирование остатка Иваново
 // - updateTurnoverNorm: сохранение нормы оборачиваемости в AppSetting (Plan 14-05, STOCK-14)
+//
+// Количество Производства (ProductIncoming.orderedQty) machine-managed из закупок
+// (lib/production-sync.ts, quick 260702-j52) — ручной редактор количества удалён.
 
 "use server"
 
@@ -82,46 +86,16 @@ export async function upsertIvanovoStock(
 
 // ──────────────────────────────────────────────────────────────────
 // Производство = ProductIncoming (2026-06-04): единый источник с Планом
-// закупок/продаж. Редактирование Производства в /stock пишет в ProductIncoming
-// (кол-во → orderedQty, дата прихода → expectedDate), сохраняя plannedSalesPerDay.
-// Двусторонняя синхронизация: /stock ↔ /purchase-plan ↔ /sales-plan.
+// закупок/продаж. Количество (orderedQty) считается автоматически из открытых
+// закупок (lib/production-sync.ts); вручную редактируется только дата прихода
+// (expectedDate). plannedSalesPerDay сохраняется.
+// Синхронизация: /stock ↔ /purchase-plan ↔ /sales-plan.
 // ──────────────────────────────────────────────────────────────────
 
 function revalidateProductionLinked() {
   revalidatePath("/stock")
   revalidatePath("/purchase-plan")
   revalidatePath("/sales-plan")
-}
-
-const ProductionStockSchema = z.object({
-  productId: z.string().min(1),
-  value: z.number().int().min(0).max(10_000_000).nullable(),
-})
-
-/** Кол-во Производства → ProductIncoming.orderedQty (null/пусто → 0). */
-export async function updateProductionStock(
-  productId: string,
-  value: number | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireSection("STOCK", "MANAGE")
-
-  const parsed = ProductionStockSchema.safeParse({ productId, value })
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Validation failed" }
-  }
-
-  const orderedQty = parsed.data.value ?? 0
-  try {
-    await prisma.productIncoming.upsert({
-      where: { productId: parsed.data.productId },
-      create: { productId: parsed.data.productId, orderedQty },
-      update: { orderedQty },
-    })
-    revalidateProductionLinked()
-    return { ok: true }
-  } catch (e) {
-    return { ok: false, error: (e as Error).message }
-  }
 }
 
 const ArrivalDateSchema = z.object({

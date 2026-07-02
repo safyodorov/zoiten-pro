@@ -1,5 +1,7 @@
 // app/actions/procurement.ts
-// Server Actions для MVP «План закупок»: upsert per-product заказа из Китая
+// Server Actions для MVP «План закупок»: upsert per-product заказа из Китая.
+// orderedQty machine-managed из закупок (lib/production-sync.ts, quick 260702-j52) —
+// action редактирует только expectedDate + plannedSalesPerDay.
 "use server"
 
 import { z } from "zod"
@@ -11,12 +13,6 @@ type ActionResult = { ok: true } | { ok: false; error: string }
 
 const UpsertIncomingSchema = z.object({
   productId: z.string().min(1),
-  orderedQty: z
-    .number()
-    .int()
-    .min(0)
-    .max(10_000_000)
-    .optional(),
   expectedDate: z.union([z.string(), z.null()]).optional(),
   // null чистит, undefined не трогает, число — устанавливает
   plannedSalesPerDay: z.union([z.number().min(0).max(1_000_000), z.null()]).optional(),
@@ -31,7 +27,7 @@ export async function upsertProductIncoming(
   if (!parsed.success) {
     return { ok: false, error: "Невалидные данные" }
   }
-  const { productId, orderedQty, expectedDate, plannedSalesPerDay } = parsed.data
+  const { productId, expectedDate, plannedSalesPerDay } = parsed.data
 
   let expected: Date | null | undefined = undefined
   if (expectedDate === null) {
@@ -57,12 +53,12 @@ export async function upsertProductIncoming(
       where: { productId },
       create: {
         productId,
-        orderedQty: orderedQty ?? 0,
+        // Количество поддерживает только production-sync — новая запись стартует с 0.
+        orderedQty: 0,
         expectedDate: expected ?? null,
         plannedSalesPerDay: plannedSalesPerDay ?? null,
       },
       update: {
-        ...(orderedQty !== undefined ? { orderedQty } : {}),
         ...(expected !== undefined ? { expectedDate: expected } : {}),
         ...(plannedSalesPerDay !== undefined ? { plannedSalesPerDay } : {}),
       },

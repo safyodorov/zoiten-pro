@@ -50,9 +50,18 @@ export interface StockProductRow {
   // Inline редактируемые поля
   ivanovoStock: number | null
   // Производство = ProductIncoming (единый источник с Планом закупок/продаж):
-  // кол-во = orderedQty, дата прихода на склад Иваново = expectedDate.
+  // кол-во = orderedQty (machine-managed из закупок, quick 260702-j52),
+  // дата прихода на склад Иваново = expectedDate (ручная).
   productionStock: number | null
   productionArrivalDate: string | null // ISO YYYY-MM-DD
+  // Раскладка Производства по открытым закупкам (PLANNED+ACTIVE) для tooltip:
+  // qty = quantity − принято на складе (WAREHOUSE), только qty > 0.
+  productionBreakdown: Array<{
+    purchaseId: string
+    supplierName: string
+    createdAt: string // ISO
+    qty: number
+  }>
 
   articles: StockArticleRow[]
   aggregates: StockAggregates
@@ -121,6 +130,49 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
     // (sortOrder каждого уровня настраивается DnD в /admin/settings)
     orderBy: PRODUCT_HIERARCHY_ORDER_BY,
   })
+
+  // 2b. Батч-запрос открытых позиций закупок (PLANNED+ACTIVE) — раскладка
+  // Производства по закупкам для tooltip (quick 260702-j52).
+  const productIds = products.map((p) => p.id)
+  const openItems = productIds.length
+    ? await prisma.purchaseItem.findMany({
+        where: {
+          productId: { in: productIds },
+          purchase: { status: { in: ["PLANNED", "ACTIVE"] } },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+          stages: { where: { stage: "WAREHOUSE" }, select: { quantity: true } },
+          purchase: {
+            select: {
+              id: true,
+              createdAt: true,
+              supplier: { select: { nameEnglish: true, nameForeign: true } },
+            },
+          },
+        },
+        orderBy: { purchase: { createdAt: "asc" } },
+      })
+    : []
+
+  const breakdownByProduct = new Map<string, StockProductRow["productionBreakdown"]>()
+  for (const item of openItems) {
+    const qty = Math.max(0, item.quantity - (item.stages[0]?.quantity ?? 0))
+    if (qty <= 0) continue
+    const entry = {
+      purchaseId: item.purchase.id,
+      supplierName: item.purchase.supplier.nameEnglish || item.purchase.supplier.nameForeign,
+      createdAt: item.purchase.createdAt.toISOString(),
+      qty,
+    }
+    const list = breakdownByProduct.get(item.productId)
+    if (list) {
+      list.push(entry)
+    } else {
+      breakdownByProduct.set(item.productId, [entry])
+    }
+  }
 
   // 3. Батч-запрос WbCard для всех WB-артикулов (один запрос на всю страницу)
   const wbNmIds: number[] = []
@@ -212,6 +264,7 @@ export async function getStockData(filters: StockFilters = {}): Promise<StockDat
       productionArrivalDate: p.incoming?.expectedDate
         ? p.incoming.expectedDate.toISOString().slice(0, 10)
         : null,
+      productionBreakdown: breakdownByProduct.get(p.id) ?? [],
       articles,
       aggregates: {
         wbTotalStock,

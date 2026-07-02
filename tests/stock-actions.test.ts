@@ -1,5 +1,7 @@
 // tests/stock-actions.test.ts
-// Phase 14-05 (STOCK-13, STOCK-14): Unit-тесты server actions updateProductionStock + updateTurnoverNorm.
+// Phase 14-05 (STOCK-14): Unit-тесты server action updateTurnoverNorm.
+// updateProductionStock удалён (quick 260702-j52): количество Производства
+// machine-managed из закупок через lib/production-sync.ts.
 // Паттерн vi.hoisted: из return-actions.test.ts Phase 9.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -35,7 +37,7 @@ vi.mock("next/cache", () => ({
 }))
 
 // Статический импорт — после регистрации моков
-import { updateProductionStock, updateTurnoverNorm } from "@/app/actions/stock"
+import { updateTurnoverNorm } from "@/app/actions/stock"
 
 // ── Константы ─────────────────────────────────────────────────────
 
@@ -51,53 +53,6 @@ beforeEach(() => {
   prismaMock.$transaction.mockImplementation((cb: unknown) =>
     typeof cb === "function" ? cb(prismaMock) : Promise.all(cb as Promise<unknown>[])
   )
-})
-
-// ── updateProductionStock ─────────────────────────────────────────
-
-describe("updateProductionStock", () => {
-  it("valid 500 → update success", async () => {
-    const result = await updateProductionStock("p1", 500)
-    expect(result).toEqual({ ok: true })
-    expect(prismaMock.product.update).toHaveBeenCalledOnce()
-    expect(prismaMock.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "p1" },
-        data: expect.objectContaining({ productionStock: 500 }),
-      })
-    )
-  })
-
-  it("valid null → update success (очистка поля)", async () => {
-    const result = await updateProductionStock("p1", null)
-    expect(result).toEqual({ ok: true })
-    expect(prismaMock.product.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ productionStock: null }),
-      })
-    )
-  })
-
-  it("valid boundary 0 → ok:true", async () => {
-    const result = await updateProductionStock("p1", 0)
-    expect(result.ok).toBe(true)
-  })
-
-  it("valid boundary 99999 → ok:true", async () => {
-    const result = await updateProductionStock("p1", 99999)
-    expect(result.ok).toBe(true)
-  })
-
-  it("invalid -5 → ok:false error", async () => {
-    const result = await updateProductionStock("p1", -5)
-    expect(result.ok).toBe(false)
-    expect("error" in result && result.error).toBeTruthy()
-  })
-
-  it("invalid 100000 → ok:false error", async () => {
-    const result = await updateProductionStock("p1", 100000)
-    expect(result.ok).toBe(false)
-  })
 })
 
 // ── updateTurnoverNorm ────────────────────────────────────────────

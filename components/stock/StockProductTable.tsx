@@ -8,8 +8,10 @@
 //     (порядок изменён 2026-04-22: Производство перед РФ для наглядности планируемого прихода)
 //   - rowSpan: Фото+Сводка rowSpan = 1 + N_articles (Сводная строка + per-article строки)
 //   - DeficitCell: 3-уровневая цветовая кодировка (зелёный/жёлтый/красный)
-//   - Inline-поля (debounced 500ms): Производство (кол-во+дата → ProductIncoming, синхр.
-//     с /purchase-plan и /sales-plan) и Иваново (→ Product.ivanovoStock, глобально).
+//   - Производство: кол-во read-only (авто из открытых закупок PLANNED+ACTIVE,
+//     quick 260702-j52) + tooltip-раскладка по закупкам со ссылкой на /procurement/purchases.
+//   - Inline-поля (debounced 500ms): дата прихода Производства (→ ProductIncoming.expectedDate,
+//     синхр. с /purchase-plan и /sales-plan) и Иваново (→ Product.ivanovoStock, глобально).
 //
 // Паттерн sticky: components/prices/PriceCalculatorTable.tsx — accumulated left, z-20/30, bg-background.
 
@@ -17,6 +19,7 @@
 
 import React, { useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import {
@@ -33,7 +36,6 @@ import {
 } from "@/components/ui/tooltip"
 import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import {
-  updateProductionStock,
   updateProductionArrivalDate,
   updateIvanovoStock,
 } from "@/app/actions/stock"
@@ -169,8 +171,6 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
     timersRef.current.set(key, timer)
   }
 
-  const saveProduction = (productId: string, value: number | null) =>
-    debouncedSave(`prod:${productId}`, () => updateProductionStock(productId, value), "Производство обновлено")
   const saveArrivalDate = (productId: string, dateIso: string | null) =>
     debouncedSave(`date:${productId}`, () => updateProductionArrivalDate(productId, dateIso), "Дата прихода обновлена")
   const saveIvanovo = (productId: string, value: number | null) =>
@@ -415,31 +415,36 @@ export function StockProductTable({ products, turnoverNormDays }: StockProductTa
                     Сводная
                   </TableCell>
 
-                  {/* Производство — inline input (перенесено перед РФ 2026-04-22).
-                      w-full у input + фикс ширина ячейки w-[88px] → колонка стабильна
-                      и в Сводной (input), и в per-article (StockCell).
-                      border-r убран — симметрия с РФ/Иваново StockCell. */}
+                  {/* Производство — read-only число (авто из открытых закупок,
+                      quick 260702-j52). Tooltip с раскладкой по закупкам:
+                      поставщик · дата создания · кол-во (за вычетом принятого)
+                      + ссылка на /procurement/purchases. */}
                   <TableCell className="px-2 py-1 h-8 text-xs tabular-nums text-right w-[88px] min-w-[88px]">
-                    <input
-                      type="number"
-                      min={0}
-                      max={9999999}
-                      className="h-7 w-full rounded border border-input bg-transparent px-1.5 text-xs tabular-nums text-right focus:ring-2 focus:ring-ring outline-none"
-                      defaultValue={p.productionStock ?? ""}
-                      placeholder="—"
-                      aria-label={`Производство (заказано): ${p.name}`}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        if (v === "") {
-                          saveProduction(p.id, null)
-                        } else {
-                          const parsed = parseInt(v, 10)
-                          if (!isNaN(parsed) && parsed >= 0) {
-                            saveProduction(p.id, parsed)
-                          }
-                        }
-                      }}
-                    />
+                    {p.productionBreakdown.length > 0 ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={<span className="cursor-default underline decoration-dotted underline-offset-2" />}
+                        >
+                          {p.productionStock ?? "—"}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="flex flex-col gap-1 text-xs">
+                            {p.productionBreakdown.map((b, i) => (
+                              <div key={`${b.purchaseId}-${i}`} className="whitespace-nowrap">
+                                {b.supplierName} · {new Date(b.createdAt).toLocaleDateString("ru-RU")} · {b.qty} шт
+                              </div>
+                            ))}
+                            <Link href="/procurement/purchases" className="underline">
+                              Открыть закупки
+                            </Link>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : p.productionStock !== null ? (
+                      <span>{p.productionStock}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
 
                   {/* Производство — Дата прихода на склад Иваново (inline) */}
