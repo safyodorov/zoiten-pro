@@ -361,6 +361,7 @@ None yet.
 | fast-260617b | кг и м³ в таблице закупок — целые с округлением вверх (Math.ceil) | 2026-06-17 | ee9ed9d |  | inline (PurchasesTable.tsx) |
 | fast-260617c | Дата текущего этапа рядом со статусом товара в раскрытых строках (page.tsx stages.date → currentStageDate) | 2026-06-17 | 6d0ca98 |  | inline (PurchasesTable.tsx, purchases/page.tsx) |
 | 260616-v5x | Авто-фото товара из первой WB-карточки + флаг override (по образцу nameOverridden): Product.photoOverridden (миграция 20260616_product_photo_overridden) + resolveProductPhoto helper в create/update/duplicate + batch-перевывод в /api/wb-sync (бэкафилл «глючных» null-фото) + UI override в ProductForm («Вернуть авто из WB»). Фикс: фото не менялось при смене порядка артикулов и при синхронизации. Требует prisma migrate deploy на VPS | 2026-06-16 | 92679be |  | [260616-v5x-product-photo-auto-wb](./quick/260616-v5x-product-photo-auto-wb/) |
+| fast-260702 | CLAUDE.md: обязательные правила деплоя (fetch в начале сессии, push в конце, деплой только через nohup + df -h) — после инцидента 2026-07-02 (stale local −435 коммитов, упавший билд стёр прод-сборку) | 2026-07-02 | d8d00e4 |  | inline (CLAUDE.md) |
 
 ### Blockers/Concerns
 
