@@ -25,6 +25,7 @@ import { calculateStockMetrics, deficitThreshold } from "@/lib/stock-math"
 import { CLUSTER_ORDER, type ClusterShortName } from "@/lib/wb-clusters"
 import { ClusterTooltip } from "./ClusterTooltip"
 import { WarehouseVisibilityPopover } from "./WarehouseVisibilityPopover"
+import { StockWbExportButton } from "./StockWbExportButton"
 import type { ProductWbGroup, StockWbDataResult, WbStockSizeRow } from "@/lib/stock-wb-data"
 import { saveStockWbShowSizes } from "@/app/actions/stock-wb"
 
@@ -197,6 +198,9 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
         >
           По размерам
         </Button>
+        <div className="ml-auto">
+          <StockWbExportButton />
+        </div>
       </div>
 
       <div className="overflow-auto border rounded flex-1 min-h-0">
