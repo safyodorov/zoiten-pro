@@ -3,6 +3,9 @@
 // createPurchase авто-генерирует депозит+баланс через lib/procurement-math (D-08).
 // Multi-payment CRUD, status lifecycle, PLANNED-only hard delete (D-21).
 // НИКОГДА не пишет в Supplier/SupplierProductLink (D-08: пользователь управляет платежами).
+// Quick 260702-j52: после каждой мутации items/stages/status — пересчёт «Производства»
+// (ProductIncoming.orderedQty) через lib/production-sync. Сбой recompute логируется,
+// но НЕ превращает результат action в ошибку (мутация закупки уже зафиксирована).
 "use server"
 
 import { requireSection } from "@/lib/rbac"
@@ -15,6 +18,14 @@ import {
   recomputeAmountFromPercent,
   computePurchaseTotal,
 } from "@/lib/procurement-math"
+import { recomputeProductionForProducts } from "@/lib/production-sync"
+
+// Ревалидация страниц, зависящих от денормализованного «Производства».
+function revalidateProductionLinked() {
+  revalidatePath("/stock")
+  revalidatePath("/purchase-plan")
+  revalidatePath("/sales-plan")
+}
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -168,8 +179,18 @@ export async function createPurchase(
       return created
     })
 
+    // Пересчёт «Производства» после коммита транзакции (читает зафиксированные данные).
+    // Собственный try/catch: сбой денормализации НЕ должен превращаться в ok:false —
+    // иначе пользователь повторит create и получит дубль закупки.
+    try {
+      await recomputeProductionForProducts(prisma, input.items.map((i) => i.productId))
+    } catch (e) {
+      console.error("[production-sync] recompute failed:", e)
+    }
+
     revalidatePath("/procurement/purchases")
     revalidatePath("/procurement/suppliers")
+    revalidateProductionLinked()
     return { ok: true, id: purchase.id }
   } catch (e) {
     const authErr = handleAuthError(e)
@@ -193,6 +214,13 @@ export async function updatePurchase(
   try {
     await requireSection("PROCUREMENT", "MANAGE")
     const input = UpdatePurchaseSchema.parse(data)
+
+    // Старые productId ДО транзакции — union с новыми покрывает удалённые позиции
+    // и смену статуса (напр. ACTIVE→COMPLETED).
+    const before = await prisma.purchaseItem.findMany({
+      where: { purchaseId: input.id },
+      select: { productId: true },
+    })
 
     await prisma.$transaction(async (tx) => {
       await tx.purchase.update({
@@ -231,8 +259,18 @@ export async function updatePurchase(
       }
     })
 
+    try {
+      await recomputeProductionForProducts(prisma, [
+        ...before.map((i) => i.productId),
+        ...input.items.map((i) => i.productId),
+      ])
+    } catch (e) {
+      console.error("[production-sync] recompute failed:", e)
+    }
+
     revalidatePath("/procurement/purchases")
     revalidatePath(`/procurement/purchases/${input.id}`)
+    revalidateProductionLinked()
     return { ok: true }
   } catch (e) {
     const authErr = handleAuthError(e)
@@ -378,9 +416,22 @@ export async function deletePurchase(id: string): Promise<ActionResult> {
       return { ok: false, error: "Удалять можно только планируемые закупки" }
     }
 
+    // productId позиций ДО удаления (каскад сотрёт PurchaseItem).
+    const items = await prisma.purchaseItem.findMany({
+      where: { purchaseId: id },
+      select: { productId: true },
+    })
+
     await prisma.purchase.delete({ where: { id } })
 
+    try {
+      await recomputeProductionForProducts(prisma, items.map((i) => i.productId))
+    } catch (e) {
+      console.error("[production-sync] recompute failed:", e)
+    }
+
     revalidatePath("/procurement/purchases")
+    revalidateProductionLinked()
     return { ok: true }
   } catch (e) {
     const authErr = handleAuthError(e)
@@ -538,7 +589,7 @@ export async function savePurchaseItemStages(
 
     const items = await prisma.purchaseItem.findMany({
       where: { purchaseId },
-      select: { id: true },
+      select: { id: true, productId: true },
     })
     const validIds = new Set(items.map((i) => i.id))
     if (validIds.size === 0) return { ok: false, error: "В закупке нет позиций" }
@@ -561,8 +612,16 @@ export async function savePurchaseItemStages(
       }),
     ])
 
+    // Частичная приёмка (WAREHOUSE) сразу уменьшает «Производство».
+    try {
+      await recomputeProductionForProducts(prisma, items.map((i) => i.productId))
+    } catch (e) {
+      console.error("[production-sync] recompute failed:", e)
+    }
+
     revalidatePath("/procurement/purchases")
     revalidatePath(`/procurement/purchases/${purchaseId}`)
+    revalidateProductionLinked()
     return { ok: true }
   } catch (e) {
     const authErr = handleAuthError(e)
