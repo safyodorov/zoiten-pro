@@ -33,6 +33,7 @@ enum ERP_SECTION {
   CREDITS
   BANK
   CASH
+  FINANCE
 }
 
 enum AbcStatus {
@@ -1788,4 +1789,82 @@ model CashEntry {
   @@index([categoryId])
   @@index([responsibleEmployeeId])
   @@index([direction])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 24: Финансовая отчётность — Баланс
+// ──────────────────────────────────────────────────────────────────
+
+enum FinanceStockLocation {
+  WB_WAREHOUSE
+  WB_IN_WAY_TO_CLIENT
+  WB_IN_WAY_FROM_CLIENT
+  IVANOVO
+}
+
+enum FinanceAdjustmentType {
+  ASSET
+  LIABILITY
+}
+
+// Ежедневный снапшот товарных остатков по локациям с себестоимостью на дату (D-01a, D-10).
+// БЕЗ @relation на Product — переживает hard-purge через 30д после soft-delete (PROD-10 cron).
+model FinanceStockSnapshot {
+  id              String               @id @default(cuid())
+  date            DateTime             @db.Date
+  productId       String // без @relation
+  sku             String // денормализовано для читаемости после удаления товара
+  name            String // денормализовано
+  location        FinanceStockLocation
+  qty             Int
+  costPriceAtDate Decimal?             @db.Decimal(14, 2) // null = «без оценки» (D-11)
+  valueRub        Decimal?             @db.Decimal(14, 2) // qty × costPriceAtDate, precomputed
+  createdAt       DateTime             @default(now())
+
+  @@unique([date, productId, location])
+  @@index([date])
+  @@index([productId])
+}
+
+// Ежедневный снапшот дебиторки WB — singleton per date, консолидированный (D-05, D-14).
+model FinanceReceivablesSnapshot {
+  id                    String   @id @default(cuid())
+  date                  DateTime @unique @db.Date // singleton per date (D-05 консолидировано)
+  balanceCurrentRub     Decimal  @db.Decimal(14, 2) // Balance API `current`
+  balanceForWithdrawRub Decimal  @db.Decimal(14, 2) // Balance API `for_withdraw`
+  weeklyTailRub         Decimal  @db.Decimal(14, 2) // Σ forPay незакрытой недели
+  totalRub              Decimal  @db.Decimal(14, 2) // current + weeklyTail (D-14)
+  rawJson               Json?
+  createdAt             DateTime @default(now())
+}
+
+// Ручные корректировочные статьи баланса (D-08) — "живая" таблица, вычисляется на лету
+// через effectiveFrom <= X фильтр (soft-delete паттерн через deletedAt).
+model FinanceManualAdjustment {
+  id            String                @id @default(cuid())
+  label         String
+  type          FinanceAdjustmentType
+  amountRub     Decimal               @db.Decimal(14, 2)
+  effectiveFrom DateTime              @db.Date
+  comment       String?
+  createdById   String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  deletedAt     DateTime? // «действует до» = момент удаления (D-08)
+
+  @@index([effectiveFrom])
+  @@index([deletedAt])
+}
+
+// Факт-корректировка налога per квартал (D-17) — перекрывает расчёт для закрытых периодов.
+model FinanceTaxPeriodActual {
+  id                 String   @id @default(cuid())
+  year               Int
+  quarter            Int // 1..4
+  vatActualRub       Decimal? @db.Decimal(14, 2) // null = использовать расчёт
+  incomeTaxActualRub Decimal? @db.Decimal(14, 2)
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+
+  @@unique([year, quarter])
 }
