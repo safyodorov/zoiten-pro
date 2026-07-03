@@ -143,6 +143,8 @@ beforeEach(() => {
   // ── Дебиторка WB (D-14) ────────────────────────────────────────────────
   vi.mocked(prisma.financeReceivablesSnapshot.findUnique).mockResolvedValueOnce({
     date: ASOF,
+    balanceCurrentRub: 5000,
+    weeklyTailRub: 3000,
     totalRub: 8000,
   } as unknown as never)
 
@@ -204,8 +206,13 @@ describe("loadBalanceSheet — assembly (24-05)", () => {
     expect(cnyLine.currency).toBe("CNY")
     expect(cnyLine.amountRub).toBeCloseTo(5000, 2)
 
-    // Дебиторка = 8000
-    expect(sheet.assets.groups.find((g) => g.key === "receivables")!.subtotalRub).toBeCloseTo(8000, 2)
+    // Дебиторка = 8000 (subtotal не меняется: 5000 + 3000 = 8000)
+    const rec = sheet.assets.groups.find((g) => g.key === "receivables")!
+    expect(rec.subtotalRub).toBeCloseTo(8000, 2)
+    // Детализация: при наличии снапшота — две строки с новыми ключами
+    expect(rec.lines).toHaveLength(2)
+    expect(rec.lines.find((l) => l.key === "receivables-wb-current")!.amountRub).toBeCloseTo(5000, 2)
+    expect(rec.lines.find((l) => l.key === "receivables-wb-tail")!.amountRub).toBeCloseTo(3000, 2)
 
     // Запасы: WB_WAREHOUSE 1000 + прочие локации 0 + "в пути из Китая" 1000 (из purch-transit) = 2000
     // (purch-warehouse-excluded НЕ учитывается — B2; unvalued-строка IVANOVO не входит в сумму — D-11)

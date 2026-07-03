@@ -334,21 +334,36 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   }))
   // "Товар в пути из Китая" строка добавляется ниже, после классификации закупок (D-12)
 
-  const receivablesLine: BalanceLine = receivablesSnapshot
-    ? { key: "receivables-wb", label: "Дебиторка Wildberries", amountRub: Number(receivablesSnapshot.totalRub) }
-    : {
-        key: "receivables-wb",
-        label: "Дебиторка Wildberries",
-        amountRub: 0,
-        note: "нет снапшота на дату",
-        approximate: true,
-      }
+  // При наличии снапшота: две строки — подтверждённый кабинет WB + расчётный хвост незакрытой недели.
+  // При отсутствии снапшота: прежняя одна приблизительная строка (обратная совместимость).
+  const receivablesLines: BalanceLine[] = receivablesSnapshot
+    ? [
+        {
+          key: "receivables-wb-current",
+          label: "Баланс WB (к перечислению)",
+          amountRub: Number(receivablesSnapshot.balanceCurrentRub),
+        },
+        {
+          key: "receivables-wb-tail",
+          label: "Незакрытая неделя (продажи)",
+          amountRub: Number(receivablesSnapshot.weeklyTailRub),
+        },
+      ]
+    : [
+        {
+          key: "receivables-wb",
+          label: "Дебиторка Wildberries",
+          amountRub: 0,
+          note: "нет снапшота на дату",
+          approximate: true,
+        },
+      ]
 
   const receivablesGroup: BalanceGroup = {
     key: "receivables",
     label: "Дебиторка",
-    lines: [receivablesLine],
-    subtotalRub: sumRubLines([receivablesLine]),
+    lines: receivablesLines,
+    subtotalRub: sumRubLines(receivablesLines),
   }
 
   // ── Авансы поставщикам / Товар в пути из Китая (D-12, B1/B2) ─────────────
