@@ -156,6 +156,7 @@ describe("getWbToken", () => {
       "WB_CHAT_TOKEN",
       "WB_ADS_TOKEN", // Phase 19
       "WB_ADS_TOKEN_2", // 2026-05-20 — ротация /fullstats
+      "WB_FINANCE_TOKEN", // Phase 24 — WB Finance API (баланс продавца, scope bit 13)
     ])
   })
 })

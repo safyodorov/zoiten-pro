@@ -31,7 +31,7 @@ beforeEach(() => {
 })
 
 describe("WB_COOLDOWN_BUCKETS / WbCooldownBucket", () => {
-  it("экспортирует 10 bucket-слагов (включая 'advert' для Phase 19)", async () => {
+  it("экспортирует 11 bucket-слагов (включая 'advert' для Phase 19 и 'finance' для Phase 24)", async () => {
     const { WB_COOLDOWN_BUCKETS } = await import("@/lib/wb-cooldown")
     expect(WB_COOLDOWN_BUCKETS).toEqual([
       "statistics-stocks",
@@ -44,13 +44,15 @@ describe("WB_COOLDOWN_BUCKETS / WbCooldownBucket", () => {
       "feedbacks",
       "questions",
       "advert",
+      "finance",
     ])
   })
 
-  it("содержит 'advert' и длина = 10", async () => {
+  it("содержит 'advert' и 'finance', длина = 11", async () => {
     const { WB_COOLDOWN_BUCKETS } = await import("@/lib/wb-cooldown")
     expect(WB_COOLDOWN_BUCKETS).toContain("advert")
-    expect(WB_COOLDOWN_BUCKETS.length).toBe(10)
+    expect(WB_COOLDOWN_BUCKETS).toContain("finance")
+    expect(WB_COOLDOWN_BUCKETS.length).toBe(11)
   })
 })
 
