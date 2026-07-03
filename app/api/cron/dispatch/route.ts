@@ -35,6 +35,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbAdvUpdSyncCronTime",
           "wbCardsRefreshCronTime",
           "cbrRateSyncCronTime",
+          "financeBalanceSnapshotCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbAdvUpdSyncLastRun",
           "wbCardsRefreshLastRun",
           "cbrRateSyncLastRun",
+          "financeBalanceSnapshotLastRun",
         ],
       },
     },
@@ -54,6 +56,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const advUpdSyncTime = settings.wbAdvUpdSyncCronTime ?? "03:30"
   const cardsRefreshTime = settings.wbCardsRefreshCronTime ?? "05:30"
   const cbrTime = settings.cbrRateSyncCronTime ?? "12:00"
+  const financeSnapshotTime = settings.financeBalanceSnapshotCronTime ?? "06:00"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
@@ -61,6 +64,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const advUpdSyncLastRun = settings.wbAdvUpdSyncLastRun ?? null
   const cardsRefreshLastRun = settings.wbCardsRefreshLastRun ?? null
   const cbrLastRun = settings.cbrRateSyncLastRun ?? null
+  const financeSnapshotLastRun = settings.financeBalanceSnapshotLastRun ?? null
 
   const fired: string[] = []
 
@@ -196,6 +200,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] cbr error:", e)
       fired.push("cbr:error")
+    }
+  }
+
+  // Phase 24 (D-02): снапшот баланса «утром за вчера». 06:00 МСК — после ночных
+  // WB-sync (adv 03:00, funnel 04:00, orders 05:00, prices 05:10, cards-refresh 05:30).
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: financeSnapshotTime,
+      lastRunDate: financeSnapshotLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: financeSnapshotHandler } = await import("../finance-snapshot/route")
+      const res = await financeSnapshotHandler(req)
+      fired.push(`finance-snapshot:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] finance-snapshot error:", e)
+      fired.push("finance-snapshot:error")
     }
   }
 
