@@ -334,19 +334,14 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   }))
   // "Товар в пути из Китая" строка добавляется ниже, после классификации закупок (D-12)
 
-  // При наличии снапшота: две строки — подтверждённый кабинет WB + расчётный хвост незакрытой недели.
-  // При отсутствии снапшота: прежняя одна приблизительная строка (обратная совместимость).
+  // Дебиторка WB = current (Balance API): реальное время, УЖЕ включает выкупы текущей недели.
+  // weeklyTail НЕ добавляем — это те же выкупы (двойной счёт). См .planning/debug/wb-receivables-double-count.md.
   const receivablesLines: BalanceLine[] = receivablesSnapshot
     ? [
         {
-          key: "receivables-wb-current",
-          label: "Баланс WB (к перечислению)",
+          key: "receivables-wb",
+          label: "Дебиторка Wildberries",
           amountRub: Number(receivablesSnapshot.balanceCurrentRub),
-        },
-        {
-          key: "receivables-wb-tail",
-          label: "Незакрытая неделя (продажи)",
-          amountRub: Number(receivablesSnapshot.weeklyTailRub),
         },
       ]
     : [

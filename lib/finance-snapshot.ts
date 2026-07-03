@@ -219,14 +219,14 @@ export async function runFinanceSnapshot(): Promise<RunFinanceSnapshotResult> {
         balanceCurrentRub: bal.current,
         balanceForWithdrawRub: bal.forWithdraw,
         weeklyTailRub: tail,
-        totalRub: Math.round((bal.current + tail) * 100) / 100,
+        totalRub: Math.round(bal.current * 100) / 100, // = current; weeklyTail НЕ суммируем (двойной счёт — см .planning/debug/wb-receivables-double-count.md)
         rawJson: { ...bal, tailDegraded: receivables === "degraded" } as never,
       },
       update: {
         balanceCurrentRub: bal.current,
         balanceForWithdrawRub: bal.forWithdraw,
         weeklyTailRub: tail,
-        totalRub: Math.round((bal.current + tail) * 100) / 100,
+        totalRub: Math.round(bal.current * 100) / 100, // = current; weeklyTail НЕ суммируем (двойной счёт — см .planning/debug/wb-receivables-double-count.md)
         rawJson: { ...bal, tailDegraded: receivables === "degraded" } as never,
       },
     })

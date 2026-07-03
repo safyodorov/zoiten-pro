@@ -144,8 +144,8 @@ beforeEach(() => {
   vi.mocked(prisma.financeReceivablesSnapshot.findUnique).mockResolvedValueOnce({
     date: ASOF,
     balanceCurrentRub: 5000,
-    weeklyTailRub: 3000,
-    totalRub: 8000,
+    weeklyTailRub: 3000, // справочно, НЕ суммируется в дебиторку
+    totalRub: 5000, // = current (новая формула, weeklyTail исключён)
   } as unknown as never)
 
   // ── Закупки: Авансы / в пути / исключённые WAREHOUSE (D-12, B1/B2) ──────
@@ -206,13 +206,12 @@ describe("loadBalanceSheet — assembly (24-05)", () => {
     expect(cnyLine.currency).toBe("CNY")
     expect(cnyLine.amountRub).toBeCloseTo(5000, 2)
 
-    // Дебиторка = 8000 (subtotal не меняется: 5000 + 3000 = 8000)
+    // Дебиторка = current (5000). weeklyTail (3000) НЕ в сумме — двойной счёт (выкупы уже в current).
     const rec = sheet.assets.groups.find((g) => g.key === "receivables")!
-    expect(rec.subtotalRub).toBeCloseTo(8000, 2)
-    // Детализация: при наличии снапшота — две строки с новыми ключами
-    expect(rec.lines).toHaveLength(2)
-    expect(rec.lines.find((l) => l.key === "receivables-wb-current")!.amountRub).toBeCloseTo(5000, 2)
-    expect(rec.lines.find((l) => l.key === "receivables-wb-tail")!.amountRub).toBeCloseTo(3000, 2)
+    expect(rec.subtotalRub).toBeCloseTo(5000, 2)
+    // Одна строка = balanceCurrentRub при наличии снапшота
+    expect(rec.lines).toHaveLength(1)
+    expect(rec.lines.find((l) => l.key === "receivables-wb")!.amountRub).toBeCloseTo(5000, 2)
 
     // Запасы: WB_WAREHOUSE 1000 + прочие локации 0 + "в пути из Китая" 1000 (из purch-transit) = 2000
     // (purch-warehouse-excluded НЕ учитывается — B2; unvalued-строка IVANOVO не входит в сумму — D-11)
@@ -224,7 +223,7 @@ describe("loadBalanceSheet — assembly (24-05)", () => {
     // Ручные активы = 3000
     expect(sheet.assets.groups.find((g) => g.key === "manual")!.subtotalRub).toBeCloseTo(3000, 2)
 
-    expect(sheet.assets.totalRub).toBeCloseTo(115000 + 8000 + 2000 + 2000 + 3000, 2)
+    expect(sheet.assets.totalRub).toBeCloseTo(115000 + 5000 + 2000 + 2000 + 3000, 2)
 
     // Кредиты: amount 50000 − principal 10000 = 40000
     expect(sheet.liabilities.groups.find((g) => g.key === "loans")!.subtotalRub).toBeCloseTo(40000, 2)
