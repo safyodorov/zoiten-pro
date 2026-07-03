@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import {
-  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones, UserCheck,
+  Package, Tag, LayoutGrid, Boxes, Calculator, ShoppingCart, TrendingUp, Headphones, UserCheck, Scale,
 } from "lucide-react"
 
 const ALL_SECTIONS = [
@@ -14,6 +14,7 @@ const ALL_SECTIONS = [
   { section: "COST", href: "/batches", title: "Себестоимость партий", description: "Расчёт себестоимости", icon: Calculator },
   { section: "PROCUREMENT", href: "/procurement/suppliers", title: "Управление закупками", description: "Поставщики, закупки, платежи", icon: ShoppingCart },
   { section: "SALES", href: "/sales-plan", title: "План продаж", description: "Планирование продаж", icon: TrendingUp },
+  { section: "FINANCE", href: "/finance/balance", title: "Финансовая отчётность", description: "Баланс, ОДДС, ОПиУ группы компаний", icon: Scale },
   { section: "SUPPORT", href: "/support", title: "Служба поддержки", description: "Тикеты и обращения клиентов", icon: Headphones },
   { section: "EMPLOYEES", href: "/employees", title: "Сотрудники", description: "Управление персоналом", icon: UserCheck },
 ]

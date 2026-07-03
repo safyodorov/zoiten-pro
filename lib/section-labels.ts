@@ -20,6 +20,7 @@ export const SECTION_OPTIONS: SectionOption[] = [
   { value: "CREDITS",         label: "Кредиты" },
   { value: "BANK",            label: "Банковские счета" },
   { value: "CASH",            label: "Наличные расчёты" },
+  { value: "FINANCE",         label: "Финансовая отчётность" },
   { value: "SUPPORT",         label: "Служба поддержки" },
   { value: "EMPLOYEES",       label: "Сотрудники" },
   { value: "USER_MANAGEMENT", label: "Управление пользователями" },
