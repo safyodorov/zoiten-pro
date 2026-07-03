@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
-stopped_at: Completed 23-cash-payments-23-04-PLAN.md
-last_updated: "2026-06-10T16:09:29.465Z"
+stopped_at: Completed 24-finance-balance-24-01-PLAN.md
+last_updated: "2026-07-03T12:14:58.490Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -124,6 +124,7 @@ Plan: Not started
 | Phase 23-cash-payments P02 | 79s | 2 tasks | 5 files |
 | Phase 23-cash-payments P03 | 10m | 2 tasks | 9 files |
 | Phase 23 P04 | 20m | 3 tasks | 6 files |
+| Phase 24-finance-balance P01 | 10min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -306,6 +307,8 @@ Recent decisions affecting current work:
 - [Phase 23-cash-payments]: normalizeResponsibleSurname: ё→е ONLY for SURNAME_FIXES lookup key, return value preserves ё; persist.ts uses (prisma as any) cast for vitest-safe type-only import
 - [Phase 23]: base-ui Dialog uses render= prop (not asChild) — DialogTrigger pattern in CashEntryForm
 - [Phase 23]: CashTable totals + truncation indicator rendered above sticky scroll container as separate block
+- [Phase 24-finance-balance]: SECTION_PATHS key /finance/ trailing slash — не ломает публичный /finance-models
+- [Phase 24-finance-balance]: Plan 24-01 выполнен и закоммичен в изолированный git worktree (branch phase-24-finance) — main НЕ трогался, параллельная разработка пользователя не задета
 
 ### Roadmap Evolution
 
@@ -379,6 +382,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-10T13:11:02.139Z
-Stopped at: Completed 23-cash-payments-23-04-PLAN.md
+Last session: 2026-07-03T12:14:19.511Z
+Stopped at: Completed 24-finance-balance-24-01-PLAN.md
 Resume file: None

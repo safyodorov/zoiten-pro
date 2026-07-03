@@ -559,7 +559,8 @@ Plans:
 
 **Requirements**: TBD
 **Depends on:** Phase 20 (закупки/предоплаты поставщикам), Phase 21 (кредиты), Phase 22 (банковские счета), Phase 23 (касса), Phase 14 (остатки WB + Иваново + в пути)
-**Plans:** 0 plans
+**Plans:** 1/9 plans executed
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 24 to break down)
+- [x] 24-01: Prisma-модели снапшотов + ERP_SECTION.FINANCE + маршруты /finance/{balance,cashflow,pnl}
+- [ ] 24-02..24-09 (см. .planning/phases/24-finance-balance/)
