@@ -1,5 +1,5 @@
 "use client"
-// Quick 260512-jxh: UI tab «WB API токены» — 3 карточки + модалка replace.
+// Quick 260512-jxh: UI tab «WB API токены» — карточка на каждый WB_TOKEN_NAMES + модалка replace.
 // SUPERADMIN-only (RSC page.tsx уже отфильтровал; не-superadmin этот компонент не получает).
 
 import { useState, useTransition } from "react"
@@ -96,6 +96,9 @@ function WbTokenCard({ token }: { token: WbTokenListItem }) {
         <div>
           <h3 className="font-semibold">{token.displayName}</h3>
           <p className="text-xs text-muted-foreground font-mono">{token.name}</p>
+          {token.hint && (
+            <p className="text-xs text-muted-foreground mt-1">{token.hint}</p>
+          )}
         </div>
         <Dialog open={open} onOpenChange={handleOpenChange}>
           <DialogTrigger

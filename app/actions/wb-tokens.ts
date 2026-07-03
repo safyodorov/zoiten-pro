@@ -16,6 +16,7 @@ export type { WbTokenName }
 export interface WbTokenListItem {
   name: WbTokenName
   displayName: string // "WB Основной" | "WB Возвраты" | "WB Чат"
+  hint: string | null // подсказка про требуемый scope / тип токена
   hasValue: boolean
   maskedTail: string | null // "...a4b2" или null если нет токена
   scopeBits: number[]
@@ -36,6 +37,19 @@ const DISPLAY_NAMES: Record<WbTokenName, string> = {
   WB_FINANCE_TOKEN: "WB Финансы", // Phase 24 — Balance API (дебиторка)
 }
 
+// Подсказка про требуемый scope / тип токена (показывается под именем карточки).
+// null → без подсказки. Для Финансов критично: базовый токен не даёт sales-reports,
+// а Balance API на нём ограничен 1 запросом в сутки.
+const HINTS: Record<WbTokenName, string | null> = {
+  WB_API_TOKEN: null,
+  WB_RETURNS_TOKEN: null,
+  WB_CHAT_TOKEN: null,
+  WB_ADS_TOKEN: null,
+  WB_ADS_TOKEN_2: null,
+  WB_FINANCE_TOKEN:
+    "Требуется Персональный или Сервисный токен со scope «Финансы» (бит 13). Базовый не подходит.",
+}
+
 function mask(value: string): string {
   return `...${value.slice(-4)}`
 }
@@ -52,6 +66,7 @@ export async function listWbTokens(): Promise<WbTokenListItem[]> {
       return {
         name,
         displayName: DISPLAY_NAMES[name],
+        hint: HINTS[name],
         hasValue: false,
         maskedTail: null,
         scopeBits: [],
@@ -66,6 +81,7 @@ export async function listWbTokens(): Promise<WbTokenListItem[]> {
     return {
       name,
       displayName: DISPLAY_NAMES[name],
+      hint: HINTS[name],
       hasValue: true,
       maskedTail: mask(r.value),
       scopeBits: decodeScopeBits(r.scopeBitmask),
