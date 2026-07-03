@@ -13,6 +13,7 @@ import { requireSection, getSectionRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { FinanceTabs } from "@/components/finance/FinanceTabs"
 import { BalanceDatePicker } from "@/components/finance/BalanceDatePicker"
+import { BalanceMethodologyDialog } from "@/components/finance/BalanceMethodologyDialog"
 import { BalanceSheetTable } from "@/components/finance/BalanceSheetTable"
 import { RecalcButton } from "@/components/finance/RecalcButton"
 import { ManualAdjustmentsModal } from "@/components/finance/ManualAdjustmentsModal"
@@ -95,6 +96,7 @@ export default async function FinanceBalancePage({
       <FinanceTabs />
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
+          <BalanceMethodologyDialog />
           {canManage && (
             <>
               <RecalcButton date={date} />
