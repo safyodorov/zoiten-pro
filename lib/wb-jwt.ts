@@ -14,6 +14,7 @@ export const WB_SCOPE_LABELS: Record<number, string> = {
   7: "Тарифы",
   9: "Чат",
   11: "Возвраты",
+  13: "Финансы", // Phase 24 (D-14) — scope для WB Finance API (Balance)
   30: "Продвижение", // Phase 19 — scope для WB Advert API
 }
 

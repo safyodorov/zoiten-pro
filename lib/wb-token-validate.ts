@@ -16,6 +16,10 @@ export const REQUIRED_SCOPE_BITS: Record<WbTokenName, number[]> = {
   WB_ADS_TOKEN: [30],
   // 2026-05-20: второй токен для ротации /fullstats (1 req/hour лимит). Тот же scope.
   WB_ADS_TOKEN_2: [30],
+  // Phase 24 (D-14): Balance API scope «Финансы». ⚠ M6 — [13] по офиц. таблице WB,
+  // ПРЕДВАРИТЕЛЬНО: номера категорий WB ≠ битам JWT (см. wb-jwt.ts комментарий о bit 4 vs 30).
+  // Подтверждается декодом реального JWT в checkpoint T3 — обновить при расхождении.
+  WB_FINANCE_TOKEN: [13],
 }
 
 const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
@@ -29,6 +33,9 @@ const PROBE_ENDPOINTS: Record<WbTokenName, string> = {
   WB_ADS_TOKEN: "https://advert-api.wildberries.ru/adv/v1/promotion/count",
   // Тот же probe endpoint для второго токена (same scope, same семантика валидации).
   WB_ADS_TOKEN_2: "https://advert-api.wildberries.ru/adv/v1/promotion/count",
+  // Phase 24: probe = сам Balance API (rate-limited 1/мин на Персональном/Сервисном) —
+  // ок для редкой операции смены токена, НЕ дёргать в фоне.
+  WB_FINANCE_TOKEN: "https://finance-api.wildberries.ru/api/v1/account/balance",
 }
 
 const PROBE_TIMEOUT_MS = 5000
