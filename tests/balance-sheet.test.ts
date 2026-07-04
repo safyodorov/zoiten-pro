@@ -198,7 +198,12 @@ beforeEach(() => {
   vi.mocked(prisma.purchase.findMany).mockResolvedValueOnce([
     {
       id: "purch-advance",
-      payments: [{ status: "PAID", paidDate: new Date("2026-05-01"), amount: 2000, currency: "RUB" }],
+      // 260704-go2: два PAID-платежа — RUB (2000) + CNY с amountRub=1234 (факт).
+      // Итоговый вклад в advances: 2000 + 1234 = 3234 (amountRub берётся вместо 100×rate).
+      payments: [
+        { status: "PAID", paidDate: new Date("2026-05-01"), amount: 2000, currency: "RUB", amountRub: null },
+        { status: "PAID", paidDate: new Date("2026-05-01"), amount: 100, currency: "CNY", amountRub: 1234 },
+      ],
       items: [
         {
           productId: "p1",
@@ -216,7 +221,7 @@ beforeEach(() => {
     },
     {
       id: "purch-transit",
-      payments: [{ status: "PAID", paidDate: new Date("2026-05-05"), amount: 1000, currency: "RUB" }],
+      payments: [{ status: "PAID", paidDate: new Date("2026-05-05"), amount: 1000, currency: "RUB", amountRub: null }],
       items: [
         {
           productId: "p1",
@@ -234,7 +239,7 @@ beforeEach(() => {
     },
     {
       id: "purch-warehouse-excluded",
-      payments: [{ status: "PAID", paidDate: new Date("2026-04-01"), amount: 500, currency: "RUB" }],
+      payments: [{ status: "PAID", paidDate: new Date("2026-04-01"), amount: 500, currency: "RUB", amountRub: null }],
       items: [
         {
           productId: "p1",
@@ -319,13 +324,14 @@ describe("loadBalanceSheet — assembly (24-05)", () => {
     // (purch-warehouse-excluded НЕ учитывается — B2; unvalued-строка IVANOVO не входит в сумму — D-11)
     expect(sheet.assets.groups.find((g) => g.key === "inventory")!.subtotalRub).toBeCloseTo(2000, 2)
 
-    // Авансы поставщикам = 2000 (из purch-advance, этап PRODUCTION)
-    expect(sheet.assets.groups.find((g) => g.key === "advances")!.subtotalRub).toBeCloseTo(2000, 2)
+    // Авансы поставщикам = 3234 (из purch-advance: 2000 RUB + CNY amountRub=1234 факт, 260704-go2)
+    // amountRub берётся как факт без умножения на курс и НЕ ставит paidApproximate
+    expect(sheet.assets.groups.find((g) => g.key === "advances")!.subtotalRub).toBeCloseTo(3234, 2)
 
     // Ручные активы = 3000
     expect(sheet.assets.groups.find((g) => g.key === "manual")!.subtotalRub).toBeCloseTo(3000, 2)
 
-    expect(sheet.assets.totalRub).toBeCloseTo(115000 + 5000 + 2000 + 2000 + 3000, 2)
+    expect(sheet.assets.totalRub).toBeCloseTo(115000 + 5000 + 2000 + 3234 + 3000, 2)
 
     // Кредиты: loan-1 currentBalance 20000 + loan-2 currentBalance 20000 = 40000
     expect(sheet.liabilities.groups.find((g) => g.key === "loans")!.subtotalRub).toBeCloseTo(40000, 2)
@@ -430,14 +436,17 @@ describe("drill-down children (260704-cvz)", () => {
     expect(sumLeaves(transit!)).toBeCloseTo(transit!.amountRub, 2)
   })
 
-  it("инвариант Σ листьев = amountRub для advances-suppliers", async () => {
+  it("инвариант Σ листьев = amountRub для advances-suppliers (260704-go2: amountRub=1234 факт)", async () => {
     const sheet = await loadBalanceSheet(ASOF)
 
     const adv = sheet.assets.groups.find((g) => g.key === "advances")!
     const advLine = adv.lines.find((l) => l.key === "advances-suppliers")!
 
-    // purch-advance: 2000 ₽ → p1:1000 + p3:1000
-    expect(advLine.amountRub).toBeCloseTo(2000, 2)
+    // purch-advance: 2000 ₽ (RUB) + 1234 ₽ (CNY amountRub=1234 факт) = 3234
+    // amountRub берётся напрямую, НЕ умножается на курс — это и есть проверка 260704-go2.
+    // Аллокатор делит 3234 пропорционально весам позиций (p1: 5×200=1000, p3: 4×250=1000),
+    // поэтому p1 ≈ 1617 и p3 ≈ 1617, инвариант sumLeaves === advLine.amountRub держится.
+    expect(advLine.amountRub).toBeCloseTo(3234, 2)
     expect(sumLeaves(advLine)).toBeCloseTo(advLine.amountRub, 2)
   })
 
