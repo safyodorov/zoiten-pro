@@ -1,11 +1,17 @@
+"use client"
 // components/finance/BalanceSheetTable.tsx
 // Phase 24 Plan 24-07 — вертикальная таблица баланса: АКТИВЫ → ПАССИВЫ → КАПИТАЛ (D-06),
-// с двумя датами и колонками дельты Δ₽/Δ% (D-09). Server component — интерактивности нет,
-// кроме нативного <details> для расшифровки «Без оценки» (D-11).
+// с двумя датами и колонками дельты Δ₽/Δ% (D-09).
+//
+// 260704-cvz: client-компонент с expandable строками (useState), chevron-кнопки,
+// рекурсивный рендер детей с нарастающим отступом по глубине.
 //
 // CNY-строки (line.currency==="CNY", m4/Pitfall 2): справочные, НЕ входят в рублёвые
 // subtotal/total (это уже сделано в lib/balance-data.ts sumRubLines) — дельта для них
 // не считается, значение показывается с ¥, не ₽.
+
+import { useState } from "react"
+import { ChevronRight, ChevronDown } from "lucide-react"
 import type { BalanceGroup, BalanceLine, BalanceSection, BalanceSheet } from "@/lib/balance-data"
 import { computeDelta } from "@/lib/balance-math"
 
@@ -44,14 +50,29 @@ function deltaColorClass(n: number): string {
   return "text-muted-foreground"
 }
 
-// ── Compare-side lookup maps (по key, без CNY-строк) ────────────────────────
+// ── Compare-side lookup maps ──────────────────────────────────────────────────
+
+/**
+ * Рекурсивно обходит дерево BalanceLine и добавляет все узлы (включая вложенные children)
+ * в map: `${groupKey}:${node.key}` → amountRub.
+ * Поскольку child.key уже является полным path-ключом (вида "bank-rub/acct:..."),
+ * достаточно использовать его напрямую.
+ */
+function addLineToMap(map: Map<string, number>, groupKey: string, node: BalanceLine): void {
+  if (node.currency === "CNY") return // CNY-строки без дельты
+  map.set(`${groupKey}:${node.key}`, node.amountRub)
+  if (node.children) {
+    for (const child of node.children) {
+      addLineToMap(map, groupKey, child)
+    }
+  }
+}
 
 function buildLineMap(section: BalanceSection): Map<string, number> {
   const map = new Map<string, number>()
   for (const group of section.groups) {
     for (const line of group.lines) {
-      if (line.currency === "CNY") continue
-      map.set(`${group.key}:${line.key}`, line.amountRub)
+      addLineToMap(map, group.key, line)
     }
   }
   return map
@@ -74,52 +95,186 @@ function DeltaCells({ current, compare }: { current: number; compare: number }) 
   )
 }
 
-// ── Строка статьи ────────────────────────────────────────────────────────
+// ── Отступ по глубине ─────────────────────────────────────────────────────
+
+const DEPTH_PADDING: Record<number, string> = {
+  0: "pl-8",
+  1: "pl-12",
+  2: "pl-16",
+  3: "pl-20",
+}
+
+function paddingForDepth(depth: number): string {
+  return DEPTH_PADDING[depth] ?? "pl-24"
+}
+
+// ── Рекурсивный рендер дерева детализации ────────────────────────────────
+
+/**
+ * Рекурсивно рендерит узел дерева и его детей.
+ * Возвращает массив <tr> (JSX-фрагменты).
+ *
+ * @param node          - узел BalanceLine (может иметь children)
+ * @param depth         - глубина вложенности (0 = верхний уровень строки)
+ * @param groupKey      - ключ группы для compare-lookup
+ * @param compareLineMap - Map compare-стороны для δ
+ * @param expandedKeys  - Set раскрытых ключей
+ * @param toggle        - функция toggle по ключу
+ * @param currentLabel  - заголовок текущей даты
+ * @param compareLabel  - заголовок сравниваемой даты
+ */
+function renderLineTree(
+  node: BalanceLine,
+  depth: number,
+  groupKey: string,
+  compareLineMap: Map<string, number>,
+  expandedKeys: Set<string>,
+  toggle: (key: string) => void,
+  currentLabel: string,
+  compareLabel: string
+): React.ReactNode[] {
+  const hasChildren = node.children && node.children.length > 0
+  const isExpanded = hasChildren && expandedKeys.has(node.key)
+  const compareAmount = compareLineMap.get(`${groupKey}:${node.key}`) ?? 0
+  const paddingClass = paddingForDepth(depth)
+
+  const rows: React.ReactNode[] = [
+    <tr key={node.key}>
+      <td className={`px-3 py-1.5 ${paddingClass} border-b border-border/40`}>
+        <span className="flex items-center gap-1">
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => toggle(node.key)}
+              aria-label={isExpanded ? "Свернуть" : "Развернуть"}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          ) : (
+            // Плейсхолдер-отступ для выравнивания листовых узлов
+            <span className="inline-block w-[14px] shrink-0" />
+          )}
+          <span>{node.label}</span>
+        </span>
+      </td>
+      <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+        {fmtRub(node.amountRub)}
+      </td>
+      <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+        {fmtRub(compareAmount)}
+      </td>
+      <DeltaCells current={node.amountRub} compare={compareAmount} />
+    </tr>,
+  ]
+
+  // Рекурсивно рендерим детей, если узел раскрыт
+  if (isExpanded && node.children) {
+    for (const child of node.children) {
+      const childRows = renderLineTree(
+        child,
+        depth + 1,
+        groupKey,
+        compareLineMap,
+        expandedKeys,
+        toggle,
+        currentLabel,
+        compareLabel
+      )
+      rows.push(...childRows)
+    }
+  }
+
+  return rows
+}
+
+// ── Строка статьи ─────────────────────────────────────────────────────────
 
 function LineRow({
   groupKey,
   line,
   compareLineMap,
+  expandedKeys,
+  toggle,
+  currentLabel,
+  compareLabel,
 }: {
   groupKey: string
   line: BalanceLine
   compareLineMap: Map<string, number>
+  expandedKeys: Set<string>
+  toggle: (key: string) => void
+  currentLabel: string
+  compareLabel: string
 }) {
   const isCny = line.currency === "CNY"
+  const hasChildren = !isCny && line.children && line.children.length > 0
+  const isExpanded = hasChildren && expandedKeys.has(line.key)
 
   return (
-    <tr>
-      <td className="px-3 py-1.5 pl-8 border-b border-border/40">
-        <span>{line.label}</span>
-        {line.approximate && (
-          <span title={line.note ?? "Приближённая оценка"} className="ml-1.5 text-amber-600 cursor-help">
-            ⚠
+    <>
+      <tr>
+        <td className="px-3 py-1.5 pl-8 border-b border-border/40">
+          <span className="flex items-center gap-1">
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={() => toggle(line.key)}
+                aria-label={isExpanded ? "Свернуть" : "Развернуть"}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+            ) : (
+              // Плейсхолдер-отступ для выравнивания (CNY-строки и строки без children)
+              <span className="inline-block w-[14px] shrink-0" />
+            )}
+            <span>{line.label}</span>
+            {line.approximate && (
+              <span title={line.note ?? "Приближённая оценка"} className="ml-1.5 text-amber-600 cursor-help">
+                ⚠
+              </span>
+            )}
+            {isCny && <span className="ml-1.5 text-xs text-muted-foreground">(справочно)</span>}
           </span>
-        )}
-        {isCny && <span className="ml-1.5 text-xs text-muted-foreground">(справочно)</span>}
-        {line.note && !line.approximate && (
-          <div className="text-xs text-muted-foreground">{line.note}</div>
-        )}
-      </td>
-      <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
-        {isCny ? fmtCny(line.amountRub) : fmtRub(line.amountRub)}
-      </td>
-      {isCny ? (
-        <td
-          colSpan={3}
-          className="px-3 py-1.5 text-center text-xs text-muted-foreground border-b border-border/40"
-        >
-          справочно, без дельты (валютная переоценка не выполняется, v1)
+          {line.note && !line.approximate && (
+            <div className="text-xs text-muted-foreground pl-[18px]">{line.note}</div>
+          )}
         </td>
-      ) : (
-        <>
-          <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
-            {fmtRub(compareLineMap.get(`${groupKey}:${line.key}`) ?? 0)}
+        <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+          {isCny ? fmtCny(line.amountRub) : fmtRub(line.amountRub)}
+        </td>
+        {isCny ? (
+          <td
+            colSpan={3}
+            className="px-3 py-1.5 text-center text-xs text-muted-foreground border-b border-border/40"
+          >
+            справочно, без дельты (валютная переоценка не выполняется, v1)
           </td>
-          <DeltaCells current={line.amountRub} compare={compareLineMap.get(`${groupKey}:${line.key}`) ?? 0} />
-        </>
-      )}
-    </tr>
+        ) : (
+          <>
+            <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+              {fmtRub(compareLineMap.get(`${groupKey}:${line.key}`) ?? 0)}
+            </td>
+            <DeltaCells current={line.amountRub} compare={compareLineMap.get(`${groupKey}:${line.key}`) ?? 0} />
+          </>
+        )}
+      </tr>
+      {/* Рекурсивный рендер детей при раскрытии (depth=1, т.к. верхний уровень = LineRow) */}
+      {isExpanded &&
+        line.children!.map((child) =>
+          renderLineTree(
+            child,
+            1, // depth 1 (дети верхнеуровневой строки)
+            groupKey,
+            compareLineMap,
+            expandedKeys,
+            toggle,
+            currentLabel,
+            compareLabel
+          )
+        )}
+    </>
   )
 }
 
@@ -129,10 +284,18 @@ function GroupBlock({
   group,
   compareGroupMap,
   compareLineMap,
+  expandedKeys,
+  toggle,
+  currentLabel,
+  compareLabel,
 }: {
   group: BalanceGroup
   compareGroupMap: Map<string, number>
   compareLineMap: Map<string, number>
+  expandedKeys: Set<string>
+  toggle: (key: string) => void
+  currentLabel: string
+  compareLabel: string
 }) {
   const compareSubtotal = compareGroupMap.get(group.key) ?? 0
   return (
@@ -146,7 +309,16 @@ function GroupBlock({
         </td>
       </tr>
       {group.lines.map((line) => (
-        <LineRow key={line.key} groupKey={group.key} line={line} compareLineMap={compareLineMap} />
+        <LineRow
+          key={line.key}
+          groupKey={group.key}
+          line={line}
+          compareLineMap={compareLineMap}
+          expandedKeys={expandedKeys}
+          toggle={toggle}
+          currentLabel={currentLabel}
+          compareLabel={compareLabel}
+        />
       ))}
       <tr className="bg-muted font-medium">
         <td className="px-3 py-1.5 pl-6">Итого {group.label}</td>
@@ -164,10 +336,18 @@ function SectionBlock({
   section,
   compareSection,
   totalLabel,
+  expandedKeys,
+  toggle,
+  currentLabel,
+  compareLabel,
 }: {
   section: BalanceSection
   compareSection: BalanceSection
   totalLabel: string
+  expandedKeys: Set<string>
+  toggle: (key: string) => void
+  currentLabel: string
+  compareLabel: string
 }) {
   const compareGroupMap = buildGroupMap(compareSection)
   const compareLineMap = buildLineMap(compareSection)
@@ -179,7 +359,16 @@ function SectionBlock({
         </td>
       </tr>
       {section.groups.map((group) => (
-        <GroupBlock key={group.key} group={group} compareGroupMap={compareGroupMap} compareLineMap={compareLineMap} />
+        <GroupBlock
+          key={group.key}
+          group={group}
+          compareGroupMap={compareGroupMap}
+          compareLineMap={compareLineMap}
+          expandedKeys={expandedKeys}
+          toggle={toggle}
+          currentLabel={currentLabel}
+          compareLabel={compareLabel}
+        />
       ))}
       <tr className="bg-muted font-semibold">
         <td className="px-3 py-1.5">{totalLabel}</td>
@@ -194,6 +383,18 @@ function SectionBlock({
 // ── Главный компонент ────────────────────────────────────────────────────
 
 export function BalanceSheetTable({ current, compare, currentLabel, compareLabel }: BalanceSheetTableProps) {
+  // Состояние раскрытых строк (иммутабельное обновление Set)
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+
+  function toggle(key: string): void {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const capitalDelta = computeDelta(current.capitalRub, compare.capitalRub)
   const capitalCls = deltaColorClass(capitalDelta.abs)
 
@@ -221,11 +422,23 @@ export function BalanceSheetTable({ current, compare, currentLabel, compareLabel
             </tr>
           </thead>
           <tbody>
-            <SectionBlock section={current.assets} compareSection={compare.assets} totalLabel="ИТОГО АКТИВЫ" />
+            <SectionBlock
+              section={current.assets}
+              compareSection={compare.assets}
+              totalLabel="ИТОГО АКТИВЫ"
+              expandedKeys={expandedKeys}
+              toggle={toggle}
+              currentLabel={currentLabel}
+              compareLabel={compareLabel}
+            />
             <SectionBlock
               section={current.liabilities}
               compareSection={compare.liabilities}
               totalLabel="ИТОГО ПАССИВЫ"
+              expandedKeys={expandedKeys}
+              toggle={toggle}
+              currentLabel={currentLabel}
+              compareLabel={compareLabel}
             />
             <tr className="bg-muted font-bold">
               <td className="px-3 py-2">КАПИТАЛ</td>
