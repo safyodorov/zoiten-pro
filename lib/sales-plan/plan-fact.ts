@@ -414,3 +414,60 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
 
   return { buckets, total, kpi, unsettledDays }
 }
+
+// ── compareVersions (дрейф черновика vs версии) ───────────────────────────────
+
+export interface VersionDriftResult {
+  /** Суммарное отклонение плана B − плана A по горизонту (₽ метрика buyouts-rub) */
+  driftRub: number
+  /** Относительное отклонение % = (planB − planA) / planA × 100 (null если planA = 0) */
+  driftPct: number | null
+  /** Количество дней в горизонте */
+  dayCount: number
+}
+
+/**
+ * «Дрейф» — насколько текущие правки черновика уводят от зафиксированной версии.
+ *
+ * Pure: принимает уже загруженные дневные ряды (массивы PlanDayInput),
+ * не обращается к Prisma.
+ *
+ * Семантика: versionA = зафиксированная версия (baseline), versionB = черновик.
+ * driftRub > 0 → черновик выше версии (рост плана).
+ * driftRub < 0 → черновик ниже версии (снижение плана).
+ *
+ * Метрика — buyouts-rub (планBuyoutsRub), соответствует iuMetric.
+ */
+export function compareVersions(
+  versionA_days: PlanDayInput[],
+  versionB_days: PlanDayInput[],
+): VersionDriftResult {
+  let planA = 0
+  let planB = 0
+
+  const mapA = new Map<string, number>()
+  for (const d of versionA_days) {
+    mapA.set(d.date, d.planBuyoutsRub)
+  }
+
+  const mapB = new Map<string, number>()
+  for (const d of versionB_days) {
+    mapB.set(d.date, d.planBuyoutsRub)
+  }
+
+  // Юнион дат
+  const allDates = new Set([...mapA.keys(), ...mapB.keys()])
+  for (const date of allDates) {
+    planA += mapA.get(date) ?? 0
+    planB += mapB.get(date) ?? 0
+  }
+
+  const driftRub = planB - planA
+  const driftPct = planA !== 0 ? (driftRub / planA) * 100 : null
+
+  return {
+    driftRub,
+    driftPct,
+    dayCount: allDates.size,
+  }
+}

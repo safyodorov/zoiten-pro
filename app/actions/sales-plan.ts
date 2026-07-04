@@ -20,6 +20,7 @@ import { computeSalesPlan } from "@/lib/sales-plan/engine"
 import { suggestVirtualPurchases } from "@/lib/sales-plan/virtual-purchases"
 import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
+import { auth } from "@/lib/auth"
 
 const BASELINE_KEY = "salesPlan.baselineOverrides"
 const PRICE_KEY = "salesPlan.priceOverrides"
@@ -1079,6 +1080,379 @@ export async function markVirtualPurchaseConverted(
     },
   })
   revalidateSalesPlanPaths()
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 25 wave 7: Версионирование плана продаж (SP-11)
+// Все write — SALES MANAGE.
+// Immutable: нет action на UPDATE строк SalesPlanVersionDay.
+// ═══════════════════════════════════════════════════════════════════
+
+/** Читает текущего userId из JWT-сессии. */
+async function getSessionUserId(): Promise<string | null> {
+  const session = await auth()
+  return session?.user?.id ?? null
+}
+
+const ACTIVE_VERSION_KEY = "salesPlan.activeVersionId"
+const HORIZON_FROM_VERSION = "2026-07-01"
+const HORIZON_TO_VERSION = "2026-12-31"
+const CHUNK_SIZE = 5000
+
+/**
+ * Фиксация плана в immutable-снапшот.
+ *
+ * Алгоритм:
+ * 1. loadSalesPlanInputs + computeSalesPlan → дневной ряд [today…horizonTo] из драфта
+ * 2. Дни < today: копируются из активной версии (если нет — unconstrained из драфта)
+ * 3. Создать header SalesPlanVersion (paramsJson со снапшотом VP + настроек)
+ * 4. createMany SalesPlanVersionDay чанками по 5000
+ * 5. Установить новую версию активной (salesPlan.activeVersionId)
+ *
+ * Immutable: нет UPDATE строк SalesPlanVersionDay.
+ */
+export async function fixSalesPlanVersion(payload: {
+  label?: string
+  note?: string
+}): Promise<{ ok: true; versionId: string } | { ok: false; error: string }> {
+  await requireSection("SALES", "MANAGE")
+  const userId = await getSessionUserId()
+
+  try {
+    // Параметры модели
+    const [deliveryDays, returnDays, wbInboundLagDays, transitDays, defaultLeadTimeDays, safetyStockDays, vpCoverDays] =
+      await Promise.all([
+        getLeadTimeDays("deliveryDays", 3),
+        getLeadTimeDays("returnDays", 3),
+        getSettingNumber("salesPlan.wbInboundLagDays", 0),
+        getSettingNumber("salesPlan.transitDays", 20),
+        getSettingNumber("salesPlan.defaultLeadTimeDays", 45),
+        getSettingNumber("salesPlan.safetyStockDays", 14),
+        getSettingNumber("salesPlan.vpCoverDays", 60),
+      ])
+
+    const nowMsk = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    const today = nowMsk.toISOString().slice(0, 10)
+
+    // Загружаем данные и вычисляем дневной ряд драфта
+    const inputs = await loadSalesPlanInputs(prisma, {
+      today,
+      horizonFrom: HORIZON_FROM_VERSION,
+      horizonTo: HORIZON_TO_VERSION,
+      deliveryDays,
+      returnDays,
+      wbInboundLagDays,
+      transitDays,
+      defaultLeadTimeDays,
+      safetyStockDays,
+      vpCoverDays,
+    })
+
+    const planResult = computeSalesPlan(inputs)
+
+    // Читаем активную версию (для прошлых дней)
+    const activeVersionSetting = await prisma.appSetting.findUnique({
+      where: { key: ACTIVE_VERSION_KEY },
+    })
+    const activeVersionId = activeVersionSetting?.value ?? null
+
+    // Прошлые дни из активной версии (если есть)
+    let pastDaysByProductDate: Map<string, Map<string, {
+      planOrdersUnits: number
+      planOrdersRub: number
+      planBuyoutsUnits: number
+      planBuyoutsRub: number
+      priceUsed: number
+      buyoutPctUsed: number
+      stockEndUnits: number
+    }>> = new Map()
+
+    if (activeVersionId) {
+      const pastVersionDays = await prisma.salesPlanVersionDay.findMany({
+        where: {
+          versionId: activeVersionId,
+          date: { lt: new Date(today + "T00:00:00Z") },
+        },
+        select: {
+          productId: true,
+          date: true,
+          planOrdersUnits: true,
+          planOrdersRub: true,
+          planBuyoutsUnits: true,
+          planBuyoutsRub: true,
+          priceUsed: true,
+          buyoutPctUsed: true,
+          stockEndUnits: true,
+        },
+      })
+      for (const row of pastVersionDays) {
+        const dateStr = row.date.toISOString().slice(0, 10)
+        let productMap = pastDaysByProductDate.get(row.productId)
+        if (!productMap) {
+          productMap = new Map()
+          pastDaysByProductDate.set(row.productId, productMap)
+        }
+        productMap.set(dateStr, {
+          planOrdersUnits: row.planOrdersUnits,
+          planOrdersRub: row.planOrdersRub,
+          planBuyoutsUnits: row.planBuyoutsUnits,
+          planBuyoutsRub: row.planBuyoutsRub,
+          priceUsed: row.priceUsed,
+          buyoutPctUsed: row.buyoutPctUsed,
+          stockEndUnits: row.stockEndUnits,
+        })
+      }
+    }
+
+    // Снапшот активных VirtualPurchase для paramsJson (ПДДС Wave 8)
+    const activeVPs = await prisma.virtualPurchase.findMany({
+      where: { status: { in: ["ACCEPTED", "SUGGESTED"] } },
+      select: {
+        id: true,
+        productId: true,
+        qty: true,
+        orderDate: true,
+        expectedArrivalDate: true,
+        unitPrice: true,
+        supplierId: true,
+        leadTimeDaysUsed: true,
+        source: true,
+        status: true,
+      },
+    })
+
+    // Снапшот ИУ-таргетов
+    const iuSetting = await prisma.appSetting.findUnique({
+      where: { key: "salesPlan.iuTargets" },
+    })
+    let iuTargetsSnapshot: unknown = null
+    if (iuSetting) {
+      try { iuTargetsSnapshot = JSON.parse(iuSetting.value) } catch { /* ignore */ }
+    }
+
+    // Label по умолчанию: «План от DD.MM.YYYY»
+    const dd = String(nowMsk.getUTCDate()).padStart(2, "0")
+    const mm = String(nowMsk.getUTCMonth() + 1).padStart(2, "0")
+    const yyyy = String(nowMsk.getUTCFullYear())
+    const defaultLabel = `План от ${dd}.${mm}.${yyyy}`
+
+    const paramsJson = {
+      modelParams: {
+        deliveryDays, returnDays, wbInboundLagDays,
+        transitDays, defaultLeadTimeDays, safetyStockDays, vpCoverDays,
+      },
+      iuTargets: iuTargetsSnapshot,
+      virtualPurchases: activeVPs.map((vp) => ({
+        id: vp.id,
+        productId: vp.productId,
+        qty: vp.qty,
+        orderDate: vp.orderDate.toISOString().slice(0, 10),
+        expectedArrivalDate: vp.expectedArrivalDate.toISOString().slice(0, 10),
+        unitPrice: vp.unitPrice != null ? Number(vp.unitPrice) : null,
+        supplierId: vp.supplierId,
+        leadTimeDaysUsed: vp.leadTimeDaysUsed,
+        source: vp.source,
+        status: vp.status,
+      })),
+      fixedAt: nowMsk.toISOString(),
+    }
+
+    // Создаём header + строки в транзакции
+    const newVersionId = await prisma.$transaction(async (tx) => {
+      const version = await tx.salesPlanVersion.create({
+        data: {
+          label: payload.label ?? defaultLabel,
+          kind: "user",
+          horizonFrom: new Date(HORIZON_FROM_VERSION + "T00:00:00Z"),
+          horizonTo: new Date(HORIZON_TO_VERSION + "T00:00:00Z"),
+          paramsJson: paramsJson as never,
+          note: payload.note ?? null,
+          createdById: userId,
+        },
+      })
+
+      // Собираем все строки: horizonFrom…horizonTo
+      const rows: Array<{
+        versionId: string
+        productId: string
+        sku: string
+        name: string
+        date: Date
+        planOrdersUnits: number
+        planOrdersRub: number
+        planBuyoutsUnits: number
+        planBuyoutsRub: number
+        priceUsed: number
+        buyoutPctUsed: number
+        stockEndUnits: number
+      }> = []
+
+      // Индексируем результат по productId для быстрого поиска
+      const productDraftDays = new Map<string, typeof planResult.products[0]["days"]>()
+      for (const pr of planResult.products) {
+        productDraftDays.set(pr.productId, pr.days)
+      }
+
+      for (const productInput of inputs.products) {
+        const pid = productInput.productId
+        const draftDays = productDraftDays.get(pid) ?? []
+        const draftByDate = new Map(draftDays.map((d) => [d.date, d]))
+        const pastMap = pastDaysByProductDate.get(pid)
+
+        // horizonFrom…horizonTo (01.07–31.12)
+        let cur = HORIZON_FROM_VERSION
+        while (cur <= HORIZON_TO_VERSION) {
+          const dateObj = new Date(cur + "T00:00:00Z")
+
+          if (cur < today && pastMap?.has(cur)) {
+            // Прошлый день: копия из активной версии
+            const pastRow = pastMap.get(cur)!
+            rows.push({
+              versionId: version.id,
+              productId: pid,
+              sku: productInput.sku,
+              name: productInput.name,
+              date: dateObj,
+              planOrdersUnits: pastRow.planOrdersUnits,
+              planOrdersRub: pastRow.planOrdersRub,
+              planBuyoutsUnits: pastRow.planBuyoutsUnits,
+              planBuyoutsRub: pastRow.planBuyoutsRub,
+              priceUsed: pastRow.priceUsed,
+              buyoutPctUsed: pastRow.buyoutPctUsed,
+              stockEndUnits: pastRow.stockEndUnits,
+            })
+          } else {
+            // Сегодня и будущие (или прошлые без активной версии): из драфта
+            const day = draftByDate.get(cur)
+            if (day) {
+              // Zero-строки не пишем (нет смысла)
+              if (
+                day.ordersUnits !== 0 ||
+                day.buyoutsUnits !== 0 ||
+                day.ordersRub !== 0 ||
+                day.buyoutsRub !== 0
+              ) {
+                rows.push({
+                  versionId: version.id,
+                  productId: pid,
+                  sku: productInput.sku,
+                  name: productInput.name,
+                  date: dateObj,
+                  planOrdersUnits: day.ordersUnits,
+                  planOrdersRub: day.ordersRub,
+                  planBuyoutsUnits: day.buyoutsUnits,
+                  planBuyoutsRub: day.buyoutsRub,
+                  priceUsed: productInput.avgPriceRub,
+                  buyoutPctUsed: productInput.buyoutPct,
+                  stockEndUnits: day.stockEnd,
+                })
+              }
+            }
+          }
+
+          // next day
+          const d = new Date(cur + "T00:00:00Z")
+          d.setUTCDate(d.getUTCDate() + 1)
+          cur = d.toISOString().slice(0, 10)
+        }
+      }
+
+      // Вставка чанками по 5000
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        await tx.salesPlanVersionDay.createMany({
+          data: rows.slice(i, i + CHUNK_SIZE),
+        })
+      }
+
+      return version.id
+    })
+
+    // Устанавливаем новую версию активной
+    await prisma.appSetting.upsert({
+      where: { key: ACTIVE_VERSION_KEY },
+      create: { key: ACTIVE_VERSION_KEY, value: newVersionId },
+      update: { value: newVersionId },
+    })
+
+    revalidateSalesPlanPaths()
+    return { ok: true, versionId: newVersionId }
+  } catch (err) {
+    console.error("[fixSalesPlanVersion]", err)
+    return { ok: false, error: "Не удалось зафиксировать версию" }
+  }
+}
+
+/**
+ * Устанавливает версию как активную (baseline для план/факт).
+ */
+export async function setActiveSalesPlanVersion(id: string): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    // Проверяем что версия существует
+    const version = await prisma.salesPlanVersion.findUnique({ where: { id }, select: { id: true } })
+    if (!version) return { ok: false, error: "Версия не найдена" }
+
+    await setGlobalJson(ACTIVE_VERSION_KEY, {} as Record<string, unknown>)
+    // setGlobalJson с пустым объектом удалит ключ; используем прямой upsert
+    await prisma.appSetting.upsert({
+      where: { key: ACTIVE_VERSION_KEY },
+      create: { key: ACTIVE_VERSION_KEY, value: id },
+      update: { value: id },
+    })
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[setActiveSalesPlanVersion]", err)
+    return { ok: false, error: "Не удалось установить версию" }
+  }
+}
+
+/**
+ * Переименование версии (label — единственное изменяемое поле).
+ */
+export async function renamePlanVersion(id: string, label: string): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const trimmed = label.trim()
+  if (!trimmed) return { ok: false, error: "Название не может быть пустым" }
+  try {
+    await prisma.salesPlanVersion.update({
+      where: { id },
+      data: { label: trimmed },
+    })
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[renamePlanVersion]", err)
+    return { ok: false, error: "Не удалось переименовать версию" }
+  }
+}
+
+/**
+ * Удаление версии (каскад days через FK).
+ * Если удаляется активная — сбрасываем activeVersionId.
+ */
+export async function deleteSalesPlanVersion(id: string): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    // Проверяем активную версию
+    const activeSetting = await prisma.appSetting.findUnique({
+      where: { key: ACTIVE_VERSION_KEY },
+    })
+    const isActive = activeSetting?.value === id
+
+    await prisma.salesPlanVersion.delete({ where: { id } })
+
+    if (isActive) {
+      // Сбрасываем activeVersionId
+      await prisma.appSetting.deleteMany({ where: { key: ACTIVE_VERSION_KEY } })
+    }
+
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[deleteSalesPlanVersion]", err)
+    return { ok: false, error: "Не удалось удалить версию" }
+  }
 }
 
 /** Читает deliveryDays / returnDays из salesPlan.leadTimes2 (JSON) или old salesPlan.leadTimes. */
