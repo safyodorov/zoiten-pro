@@ -105,6 +105,8 @@ model User {
   autoReplyUpdates        AutoReplyConfig[]     @relation("AutoReplyUpdater") // Phase 10 — кто последний редактировал автоответ
   managerStats            ManagerSupportStats[] @relation("ManagerStats") // Phase 13 — денормализованная статистика менеджеров (SUP-39)
   wbTokensUpdated         WbApiToken[]          @relation("WbTokenUpdater") // Quick 260512-jxh
+  // Phase 25: Plan prodazh v2 back-relation
+  salesPlanVersions       SalesPlanVersion[]
   isActive                Boolean               @default(true)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -435,6 +437,10 @@ model Product {
   supplierProductLinks     SupplierProductLink[]
   negotiationProducts      NegotiationProduct[]
   purchaseItems            PurchaseItem[]
+  // Phase 25: Plan prodazh v2 back-relations
+  salesPlanMonthLevels     SalesPlanMonthLevel[]
+  salesPlanDayOverrides    SalesPlanDayOverride[]
+  virtualPurchases         VirtualPurchase[]
   deletedAt                DateTime? // Soft delete: null = active
   createdAt                DateTime               @default(now())
   updatedAt                DateTime               @updatedAt
@@ -1361,6 +1367,8 @@ model Supplier {
   productLinks      SupplierProductLink[]
   negotiations      Negotiation[]
   purchases         Purchase[]
+  // Phase 25: Plan prodazh v2 back-relation
+  virtualPurchases  VirtualPurchase[]
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   deletedAt         DateTime?
@@ -1480,6 +1488,8 @@ model Purchase {
   inspection         PurchaseInspection?
   groupId            String?
   group              PurchaseGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  // Phase 25: ПЛАНОВАЯ дата прихода в Иваново. Приоритетный источник дат для плана продаж (resolver §3.4).
+  plannedArrivalDate DateTime?         @db.Date
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -1868,4 +1878,120 @@ model FinanceTaxPeriodActual {
   updatedAt          DateTime @updatedAt
 
   @@unique([year, quarter])
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 25: План продаж v2 (2026-07)
+// Рабочий план продаж H2-2026: помесячные уровни, дневные правки,
+// виртуальные закупки, версионирование (фиксация).
+// ──────────────────────────────────────────────────────────────────
+
+// План продаж v2: помесячный плановый уровень per товар.
+// Единица — ЗАКАЗЫ шт/день (вход симуляции; выкупы/₽ — производные).
+// month = 1-е число месяца (конвенция ManagerSupportStats.period).
+model SalesPlanMonthLevel {
+  id                 String   @id @default(cuid())
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  month              DateTime @db.Date // 2026-07-01, 2026-08-01, …
+  targetOrdersPerDay Float? // null = «нет плана, взять baseline из funnel»
+  priceRub           Float? // плановая цена выкупа ₽; null = live avgPrice
+  buyoutPct          Float? // 0..100 override % выкупа; null = fallback-цепочка
+  comment            String?
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+
+  @@unique([productId, month])
+  @@index([month])
+}
+
+// Точечная правка дня — sparse таблица, строки создаются только где пользователь
+// руками поправил день. Приоритет: dayOverride > monthLevel > baseline.
+model SalesPlanDayOverride {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  ordersPerDay Float // абсолютная ставка на день (не дельта)
+  updatedAt    DateTime @updatedAt
+  updatedBy    String?
+
+  @@unique([productId, date])
+  @@index([date])
+}
+
+enum VirtualPurchaseStatus {
+  SUGGESTED // сгенерирована автоматически — УЧАСТВУЕТ в плане (opt-out)
+  ACCEPTED // подтверждена/отредактирована пользователем — участвует, переживает регенерацию
+  DISMISSED // отклонена — не участвует, не регенерируется на то же окно
+  CONVERTED // превращена в реальную Purchase — исключена (анти-двойной счёт)
+}
+
+// Виртуальная закупка: гипотетический заказ поставщику, влияющий ТОЛЬКО на план
+// продаж (и будущий ПДДС-план). НЕ участвует в production-sync, /stock, балансе,
+// списке закупок — изоляция структурная (отдельная таблица), не флаговая.
+model VirtualPurchase {
+  id                  String                @id @default(cuid())
+  productId           String
+  product             Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplierId          String?
+  supplier            Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  qty                 Int
+  orderDate           DateTime              @db.Date // когда надо разместить заказ
+  expectedArrivalDate DateTime              @db.Date // плановый приход в Иваново
+  leadTimeDaysUsed    Int? // зафиксировано при генерации (аудит)
+  unitPrice           Decimal?              @db.Decimal(14, 4) // из SupplierProductLink
+  currency            String                @default("CNY")
+  source              String                @default("auto") // "auto" | "manual"
+  status              VirtualPurchaseStatus @default(SUGGESTED)
+  convertedPurchaseId String? // Purchase.id после конвертации (без FK)
+  comment             String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([productId, expectedArrivalDate])
+  @@index([status])
+}
+
+// Зафиксированная версия плана. Immutable: строки пишутся один раз в транзакции,
+// server action на UPDATE строк отсутствует. Удаление — только целиком версии.
+model SalesPlanVersion {
+  id          String              @id @default(cuid())
+  label       String // «План от 04.07.2026», редактируемо (rename)
+  kind        String              @default("user") // "user" | "auto" (cron-фиксация — заложено, не реализуется в v1)
+  horizonFrom DateTime            @db.Date // 2026-07-01
+  horizonTo   DateTime            @db.Date // 2026-12-31
+  paramsJson  Json // снапшот входов: параметры модели, monthLevels+dayOverrides digest,
+  // активные VirtualPurchase (id, productId, qty, даты, unitPrice,
+  // currency, depositPct/balancePct, supplierId) — самодостаточные копии,
+  // iuTargets — для аудита, воспроизводимости и ПДДС
+  note        String?
+  createdById String?
+  createdBy   User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime            @default(now())
+  days        SalesPlanVersionDay[]
+
+  @@index([createdAt])
+}
+
+// Дневная строка версии. productId БЕЗ FK + денормализация sku/name —
+// паттерн FinanceStockSnapshot (переживает hard-purge товара).
+model SalesPlanVersionDay {
+  id               BigInt           @id @default(autoincrement())
+  versionId        String
+  version          SalesPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  productId        String // без @relation!
+  sku              String
+  name             String
+  date             DateTime         @db.Date
+  planOrdersUnits  Float
+  planOrdersRub    Float
+  planBuyoutsUnits Float // T+3 начисление
+  planBuyoutsRub   Float // главная план-метрика (при iuMetric=buyouts)
+  priceUsed        Float
+  buyoutPctUsed    Float // 0..1
+  stockEndUnits    Float // остаток на конец дня (диагностика)
+
+  @@unique([versionId, productId, date])
+  @@index([versionId, date])
 }
