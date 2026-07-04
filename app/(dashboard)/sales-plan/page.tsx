@@ -1,34 +1,70 @@
 // app/(dashboard)/sales-plan/page.tsx
-// План продаж — прогноз выкупов до заданной даты, с разрезами по товарам.
+// Таб «Сводный» — план/факт/ИУ матрица.
+// Переработка Phase 25-06: хардкод хранилища и guard end≥today удалены.
+// requireSection("SALES"); guard end>=today снят; clamp в горизонт.
 
 import { prisma } from "@/lib/prisma"
-import { requireSection } from "@/lib/rbac"
-import { computeForecast, getMskTodayIso } from "@/lib/sales-forecast"
-import { SalesForecastSummary } from "@/components/sales-plan/SalesForecastSummary"
-import { SalesForecastFilters } from "@/components/sales-plan/SalesForecastFilters"
-import { SalesForecastEndDate } from "@/components/sales-plan/SalesForecastEndDate"
-import { SalesForecastTable } from "@/components/sales-plan/SalesForecastTable"
-import { SalesForecastDailyChart } from "@/components/sales-plan/SalesForecastDailyChart"
+import { requireSection, getSectionRole } from "@/lib/rbac"
+import { loadFactDaily } from "@/lib/sales-plan/data"
+import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
+import { computeSalesPlan } from "@/lib/sales-plan/engine"
+import { buildPlanFactReport } from "@/lib/sales-plan/plan-fact"
+import { iuTotalForRange } from "@/lib/sales-plan/iu"
+import type { Granularity } from "@/lib/date-buckets"
+import type { IuTarget } from "@/lib/sales-plan/types"
+import { SalesPlanTabs } from "@/components/sales-plan/SalesPlanTabs"
+import { PlanFactControls } from "@/components/sales-plan/PlanFactControls"
+import { PlanFactSummaryCards } from "@/components/sales-plan/PlanFactSummaryCards"
+import { PlanFactChart } from "@/components/sales-plan/PlanFactChart"
+import type { PlanFactChartPoint } from "@/components/sales-plan/PlanFactChart"
+import { PlanFactMatrix } from "@/components/sales-plan/PlanFactMatrix"
 
-const BASELINE_OVERRIDES_KEY = "salesPlan.baselineOverrides"
-const PRICE_OVERRIDES_KEY = "salesPlan.priceOverrides"
-const LEAD_TIMES_KEY = "salesPlan.leadTimes"
-const DEFAULT_DELIVERY_DAYS = 3
-const DEFAULT_RETURN_DAYS = 3
+// ── Константы ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_END_DATE = "2026-06-30"
-const DEFAULT_CHART_END = "2026-07-31"
+const HORIZON_FROM = "2026-07-01"
+const HORIZON_TO = "2026-12-31"
+const DAY_WINDOW_LIMIT = 62
+
+// Fallback ИУ-таргет (до настройки через AppSetting)
+const DEFAULT_IU_TARGETS: IuTarget[] = [
+  { from: "2026-07-01", to: "2026-12-31", dailyRub: 2_380_805 },
+]
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getMskTodayIso(): string {
+  const now = new Date()
+  const msk = new Date(now.getTime() + 3 * 60 * 60 * 1000)
+  return msk.toISOString().slice(0, 10)
+}
 
 function isValidDate(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(new Date(s).getTime())
 }
 
+function clamp(date: string, min: string, max: string): string {
+  if (date < min) return min
+  if (date > max) return max
+  return date
+}
+
+function parseJsonSafe(raw: string | undefined): unknown {
+  if (!raw) return null
+  try { return JSON.parse(raw) } catch { return null }
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default async function SalesPlanPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    end?: string
-    q?: string
+    granularity?: string
+    from?: string
+    to?: string
+    metric?: string
+    cumulative?: string
+    version?: string
     brands?: string
     categories?: string
     subcategories?: string
@@ -36,327 +72,242 @@ export default async function SalesPlanPage({
   }>
 }) {
   await requireSection("SALES")
+  const canManage = (await getSectionRole("SALES")) === "MANAGE"
+  void canManage // пока не используется до Wave 7
+
   const today = getMskTodayIso()
-  const {
-    end: endParam,
-    q,
-    brands: brandsParam,
-    categories: categoriesParam,
-    subcategories: subcategoriesParam,
-    directions: directionsParam,
-  } = await searchParams
+  const sp = await searchParams
 
-  let endDate = DEFAULT_END_DATE
-  if (endParam && isValidDate(endParam) && endParam >= today) {
-    endDate = endParam
-  }
-  if (endDate < today) endDate = today
-  // Chart-горизонт — фиксированный (до 31.07), либо endDate, если он больше
-  const chartEndDate = endDate > DEFAULT_CHART_END ? endDate : DEFAULT_CHART_END
+  // ── Параметры из URL ───────────────────────────────────────────────────────
 
-  const selectedBrandIds = brandsParam ? brandsParam.split(",").filter(Boolean) : []
-  const selectedCategoryIds = categoriesParam
-    ? categoriesParam.split(",").filter(Boolean)
-    : []
-  const selectedSubcategoryIds = subcategoriesParam
-    ? subcategoriesParam.split(",").filter(Boolean)
-    : []
-  const selectedDirectionIds = directionsParam
-    ? directionsParam.split(",").filter(Boolean)
-    : []
-  const search = (q ?? "").trim()
+  const VALID_GRANULARITIES: Granularity[] = ["day", "week", "month", "quarter", "halfyear", "year"]
+  const granularity: Granularity =
+    (sp.granularity && VALID_GRANULARITIES.includes(sp.granularity as Granularity))
+      ? (sp.granularity as Granularity)
+      : "month"
 
-  // Глобальные корректировки плана (общие для всех) — из AppSetting (JSON-строки).
+  // from/to — clamp в горизонт (guard end≥today СНЯТ)
+  const rawFrom = sp.from && isValidDate(sp.from) ? sp.from : HORIZON_FROM
+  const rawTo = sp.to && isValidDate(sp.to) ? sp.to : HORIZON_TO
+  const from = clamp(rawFrom, HORIZON_FROM, HORIZON_TO)
+  const to = clamp(rawTo, from, HORIZON_TO)
+
+  const VALID_METRICS = ["buyouts-rub", "buyouts-units", "orders-rub", "orders-units"]
+  const metric: string =
+    sp.metric && VALID_METRICS.includes(sp.metric) ? sp.metric : "buyouts-rub"
+
+  const cumulative = sp.cumulative === "1"
+
+  // Дневная разбивка — ограничена 62 днями
+  const dayCount = Math.round(
+    (new Date(to + "T00:00:00Z").getTime() - new Date(from + "T00:00:00Z").getTime()) / 86_400_000
+  ) + 1
+  const dayWindowExceeded = granularity === "day" && dayCount > DAY_WINDOW_LIMIT
+  const effectiveGranularity: Granularity = dayWindowExceeded ? "month" : granularity
+
+  // ── AppSettings ─────────────────────────────────────────────────────────────
+
   const settingsRows = await prisma.appSetting.findMany({
-    where: { key: { in: [BASELINE_OVERRIDES_KEY, PRICE_OVERRIDES_KEY, LEAD_TIMES_KEY] } },
+    where: {
+      key: {
+        in: [
+          "salesPlan.iuTargets",
+          "salesPlan.leadTimes2",
+          "salesPlan.defaultLeadTimeDays",
+          "salesPlan.safetyStockDays",
+          "salesPlan.vpCoverDays",
+          "salesPlan.wbInboundLagDays",
+          "salesPlan.transitDays",
+        ],
+      },
+    },
     select: { key: true, value: true },
   })
   const settingByKey = new Map(settingsRows.map((s) => [s.key, s.value]))
 
-  function parseJsonObject(raw: string | undefined): Record<string, unknown> {
-    if (!raw) return {}
-    try {
-      const parsed = JSON.parse(raw)
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {}
-    } catch {
-      return {}
-    }
+  function getSettingNum(key: string, def: number): number {
+    const raw = settingByKey.get(key)
+    if (!raw) return def
+    const n = parseFloat(raw)
+    return Number.isFinite(n) ? n : def
   }
 
-  const baselineOverrides: Record<string, number> = {}
-  for (const [k, v] of Object.entries(parseJsonObject(settingByKey.get(BASELINE_OVERRIDES_KEY)))) {
-    if (typeof v === "number" && Number.isFinite(v) && v >= 0) baselineOverrides[k] = v
-  }
-  const priceOverrides: Record<string, number> = {}
-  for (const [k, v] of Object.entries(parseJsonObject(settingByKey.get(PRICE_OVERRIDES_KEY)))) {
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) priceOverrides[k] = v
-  }
-  let deliveryDaysOverride: number | undefined
-  let returnDaysOverride: number | undefined
-  const leadRaw = parseJsonObject(settingByKey.get(LEAD_TIMES_KEY))
-  if (typeof leadRaw.deliveryDays === "number" && leadRaw.deliveryDays >= 0) {
-    deliveryDaysOverride = leadRaw.deliveryDays
-  }
-  if (typeof leadRaw.returnDays === "number" && leadRaw.returnDays >= 0) {
-    returnDaysOverride = leadRaw.returnDays
+  // ИУ-таргеты (из AppSetting или fallback)
+  let iuTargets: IuTarget[] = DEFAULT_IU_TARGETS
+  const iuRaw = parseJsonSafe(settingByKey.get("salesPlan.iuTargets"))
+  if (Array.isArray(iuRaw) && iuRaw.length > 0) {
+    iuTargets = iuRaw as IuTarget[]
   }
 
-  const [forecast, allBrands, allCategories, allSubcategories, allDirections] =
-    await Promise.all([
-      computeForecast({
-        endDate,
-        chartEndDate,
-        today,
-        baselineOverrides,
-        priceOverrides,
-        deliveryDaysOverride,
-        returnDaysOverride,
-      }),
-      prisma.brand.findMany({
-        orderBy: { name: "asc" },
-        select: { id: true, name: true, directionId: true },
-      }),
-      prisma.category.findMany({
-        orderBy: { name: "asc" },
-        select: { id: true, name: true, brandId: true },
-      }),
-      prisma.subcategory.findMany({
-        orderBy: { name: "asc" },
-        select: { id: true, name: true, categoryId: true },
-      }),
-      prisma.productDirection.findMany({
-        orderBy: { sortOrder: "asc" },
-        select: { id: true, name: true },
-      }),
-    ])
+  // Lead times
+  const leadTimesRaw = parseJsonSafe(settingByKey.get("salesPlan.leadTimes2")) as Record<string, number> | null
+  const deliveryDays = leadTimesRaw?.deliveryDays ?? 3
+  const returnDays = leadTimesRaw?.returnDays ?? 3
+  const wbInboundLagDays = getSettingNum("salesPlan.wbInboundLagDays", 0)
+  const transitDays = getSettingNum("salesPlan.transitDays", 20)
+  const defaultLeadTimeDays = getSettingNum("salesPlan.defaultLeadTimeDays", 45)
+  const safetyStockDays = getSettingNum("salesPlan.safetyStockDays", 14)
+  const vpCoverDays = getSettingNum("salesPlan.vpCoverDays", 60)
 
-  // In-memory фильтрация — прогноз считается один раз для всех товаров, потом filter
-  let visible = forecast.products
-  if (search) {
-    const term = search.toLocaleLowerCase("ru")
-    visible = visible.filter(
-      (p) =>
-        p.name.toLocaleLowerCase("ru").includes(term) ||
-        p.sku.toLocaleLowerCase("ru").includes(term),
-    )
-  }
-  if (selectedDirectionIds.length > 0) {
-    visible = visible.filter(
-      (p) => p.directionId && selectedDirectionIds.includes(p.directionId),
-    )
-  }
-  if (selectedBrandIds.length > 0) {
-    visible = visible.filter((p) => selectedBrandIds.includes(p.brandId))
-  }
-  if (selectedCategoryIds.length > 0) {
-    visible = visible.filter(
-      (p) => p.categoryId && selectedCategoryIds.includes(p.categoryId),
-    )
-  }
-  if (selectedSubcategoryIds.length > 0) {
-    visible = visible.filter(
-      (p) => p.subcategoryId && selectedSubcategoryIds.includes(p.subcategoryId),
-    )
-  }
+  // ── Данные ─────────────────────────────────────────────────────────────────
 
-  const totalOrders = visible.reduce((s, p) => s + p.ordersUnits, 0)
-  const totalSalesUnits = visible.reduce((s, p) => s + p.salesUnits, 0)
-  const totalSalesRub = visible.reduce((s, p) => s + p.salesRub, 0)
-  const subcatFallbackInView = visible.filter(
-    (p) => p.buyoutSource === "subcategory",
-  ).length
-  const globalFallbackInView = visible.filter(
-    (p) => p.buyoutSource === "global",
-  ).length
+  // Факт — loadFactDaily (company + byProduct)
+  const factResult = await loadFactDaily(prisma, from, to)
+  const { company: companyFactMap, byProduct: byProductMap, settledThroughIso } = factResult
 
-  // Агрегируем dailySales по видимым товарам — для chart.
-  // Дополнительно разбиваем выручку по направлениям (Одежда / Бытовая техника / Прочее)
-  // для двухцветных stacked-баров.
-  type DirBucket = "clothing" | "appliances" | "other"
-  function bucketOf(name: string | null): DirBucket {
-    if (name === "Одежда") return "clothing"
-    if (name === "Бытовая техника") return "appliances"
-    return "other"
-  }
-  interface DailyAgg {
-    units: number
-    rub: number
-    rubClothing: number
-    rubAppliances: number
-    rubOther: number
-    unitsClothing: number
-    unitsAppliances: number
-    unitsOther: number
-  }
-  function emptyAgg(): DailyAgg {
-    return {
-      units: 0,
-      rub: 0,
-      rubClothing: 0,
-      rubAppliances: 0,
-      rubOther: 0,
-      unitsClothing: 0,
-      unitsAppliances: 0,
-      unitsOther: 0,
-    }
-  }
-  const dailyByDate = new Map<string, DailyAgg>()
-  for (const p of visible) {
-    const b = bucketOf(p.directionName)
-    for (const d of p.dailySales) {
-      const cur = dailyByDate.get(d.date) ?? emptyAgg()
-      cur.units += d.units
-      cur.rub += d.rub
-      if (b === "clothing") {
-        cur.rubClothing += d.rub
-        cur.unitsClothing += d.units
-      } else if (b === "appliances") {
-        cur.rubAppliances += d.rub
-        cur.unitsAppliances += d.units
-      } else {
-        cur.rubOther += d.rub
-        cur.unitsOther += d.units
-      }
-      dailyByDate.set(d.date, cur)
-    }
-  }
-  function fmtDayLabel(iso: string): string {
-    const dt = new Date(iso + "T00:00:00Z")
-    return dt.toLocaleDateString("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      timeZone: "UTC",
+  // Дневной ряд плана — через computeSalesPlan (драфт, номинал до первой версии)
+  // Для Сводного используем company-level plan (Σ по всем товарам)
+  let planCompanyDays: Array<{
+    date: string
+    planOrdersUnits: number
+    planOrdersRub: number
+    planBuyoutsUnits: number
+    planBuyoutsRub: number
+    priceUsed: number
+    buyoutPctUsed: number
+    stockEndUnits: number
+  }> = []
+
+  try {
+    const planInputs = await loadSalesPlanInputs(prisma, {
+      today,
+      horizonFrom: HORIZON_FROM,
+      horizonTo: HORIZON_TO,
+      deliveryDays,
+      returnDays,
+      wbInboundLagDays,
+      transitDays,
+      defaultLeadTimeDays,
+      safetyStockDays,
+      vpCoverDays,
     })
+
+    const planResult = computeSalesPlan(planInputs)
+
+    // Срежем companyDaily до диапазона from/to
+    planCompanyDays = planResult.companyDaily
+      .filter((d) => d.date >= from && d.date <= to)
+      .map((d) => ({
+        date: d.date,
+        planOrdersUnits: d.ordersUnits,
+        planOrdersRub: d.ordersRub,
+        planBuyoutsUnits: d.buyoutsUnits,
+        planBuyoutsRub: d.buyoutsRub,
+        priceUsed: 0,
+        buyoutPctUsed: 0,
+        stockEndUnits: 0,
+      }))
+  } catch (err) {
+    console.error("[SalesPlanPage] computeSalesPlan error:", err)
+    // Fallback: пустой план (нет данных товаров)
   }
-  const sortedDates = Array.from(dailyByDate.keys()).sort()
-  const chartData = sortedDates.map((date) => {
-    const a = dailyByDate.get(date)!
-    return {
-      date,
-      label: fmtDayLabel(date),
-      units: a.units,
-      rub: a.rub,
-      rubClothing: a.rubClothing,
-      rubAppliances: a.rubAppliances,
-      rubOther: a.rubOther,
-      unitsClothing: a.unitsClothing,
-      unitsAppliances: a.unitsAppliances,
-      unitsOther: a.unitsOther,
+
+  // Факт product-level (Σ по всем товарам)
+  const productFactByDate = new Map<string, { buyoutsRub: number; ordersRub: number; buyoutsUnits: number; ordersUnits: number }>()
+  for (const [, dailyMap] of byProductMap) {
+    for (const [date, row] of dailyMap) {
+      const cur = productFactByDate.get(date) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
+      cur.buyoutsRub += row.buyoutsRub
+      cur.ordersRub += row.ordersRub
+      cur.buyoutsUnits += row.buyoutsUnits
+      cur.ordersUnits += row.ordersUnits
+      productFactByDate.set(date, cur)
     }
+  }
+
+  // Сериализуем в массивы для buildPlanFactReport
+  const factDays = Array.from(productFactByDate.entries()).map(([date, row]) => ({
+    date,
+    ...row,
+  }))
+
+  const companyFactDays = Array.from(companyFactMap.entries()).map(([date, row]) => ({
+    date,
+    ...row,
+  }))
+
+  // ── buildPlanFactReport ─────────────────────────────────────────────────────
+
+  const metricForReport = metric as "buyouts-rub" | "buyouts-units" | "orders-rub" | "orders-units"
+
+  const report = buildPlanFactReport({
+    today,
+    planDays: planCompanyDays,
+    factDays,
+    companyFactDays,
+    iuTargets,
+    granularity: effectiveGranularity,
+    from,
+    to,
+    cumulative,
+    settledThroughIso,
+    metric: metricForReport,
   })
 
-  // endStockDateLabel — день после endDate (по умолчанию 01.07)
-  function isoAddOne(iso: string): string {
-    const dt = new Date(iso + "T00:00:00Z")
-    dt.setUTCDate(dt.getUTCDate() + 1)
-    return dt.toISOString().slice(0, 10)
-  }
-  const endStockIso = isoAddOne(endDate)
-  const endStockDateLabel = fmtDayLabel(endStockIso)
-  const accountingEndLabel = fmtDayLabel(endDate)
+  // ИУ за весь горизонт H2 (для карточки «Прогноз на 31.12»)
+  const iuHorizonTotalRub = iuTotalForRange(HORIZON_FROM, HORIZON_TO, iuTargets)
+
+  // ── Chart data ─────────────────────────────────────────────────────────────
+
+  const chartPoints: PlanFactChartPoint[] = report.buckets.map((b) => ({
+    key: b.key,
+    label: b.label,
+    planRub: b.planRub,
+    factRub: b.factRub,
+    iuRub: b.iuRub,
+    unsettled: b.hasUnsettledDays,
+    isCurrentBucket: b.isCurrentBucket,
+  }))
+
+  // Проверяем есть ли активные фильтры (для скрытия ИУ-строк в матрице)
+  const hasFilters = Boolean(
+    sp.brands || sp.categories || sp.subcategories || sp.directions
+  )
 
   return (
     <div className="h-full flex flex-col gap-4 min-h-0">
-      <div className="flex-none space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="text-sm text-muted-foreground">
-          Прогноз выкупов по дневной симуляции (заказы → T+3 → выкуп)
-        </div>
-        <SalesForecastEndDate value={endDate} minDate={today} />
+      {/* Табы */}
+      <SalesPlanTabs />
+
+      {/* Тулбар */}
+      <PlanFactControls
+        granularity={granularity}
+        from={from}
+        to={to}
+        metric={metric}
+        cumulative={cumulative}
+        dayWindowExceeded={dayWindowExceeded}
+      />
+
+      {/* Бейдж «номинал» (до первой фиксации версии) */}
+      <div className="text-xs text-amber-600 dark:text-amber-500 px-1">
+        ℹ План — номинал (без сток-лимита): версия плана не зафиксирована. Строки плана до первой фиксации (Wave 7) показывают unconstrained ставку × цена × % выкупа.
       </div>
 
-      <SalesForecastSummary
-        totalOrders={totalOrders}
-        totalSalesUnits={totalSalesUnits}
-        totalSalesRub={totalSalesRub}
-        productsCount={visible.length}
-        subcategoryFallbackCount={subcatFallbackInView}
-        globalFallbackCount={globalFallbackInView}
-        globalBuyoutPct={forecast.globalBuyoutPct}
-        today={forecast.today}
-        endDate={forecast.endDate}
+      {/* KPI-карточки */}
+      <PlanFactSummaryCards
+        kpi={report.kpi}
+        iuHorizonTotalRub={iuHorizonTotalRub}
+        horizonToLabel="31.12"
       />
 
-      <SalesForecastDailyChart
-        data={chartData}
-        accountingEndDate={endDate}
-        accountingEndLabel={accountingEndLabel}
+      {/* График */}
+      <PlanFactChart
+        data={chartPoints}
+        cumulative={cumulative}
+        today={today}
+        metric={metric}
       />
 
-      <SalesForecastFilters
-        directions={allDirections}
-        brands={allBrands}
-        categories={allCategories}
-        subcategories={allSubcategories}
-        selectedDirectionIds={selectedDirectionIds}
-        selectedBrandIds={selectedBrandIds}
-        selectedCategoryIds={selectedCategoryIds}
-        selectedSubcategoryIds={selectedSubcategoryIds}
-        search={search}
+      {/* Матрица */}
+      <PlanFactMatrix
+        buckets={report.buckets}
+        total={report.total}
+        granularity={effectiveGranularity}
+        hideIuRows={hasFilters}
+        hasFilters={hasFilters}
+        metric={metric}
       />
-      </div>
-
-      <SalesForecastTable
-        products={visible}
-        endStockDateLabel={endStockDateLabel}
-        currentOverrides={baselineOverrides}
-        currentPriceOverrides={priceOverrides}
-        currentDeliveryDays={forecast.deliveryDays}
-        currentReturnDays={forecast.returnDays}
-        defaultDeliveryDays={DEFAULT_DELIVERY_DAYS}
-        defaultReturnDays={DEFAULT_RETURN_DAYS}
-      />
-
-      <details className="text-xs text-muted-foreground rounded-md border bg-muted/30 p-3 flex-none">
-        <summary className="cursor-pointer font-medium text-foreground">
-          Как считается прогноз
-        </summary>
-        <div className="mt-2 space-y-1 leading-relaxed">
-          <p>
-            • <strong>База заказов</strong> = средние заказы за последние 7 дней
-            (по WB orders daily, агрегированы по всем nmId товара).
-          </p>
-          <p>
-            • <strong>План после прихода</strong> (если задан в /purchase-plan) —
-            target заказов в шт/день; ставка линейно растёт от базы к target за
-            3 рабочих дня, начиная со дня после <code>expectedDate</code>.
-          </p>
-          <p>
-            • <strong>Сток</strong> = текущий <code>WbCard.stockQty</code>;
-            приходы из <code>ProductIncoming.orderedQty</code> пополняют сток на
-            <code> expectedDate + 1</code>. Возвраты (1 − % выкупа) возвращаются
-            на T+6 от даты заказа.
-          </p>
-          <p>
-            • <strong>% выкупа</strong> — взвешенный 30-дневный
-            (buyouts/orders из funnel) на settled-окне{" "}
-            <code>[today−37; today−7]</code>. Сдвиг на 7 дней назад
-            исключает «свежие» заказы, по которым выкупы ещё не материализовались
-            (T+3 лаг доставки) — без сдвига % занижается на 15-20 п.п. Если своей
-            истории нет — fallback по цепочке: legacy{" "}
-            <code>WbCard.buyoutPercent</code> →{" "}
-            <span className="text-blue-600 dark:text-blue-500">
-              среднее по подкатегории
-            </span>{" "}
-            (↑) →{" "}
-            <span className="text-amber-600 dark:text-amber-500">
-              глобальное среднее
-            </span>{" "}
-            (*).
-          </p>
-          <p>
-            • <strong>Выкупы</strong> засчитываются на T+3 от заказа. В горизонт
-            попадают только заказы с T+3 ≤ конечная дата.
-          </p>
-          <p>
-            • <strong>Цена выкупа</strong> — взвешенная по qty
-            <code> WbCardOrdersDaily.buyerPrice</code> за последние 7 дней,
-            fallback на <code>WbCard.price</code>.
-          </p>
-        </div>
-      </details>
     </div>
   )
 }
