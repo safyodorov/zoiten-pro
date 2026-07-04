@@ -643,6 +643,11 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
       if (p.paidDate == null) continue
       if (p.paidDate.getTime() > asOf.getTime()) continue
       const amount = Number(p.amount)
+      // 260704-go2: amountRub (факт банка) имеет приоритет над курсовой конвертацией.
+      if (p.amountRub != null) {
+        paidRub += Number(p.amountRub) // факт — НЕ ставим paidApproximate
+        continue
+      }
       if (p.currency === "RUB" || p.currency === "RUR") {
         paidRub += amount
         continue

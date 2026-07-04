@@ -105,7 +105,7 @@ export default async function PurchasesPage({
             },
           },
           payments: {
-            select: { dueDate: true, paidDate: true, status: true, amount: true },
+            select: { dueDate: true, paidDate: true, status: true, amount: true, amountRub: true },
           },
         },
       }),
@@ -175,7 +175,25 @@ export default async function PurchasesPage({
       .filter((pay) => pay.status === "PAID")
       .reduce((s, pay) => s + Number(pay.amount), 0)
     const remaining = total - paid
-    const paidRub = rate != null ? paid * rate : null
+    // 260704-go2: amountRub (факт банка) имеет приоритет над amount×курс.
+    // Если хотя бы один PAID-платёж имеет amountRub — сумму можно вычислить без курса.
+    const paidPayments = p.payments.filter((pay) => pay.status === "PAID")
+    const hasAmountRub = paidPayments.some((pay) => pay.amountRub != null)
+    const paidRub: number | null =
+      paidPayments.length === 0
+        ? rate != null ? 0 : null
+        : hasAmountRub || rate != null
+          ? paidPayments.reduce(
+              (s, pay) =>
+                s +
+                (pay.amountRub != null
+                  ? Number(pay.amountRub)
+                  : rate != null
+                    ? Number(pay.amount) * rate
+                    : 0),
+              0
+            )
+          : null
     const remainingRub = rate != null ? remaining * rate : null
 
     // Вес (кг) и объём (м³) из БД Товары: qty × per-unit.
