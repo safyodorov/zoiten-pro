@@ -319,6 +319,42 @@ Requirements для Phase 21, добавленные 2026-06-08/09. Трасси
 | U-04 (JetLend PDF авто-парсинг через pdftotext) | scripts/seed-credits.ts parseJetLendPdf | Complete |
 | U-05 (Сбер: история из Лист2 + хвост из XLSX) | scripts/seed-credits.ts Sber merge logic | Complete |
 
+## Phase 25 Requirements — План продаж v2 (рабочий план H2-2026)
+
+Requirements для Phase 25, добавленные 2026-07-04. Источник — дизайн-документ `.planning/phases/25-v2-h2-2026/RESEARCH-DESIGN.md` (11 разделов, ресёч-воркфлоу + адверсариальная критика) и 4 зафиксированных решения пользователя (блок «Зафиксированные решения (2026-07-04)» в доке). Секция остаётся `SALES` (новая ERP_SECTION не нужна).
+
+### Модель данных и движок
+
+- [ ] **SP-01**: Новые модели `SalesPlanMonthLevel` (помесячный уровень «заказы шт/день» per товар + опц. priceRub/buyoutPct), `SalesPlanDayOverride` (точечная правка дня), `VirtualPurchase` (+ enum `VirtualPurchaseStatus`), `SalesPlanVersion` + `SalesPlanVersionDay` (immutable снапшот дневного ряда), новое поле `Purchase.plannedArrivalDate DateTime? @db.Date`. Одна рукописная миграция `prisma/migrations/20260705_sales_plan_v2/` (аддитивно, старый sales-plan не ломается). Back-relations Product/Supplier/User.
+- [ ] **SP-02**: Pure-движок `lib/sales-plan/` (engine, arrivals, iu, virtual-purchases, plan-fact, pdds-feed, data-loader) по образцу `lib/pricing-math.ts` — детерминированный, без Prisma в ядре. Дневной ряд драфта не хранится, вычисляется на request. `lib/date-buckets.ts` (вынос из loan-math + quarter/halfyear/year).
+- [ ] **SP-03**: Vitest-тесты: engine golden (уровень+day override+партии, сток-лимит, T+3/T+6), arrivals (5 уровней fallback + TRANSIT split/null), iu (`iuTotalForRange("2026-07-01","2026-12-31") === 438_068_120`), plan-fact (бакеты+pro-rata+deviation), virtual (триггер/qty/clamp), pdds-feed (DEPOSIT/BALANCE, исключение CONVERTED/DISMISSED).
+- [ ] **SP-14**: Bootstrap-скрипт `scripts/bootstrap-sales-plan-monthly.ts` (DI PrismaClient): миграция старых `salesPlan.baselineOverrides/priceOverrides` → `SalesPlanMonthLevel` (с учётом семантики `plannedSalesPerDay`), `salesPlan.leadTimes` → `salesPlan.leadTimes2`. Сид AppSetting-ключей (`salesPlan.iuTargets`, `salesPlan.horizon`, `salesPlan.iuMetric="buyouts"`, страховой запас/покрытие/lead time/транзит).
+
+### План — ввод и горизонт
+
+- [ ] **SP-04**: Помесячные плановые уровни (заказы шт/день) per товар с детализацией/правкой в день. Резолв `dayOverride > monthLevel > baseline`. Таб «Товары» (`/sales-plan/products`): редактирование уровней (bulk-drafts + «Пересчитать план»), модалка `ProductPlanDialog` с правкой по дням и realtime-пересчётом стока на клиенте. Горизонт 01.07–31.12.2026 (`salesPlan.horizon`), guard `end ≥ today` снят.
+- [ ] **SP-05**: Приходы товара из Китая по партиям. `resolveArrivalBatches()` — мульти-партийный resolver с fallback-цепочкой: `Purchase.plannedArrivalDate` → этап TRANSIT (+`transitDays`) → `createdAt + leadTimeDays` (fallback 45) → legacy `ProductIncoming.expectedDate`. По умолчанию `createdAt+45` (leadtime-eta); при заполненном `plannedArrivalDate` — по нему. Поле «Плановая дата прихода» в карточке закупки (`PROCUREMENT MANAGE`). `dateSource`-тег на каждой партии (видимая деградация точности).
+
+### Три ряда, план/факт, ИУ
+
+- [ ] **SP-06**: Три ряда данных — наш план / наш факт / план по ИУ. ИУ = `salesPlan.iuTargets` (массив периодов), константа 2 380 805 ₽/день с 01.07 по 31.12.2026 (итог 438 068 120 ₽). Метрика ИУ и факта — **выкупы в ₽** (цены продавца до СПП), `iuMetric="buyouts"`. Хардкод `IU_REMAINING_RUB` выпиливается.
+- [ ] **SP-07**: План/факт с отклонением (₽ и %) за день/неделю/месяц/квартал/полугодие/весь горизонт («Итог» = горизонт H2, календарно-годовой тотал за 2026 не показывать; year-бакет в движке — для будущих лет). Таб «Сводный» (`/sales-plan`): `PlanFactMatrix` + KPI-карточки (в т.ч. «отставание от ИУ нарастающим») + график (recharts, факт-bars/план-line/ИУ-dashed). `buildPlanFactReport()` — pure: pro-rata текущего бакета, FAC-прогноз, накопительный итог.
+- [ ] **SP-10**: Факт продаж из `WbCardFunnelDaily` на лету (без новых таблиц факта). Кабинет = токен `WB_API_TOKEN`. Два разреза: company-level (все nmId, сравнение с ИУ) и product-level (через MarketplaceArticle). Разница — строка «Вне плана» (непривязанные nmId). Settle-лаг 7 дней (`factSettled=false` для свежих дней).
+
+### Виртуальные закупки
+
+- [ ] **SP-08**: Генератор `suggestVirtualPurchases()` — итеративный roll-forward, pure: триггер «пора заказывать» = пробой страхового запаса (`projectedStock(d) < safetyStockDays × rate(d)`, default 14 дн), qty на покрытие 60 дн, orderDate = breach − leadTime (clamp к today). Учитываются в плане сразу (opt-out): `SUGGESTED` + `ACCEPTED` в arrivals; `DISMISSED` исключается (план проседает, виден `lostRub`). Таб «Пора заказывать» (`/sales-plan/purchases`) — предложения с действиями подтвердить/изменить/отклонить. `regenerateVirtualPurchases()` в обеих цепочках пересчёта. Изоляция структурная (отдельная таблица, не участвует в production-sync/stock/балансе).
+- [ ] **SP-09**: Конвертация виртуальной закупки в реальную `Purchase` — `convertVirtualPurchase(id)` (`SALES MANAGE` + `PROCUREMENT MANAGE`), префилл `PurchaseModal` (`plannedArrivalDate = VP.expectedArrivalDate`), `status=CONVERTED`. Анти-двойной счёт: CONVERTED исключён из arrivals; для зафиксированных версий — live-сверка статусов в pdds-feed.
+
+### Версионирование
+
+- [ ] **SP-11**: Фиксация плана `fixSalesPlanVersion(label?, note?)` (`SALES MANAGE`) — материализация дневного ряда в immutable `SalesPlanVersion` + `SalesPlanVersionDay` (обе метрики: заказы и выкупы). Активная версия (`salesPlan.activeVersionId`) — baseline для план/факт. `PlanVersionBar` — селектор версий + «Зафиксировать план»; read-only просмотр версии (`?version=`); «дрейф» черновика vs версии (`compareVersions`). Прошлое версии не переписывается (дни `< today` копируются из активной). `renamePlanVersion`, `setActiveSalesPlanVersion`, `deleteSalesPlanVersion`.
+
+### ПДДС-контракт, RBAC, зачистка
+
+- [ ] **SP-12**: Контракт для будущего ПДДС `lib/sales-plan/pdds-feed.ts` (pure-ядро + loader): `getPlannedRevenueSeries(versionId)` (дневной ряд плановых выкупов), `getPlannedVirtualPayments(versionId)` (DEPOSIT/BALANCE платежи VP из paramsJson со сверкой live-статусов, forward-fill курса). Потребляется следующей фазой ПДДС (`/finance/cashflow`).
+- [ ] **SP-13**: RBAC — read `requireSection("SALES")`, все write server actions — `requireSection("SALES","MANAGE")` (фикс текущей дыры: `saveBaselineOverrides` и др. сейчас требуют лишь VIEW). Зачистка: удаление `SalesForecast*`-компонентов, `ProductForecastDialog`, `IU_REMAINING_RUB`, `DEFAULT_END_DATE`, старых AppSetting-ключей; деприкейт `/purchase-plan` и `/procurement/plan` (снятие из sidebar — отдельно). Проводка: `section-titles.ts` для подроутов `/sales-plan/products` и `/sales-plan/purchases`.
+
 ## v2 Requirements
 
 Deferred to future milestone. Tracked but not in current roadmap.
@@ -558,3 +594,4 @@ Explicitly excluded. Documented to prevent scope creep.
 *Milestone v1.2 added: 2026-04-21 | +29 requirements (STOCK-01..STOCK-29) | 1 new phase planned (Phase 14)*
 *Phase 15 added: 2026-04-22 | +3 requirements (ORDERS-01..ORDERS-03) | extends Phase 14 with per-warehouse orders*
 *Phase 16 added: 2026-04-22 | +8 requirements (STOCK-30..STOCK-37) | per-size breakdown в /stock/wb + sync bug fix*
+*Phase 25 added: 2026-07-04 | +14 requirements (SP-01..SP-14) | План продаж v2 — рабочий план H2-2026 (план/факт/ИУ, помесячные уровни, виртуальные закупки, версионирование, ПДДС-контракт)*
