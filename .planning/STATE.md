@@ -376,6 +376,8 @@ None yet.
 | fast-260704b | feat: в drill-down баланса добавлен уровень «Направление» первым — иерархия товарных строк стала Направление→Категория→Подкатегория→Товар. Направление=Product→Brand→Direction (nullable→«Без направления»). buildProductTree +внешний dir-уровень, product.findMany +brand.direction, тест-мок +brand.direction. Клиент не тронут | 2026-07-04 | 973e674 |  | inline (balance-data.ts, tests/balance-sheet.test.ts) |
 | 260704-fzt | Баланс закупок Заход 1/2: (A) классификация закупок на 3 строки вместо 2 — Авансы (PRODUCTION/INSPECTION) / Товар готовый к отгрузке (SHIPMENT, был багом в «в пути») / Товар в пути (TRANSIT); (B) fetchCbrRatesForDate (архив cbr-xml-daily) + scripts/backfill-cbr-rates.ts — исторические курсы ЦБ март–июнь (CurrencyRate forward-only с 09.06 занижал ранние платежи); (C) методология обновлена; (D) тесты. Post-deploy: npx tsx scripts/backfill-cbr-rates.ts. Заход 2 (поле «Оплачено ₽ факт» на платеже) — TODO | 2026-07-04 | 0c1aea9 |  | [260704-fzt-balance-purchase-3lines-cbr-backfill](./quick/260704-fzt-balance-purchase-3lines-cbr-backfill/) |
 
+| 260704-go2 | Баланс закупок Заход 2/2: поле «Оплачено ₽ (факт)» на платеже (PurchasePayment.amountRub Decimal? + миграция) с приоритетом в балансе (Авансы/Готов/В пути — факт без paidApproximate) и в таблице закупок (столбец «Оплачено»). UI-инпут в PurchasePaymentsCard для не-RUB платежей (placeholder = ≈CNY×курс). Пусто → CNY×курс как раньше. Миграция применяется deploy.sh (prisma migrate deploy) | 2026-07-04 | bfd6585 |  | [260704-go2-payment-actual-rub](./quick/260704-go2-payment-actual-rub/) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
