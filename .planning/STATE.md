@@ -373,6 +373,8 @@ None yet.
 | fast-260704 | fix: модалка «Как считается» ~3× шире на десктопе (max-w-2xl → sm:max-w-6xl; max-w-2xl без sm: не перебивал базовый sm:max-w-sm 384px) | 2026-07-04 | bc45ad6 |  | inline (BalanceMethodologyDialog.tsx) |
 | 260704-cvz | Раскрываемые (drill-down) строки в балансе /finance/balance: 6 товарных строк (WB склад/в пути к-от клиента/Иваново/в пути из Китая/Авансы) → Категория→Подкатегория→Товар; «Банковские счета (₽)» → по счёту; «Остаток по кредитам» → Кредитор→Кредит. Обе даты+Δ, сортировка desc на каждом уровне. BalanceLine.children + buildProductTree в balance-data.ts (аллокация закупок по qty×unitPrice; 1 product.findMany), client-рефактор BalanceSheetTable (expandedKeys, chevron, рекурсивный рендер, compare по полному path-ключу). Инвариант Σдетей=amountRub; итоги/капитал не меняются. Локально vitest нет (нет node_modules) — верификация ревью+сборка | 2026-07-04 | 8f50ebf |  | [260704-cvz-balance-drilldown-rows](./quick/260704-cvz-balance-drilldown-rows/) |
 
+| fast-260704b | feat: в drill-down баланса добавлен уровень «Направление» первым — иерархия товарных строк стала Направление→Категория→Подкатегория→Товар. Направление=Product→Brand→Direction (nullable→«Без направления»). buildProductTree +внешний dir-уровень, product.findMany +brand.direction, тест-мок +brand.direction. Клиент не тронут | 2026-07-04 | 973e674 |  | inline (balance-data.ts, tests/balance-sheet.test.ts) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
