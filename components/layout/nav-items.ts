@@ -46,8 +46,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "COST", href: "/batches", label: "Себестоимость партий", icon: "Calculator" },
   { section: "PROCUREMENT", href: "/procurement/suppliers", label: "Поставщики", icon: "Truck" },
   { section: "PROCUREMENT", href: "/procurement/purchases", label: "Закупки", icon: "PackageCheck" },
-  { section: "PROCUREMENT", href: "/procurement/plan", label: "План закупок", icon: "ShoppingCart" },
-  { section: "PROCUREMENT", href: "/purchase-plan", label: "План закупок (временный)", icon: "ShoppingCart" },
+  // /procurement/plan и /purchase-plan деприкейтнуты (25-09 зачистка) — роуты доступны по прямым ссылкам, но убраны из sidebar
   { section: "SALES", href: "/sales-plan", label: "План продаж", icon: "TrendingUp" },
   { section: "CREDITS", href: "/credits", label: "Кредиты", icon: "Landmark" },
   { section: "BANK", href: "/bank", label: "Банковские счета", icon: "Building2" },

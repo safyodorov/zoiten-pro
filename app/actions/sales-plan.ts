@@ -22,10 +22,6 @@ import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
 import { auth } from "@/lib/auth"
 
-const BASELINE_KEY = "salesPlan.baselineOverrides"
-const PRICE_KEY = "salesPlan.priceOverrides"
-const LEAD_TIMES_KEY = "salesPlan.leadTimes"
-
 type ActionResult = { ok: true } | { ok: false; error: string }
 
 /** Записать (или удалить, если пусто) глобальную JSON-настройку. */
@@ -55,86 +51,6 @@ function revalidateSalesPlanPaths() {
   revalidatePath("/sales-plan")
   revalidatePath("/sales-plan/products")
   revalidatePath("/sales-plan/purchases")
-}
-
-const OverridesSchema = z.record(z.string().min(1), z.number().min(0).max(100_000))
-
-export async function saveBaselineOverrides(
-  overrides: Record<string, number>,
-): Promise<ActionResult> {
-  await requireSection("SALES")
-  const parsed = OverridesSchema.safeParse(overrides)
-  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
-  try {
-    const filtered = Object.fromEntries(
-      Object.entries(parsed.data).filter(([, v]) => Number.isFinite(v) && v >= 0),
-    )
-    await setGlobalJson(BASELINE_KEY, filtered)
-    revalidatePath("/sales-plan")
-    return { ok: true }
-  } catch (err) {
-    console.error("[saveBaselineOverrides]", err)
-    return { ok: false, error: "Не удалось сохранить" }
-  }
-}
-
-const PriceOverridesSchema = z.record(z.string().min(1), z.number().min(0).max(10_000_000))
-
-/** Глобальные корректировки цены выкупа (productId → ₽). Пусто → удаляет запись. */
-export async function savePriceOverrides(
-  overrides: Record<string, number>,
-): Promise<ActionResult> {
-  await requireSection("SALES")
-  const parsed = PriceOverridesSchema.safeParse(overrides)
-  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
-  try {
-    const filtered = Object.fromEntries(
-      Object.entries(parsed.data).filter(([, v]) => Number.isFinite(v) && v > 0),
-    )
-    await setGlobalJson(PRICE_KEY, filtered)
-    revalidatePath("/sales-plan")
-    return { ok: true }
-  } catch (err) {
-    console.error("[savePriceOverrides]", err)
-    return { ok: false, error: "Не удалось сохранить" }
-  }
-}
-
-export async function clearBaselineOverrides(): Promise<ActionResult> {
-  await requireSection("SALES")
-  try {
-    await prisma.appSetting.deleteMany({
-      where: { key: { in: [BASELINE_KEY, PRICE_KEY, LEAD_TIMES_KEY] } },
-    })
-    revalidatePath("/sales-plan")
-    return { ok: true }
-  } catch (err) {
-    console.error("[clearBaselineOverrides]", err)
-    return { ok: false, error: "Не удалось сбросить" }
-  }
-}
-
-// ── Lead times (глобальные) ────────────────────────────────────────
-
-const LeadTimesSchema = z.object({
-  deliveryDays: z.number().int().min(0).max(60),
-  returnDays: z.number().int().min(0).max(60),
-})
-
-export async function saveLeadTimes(
-  payload: { deliveryDays: number; returnDays: number },
-): Promise<ActionResult> {
-  await requireSection("SALES")
-  const parsed = LeadTimesSchema.safeParse(payload)
-  if (!parsed.success) return { ok: false, error: "Невалидные сроки" }
-  try {
-    await setGlobalJson(LEAD_TIMES_KEY, parsed.data)
-    revalidatePath("/sales-plan")
-    return { ok: true }
-  } catch (err) {
-    console.error("[saveLeadTimes]", err)
-    return { ok: false, error: "Не удалось сохранить" }
-  }
 }
 
 // ── Bulk обновление дат прихода (глобально, в ProductIncoming) ──
@@ -1539,8 +1455,8 @@ async function getLeadTimeDays(
       // fallthrough
     }
   }
-  // Fallback: старый ключ salesPlan.leadTimes
-  const rowOld = await prisma.appSetting.findUnique({ where: { key: LEAD_TIMES_KEY } })
+  // Fallback: старый ключ salesPlan.leadTimes (legacy, оставлен для совместимости)
+  const rowOld = await prisma.appSetting.findUnique({ where: { key: "salesPlan.leadTimes" } })
   if (rowOld) {
     try {
       const obj = JSON.parse(rowOld.value) as Record<string, number>

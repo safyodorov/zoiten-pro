@@ -13,7 +13,7 @@ import { ProductPlanDialog } from "./ProductPlanDialog"
 import { saveMonthLevels, scaleMonthLevels } from "@/app/actions/sales-plan"
 import type { ProductPlanResult, ArrivalBatch } from "@/lib/sales-plan/types"
 
-// ── Форматирование чисел (паттерн SalesForecastTable) ──────────────────────────
+// ── Форматирование чисел ────────────────────────────────────────────────────────
 
 function fmtNum(n: number, digits = 0): string {
   return n.toLocaleString("ru-RU", {
