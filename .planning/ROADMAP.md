@@ -591,7 +591,7 @@ Plans:
 
 ⚠ Этапы 3–5 деплоить **плотной серией**, первую версию зафиксировать в день деплоя этапа 5 (минимизация unconstrained-зоны прошлого — §6.1 доки).
 
-**Plans:** 5/10 plans executed
+**Plans:** 6/10 plans executed
 
 Plans:
 - [x] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
@@ -599,7 +599,7 @@ Plans:
 - [x] 25-02-PLAN.md — Wave 1 (Этап 1): pure-ядро движка (date-buckets 6 бакетов + types/dates/iu/arrivals/engine) → 4 стаба GREEN
 - [x] 25-03-PLAN.md — Wave 2 (Этап 1): data-loader (loadSalesPlanInputs/loadFactDaily, DI) + bootstrap-скрипт миграции старых overrides
 - [x] 25-05-PLAN.md — Wave 3 (Этап 2): Товары actions (saveMonthLevels/scale/saveDayOverrides/params/model/getProductPlanDays, все SALES MANAGE) + плановая дата прихода в карточке закупки
-- [ ] 25-04-PLAN.md — Wave 4 (Этап 2): Товары UI (Tabs/Filters/ModelParamsBar/IncomingBadges/ProductPlanTable/Cell/Dialog + RSC page + section-titles) — realtime «Сток(расч)»
+- [x] 25-04-PLAN.md — Wave 4 (Этап 2): Товары UI (Tabs/Filters/ModelParamsBar/IncomingBadges/ProductPlanTable/Cell/Dialog + RSC page + section-titles) — realtime «Сток(расч)»
 - [ ] 25-06-PLAN.md — Wave 5 (Этап 3): Сводный (plan-fact движок → GREEN + PlanFactControls/SummaryCards/Chart/Matrix + переработка page; IU_REMAINING_RUB/DEFAULT_END_DATE удалены)
 - [ ] 25-07-PLAN.md — Wave 6 (Этап 4): Виртуальные закупки (suggestVirtualPurchases → GREEN + VP-actions + regenerate в обеих цепочках + таб «Пора заказывать» + бейджи ◇/⚠ + конвертация)
 - [ ] 25-08-PLAN.md — Wave 7 (Этап 5): Версионирование (fixSalesPlanVersion чанки 5000 + set/rename/delete + compareVersions + PlanVersionBar/FixDialog + read-only + UAT первой версии)
