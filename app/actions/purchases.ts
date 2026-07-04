@@ -94,6 +94,7 @@ const PaymentSchema = z.object({
   paidDate: z.string().optional().nullable(),
   status: z.enum(["PLANNED", "PAID", "OVERDUE"]).optional(),
   comment: z.string().optional().nullable(),
+  amountRub: z.number().nullable().optional(), // факт. оплачено ₽ (260704-go2)
 })
 
 // ── createPurchase (D-05..D-08) ─────────────────────────────────────
@@ -162,6 +163,7 @@ export async function createPurchase(
             currency,
             dueDate: depositDue,
             status: "PLANNED",
+            amountRub: null,
           },
           {
             purchaseId: created.id,
@@ -172,6 +174,7 @@ export async function createPurchase(
             currency,
             dueDate: balanceDue,
             status: "PLANNED",
+            amountRub: null,
           },
         ],
       })
@@ -336,6 +339,7 @@ export async function savePurchasePayments(
           ordinal: p.ordinal,
           percent: p.percent ?? null,
           amount,
+          amountRub: p.amountRub ?? null, // факт. оплачено ₽ (260704-go2)
           currency: p.currency,
           dueDate: due,
           paidDate: parseDate(p.paidDate),
