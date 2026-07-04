@@ -47,7 +47,7 @@ export function BalanceMethodologyDialog() {
         }
       />
 
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Как считается баланс</DialogTitle>
         </DialogHeader>
