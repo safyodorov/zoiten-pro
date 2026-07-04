@@ -590,10 +590,80 @@ export async function getProductPlanDays(
 > {
   await requireSection("SALES")
 
-  // TODO Wave 7: если versionId задан — читать из SalesPlanVersionDay (read-only)
+  // Wave 7: если versionId задан — читать из SalesPlanVersionDay (read-only)
   if (versionId) {
-    // Placeholder: игнорируем versionId, возвращаем драфт
-    console.warn("[getProductPlanDays] versionId игнорируется (Wave 7), используется драфт")
+    try {
+      const versionDays = await prisma.salesPlanVersionDay.findMany({
+        where: {
+          versionId,
+          productId,
+          date: {
+            gte: new Date(month + "T00:00:00Z"),
+            lt: new Date(
+              (() => {
+                const d = new Date(month + "T00:00:00Z")
+                d.setUTCMonth(d.getUTCMonth() + 1)
+                return d.toISOString().slice(0, 10)
+              })() + "T00:00:00Z"
+            ),
+          },
+        },
+        select: {
+          date: true,
+          planOrdersUnits: true,
+          planOrdersRub: true,
+          planBuyoutsUnits: true,
+          planBuyoutsRub: true,
+          stockEndUnits: true,
+        },
+        orderBy: { date: "asc" },
+      })
+
+      const days: PlanDayRow[] = versionDays.map((row) => ({
+        date: row.date.toISOString().slice(0, 10),
+        ordersUnits: row.planOrdersUnits,
+        buyoutsUnits: row.planBuyoutsUnits,
+        buyoutsRub: row.planBuyoutsRub,
+        ordersRub: row.planOrdersRub,
+        stockEnd: row.stockEndUnits,
+        rateRequested: row.planOrdersUnits, // денормализовано в снапшоте
+      }))
+
+      // productInput: загружаем из драфта (для метаданных)
+      const nowMsk2 = new Date(Date.now() + 3 * 60 * 60 * 1000)
+      const today2 = nowMsk2.toISOString().slice(0, 10)
+      const [d2, r2, wbi2, tr2, dlt2, ss2, vpc2] = await Promise.all([
+        getLeadTimeDays("deliveryDays", 3),
+        getLeadTimeDays("returnDays", 3),
+        getSettingNumber("salesPlan.wbInboundLagDays", 0),
+        getSettingNumber("salesPlan.transitDays", 20),
+        getSettingNumber("salesPlan.defaultLeadTimeDays", 45),
+        getSettingNumber("salesPlan.safetyStockDays", 14),
+        getSettingNumber("salesPlan.vpCoverDays", 60),
+      ])
+      const horizonRow2 = await prisma.appSetting.findUnique({ where: { key: "salesPlan.horizon" } })
+      let hFrom2 = today2; let hTo2 = today2.slice(0, 4) + "-12-31"
+      if (horizonRow2) {
+        try {
+          const h = JSON.parse(horizonRow2.value) as { from?: string; to?: string }
+          if (h.from) hFrom2 = h.from
+          if (h.to) hTo2 = h.to
+        } catch { /* ignore */ }
+      }
+      const draftInputs2 = await loadSalesPlanInputs(prisma, {
+        today: today2, horizonFrom: hFrom2, horizonTo: hTo2,
+        deliveryDays: d2, returnDays: r2, wbInboundLagDays: wbi2,
+        transitDays: tr2, defaultLeadTimeDays: dlt2,
+        safetyStockDays: ss2, vpCoverDays: vpc2,
+      })
+      const pi = draftInputs2.products.find((p) => p.productId === productId)
+      if (!pi) return { ok: false, error: "Товар не найден" }
+
+      return { ok: true, days, productInput: pi }
+    } catch (err) {
+      console.error("[getProductPlanDays] version read error:", err)
+      return { ok: false, error: "Не удалось загрузить данные версии" }
+    }
   }
 
   // Параметры модели из AppSetting

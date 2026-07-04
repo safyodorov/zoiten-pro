@@ -9,6 +9,8 @@ import { requireSection, getSectionRole } from "@/lib/rbac"
 import { loadSalesPlanInputs, loadFactDaily } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
 import { SalesPlanTabs } from "@/components/sales-plan/SalesPlanTabs"
+import { PlanVersionBar } from "@/components/sales-plan/PlanVersionBar"
+import type { PlanVersion } from "@/components/sales-plan/PlanVersionBar"
 import { SalesPlanFilters } from "@/components/sales-plan/SalesPlanFilters"
 import { ModelParamsBar } from "@/components/sales-plan/ModelParamsBar"
 import { ProductPlanTable } from "@/components/sales-plan/ProductPlanTable"
@@ -106,6 +108,21 @@ export default async function SalesPlanProductsPage({
     safetyStockDays,
     vpCoverDays,
   }
+
+  // ── Версии плана ────────────────────────────────────────────────────────────
+  const activeVersionSetting = await prisma.appSetting.findUnique({
+    where: { key: "salesPlan.activeVersionId" },
+  })
+  const activeVersionId = activeVersionSetting?.value ?? null
+  const allVersions = await prisma.salesPlanVersion.findMany({
+    select: { id: true, label: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  })
+  const versionsForBar: PlanVersion[] = allVersions.map((v) => ({
+    id: v.id,
+    label: v.label,
+    createdAt: v.createdAt.toISOString(),
+  }))
 
   // ── Загрузка данных ─────────────────────────────────────────────────────────
   const inputs = await loadSalesPlanInputs(prisma, {
@@ -238,26 +255,29 @@ export default async function SalesPlanProductsPage({
       {/* Табы */}
       <SalesPlanTabs />
 
+      {/* Бар версий */}
+      <PlanVersionBar
+        versions={versionsForBar}
+        activeVersionId={activeVersionId}
+        currentVersionId={versionId ?? null}
+        canManage={canManage}
+        readOnly={readOnly}
+        drift={null}
+      />
+
       {/* Режим + кнопка переключения */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            Режим: <strong>{mode === "edit" ? "Редактирование" : "Просмотр"}</strong>
-          </span>
-          {canManage && !versionId && (
-            <a
-              href={modeToggleUrl}
-              className="text-xs text-primary underline-offset-2 hover:underline"
-            >
-              {mode === "edit" ? "← Просмотр" : "Редактировать →"}
-            </a>
-          )}
-          {versionId && (
-            <span className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded">
-              Просмотр версии — редактирование недоступно
-            </span>
-          )}
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          Режим: <strong>{mode === "edit" ? "Редактирование" : "Просмотр"}</strong>
+        </span>
+        {canManage && !versionId && (
+          <a
+            href={modeToggleUrl}
+            className="text-xs text-primary underline-offset-2 hover:underline"
+          >
+            {mode === "edit" ? "← Просмотр" : "Редактировать →"}
+          </a>
+        )}
       </div>
 
       {/* Параметры модели */}

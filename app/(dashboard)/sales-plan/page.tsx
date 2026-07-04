@@ -1,6 +1,7 @@
 // app/(dashboard)/sales-plan/page.tsx
 // Таб «Сводный» — план/факт/ИУ матрица.
 // Переработка Phase 25-06: хардкод хранилища и guard end≥today удалены.
+// Phase 25-08 wave 7: план/факт переключён на активную версию; PlanVersionBar.
 // requireSection("SALES"); guard end>=today снят; clamp в горизонт.
 
 import { prisma } from "@/lib/prisma"
@@ -8,11 +9,14 @@ import { requireSection, getSectionRole } from "@/lib/rbac"
 import { loadFactDaily } from "@/lib/sales-plan/data"
 import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
-import { buildPlanFactReport } from "@/lib/sales-plan/plan-fact"
+import { buildPlanFactReport, compareVersions } from "@/lib/sales-plan/plan-fact"
+import type { PlanDayInput } from "@/lib/sales-plan/plan-fact"
 import { iuTotalForRange } from "@/lib/sales-plan/iu"
 import type { Granularity } from "@/lib/date-buckets"
 import type { IuTarget } from "@/lib/sales-plan/types"
 import { SalesPlanTabs } from "@/components/sales-plan/SalesPlanTabs"
+import { PlanVersionBar } from "@/components/sales-plan/PlanVersionBar"
+import type { PlanVersion } from "@/components/sales-plan/PlanVersionBar"
 import { PlanFactControls } from "@/components/sales-plan/PlanFactControls"
 import { PlanFactSummaryCards } from "@/components/sales-plan/PlanFactSummaryCards"
 import { PlanFactChart } from "@/components/sales-plan/PlanFactChart"
@@ -73,10 +77,12 @@ export default async function SalesPlanPage({
 }) {
   await requireSection("SALES")
   const canManage = (await getSectionRole("SALES")) === "MANAGE"
-  void canManage // пока не используется до Wave 7
 
   const today = getMskTodayIso()
   const sp = await searchParams
+
+  // version из URL (может быть черновик или конкретная версия)
+  const currentVersionId = sp.version ?? null
 
   // ── Параметры из URL ───────────────────────────────────────────────────────
 
@@ -118,6 +124,7 @@ export default async function SalesPlanPage({
           "salesPlan.vpCoverDays",
           "salesPlan.wbInboundLagDays",
           "salesPlan.transitDays",
+          "salesPlan.activeVersionId",
         ],
       },
     },
@@ -131,6 +138,22 @@ export default async function SalesPlanPage({
     const n = parseFloat(raw)
     return Number.isFinite(n) ? n : def
   }
+
+  // Активная версия и список версий
+  const activeVersionId = settingByKey.get("salesPlan.activeVersionId") ?? null
+
+  // Выбранная версия: currentVersionId (из URL) ?? activeVersionId (baseline по умолчанию)
+  const selectedVersionId = currentVersionId ?? activeVersionId
+
+  const allVersions = await prisma.salesPlanVersion.findMany({
+    select: { id: true, label: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  })
+  const versionsForBar: PlanVersion[] = allVersions.map((v) => ({
+    id: v.id,
+    label: v.label,
+    createdAt: v.createdAt.toISOString(),
+  }))
 
   // ИУ-таргеты (из AppSetting или fallback)
   let iuTargets: IuTarget[] = DEFAULT_IU_TARGETS
@@ -155,7 +178,7 @@ export default async function SalesPlanPage({
   const factResult = await loadFactDaily(prisma, from, to)
   const { company: companyFactMap, byProduct: byProductMap, settledThroughIso } = factResult
 
-  // Дневной ряд плана — через computeSalesPlan (драфт, номинал до первой версии)
+  // Дневной ряд плана — из активной/выбранной версии или драфта
   // Для Сводного используем company-level plan (Σ по всем товарам)
   let planCompanyDays: Array<{
     date: string
@@ -168,26 +191,126 @@ export default async function SalesPlanPage({
     stockEndUnits: number
   }> = []
 
-  try {
-    const planInputs = await loadSalesPlanInputs(prisma, {
-      today,
-      horizonFrom: HORIZON_FROM,
-      horizonTo: HORIZON_TO,
-      deliveryDays,
-      returnDays,
-      wbInboundLagDays,
-      transitDays,
-      defaultLeadTimeDays,
-      safetyStockDays,
-      vpCoverDays,
-    })
+  // Флаг: использован драфт (нет зафиксированной версии)
+  let usingDraft = !selectedVersionId
 
-    const planResult = computeSalesPlan(planInputs)
+  if (selectedVersionId) {
+    // Загрузка из SalesPlanVersionDay (активная или выбранная версия)
+    try {
+      const versionDays = await prisma.salesPlanVersionDay.findMany({
+        where: {
+          versionId: selectedVersionId,
+          date: {
+            gte: new Date(from + "T00:00:00Z"),
+            lte: new Date(to + "T00:00:00Z"),
+          },
+        },
+        select: {
+          date: true,
+          planOrdersUnits: true,
+          planOrdersRub: true,
+          planBuyoutsUnits: true,
+          planBuyoutsRub: true,
+          priceUsed: true,
+          buyoutPctUsed: true,
+          stockEndUnits: true,
+        },
+        orderBy: { date: "asc" },
+      })
 
-    // Срежем companyDaily до диапазона from/to
-    planCompanyDays = planResult.companyDaily
-      .filter((d) => d.date >= from && d.date <= to)
-      .map((d) => ({
+      // Агрегируем по date (company-level = Σ по всем товарам)
+      const byDate = new Map<string, {
+        planOrdersUnits: number; planOrdersRub: number;
+        planBuyoutsUnits: number; planBuyoutsRub: number;
+        priceUsed: number; buyoutPctUsed: number; stockEndUnits: number
+      }>()
+      for (const row of versionDays) {
+        const dateStr = row.date.toISOString().slice(0, 10)
+        const cur = byDate.get(dateStr)
+        if (cur) {
+          cur.planOrdersUnits += row.planOrdersUnits
+          cur.planOrdersRub += row.planOrdersRub
+          cur.planBuyoutsUnits += row.planBuyoutsUnits
+          cur.planBuyoutsRub += row.planBuyoutsRub
+          cur.priceUsed = row.priceUsed   // последний (прибл.)
+          cur.buyoutPctUsed = row.buyoutPctUsed
+          cur.stockEndUnits += row.stockEndUnits
+        } else {
+          byDate.set(dateStr, {
+            planOrdersUnits: row.planOrdersUnits,
+            planOrdersRub: row.planOrdersRub,
+            planBuyoutsUnits: row.planBuyoutsUnits,
+            planBuyoutsRub: row.planBuyoutsRub,
+            priceUsed: row.priceUsed,
+            buyoutPctUsed: row.buyoutPctUsed,
+            stockEndUnits: row.stockEndUnits,
+          })
+        }
+      }
+      planCompanyDays = Array.from(byDate.entries()).map(([date, row]) => ({
+        date, ...row
+      }))
+    } catch (err) {
+      console.error("[SalesPlanPage] version load error:", err)
+      usingDraft = true
+    }
+  }
+
+  if (usingDraft) {
+    // Fallback на драфт (номинал из computeSalesPlan)
+    try {
+      const planInputs = await loadSalesPlanInputs(prisma, {
+        today,
+        horizonFrom: HORIZON_FROM,
+        horizonTo: HORIZON_TO,
+        deliveryDays,
+        returnDays,
+        wbInboundLagDays,
+        transitDays,
+        defaultLeadTimeDays,
+        safetyStockDays,
+        vpCoverDays,
+      })
+
+      const planResult = computeSalesPlan(planInputs)
+
+      // Срежем companyDaily до диапазона from/to
+      planCompanyDays = planResult.companyDaily
+        .filter((d) => d.date >= from && d.date <= to)
+        .map((d) => ({
+          date: d.date,
+          planOrdersUnits: d.ordersUnits,
+          planOrdersRub: d.ordersRub,
+          planBuyoutsUnits: d.buyoutsUnits,
+          planBuyoutsRub: d.buyoutsRub,
+          priceUsed: 0,
+          buyoutPctUsed: 0,
+          stockEndUnits: 0,
+        }))
+    } catch (err) {
+      console.error("[SalesPlanPage] computeSalesPlan error:", err)
+    }
+  }
+
+  // Дрейф: черновик vs активной версии (показываем только если viewing active/draft)
+  let drift = null
+  if (activeVersionId && (!currentVersionId || currentVersionId === activeVersionId)) {
+    try {
+      // Загружаем черновик (для расчёта дрейфа)
+      const draftInputs = await loadSalesPlanInputs(prisma, {
+        today,
+        horizonFrom: HORIZON_FROM,
+        horizonTo: HORIZON_TO,
+        deliveryDays,
+        returnDays,
+        wbInboundLagDays,
+        transitDays,
+        defaultLeadTimeDays,
+        safetyStockDays,
+        vpCoverDays,
+      })
+      const draftResult = computeSalesPlan(draftInputs)
+      const draftDays: PlanDayInput[] = draftResult.companyDaily.map((d) => ({
         date: d.date,
         planOrdersUnits: d.ordersUnits,
         planOrdersRub: d.ordersRub,
@@ -197,9 +320,45 @@ export default async function SalesPlanPage({
         buyoutPctUsed: 0,
         stockEndUnits: 0,
       }))
-  } catch (err) {
-    console.error("[SalesPlanPage] computeSalesPlan error:", err)
-    // Fallback: пустой план (нет данных товаров)
+
+      // Активная версия days (весь горизонт)
+      const activeDaysRaw = await prisma.salesPlanVersionDay.findMany({
+        where: { versionId: activeVersionId },
+        select: {
+          date: true,
+          planOrdersUnits: true, planOrdersRub: true,
+          planBuyoutsUnits: true, planBuyoutsRub: true,
+          priceUsed: true, buyoutPctUsed: true, stockEndUnits: true,
+        },
+      })
+      // Агрегируем в company-level
+      const activeByDate = new Map<string, PlanDayInput>()
+      for (const row of activeDaysRaw) {
+        const dateStr = row.date.toISOString().slice(0, 10)
+        const cur = activeByDate.get(dateStr)
+        if (cur) {
+          cur.planOrdersUnits += row.planOrdersUnits
+          cur.planOrdersRub += row.planOrdersRub
+          cur.planBuyoutsUnits += row.planBuyoutsUnits
+          cur.planBuyoutsRub += row.planBuyoutsRub
+        } else {
+          activeByDate.set(dateStr, {
+            date: dateStr,
+            planOrdersUnits: row.planOrdersUnits,
+            planOrdersRub: row.planOrdersRub,
+            planBuyoutsUnits: row.planBuyoutsUnits,
+            planBuyoutsRub: row.planBuyoutsRub,
+            priceUsed: row.priceUsed,
+            buyoutPctUsed: row.buyoutPctUsed,
+            stockEndUnits: row.stockEndUnits,
+          })
+        }
+      }
+      const activeDays = Array.from(activeByDate.values())
+      drift = compareVersions(activeDays, draftDays)
+    } catch (err) {
+      console.error("[SalesPlanPage] drift calculation error:", err)
+    }
   }
 
   // Факт product-level (Σ по всем товарам)
@@ -269,6 +428,16 @@ export default async function SalesPlanPage({
       {/* Табы */}
       <SalesPlanTabs />
 
+      {/* Бар версий */}
+      <PlanVersionBar
+        versions={versionsForBar}
+        activeVersionId={activeVersionId}
+        currentVersionId={currentVersionId}
+        canManage={canManage}
+        readOnly={!canManage || Boolean(currentVersionId)}
+        drift={drift}
+      />
+
       {/* Тулбар */}
       <PlanFactControls
         granularity={granularity}
@@ -280,9 +449,11 @@ export default async function SalesPlanPage({
       />
 
       {/* Бейдж «номинал» (до первой фиксации версии) */}
-      <div className="text-xs text-amber-600 dark:text-amber-500 px-1">
-        ℹ План — номинал (без сток-лимита): версия плана не зафиксирована. Строки плана до первой фиксации (Wave 7) показывают unconstrained ставку × цена × % выкупа.
-      </div>
+      {usingDraft && (
+        <div className="text-xs text-amber-600 dark:text-amber-500 px-1">
+          ℹ План — номинал (без сток-лимита): версия плана не зафиксирована. Строки плана показывают unconstrained ставку × цена × % выкупа.
+        </div>
+      )}
 
       {/* KPI-карточки */}
       <PlanFactSummaryCards
