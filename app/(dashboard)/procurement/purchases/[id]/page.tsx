@@ -33,6 +33,7 @@ import type {
   ProductOption,
   ProductLinkMap,
 } from "@/components/procurement/PurchaseModal"
+import { PlannedArrivalDateField } from "@/components/procurement/PlannedArrivalDateField"
 
 interface Props {
   params: Promise<{ id: string }>
@@ -244,6 +245,32 @@ export default async function PurchaseDetailPage({ params }: Props) {
     ? `${purchase.supplier.buyer.lastName} ${purchase.supplier.buyer.firstName}`.trim()
     : null
 
+  // Расчётный дефолт плановой даты: createdAt + min(leadTimeDays) или +45
+  const minLeadTimeDays = (() => {
+    const productIds = purchase.items.map((i) => i.productId)
+    const productLinksForPurchase = links.filter(
+      (l) => l.supplierId === purchase.supplier.id && l.productId && productIds.includes(l.productId),
+    )
+    const minLt = productLinksForPurchase.reduce(
+      (min: number | null, l) => {
+        if (l.leadTimeDays == null) return min
+        return min === null || l.leadTimeDays < min ? l.leadTimeDays : min
+      },
+      null as number | null,
+    )
+    return minLt ?? 45
+  })()
+
+  const estimatedArrivalDateLabel = (() => {
+    const d = new Date(purchase.createdAt)
+    d.setUTCDate(d.getUTCDate() + minLeadTimeDays)
+    return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" })
+  })()
+
+  const plannedArrivalDateValue = purchase.plannedArrivalDate
+    ? toDateInput(purchase.plannedArrivalDate)
+    : null
+
   return (
     <div className="h-full flex flex-col gap-4 p-4 overflow-auto">
       {/* Шапка */}
@@ -276,6 +303,16 @@ export default async function PurchaseDetailPage({ params }: Props) {
             />
           )}
         </div>
+      </div>
+
+      {/* Плановая дата прихода (Phase 25 — приоритетный источник дат для плана продаж) */}
+      <div className="rounded-lg border p-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-8">
+        <PlannedArrivalDateField
+          purchaseId={purchase.id}
+          plannedArrivalDate={plannedArrivalDateValue}
+          estimatedDateLabel={estimatedArrivalDateLabel}
+          canManage={canManage}
+        />
       </div>
 
       {/* Позиции */}

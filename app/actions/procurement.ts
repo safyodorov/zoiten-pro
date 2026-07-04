@@ -2,6 +2,10 @@
 // Server Actions для MVP «План закупок»: upsert per-product заказа из Китая.
 // orderedQty machine-managed из закупок (lib/production-sync.ts, quick 260702-j52) —
 // action редактирует только expectedDate + plannedSalesPerDay.
+//
+// 2026-07-04 (Phase 25 wave 3): добавлен savePlannedArrivalDate (PROCUREMENT MANAGE) —
+// редактирование поля «Плановая дата прихода» в карточке закупки. Реквалидирует
+// /sales-plan/products чтобы resolver дат перечитал plannedArrivalDate.
 "use server"
 
 import { z } from "zod"
@@ -72,5 +76,47 @@ export async function upsertProductIncoming(
   } catch (err) {
     console.error("[upsertProductIncoming]", err)
     return { ok: false, error: "Не удалось сохранить" }
+  }
+}
+
+// ── savePlannedArrivalDate ────────────────────────────────────────────────────
+
+const PlannedArrivalDateSchema = z.object({
+  purchaseId: z.string().min(1),
+  date: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.null()]),
+})
+
+/**
+ * Сохраняет поле «Плановая дата прихода в Иваново» на закупке.
+ * Требует PROCUREMENT MANAGE.
+ * Реквалидирует /sales-plan/* чтобы resolver дат приходов перечитал plannedArrivalDate.
+ */
+export async function savePlannedArrivalDate(payload: {
+  purchaseId: string
+  date: string | null
+}): Promise<ActionResult> {
+  await requireSection("PROCUREMENT", "MANAGE")
+
+  const parsed = PlannedArrivalDateSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+
+  const { purchaseId, date } = parsed.data
+
+  try {
+    await prisma.purchase.update({
+      where: { id: purchaseId },
+      data: {
+        plannedArrivalDate: date === null ? null : new Date(date + "T00:00:00Z"),
+      },
+    })
+
+    revalidatePath("/procurement/purchases")
+    revalidatePath(`/procurement/purchases/${purchaseId}`)
+    revalidatePath("/sales-plan/products")
+    revalidatePath("/sales-plan")
+    return { ok: true }
+  } catch (err) {
+    console.error("[savePlannedArrivalDate]", err)
+    return { ok: false, error: "Не удалось сохранить дату прихода" }
   }
 }
