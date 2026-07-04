@@ -29,6 +29,8 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/procurement/, title: "Управление закупками" },
 
   { match: /^\/purchase-plan/, title: "План закупок (временный)" },
+  { match: /^\/sales-plan\/products/, title: "План продаж — Товары" },
+  { match: /^\/sales-plan\/purchases/, title: "План продаж — Пора заказывать" },
   { match: /^\/sales-plan/, title: "План продаж" },
   { match: /^\/credits\/schedule/, title: "Кредиты — сводный график" },
   { match: /^\/credits\/[^/]+/, title: "Кредит" },
