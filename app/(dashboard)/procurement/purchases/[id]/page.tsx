@@ -166,6 +166,7 @@ export default async function PurchaseDetailPage({ params }: Props) {
     ordinal: p.ordinal,
     percent: p.percent != null ? Number(p.percent) : null,
     amount: Number(p.amount),
+    amountRub: p.amountRub != null ? Number(p.amountRub) : null, // Decimal→number|null (RSC→client, 260704-go2)
     currency: p.currency,
     dueDate: toDateInput(p.dueDate),
     paidDate: p.paidDate ? toDateInput(p.paidDate) : null,
