@@ -564,3 +564,45 @@ Plans:
 Plans:
 - [x] 24-01: Prisma-модели снапшотов + ERP_SECTION.FINANCE + маршруты /finance/{balance,cashflow,pnl}
 - [ ] 24-02..24-09 (см. .planning/phases/24-finance-balance/)
+
+### Phase 25: План продаж v2 — рабочий план H2-2026 (план/факт/ИУ, помесячные уровни, виртуальные закупки, версионирование, контракт ПДДС)
+
+**Goal:** Превратить одноразовый симулятор `/sales-plan` («до 30.06») в рабочий план продаж с горизонтом **01.07–31.12.2026**: три ряда данных (наш план / наш факт / план по ИУ = 2 380 805 ₽/день, итог 438 068 120 ₽), помесячные плановые уровни с детализацией в день, приходы товара из Китая по партиям (из раздела Закупки), **виртуальные закупки** (система предлагает «что пора заказывать», учитываются только в плане), версионирование/фиксация плана, план/факт с отклонением за неделю/месяц/квартал/полугодие/весь горизонт. Закладывает контракт `lib/sales-plan/pdds-feed.ts` для следующей фазы — план движения денежных средств (ПДДС).
+
+**Дизайн-документ (ресёч):** `.planning/phases/25-v2-h2-2026/25-RESEARCH.md` (11 разделов: модель данных, расчётный движок, виртуальные закупки, факт, фиксация, UI, стыковка ПДДС, план внедрения, риски, вопросы + Validation Architecture) + `CRITIC-VERDICT.md` (адверсариальная проверка против кода/прод-БД).
+
+**Зафиксированные решения пользователя (2026-07-04):**
+1. Метрика ИУ = **выкупы в ₽** (цены продавца до СПП), `iuMetric="buyouts"`. Эмпирика прод-БД: выкупы июня ≈ 104% константы.
+2. Кабинет ИУ = кабинет с токеном `WB_API_TOKEN` (единственный источник funnel-факта); мульти-кабинет не нужен.
+3. Колонка «Итог» = горизонт H2 (01.07–31.12.2026); календарно-годовой тотал за 2026 **не** показывать (январь–апрель нет в funnel). Механизм year-бакета оставить в движке для будущих лет (2027+).
+4. Даты приходов: по умолчанию `createdAt + 45` (leadtime-eta); при заполненном `Purchase.plannedArrivalDate` — работать по нему. Массовое ручное заполнение дат перед запуском **не** требуется — заполняется постепенно, +45 приемлем как временный дефолт.
+Остальные 14 вопросов §11 доки — по рекомендованным дефолтам (opt-out виртуальных закупок, единица «заказы шт/день», страховой запас 14 дн / покрытие 60 дн / lead time 45 дн / транзит 20 дн, реализуемый ряд «План», сравнение против активной версии, без авто-фиксации cron, без ramp-up в v1, деприкейт /purchase-plan в этапе 6, поднять write до SALES MANAGE).
+
+**Requirements**: SP-01, SP-02, SP-03, SP-04, SP-05, SP-06, SP-07, SP-08, SP-09, SP-10, SP-11, SP-12, SP-13, SP-14 (см. `.planning/REQUIREMENTS.md # Phase 25 Requirements`). Секция остаётся `SALES`, новая ERP_SECTION не нужна.
+**Depends on:** Phase 4 (Products/MarketplaceArticle→nmId), Phase 7 (AppSetting KV, pricing-math, sticky-таблицы), Phase 14 (остатки WB + Иваново), Phase 20 (Закупки — этапы с датами, SupplierProductLink, procurement-math), Phase 24 (снапшот-паттерн Finance, WbCardFunnelDaily как источник факта). Существующий `/sales-plan` (lib/sales-forecast.ts) — переделывается.
+
+**План внедрения — 6 самостоятельно деплоябельных под-этапов (§9 доки), кандидаты в Plans:**
+1. **Фундамент** — миграция (SalesPlanMonthLevel, SalesPlanDayOverride, VirtualPurchase, SalesPlanVersion/Day, `Purchase.plannedArrivalDate`) + pure-движок `lib/sales-plan/` + тесты (engine golden, arrivals, iu=438 068 120 ₽) + bootstrap-скрипт. Невидимый деплой.
+2. **Таб «Товары»** — помесячные уровни (редактирование), модалка правки по дням с realtime-пересчётом стока, приходы, SALES MANAGE.
+3. **Таб «Сводный»** — матрица план/факт/ИУ + KPI «отставание от ИУ» + график; бакеты день/неделя/месяц/квартал/полугодие + «Итог».
+4. **Виртуальные закупки** — генератор предложений (точка перезаказа) + таб «Пора заказывать» + конвертация в реальную закупку (анти-двойной счёт).
+5. **Версионирование** — фиксация плана, активная версия, read-only просмотр версий, «дрейф» черновика.
+6. **ПДДС-feed + зачистка** — `lib/sales-plan/pdds-feed.ts` + удаление старого кода (SalesForecast*, IU_REMAINING_RUB, DEFAULT_END_DATE).
+
+⚠ Этапы 3–5 деплоить **плотной серией**, первую версию зафиксировать в день деплоя этапа 5 (минимизация unconstrained-зоны прошлого — §6.1 доки).
+
+**Plans:** 10 plans (9 waves, 6 деплоябельных этапов)
+
+Plans:
+- [ ] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
+- [ ] 25-01-PLAN.md — Wave 1 (Этап 1): [BLOCKING] рукописная миграция 20260705_sales_plan_v2 (5 таблиц + enum + Purchase.plannedArrivalDate + back-relations + сид 9 AppSetting) + schema.prisma
+- [ ] 25-02-PLAN.md — Wave 1 (Этап 1): pure-ядро движка (date-buckets 6 бакетов + types/dates/iu/arrivals/engine) → 4 стаба GREEN
+- [ ] 25-03-PLAN.md — Wave 2 (Этап 1): data-loader (loadSalesPlanInputs/loadFactDaily, DI) + bootstrap-скрипт миграции старых overrides
+- [ ] 25-05-PLAN.md — Wave 3 (Этап 2): Товары actions (saveMonthLevels/scale/saveDayOverrides/params/model/getProductPlanDays, все SALES MANAGE) + плановая дата прихода в карточке закупки
+- [ ] 25-04-PLAN.md — Wave 4 (Этап 2): Товары UI (Tabs/Filters/ModelParamsBar/IncomingBadges/ProductPlanTable/Cell/Dialog + RSC page + section-titles) — realtime «Сток(расч)»
+- [ ] 25-06-PLAN.md — Wave 5 (Этап 3): Сводный (plan-fact движок → GREEN + PlanFactControls/SummaryCards/Chart/Matrix + переработка page; IU_REMAINING_RUB/DEFAULT_END_DATE удалены)
+- [ ] 25-07-PLAN.md — Wave 6 (Этап 4): Виртуальные закупки (suggestVirtualPurchases → GREEN + VP-actions + regenerate в обеих цепочках + таб «Пора заказывать» + бейджи ◇/⚠ + конвертация)
+- [ ] 25-08-PLAN.md — Wave 7 (Этап 5): Версионирование (fixSalesPlanVersion чанки 5000 + set/rename/delete + compareVersions + PlanVersionBar/FixDialog + read-only + UAT первой версии)
+- [ ] 25-09-PLAN.md — Wave 8 (Этап 6): ПДДС-feed (→ GREEN, live-сверка статусов + forward-fill курса) + зачистка (SalesForecast*/хардкоды/старые actions) + деприкейт /purchase-plan + deploy + end-to-end UAT
+
+⚠ Этапы 3-5 (waves 5-7) деплоить плотной серией; первую версию фиксировать в день деплоя wave 7 (§6.1 доки — минимизация unconstrained-зоны прошлого).
