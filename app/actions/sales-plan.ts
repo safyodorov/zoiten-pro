@@ -17,6 +17,8 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
+import { suggestVirtualPurchases } from "@/lib/sales-plan/virtual-purchases"
+import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
 
 const BASELINE_KEY = "salesPlan.baselineOverrides"
@@ -244,7 +246,8 @@ export async function saveMonthLevels(
         })
       }
     }
-    // TODO Wave 6: вызов regenerateVirtualPurchases после изменения месячных уровней
+    // Регенерация виртуальных закупок после изменения месячных уровней (дыра критика №5)
+    await regenerateVirtualPurchasesInternal()
     revalidateSalesPlanPaths()
     return { ok: true }
   } catch (err) {
@@ -432,7 +435,8 @@ export async function saveDayOverrides(payload: {
         })
       }
     }
-    // TODO Wave 6: вызов regenerateVirtualPurchases после изменения day overrides
+    // Регенерация виртуальных закупок после изменения day overrides (дыра критика №5)
+    await regenerateVirtualPurchasesInternal()
     revalidateSalesPlanPaths()
     return { ok: true }
   } catch (err) {
@@ -651,6 +655,430 @@ export async function getProductPlanDays(
     console.error("[getProductPlanDays]", err)
     return { ok: false, error: "Не удалось загрузить данные плана" }
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 25 wave 6: Виртуальные закупки (VP-actions)
+// Все write — SALES MANAGE. convertVirtualPurchase — + PROCUREMENT MANAGE.
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Внутренний хелпер: загрузка параметров модели для regenerate ───
+
+async function loadModelParamsForRegenerate() {
+  const [
+    deliveryDays,
+    returnDays,
+    wbInboundLagDays,
+    transitDays,
+    defaultLeadTimeDays,
+    safetyStockDays,
+    vpCoverDays,
+  ] = await Promise.all([
+    getLeadTimeDays("deliveryDays", 3),
+    getLeadTimeDays("returnDays", 3),
+    getSettingNumber("salesPlan.wbInboundLagDays", 0),
+    getSettingNumber("salesPlan.transitDays", 20),
+    getSettingNumber("salesPlan.defaultLeadTimeDays", 45),
+    getSettingNumber("salesPlan.safetyStockDays", 14),
+    getSettingNumber("salesPlan.vpCoverDays", 60),
+  ])
+
+  const nowMsk = new Date(Date.now() + 3 * 60 * 60 * 1000)
+  const todayMsk = nowMsk.toISOString().slice(0, 10)
+
+  const horizonRow = await prisma.appSetting.findUnique({ where: { key: "salesPlan.horizon" } })
+  let horizonFrom = todayMsk
+  let horizonTo = todayMsk.slice(0, 4) + "-12-31"
+  if (horizonRow) {
+    try {
+      const h = JSON.parse(horizonRow.value) as { from?: string; to?: string }
+      if (h.from) horizonFrom = h.from
+      if (h.to) horizonTo = h.to
+    } catch { /* defaults */ }
+  }
+
+  return {
+    todayMsk, horizonFrom, horizonTo,
+    deliveryDays, returnDays, wbInboundLagDays,
+    transitDays, defaultLeadTimeDays, safetyStockDays, vpCoverDays,
+  }
+}
+
+// ── regenerateVirtualPurchasesInternal (internal, вызывается из цепочек пересчёта) ───
+
+/**
+ * Внутренний хелпер: пересоздаёт авто-SUGGESTED виртуальные закупки.
+ * Вызывается в конце saveMonthLevels И saveDayOverrides (дыра критика №5).
+ * Транзакция: deleteMany(SUGGESTED+auto) + createMany(новые предложения).
+ * ACCEPTED/DISMISSED/CONVERTED/manual неприкосновенны.
+ */
+async function regenerateVirtualPurchasesInternal(productIds?: string[]): Promise<void> {
+  try {
+    const modelParams = await loadModelParamsForRegenerate()
+    const {
+      todayMsk, horizonFrom, horizonTo,
+      deliveryDays, returnDays, wbInboundLagDays,
+      transitDays, defaultLeadTimeDays, safetyStockDays, vpCoverDays,
+    } = modelParams
+
+    const inputs = await loadSalesPlanInputs(prisma, {
+      today: todayMsk,
+      horizonFrom,
+      horizonTo,
+      deliveryDays,
+      returnDays,
+      wbInboundLagDays,
+      transitDays,
+      defaultLeadTimeDays,
+      safetyStockDays,
+      vpCoverDays,
+    })
+
+    // Загружаем existing ACCEPTED/DISMISSED/manual VPs для передачи в suggestVirtualPurchases
+    const existingVPs = await prisma.virtualPurchase.findMany({
+      where: {
+        status: { in: ["ACCEPTED", "DISMISSED", "CONVERTED"] },
+        ...(productIds ? { productId: { in: productIds } } : {}),
+      },
+      select: {
+        id: true,
+        productId: true,
+        status: true,
+        orderDate: true,
+        expectedArrivalDate: true,
+        qty: true,
+        source: true,
+      },
+    })
+
+    // Также загружаем manual VPs (source="manual", status может быть любым)
+    const manualVPs = await prisma.virtualPurchase.findMany({
+      where: {
+        source: "manual",
+        status: { notIn: ["DISMISSED", "CONVERTED"] },
+        ...(productIds ? { productId: { in: productIds } } : {}),
+      },
+      select: {
+        id: true,
+        productId: true,
+        status: true,
+        orderDate: true,
+        expectedArrivalDate: true,
+        qty: true,
+        source: true,
+      },
+    })
+
+    // Сгруппируем existing по productId
+    const existingByProduct = new Map<
+      string,
+      Array<{
+        id: string
+        status: string
+        orderDate: string
+        expectedArrivalDate: string
+        qty: number
+        source: string
+      }>
+    >()
+    for (const vp of [...existingVPs, ...manualVPs]) {
+      const arr = existingByProduct.get(vp.productId) ?? []
+      arr.push({
+        id: vp.id,
+        status: vp.status,
+        orderDate: vp.orderDate.toISOString().slice(0, 10),
+        expectedArrivalDate: vp.expectedArrivalDate.toISOString().slice(0, 10),
+        qty: vp.qty,
+        source: vp.source,
+      })
+      existingByProduct.set(vp.productId, arr)
+    }
+
+    // Загружаем leadTimeDays и unitPrice из SupplierProductLink
+    const supplierLinks = await prisma.supplierProductLink.findMany({
+      where: productIds ? { productId: { in: productIds } } : undefined,
+      select: { productId: true, leadTimeDays: true, unitPrice: true },
+    })
+    const minLeadTimeByProduct = new Map<string, number>()
+    const unitPriceByProduct = new Map<string, number>()
+    for (const link of supplierLinks) {
+      if (!link.productId) continue
+      if (link.leadTimeDays != null) {
+        const cur = minLeadTimeByProduct.get(link.productId)
+        if (cur == null || link.leadTimeDays < cur) {
+          minLeadTimeByProduct.set(link.productId, link.leadTimeDays)
+        }
+      }
+      if (link.unitPrice != null && !unitPriceByProduct.has(link.productId)) {
+        unitPriceByProduct.set(link.productId, Number(link.unitPrice))
+      }
+    }
+
+    // Подготавливаем VpProductInput для каждого ProductPlanInput
+    const vpProducts = inputs.products.map((p) => ({
+      productId: p.productId,
+      sku: p.sku,
+      name: p.name,
+      stockNow: p.stockNow,
+      baselineOrdersPerDay: p.baselineOrdersPerDay,
+      leadTimeDays: minLeadTimeByProduct.get(p.productId),
+      monthLevels: p.monthLevels.map((ml) => ({
+        month: ml.month,
+        targetOrdersPerDay: ml.targetOrdersPerDay,
+        priceRub: ml.priceRub,
+        buyoutPct: ml.buyoutPct,
+      })),
+      dayOverrides: p.dayOverrides,
+      // Реальные приходы уже включены через resolveArrivalBatches в ProductPlanInput.arrivals
+      arrivals: p.arrivals
+        .filter((a) => a.source === "purchase" || a.source === "incoming-legacy")
+        .map((a) => ({ date: a.date, qty: a.qty })),
+      existingVirtualPurchases: (existingByProduct.get(p.productId) ?? []).map((vp) => ({
+        ...vp,
+        status: vp.status as "SUGGESTED" | "ACCEPTED" | "DISMISSED" | "CONVERTED",
+      })),
+      unitPrice: unitPriceByProduct.get(p.productId) ?? null,
+    }))
+
+    const suggestions = suggestVirtualPurchases({
+      params: {
+        safetyStockDays,
+        vpCoverDays,
+        defaultLeadTimeDays,
+        minQty: 10,
+        maxIterationsPerProduct: 6,
+        today: todayMsk,
+        horizonTo,
+      },
+      products: vpProducts,
+    })
+
+    // Транзакция: deleteMany(SUGGESTED+auto) + createMany(новые)
+    await prisma.$transaction(async (tx) => {
+      // Удаляем только авто-SUGGESTED (ACCEPTED/DISMISSED/CONVERTED/manual неприкосновенны)
+      await tx.virtualPurchase.deleteMany({
+        where: {
+          status: "SUGGESTED",
+          source: "auto",
+          ...(productIds ? { productId: { in: productIds } } : {}),
+        },
+      })
+
+      if (suggestions.length > 0) {
+        await tx.virtualPurchase.createMany({
+          data: suggestions.map((s) => ({
+            productId: s.productId,
+            qty: s.qty,
+            orderDate: new Date(s.orderDate + "T00:00:00Z"),
+            expectedArrivalDate: new Date(s.expectedArrivalDate + "T00:00:00Z"),
+            leadTimeDaysUsed: s.leadTimeDaysUsed,
+            unitPrice: s.unitPrice ?? null,
+            source: "auto",
+            status: "SUGGESTED",
+          })),
+        })
+      }
+    })
+  } catch (err) {
+    // Логируем, но не прерываем основную цепочку сохранения
+    console.error("[regenerateVirtualPurchasesInternal]", err)
+  }
+}
+
+// ── regenerateVirtualPurchases (public action) ─────────────────────
+
+/**
+ * Публичный server action: пересоздать авто-SUGGESTED виртуальные закупки.
+ * Вызывается вручную пользователем или из UI.
+ * productIds — опционально сузить до конкретных товаров.
+ */
+export async function regenerateVirtualPurchases(productIds?: string[]): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    await regenerateVirtualPurchasesInternal(productIds)
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[regenerateVirtualPurchases]", err)
+    return { ok: false, error: "Не удалось регенерировать предложения" }
+  }
+}
+
+// ── acceptVirtualPurchase ──────────────────────────────────────────
+
+/**
+ * SUGGESTED → ACCEPTED: предложение переживает регенерацию.
+ */
+export async function acceptVirtualPurchase(id: string): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    await prisma.virtualPurchase.update({
+      where: { id },
+      data: { status: "ACCEPTED" },
+    })
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[acceptVirtualPurchase]", err)
+    return { ok: false, error: "Не удалось подтвердить" }
+  }
+}
+
+// ── updateVirtualPurchase ──────────────────────────────────────────
+
+const UpdateVpSchema = z.object({
+  id: z.string().min(1),
+  qty: z.number().int().positive().optional(),
+  orderDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  supplierId: z.string().optional().nullable(),
+  expectedArrivalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  unitPrice: z.number().nonnegative().optional().nullable(),
+})
+
+/**
+ * Правка виртуальной закупки. source остаётся, status → ACCEPTED.
+ *
+ * ИНВАРИАНТ «не прошлым числом» (серверный clamp — клиент можно обойти):
+ * - orderDate = max(getMskTodayIso(), orderDate)
+ * - expectedArrivalDate = max(orderDate + leadTimeDaysUsed, expectedArrivalDate)
+ *
+ * Виртуальная закупка НИКОГДА не размещается прошлым числом,
+ * приход не раньше today + leadTimeDays от сегодня.
+ */
+export async function updateVirtualPurchase(
+  payload: z.infer<typeof UpdateVpSchema>,
+): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = UpdateVpSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+
+  const { id, qty, orderDate: rawOrderDate, supplierId, expectedArrivalDate: rawArrivalDate, unitPrice } = parsed.data
+
+  try {
+    const existing = await prisma.virtualPurchase.findUnique({
+      where: { id },
+      select: { orderDate: true, expectedArrivalDate: true, leadTimeDaysUsed: true },
+    })
+    if (!existing) return { ok: false, error: "Запись не найдена" }
+
+    const today = getMskTodayIso()
+    const leadTimeDays = existing.leadTimeDaysUsed ?? 45
+
+    // Серверный clamp — ИНВАРИАНТ «не прошлым числом»
+    let orderDate: string | undefined
+    if (rawOrderDate !== undefined) {
+      orderDate = rawOrderDate < today ? today : rawOrderDate
+    } else {
+      // Используем существующий, но тоже clamp к today
+      const existingOrderDate = existing.orderDate.toISOString().slice(0, 10)
+      orderDate = existingOrderDate < today ? today : existingOrderDate
+    }
+
+    // expectedArrivalDate = max(orderDate + leadTimeDays, expectedArrivalDate)
+    let expectedArrivalDate: string | undefined
+    const minArrivalDate = addDays(orderDate, leadTimeDays)
+    if (rawArrivalDate !== undefined) {
+      expectedArrivalDate = rawArrivalDate < minArrivalDate ? minArrivalDate : rawArrivalDate
+    } else {
+      const existingArrival = existing.expectedArrivalDate.toISOString().slice(0, 10)
+      expectedArrivalDate = existingArrival < minArrivalDate ? minArrivalDate : existingArrival
+    }
+
+    const updateData: Record<string, unknown> = {
+      status: "ACCEPTED",
+    }
+    if (qty !== undefined) updateData.qty = qty
+    if (orderDate !== undefined) updateData.orderDate = new Date(orderDate + "T00:00:00Z")
+    if (supplierId !== undefined) updateData.supplierId = supplierId
+    if (expectedArrivalDate !== undefined) updateData.expectedArrivalDate = new Date(expectedArrivalDate + "T00:00:00Z")
+    if (unitPrice !== undefined) updateData.unitPrice = unitPrice
+
+    await prisma.virtualPurchase.update({
+      where: { id },
+      data: updateData,
+    })
+
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[updateVirtualPurchase]", err)
+    return { ok: false, error: "Не удалось обновить" }
+  }
+}
+
+// ── dismissVirtualPurchase ─────────────────────────────────────────
+
+/**
+ * → DISMISSED: исключён из arrivals, план честно проседает, lostRub виден.
+ */
+export async function dismissVirtualPurchase(id: string): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    await prisma.virtualPurchase.update({
+      where: { id },
+      data: { status: "DISMISSED" },
+    })
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[dismissVirtualPurchase]", err)
+    return { ok: false, error: "Не удалось отклонить" }
+  }
+}
+
+// ── convertVirtualPurchase ─────────────────────────────────────────
+
+type ConvertVpResult = { ok: true; redirectUrl: string } | { ok: false; error: string }
+
+/**
+ * Конвертация виртуальной закупки в реальную.
+ * Требует SALES MANAGE + PROCUREMENT MANAGE.
+ *
+ * Возвращает redirectUrl для перехода на /procurement/purchases?create=1&from-virtual=<id>.
+ * Финализация status=CONVERTED происходит в createPurchase при передаче fromVirtualId.
+ *
+ * Анти-двойной счёт: CONVERTED исключается из arrivals структурно
+ * (resolveArrivalBatches фильтрует только SUGGESTED+ACCEPTED, CONVERTED не в этом множестве).
+ */
+export async function convertVirtualPurchase(id: string): Promise<ConvertVpResult> {
+  await requireSection("SALES", "MANAGE")
+  await requireSection("PROCUREMENT", "MANAGE")
+
+  try {
+    const vp = await prisma.virtualPurchase.findUnique({
+      where: { id },
+      select: { id: true, status: true },
+    })
+    if (!vp) return { ok: false, error: "Виртуальная закупка не найдена" }
+    if (vp.status === "CONVERTED") return { ok: false, error: "Уже конвертирована" }
+    if (vp.status === "DISMISSED") return { ok: false, error: "Отклонённую закупку нельзя конвертировать" }
+
+    return {
+      ok: true,
+      redirectUrl: `/procurement/purchases?create=1&from-virtual=${id}`,
+    }
+  } catch (err) {
+    console.error("[convertVirtualPurchase]", err)
+    return { ok: false, error: "Ошибка сервера" }
+  }
+}
+
+/**
+ * Финализация CONVERTED статуса — вызывается из createPurchase при наличии fromVirtualId.
+ * Обновляет VP в той же транзакции что и создание Purchase.
+ */
+export async function markVirtualPurchaseConverted(
+  vpId: string,
+  purchaseId: string,
+): Promise<void> {
+  await prisma.virtualPurchase.update({
+    where: { id: vpId },
+    data: {
+      status: "CONVERTED",
+      convertedPurchaseId: purchaseId,
+    },
+  })
+  revalidateSalesPlanPaths()
 }
 
 /** Читает deliveryDays / returnDays из salesPlan.leadTimes2 (JSON) или old salesPlan.leadTimes. */

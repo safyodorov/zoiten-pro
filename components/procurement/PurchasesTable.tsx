@@ -18,6 +18,7 @@ import {
   type SupplierOption,
   type ProductOption,
   type ProductLinkMap,
+  type FromVirtualPrefill,
 } from "@/components/procurement/PurchaseModal"
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -88,6 +89,8 @@ interface PurchasesTableProps {
   suppliers: SupplierOption[]
   products: ProductOption[]
   productLinkMap: ProductLinkMap
+  /** Если задан — открыть модалку создания с префиллом из виртуальной закупки */
+  fromVirtualPrefill?: FromVirtualPrefill | null
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -232,9 +235,11 @@ export function PurchasesTable({
   suppliers,
   products,
   productLinkMap,
+  fromVirtualPrefill,
 }: PurchasesTableProps) {
   const router = useRouter()
-  const [createOpen, setCreateOpen] = useState(false)
+  // Если fromVirtualPrefill передан — открыть модалку создания сразу
+  const [createOpen, setCreateOpen] = useState(() => Boolean(fromVirtualPrefill))
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -573,6 +578,7 @@ export function PurchasesTable({
             suppliers={suppliers}
             products={products}
             productLinkMap={productLinkMap}
+            fromVirtualPrefill={fromVirtualPrefill}
           />
         </div>
       )}

@@ -25,6 +25,8 @@ export default async function PurchasesPage({
     buyers?: string
     dateFrom?: string
     dateTo?: string
+    create?: string
+    "from-virtual"?: string
   }>
 }) {
   await requireSection("PROCUREMENT")
@@ -417,6 +419,34 @@ export default async function PurchasesPage({
     }
   }
 
+  // ── from-virtual: загрузить VP для префилла модалки создания ───────
+  let fromVirtualPrefill = null
+  const fromVirtualId = sp["from-virtual"]
+  if (fromVirtualId && canManage) {
+    const vp = await prisma.virtualPurchase.findUnique({
+      where: { id: fromVirtualId },
+      select: {
+        id: true,
+        supplierId: true,
+        productId: true,
+        qty: true,
+        unitPrice: true,
+        currency: true,
+        status: true,
+      },
+    })
+    if (vp && vp.status !== "CONVERTED" && vp.status !== "DISMISSED") {
+      fromVirtualPrefill = {
+        virtualPurchaseId: vp.id,
+        supplierId: vp.supplierId,
+        currency: vp.currency ?? "CNY",
+        productId: vp.productId,
+        quantity: vp.qty,
+        unitPrice: vp.unitPrice != null ? Number(vp.unitPrice) : null,
+      }
+    }
+  }
+
   return (
     <div className="h-full flex flex-col gap-3 p-4">
       <PurchaseFilters
@@ -437,6 +467,7 @@ export default async function PurchasesPage({
           suppliers={supplierOptions}
           products={productOptions}
           productLinkMap={productLinkMap}
+          fromVirtualPrefill={fromVirtualPrefill}
         />
       </div>
     </div>

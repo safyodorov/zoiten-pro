@@ -52,6 +52,16 @@ export interface PurchaseForModal {
   items: Array<{ id: string; productId: string; quantity: number; unitPrice: number }>
 }
 
+/** Префилл из виртуальной закупки (from-virtual конвертация, Phase 25 wave 6) */
+export interface FromVirtualPrefill {
+  virtualPurchaseId: string
+  supplierId: string | null
+  currency: string
+  productId: string | null
+  quantity: number
+  unitPrice: number | null
+}
+
 interface PurchaseModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -60,6 +70,8 @@ interface PurchaseModalProps {
   suppliers: SupplierOption[]
   products: ProductOption[]
   productLinkMap: ProductLinkMap
+  /** Если задан — открыт в режиме конвертации виртуальной закупки */
+  fromVirtualPrefill?: FromVirtualPrefill | null
 }
 
 const CURRENCIES = ["CNY", "USD", "EUR", "RUB"]
@@ -109,6 +121,7 @@ export function PurchaseModal({
   suppliers,
   products,
   productLinkMap,
+  fromVirtualPrefill,
 }: PurchaseModalProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -185,6 +198,24 @@ export function PurchaseModal({
           unitPrice: i.unitPrice,
         })),
       })
+    } else if (fromVirtualPrefill) {
+      // Конвертация виртуальной закупки (from-virtual)
+      reset({
+        supplierId: fromVirtualPrefill.supplierId ?? "",
+        currency: fromVirtualPrefill.currency,
+        status: "PLANNED",
+        optionsDescription: "",
+        optionsExtraCost: null,
+        logisticsCost: null,
+        logisticsComment: "",
+        items: [
+          {
+            productId: fromVirtualPrefill.productId ?? "",
+            quantity: fromVirtualPrefill.quantity,
+            unitPrice: fromVirtualPrefill.unitPrice ?? 0,
+          },
+        ],
+      })
     } else {
       reset({
         supplierId: "",
@@ -197,7 +228,7 @@ export function PurchaseModal({
         items: [{ productId: "", quantity: 1, unitPrice: 0 }],
       })
     }
-  }, [open, mode, purchase, reset])
+  }, [open, mode, purchase, fromVirtualPrefill, reset])
 
   // D-06: при выборе товара — prefill unitPrice из SupplierProductLink выбранного
   // поставщика. Поле остаётся редактируемым (только подстановка значения).
@@ -245,6 +276,8 @@ export function PurchaseModal({
           depositPct: params.depositPct,
           balancePct: params.balancePct,
           leadTimeDays: params.leadTimeDays,
+          // from-virtual конвертация: CONVERTED статус проставляется в той же транзакции
+          fromVirtualId: fromVirtualPrefill?.virtualPurchaseId ?? null,
         })
         if (result.ok) {
           toast.success("Закупка создана")
@@ -295,7 +328,11 @@ export function PurchaseModal({
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
             <DialogTitle>
-              {mode === "create" ? "Новая закупка" : "Редактировать закупку"}
+              {fromVirtualPrefill
+                ? "Создать закупку из предложения"
+                : mode === "create"
+                  ? "Новая закупка"
+                  : "Редактировать закупку"}
             </DialogTitle>
           </DialogHeader>
 

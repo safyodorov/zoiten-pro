@@ -70,6 +70,8 @@ const CreatePurchaseSchema = z.object({
   depositPct: z.number().optional().nullable(),
   balancePct: z.number().optional().nullable(),
   leadTimeDays: z.number().int().optional().nullable(),
+  // Конвертация виртуальной закупки (Phase 25 wave 6): анти-двойной счёт
+  fromVirtualId: z.string().optional().nullable(),
 })
 
 const UpdatePurchaseSchema = z.object({
@@ -179,6 +181,17 @@ export async function createPurchase(
         ],
       })
 
+      // Анти-двойной счёт: если создаётся из виртуальной закупки → CONVERTED (Phase 25 wave 6)
+      if (input.fromVirtualId) {
+        await tx.virtualPurchase.update({
+          where: { id: input.fromVirtualId },
+          data: {
+            status: "CONVERTED",
+            convertedPurchaseId: created.id,
+          },
+        })
+      }
+
       return created
     })
 
@@ -189,6 +202,13 @@ export async function createPurchase(
       await recomputeProductionForProducts(prisma, input.items.map((i) => i.productId))
     } catch (e) {
       console.error("[production-sync] recompute failed:", e)
+    }
+
+    // Ревалидация sales-plan если была конвертация виртуальной закупки
+    if (input.fromVirtualId) {
+      revalidatePath("/sales-plan")
+      revalidatePath("/sales-plan/products")
+      revalidatePath("/sales-plan/purchases")
     }
 
     revalidatePath("/procurement/purchases")
