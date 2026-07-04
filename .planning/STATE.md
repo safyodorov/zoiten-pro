@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-04T13:27:36.526Z"
+last_updated: "2026-07-04T13:37:56.214Z"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 25 (v2-h2-2026) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 
 ## Performance Metrics
 
@@ -126,6 +126,7 @@ Plan: 2 of 10
 | Phase 23-cash-payments P03 | 10m | 2 tasks | 9 files |
 | Phase 23 P04 | 20m | 3 tasks | 6 files |
 | Phase 24-finance-balance P01 | 10min | 3 tasks | 11 files |
+| Phase 25-v2-h2-2026 P01 | 25 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -394,6 +395,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-04T13:27:36.519Z
+Last session: 2026-07-04T13:37:56.207Z
 Stopped at: Completed 24-finance-balance-24-01-PLAN.md
 Resume file: None
