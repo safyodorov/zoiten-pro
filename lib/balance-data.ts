@@ -104,6 +104,12 @@ export interface BalanceLine {
   currency?: "RUB" | "CNY"
   approximate?: boolean
   note?: string
+  /**
+   * Детализация строки (drill-down, 260704-cvz).
+   * Σ листовых amountRub (узлы без children) === amountRub родителя (инвариант).
+   * Дети отсортированы по убыванию amountRub на каждом уровне.
+   */
+  children?: BalanceLine[]
 }
 
 export interface BalanceGroup {
@@ -180,6 +186,132 @@ function parseQuarterKey(key: string): { year: number; quarter: number } {
   return { year: parseInt(m[1], 10), quarter: parseInt(m[2], 10) }
 }
 
+// ── Drill-down tree builder (260704-cvz) ─────────────────────────────────────
+
+/** Вклад одного продукта в дерево детализации. */
+interface ProductContrib {
+  productId: string
+  productLabel: string
+  amountRub: number
+}
+
+/** Метаданные товара из общего product-lookup. */
+interface ProductMeta {
+  catId: string
+  catName: string | null
+  subId: string
+  subName: string | null
+}
+
+/**
+ * Обобщённый билдер дерева Категория → Подкатегория → Товар.
+ * Принимает parentKey и массив листовых вкладов, строит 3 уровня.
+ * Дети на КАЖДОМ уровне сортированы по убыванию amountRub.
+ * Узлы «Без категории» / «Без подкатегории» / «Без распределения» поддерживаются.
+ *
+ * @param parentKey - ключ родительской строки баланса (например "stock-wb-warehouse")
+ * @param contribs  - массив вкладов (productId может быть "none" для «Без распределения»)
+ * @param metaMap   - Map из product.findMany: productId → {catId, catName, subId, subName}
+ */
+function buildProductTree(
+  parentKey: string,
+  contribs: ProductContrib[],
+  metaMap: Map<string, ProductMeta>
+): BalanceLine[] {
+  if (contribs.length === 0) return []
+
+  // Агрегируем вклады по productId (может прийти несколько строк одного товара)
+  const byProduct = new Map<string, { label: string; amount: number; catId: string; catName: string | null; subId: string; subName: string | null }>()
+  for (const c of contribs) {
+    const existing = byProduct.get(c.productId)
+    if (existing) {
+      existing.amount = round2(existing.amount + c.amountRub)
+    } else {
+      // Специальный случай: productId="none" → «Без распределения»
+      if (c.productId === "none") {
+        byProduct.set("none", {
+          label: c.productLabel,
+          amount: round2(c.amountRub),
+          catId: "none",
+          catName: null,
+          subId: "none",
+          subName: null,
+        })
+      } else {
+        const meta = metaMap.get(c.productId)
+        byProduct.set(c.productId, {
+          label: c.productLabel,
+          amount: round2(c.amountRub),
+          catId: meta?.catId ?? "none",
+          catName: meta?.catName ?? null,
+          subId: meta?.subId ?? "none",
+          subName: meta?.subName ?? null,
+        })
+      }
+    }
+  }
+
+  // Группируем по категории → подкатегории
+  const byCat = new Map<string, { name: string | null; subs: Map<string, { name: string | null; products: Map<string, { label: string; amount: number }> }> }>()
+  for (const [productId, info] of byProduct) {
+    let catEntry = byCat.get(info.catId)
+    if (!catEntry) {
+      catEntry = { name: info.catName, subs: new Map() }
+      byCat.set(info.catId, catEntry)
+    }
+    let subEntry = catEntry.subs.get(info.subId)
+    if (!subEntry) {
+      subEntry = { name: info.subName, products: new Map() }
+      catEntry.subs.set(info.subId, subEntry)
+    }
+    subEntry.products.set(productId, { label: info.label, amount: info.amount })
+  }
+
+  // Строим дерево BalanceLine[]
+  const catNodes: BalanceLine[] = []
+  for (const [catId, catInfo] of byCat) {
+    const catKey = `${parentKey}/cat:${catId}`
+    const subNodes: BalanceLine[] = []
+
+    for (const [subId, subInfo] of catInfo.subs) {
+      const subKey = `${catKey}/sub:${subId}`
+      const prodNodes: BalanceLine[] = []
+
+      for (const [productId, prodInfo] of subInfo.products) {
+        prodNodes.push({
+          key: `${subKey}/prod:${productId}`,
+          label: prodInfo.label,
+          amountRub: prodInfo.amount,
+        })
+      }
+      // Сортировка товаров по убыванию суммы
+      prodNodes.sort((a, b) => b.amountRub - a.amountRub)
+
+      const subAmount = round2(prodNodes.reduce((s, p) => s + p.amountRub, 0))
+      subNodes.push({
+        key: subKey,
+        label: subInfo.name ?? "Без подкатегории",
+        amountRub: subAmount,
+        children: prodNodes,
+      })
+    }
+    // Сортировка подкатегорий по убыванию суммы
+    subNodes.sort((a, b) => b.amountRub - a.amountRub)
+
+    const catAmount = round2(subNodes.reduce((s, s2) => s + s2.amountRub, 0))
+    catNodes.push({
+      key: catKey,
+      label: catInfo.name ?? "Без категории",
+      amountRub: catAmount,
+      children: subNodes,
+    })
+  }
+  // Сортировка категорий по убыванию суммы
+  catNodes.sort((a, b) => b.amountRub - a.amountRub)
+
+  return catNodes
+}
+
 // ── loadBalanceSheet ──────────────────────────────────────────────────────────
 
 /**
@@ -192,14 +324,23 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   // ── Денежные средства + Кредиты + Ручные статьи ─────────────────────────
 
   const [bankAccounts, cashGroups, loans, manualAdjustments] = await Promise.all([
-    prisma.bankAccount.findMany({ select: { id: true, currency: true } }),
+    // Расширен select: добавлены number и bank.name для drill-down (260704-cvz)
+    prisma.bankAccount.findMany({
+      select: {
+        id: true,
+        currency: true,
+        number: true,
+        bank: { select: { name: true } },
+      },
+    }),
     prisma.cashEntry.groupBy({
       by: ["direction"],
       where: { date: { lte: asOf } },
       _sum: { amount: true },
     }),
     // deletedAt НЕ фильтруем в запросе — point-in-time фильтр по дате ниже (M3)
-    prisma.loan.findMany({ include: { payments: true } }),
+    // Расширен include: добавлен lender.name для drill-down (260704-cvz)
+    prisma.loan.findMany({ include: { payments: true, lender: { select: { name: true } } } }),
     prisma.financeManualAdjustment.findMany({
       where: {
         effectiveFrom: { lte: asOf },
@@ -209,23 +350,42 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   ])
 
   // Банк: RUR-счета → рублёвая строка; CNY-счета → отдельная справочная строка (m4/Pitfall 2)
+  // Drill-down (260704-cvz): собираем per-счёт данные для children строки bank-rub
   const bankBalances = await Promise.all(
     bankAccounts.map(async (acc) => ({
+      id: acc.id,
       currency: acc.currency,
+      number: acc.number,
+      bankName: acc.bank?.name ?? null,
       balance: await getBankBalanceAsOf(acc.id, asOf),
     }))
   )
   let bankRurTotal = 0
   let bankCnyTotal = 0
   let hasCnyAccount = false
+  // Drill-down: per-счёт RUR-строки для bank-rub children
+  const bankRurChildren: BalanceLine[] = []
+
   for (const b of bankBalances) {
     if (b.balance == null) continue
-    if (b.currency === "RUR") bankRurTotal += b.balance
-    else if (b.currency === "CNY") {
+    if (b.currency === "RUR") {
+      bankRurTotal += b.balance
+      // Формируем читаемый label: «Название банка · Номер счёта»
+      const label = b.bankName
+        ? `${b.bankName}${b.number ? ` · ${b.number}` : ""}`
+        : (b.number ?? b.id)
+      bankRurChildren.push({
+        key: `bank-rub/acct:${b.id}`,
+        label,
+        amountRub: round2(b.balance),
+      })
+    } else if (b.currency === "CNY") {
       bankCnyTotal += b.balance
       hasCnyAccount = true
     }
   }
+  // Сортируем per-счёт дети по убыванию суммы
+  bankRurChildren.sort((a, b) => b.amountRub - a.amountRub)
 
   // Касса: Σ INCOME − Σ EXPENSE, date <= asOf (паттерн app/(dashboard)/cash/page.tsx:155-164)
   let cashBalance = 0
@@ -234,9 +394,15 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     cashBalance += g.direction === "INCOME" ? sum : -sum
   }
 
-  const cashLines: BalanceLine[] = [
-    { key: "bank-rub", label: "Банковские счета (₽)", amountRub: round2(bankRurTotal) },
-  ]
+  const bankRurLine: BalanceLine = {
+    key: "bank-rub",
+    label: "Банковские счета (₽)",
+    amountRub: round2(bankRurTotal),
+    // Drill-down: children = per-счёт строки (только если ≥1 счёт)
+    ...(bankRurChildren.length > 0 ? { children: bankRurChildren } : {}),
+  }
+
+  const cashLines: BalanceLine[] = [bankRurLine]
   if (hasCnyAccount) {
     cashLines.push({
       key: "bank-cny",
@@ -256,7 +422,11 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   }
 
   // Кредиты (M3 — point-in-time: не выдан на asOf → пропуск; soft-delete по дате удаления)
+  // Drill-down: дерево Кредитор → Кредит (260704-cvz)
   let loansTotal = 0
+  // Map: lenderId → {name, loans: [{loanId, contractNumber, balance}]}
+  const lenderMap = new Map<string, { name: string; loans: Array<{ loanId: string; contractNumber: string | null; balance: number }> }>()
+
   for (const loan of loans) {
     const issued = loan.issueDate ?? loan.createdAt
     if (issued.getTime() > asOf.getTime()) continue // M3: кредит ещё не выдан на asOf
@@ -269,12 +439,55 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     }))
     const agg = computeLoanAggregates(amount, payments, asOf)
     loansTotal += agg.currentBalance
+
+    // Drill-down: копим per-кредитор
+    const lenderId = loan.lenderId ?? "unknown"
+    const lenderName = loan.lender?.name ?? "Неизвестный кредитор"
+    let lenderEntry = lenderMap.get(lenderId)
+    if (!lenderEntry) {
+      lenderEntry = { name: lenderName, loans: [] }
+      lenderMap.set(lenderId, lenderEntry)
+    }
+    lenderEntry.loans.push({
+      loanId: loan.id,
+      contractNumber: loan.contractNumber ?? null,
+      balance: agg.currentBalance,
+    })
+  }
+
+  // Строим дерево Кредитор → Кредит для loans-balance
+  const lenderNodes: BalanceLine[] = []
+  for (const [lenderId, lenderInfo] of lenderMap) {
+    const lenderKey = `loans-balance/lender:${lenderId}`
+    const loanNodes: BalanceLine[] = lenderInfo.loans.map((l) => ({
+      key: `${lenderKey}/loan:${l.loanId}`,
+      label: l.contractNumber ?? l.loanId,
+      amountRub: round2(l.balance),
+    }))
+    // Сортировка кредитов по убыванию суммы
+    loanNodes.sort((a, b) => b.amountRub - a.amountRub)
+    const lenderAmount = round2(loanNodes.reduce((s, l) => s + l.amountRub, 0))
+    lenderNodes.push({
+      key: lenderKey,
+      label: lenderInfo.name,
+      amountRub: lenderAmount,
+      children: loanNodes,
+    })
+  }
+  // Сортировка кредиторов по убыванию суммы
+  lenderNodes.sort((a, b) => b.amountRub - a.amountRub)
+
+  const loansBalanceLine: BalanceLine = {
+    key: "loans-balance",
+    label: "Остаток по кредитам",
+    amountRub: round2(loansTotal),
+    ...(lenderNodes.length > 0 ? { children: lenderNodes } : {}),
   }
 
   const loansGroup: BalanceGroup = {
     key: "loans",
     label: "Кредиты и займы",
-    lines: [{ key: "loans-balance", label: "Остаток по кредитам", amountRub: round2(loansTotal) }],
+    lines: [loansBalanceLine],
     subtotalRub: round2(loansTotal),
   }
 
@@ -308,6 +521,13 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   const unvaluedMap = new Map<string, { sku: string; name: string; qty: number }>()
   let unvaluedQtySum = 0
 
+  // Drill-down: собираем вклады per-товар per-локация (260704-cvz)
+  const stockContribsByLocation = new Map<string, ProductContrib[]>()
+  for (const loc of STOCK_LOCATION_ORDER) stockContribsByLocation.set(loc, [])
+
+  // Множество productId для product-lookup (заполняется в цикле ниже, дополняется закупками)
+  const allProductIds = new Set<string>()
+
   for (const row of stockRows) {
     if (row.costPriceAtDate == null) {
       // D-11: «без оценки» — НЕ включаем qty×null в сумму запасов
@@ -319,6 +539,18 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     }
     const value = Number(row.valueRub ?? 0)
     stockByLocation.set(row.location, (stockByLocation.get(row.location) ?? 0) + value)
+
+    // Drill-down: накапливаем вклад товара в локацию
+    const locContribs = stockContribsByLocation.get(row.location)
+    if (locContribs != null) {
+      locContribs.push({
+        productId: row.productId,
+        // Используем sku+name из снапшота напрямую (productLabel)
+        productLabel: `${row.sku} ${row.name}`,
+        amountRub: value,
+      })
+      allProductIds.add(row.productId)
+    }
   }
 
   const unvaluedStock: UnvaluedStock = {
@@ -326,13 +558,6 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     qtySum: unvaluedQtySum,
     products: [...unvaluedMap.values()].sort((a, b) => b.qty - a.qty),
   }
-
-  const stockLines: BalanceLine[] = STOCK_LOCATION_ORDER.map((loc) => ({
-    key: STOCK_LOCATION_KEYS[loc],
-    label: STOCK_LOCATION_LABELS[loc],
-    amountRub: round2(stockByLocation.get(loc) ?? 0),
-  }))
-  // "Товар в пути из Китая" строка добавляется ниже, после классификации закупок (D-12)
 
   // Дебиторка WB = current (Balance API): реальное время, УЖЕ включает выкупы текущей недели.
   // weeklyTail НЕ добавляем — это те же выкупы (двойной счёт). См .planning/debug/wb-receivables-double-count.md.
@@ -372,6 +597,10 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   let inTransitTotal = 0
   let inTransitApproximate = false
 
+  // Drill-down: вклады по закупкам (260704-cvz)
+  const inTransitContribs: ProductContrib[] = []
+  const advancesContribs: ProductContrib[] = []
+
   for (const purchase of purchases) {
     // Уплачено в ₽ на asOf (B1): только PAID + paidDate!=null + paidDate<=asOf, курс на дату платежа.
     // НЕ фильтруем по текущему Purchase.status — закупка, закрытая ПОСЛЕ asOf, не должна исчезать
@@ -400,7 +629,50 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
 
     if (stage === "WAREHOUSE") {
       continue // B2: уже принят на складе — покрыт снапшотом остатков, исключаем полностью (не двойной счёт)
-    } else if (stage === "SHIPMENT" || stage === "TRANSIT") {
+    }
+
+    // Drill-down: аллокация paidRub по позициям закупки (260704-cvz)
+    // Вес позиции: quantity × unitPrice; если Σweight===0 — весь paidRub в «Без распределения»
+    const items = purchase.items as Array<{ productId: string; quantity: number; unitPrice?: { toNumber?: () => number } | number | string | null; stages: unknown[] }>
+    const weightedItems: Array<{ productId: string; weight: number }> = []
+    let weightSum = 0
+    for (const item of items) {
+      const qty = item.quantity ?? 0
+      const price = item.unitPrice != null
+        ? (typeof item.unitPrice === "object" && "toNumber" in item.unitPrice
+          ? (item.unitPrice as { toNumber: () => number }).toNumber()
+          : Number(item.unitPrice))
+        : 0
+      const w = qty * price
+      weightedItems.push({ productId: item.productId, weight: w })
+      weightSum += w
+    }
+
+    // Целевой массив вкладов
+    const targetContribs = (stage === "SHIPMENT" || stage === "TRANSIT") ? inTransitContribs : advancesContribs
+
+    if (weightSum > 0) {
+      for (const wi of weightedItems) {
+        const contrib = round2(paidRub * wi.weight / weightSum)
+        if (contrib <= 0) continue
+        // Используем productMeta для label — заполним после product.findMany ниже; здесь только productId
+        targetContribs.push({
+          productId: wi.productId,
+          productLabel: wi.productId, // временный label, будет уточнён ниже через productMeta
+          amountRub: contrib,
+        })
+        allProductIds.add(wi.productId)
+      }
+    } else {
+      // Нет позиций с весом — весь paidRub в «Без распределения»
+      targetContribs.push({
+        productId: "none",
+        productLabel: "Без распределения",
+        amountRub: round2(paidRub),
+      })
+    }
+
+    if (stage === "SHIPMENT" || stage === "TRANSIT") {
       inTransitTotal += paidRub
       if (paidApproximate) inTransitApproximate = true
     } else {
@@ -410,11 +682,69 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     }
   }
 
+  // ── Общий product-lookup (ОДИН запрос) для drill-down (260704-cvz) ────────
+  // Запрашиваем sku+name для читаемых меток + category/subcategory для дерева
+  const productMetaRows = await prisma.product.findMany({
+    where: { id: { in: [...allProductIds] } },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      category: { select: { id: true, name: true } },
+      subcategory: { select: { id: true, name: true } },
+    },
+  })
+  const productMetaMap = new Map<string, ProductMeta & { sku: string; name: string }>(
+    productMetaRows.map((p) => [
+      p.id,
+      {
+        catId: p.category?.id ?? "none",
+        catName: p.category?.name ?? null,
+        subId: p.subcategory?.id ?? "none",
+        subName: p.subcategory?.name ?? null,
+        sku: p.sku,
+        name: p.name,
+      },
+    ])
+  )
+
+  // Обновляем productLabel в вкладах закупок (теперь есть productMeta)
+  for (const contribs of [inTransitContribs, advancesContribs]) {
+    for (const c of contribs) {
+      if (c.productId === "none") continue // «Без распределения» — оставляем как есть
+      const meta = productMetaMap.get(c.productId)
+      if (meta) {
+        c.productLabel = `${meta.sku} ${meta.name}`
+      }
+      // Если товар не найден в productMeta (удалён) — оставляем productId как fallback label
+    }
+  }
+
+  // Для складских вкладов productLabel уже заполнен из row.sku+row.name (снапшот хранит их)
+  // productMeta нужен только для category/subcategory — обновлять label не нужно
+
+  // ── Строим складские строки с drill-down children ────────────────────────
+  const stockLines: BalanceLine[] = STOCK_LOCATION_ORDER.map((loc) => {
+    const locKey = STOCK_LOCATION_KEYS[loc]
+    const contribs = stockContribsByLocation.get(loc) ?? []
+    const children = buildProductTree(locKey, contribs, productMetaMap)
+    const line: BalanceLine = {
+      key: locKey,
+      label: STOCK_LOCATION_LABELS[loc],
+      amountRub: round2(stockByLocation.get(loc) ?? 0),
+      ...(children.length > 0 ? { children } : {}),
+    }
+    return line
+  })
+
+  // "Товар в пути из Китая" строка с drill-down children
+  const inTransitChildren = buildProductTree("stock-in-transit-china", inTransitContribs, productMetaMap)
   stockLines.push({
     key: "stock-in-transit-china",
     label: "Товар в пути из Китая",
     amountRub: round2(inTransitTotal),
     approximate: inTransitApproximate || undefined,
+    ...(inTransitChildren.length > 0 ? { children: inTransitChildren } : {}),
   })
 
   const inventoryGroup: BalanceGroup = {
@@ -424,12 +754,15 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     subtotalRub: sumRubLines(stockLines),
   }
 
+  // «Авансы поставщикам» с drill-down children
+  const advancesChildren = buildProductTree("advances-suppliers", advancesContribs, productMetaMap)
   const advancesLines: BalanceLine[] = [
     {
       key: "advances-suppliers",
       label: "Авансы поставщикам",
       amountRub: round2(advancesTotal),
       approximate: advancesApproximate || undefined,
+      ...(advancesChildren.length > 0 ? { children: advancesChildren } : {}),
     },
   ]
   const advancesGroup: BalanceGroup = {
