@@ -591,7 +591,7 @@ Plans:
 
 ⚠ Этапы 3–5 деплоить **плотной серией**, первую версию зафиксировать в день деплоя этапа 5 (минимизация unconstrained-зоны прошлого — §6.1 доки).
 
-**Plans:** 8/10 plans executed
+**Plans:** 9/10 plans executed
 
 Plans:
 - [x] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
@@ -602,7 +602,7 @@ Plans:
 - [x] 25-04-PLAN.md — Wave 4 (Этап 2): Товары UI (Tabs/Filters/ModelParamsBar/IncomingBadges/ProductPlanTable/Cell/Dialog + RSC page + section-titles) — realtime «Сток(расч)»
 - [x] 25-06-PLAN.md — Wave 5 (Этап 3): Сводный (plan-fact движок → GREEN + PlanFactControls/SummaryCards/Chart/Matrix + переработка page; IU_REMAINING_RUB/DEFAULT_END_DATE удалены)
 - [x] 25-07-PLAN.md — Wave 6 (Этап 4): Виртуальные закупки (suggestVirtualPurchases → GREEN + VP-actions + regenerate в обеих цепочках + таб «Пора заказывать» + бейджи ◇/⚠ + конвертация)
-- [ ] 25-08-PLAN.md — Wave 7 (Этап 5): Версионирование (fixSalesPlanVersion чанки 5000 + set/rename/delete + compareVersions + PlanVersionBar/FixDialog + read-only + UAT первой версии)
+- [x] 25-08-PLAN.md — Wave 7 (Этап 5): Версионирование (fixSalesPlanVersion чанки 5000 + set/rename/delete + compareVersions + PlanVersionBar/FixDialog + read-only + UAT первой версии)
 - [ ] 25-09-PLAN.md — Wave 8 (Этап 6): ПДДС-feed (→ GREEN, live-сверка статусов + forward-fill курса) + зачистка (SalesForecast*/хардкоды/старые actions) + деприкейт /purchase-plan + deploy + end-to-end UAT
 
 ⚠ Этапы 3-5 (waves 5-7) деплоить плотной серией; первую версию фиксировать в день деплоя wave 7 (§6.1 доки — минимизация unconstrained-зоны прошлого).
