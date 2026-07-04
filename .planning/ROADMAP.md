@@ -591,10 +591,10 @@ Plans:
 
 ⚠ Этапы 3–5 деплоить **плотной серией**, первую версию зафиксировать в день деплоя этапа 5 (минимизация unconstrained-зоны прошлого — §6.1 доки).
 
-**Plans:** 10 plans (9 waves, 6 деплоябельных этапов)
+**Plans:** 1/10 plans executed
 
 Plans:
-- [ ] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
+- [x] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
 - [ ] 25-01-PLAN.md — Wave 1 (Этап 1): [BLOCKING] рукописная миграция 20260705_sales_plan_v2 (5 таблиц + enum + Purchase.plannedArrivalDate + back-relations + сид 9 AppSetting) + schema.prisma
 - [ ] 25-02-PLAN.md — Wave 1 (Этап 1): pure-ядро движка (date-buckets 6 бакетов + types/dates/iu/arrivals/engine) → 4 стаба GREEN
 - [ ] 25-03-PLAN.md — Wave 2 (Этап 1): data-loader (loadSalesPlanInputs/loadFactDaily, DI) + bootstrap-скрипт миграции старых overrides

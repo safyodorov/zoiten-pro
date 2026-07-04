@@ -4,12 +4,13 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-03T12:14:58.490Z"
+last_updated: "2026-07-04T13:27:36.526Z"
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 51
-  completed_plans: 52
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 22
+  completed_plans: 22
+  percent: 100
 ---
 
 # Project State
@@ -19,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 23 — cash-payments
+**Current focus:** Phase 25 — v2-h2-2026
 
 ## Current Position
 
-Phase: 23
-Plan: Not started
+Phase: 25 (v2-h2-2026) — EXECUTING
+Plan: 2 of 10
 
 ## Performance Metrics
 
@@ -393,6 +394,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-03T12:14:19.511Z
+Last session: 2026-07-04T13:27:36.519Z
 Stopped at: Completed 24-finance-balance-24-01-PLAN.md
 Resume file: None
