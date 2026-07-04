@@ -616,6 +616,60 @@ WB лимиты per-endpoint: **Tariffs 100/час**, **Statistics 5/мин**, *
 
 Подробно: [memory/project_zoiten_per_user_prefs.md](../../Users/User/.claude/projects/C--Claude/memory/project_zoiten_per_user_prefs.md)
 
+## План продаж v2 — Phase 25
+
+### Домен
+
+Раздел `/sales-plan` — помесячное планирование продаж с дневной детализацией. Три таба:
+- `/sales-plan` — Сводный: три ряда план/факт/ИУ по бакетам, KPI «Отставание от ИУ», строка «Вне плана», график факт/план/ИУ.
+- `/sales-plan/products` — Товары: матрица товаров × месяцы с редактированием уровней (bulk «Пересчитать план»), модалка «Дни» realtime «Сток(расч)», приходы 📦/◇/⚠, «Масштабировать месяц».
+- `/sales-plan/purchases` — Пора заказывать: автоматически сгенерированные предложения виртуальных закупок (VP), подтвердить/отклонить/конвертировать → префилл PurchaseModal.
+
+### Модель данных (Phase 25)
+
+- **SalesPlanMonthLevel** — помесячные уровни per товар: `productId_month @unique`, `targetOrdersPerDay / priceRub / buyoutPct` (null = fallback на baseline)
+- **SalesPlanDayOverride** — дневные правки per товар: `productId_date @unique`, `ordersPerDay`
+- **VirtualPurchase** — виртуальная закупка (предложение): `status=SUGGESTED|ACCEPTED|DISMISSED|CONVERTED`, `source=auto|manual`, `convertedPurchaseId FK`
+- **SalesPlanVersion** — immutable-снапшот плана: `paramsJson` с VP-снапшотами + настройками модели + ИУ-таргетами; `salesPlan.activeVersionId` хранится в AppSetting
+- **SalesPlanVersionDay** — дневной ряд снапшота: `versionId × productId × date @unique`, все 6 колонок (planOrders/Buyouts/Rub + priceUsed/buyoutPctUsed/stockEnd)
+- **WbCardFunnelDaily** — ежедневный факт (заказы/выкупы) из WB Analytics nm-report/downloads API, хранится по nmId
+
+### Движок lib/sales-plan/
+
+- `lib/sales-plan/engine.ts` — `computeSalesPlan(inputs)`: pure детерминированная симуляция per товар, T+3/T+6 deliveryDays/returnDays, stockEnd, rateRequested для suggester
+- `lib/sales-plan/data.ts` — `loadSalesPlanInputs(db, params)`: Prisma-загрузчик всех входов для движка
+- `lib/sales-plan/types.ts` — все публичные интерфейсы (SalesPlanInputs, ProductPlanInput, PlanDayRow, SalesPlanResult и т.д.)
+- `lib/sales-plan/virtual-purchases.ts` — `suggestVirtualPurchases(input)`: pure-генератор предложений VP (roll-forward, инвариант «не прошлым числом»)
+- `lib/sales-plan/arrivals.ts` — `resolveArrivalBatches`: приходы из Purchase + VirtualPurchase + ProductIncoming
+- `lib/sales-plan/iu.ts` — `loadIuTargets`: ИУ-таргеты из AppSetting.salesPlan.iuTargets
+- `lib/sales-plan/plan-fact.ts` — `loadPlanFact`: план (из activeVersion или драфта) + факт (из WbCardFunnelDaily) + ИУ-таргеты
+- `lib/sales-plan/pdds-feed.ts` — **контракт ПДДС** для следующей фазы (/finance/cashflow):
+  - `buildVirtualPurchasePayments(vpSnapshot)` — PURE: DEPOSIT=orderDate+3, BALANCE=deposit+leadTime, 30/70 fallback, amount в валюте закупки (CNY/USD, не конвертируется)
+  - `getPlannedRevenueSeries(db, versionId)` — притоки ПДДС из SalesPlanVersionDay
+  - `getPlannedVirtualPayments(db, versionId)` — оттоки ПДДС: live-сверка CONVERTED/DISMISSED (анти-двойной счёт), forward-fill курса CNY/USD→₽ через getRateForDate
+
+### Версионирование
+
+`fixSalesPlanVersion` → SalesPlanVersion (immutable) + SalesPlanVersionDay (чанки 5000). Прошлые дни копируются из предыдущей активной версии. `paramsJson` содержит снапшот VP + modelParams + iuTargets для ПДДС. Immutable: нет UPDATE строк SalesPlanVersionDay.
+
+### AppSetting-ключи плана продаж
+
+`salesPlan.iuTargets` (JSON: [{from, to, dailyRub}]), `salesPlan.horizon` (JSON: {from, to}), `salesPlan.leadTimes2` (JSON: {deliveryDays, returnDays}), `salesPlan.safetyStockDays`, `salesPlan.vpCoverDays`, `salesPlan.defaultLeadTimeDays`, `salesPlan.transitDays`, `salesPlan.wbInboundLagDays`, `salesPlan.activeVersionId`.
+
+Устаревшие ключи (удалить после UAT): `salesPlan.baselineOverrides`, `salesPlan.priceOverrides`, `salesPlan.leadTimes`.
+
+### RBAC
+
+- Read (все три /sales-plan роута): `requireSection("SALES")`
+- Write (все server actions, кроме getProductPlanDays): `requireSection("SALES", "MANAGE")`
+- convertVirtualPurchase: + `requireSection("PROCUREMENT", "MANAGE")`
+
+### SQL-очистка (выполнить на проде после UAT)
+
+```sql
+DELETE FROM "AppSetting" WHERE key IN ('salesPlan.baselineOverrides','salesPlan.priceOverrides','salesPlan.leadTimes');
+```
+
 ## GSD Workflow Enforcement
 
 Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
