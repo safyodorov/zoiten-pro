@@ -609,7 +609,11 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     subtotalRub: sumRubLines(receivablesLines),
   }
 
-  // ── Авансы поставщикам / Товар в пути из Китая (D-12, B1/B2) ─────────────
+  // ── Авансы поставщикам / Товар готовый к отгрузке / Товар в пути (D-12, B1/B2) ─────────────
+  // 260704-fzt: 3-строчная классификация вместо 2-х.
+  //   TRANSIT   → «Товар в пути»             (inTransit*)
+  //   SHIPMENT  → «Товар готовый к отгрузке» (readyToShip*)
+  //   иначе     → «Авансы поставщикам»       (advances*)
 
   const purchases = await prisma.purchase.findMany({
     include: { items: { include: { stages: true } }, payments: true },
@@ -619,9 +623,13 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   let advancesApproximate = false
   let inTransitTotal = 0
   let inTransitApproximate = false
+  // 260704-fzt: новый набор для SHIPMENT
+  let readyToShipTotal = 0
+  let readyToShipApproximate = false
 
   // Drill-down: вклады по закупкам (260704-cvz)
   const inTransitContribs: ProductContrib[] = []
+  const readyToShipContribs: ProductContrib[] = []
   const advancesContribs: ProductContrib[] = []
 
   for (const purchase of purchases) {
@@ -671,8 +679,13 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
       weightSum += w
     }
 
-    // Целевой массив вкладов
-    const targetContribs = (stage === "SHIPMENT" || stage === "TRANSIT") ? inTransitContribs : advancesContribs
+    // Целевой массив вкладов (260704-fzt: три ветки вместо двух)
+    const targetContribs =
+      stage === "TRANSIT"
+        ? inTransitContribs
+        : stage === "SHIPMENT"
+          ? readyToShipContribs
+          : advancesContribs
 
     if (weightSum > 0) {
       for (const wi of weightedItems) {
@@ -695,11 +708,15 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
       })
     }
 
-    if (stage === "SHIPMENT" || stage === "TRANSIT") {
+    // 260704-fzt: три ветки накопления тоталов
+    if (stage === "TRANSIT") {
       inTransitTotal += paidRub
       if (paidApproximate) inTransitApproximate = true
+    } else if (stage === "SHIPMENT") {
+      readyToShipTotal += paidRub
+      if (paidApproximate) readyToShipApproximate = true
     } else {
-      // null | PRODUCTION | INSPECTION (до отгрузки)
+      // null | PRODUCTION | INSPECTION (до отгрузки) — авансы поставщикам
       advancesTotal += paidRub
       if (paidApproximate) advancesApproximate = true
     }
@@ -735,7 +752,8 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   )
 
   // Обновляем productLabel в вкладах закупок (теперь есть productMeta)
-  for (const contribs of [inTransitContribs, advancesContribs]) {
+  // 260704-fzt: три набора вкладов вместо двух
+  for (const contribs of [inTransitContribs, readyToShipContribs, advancesContribs]) {
     for (const c of contribs) {
       if (c.productId === "none") continue // «Без распределения» — оставляем как есть
       const meta = productMetaMap.get(c.productId)
@@ -763,11 +781,22 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     return line
   })
 
-  // "Товар в пути из Китая" строка с drill-down children
-  const inTransitChildren = buildProductTree("stock-in-transit-china", inTransitContribs, productMetaMap)
+  // 260704-fzt: «Товар готовый к отгрузке» (SHIPMENT) — всегда push (даже при total=0)
+  const readyToShipChildren = buildProductTree("stock-ready-to-ship", readyToShipContribs, productMetaMap)
   stockLines.push({
-    key: "stock-in-transit-china",
-    label: "Товар в пути из Китая",
+    key: "stock-ready-to-ship",
+    label: "Товар готовый к отгрузке",
+    amountRub: round2(readyToShipTotal),
+    approximate: readyToShipApproximate || undefined,
+    ...(readyToShipChildren.length > 0 ? { children: readyToShipChildren } : {}),
+  })
+
+  // 260704-fzt: key/label переименованы (ключ теперь stock-in-transit, label «Товар в пути»)
+  // Строка ВСЕГДА push-ается (даже при total=0), как прочие складские строки — инвариант таблицы
+  const inTransitChildren = buildProductTree("stock-in-transit", inTransitContribs, productMetaMap)
+  stockLines.push({
+    key: "stock-in-transit",
+    label: "Товар в пути",
     amountRub: round2(inTransitTotal),
     approximate: inTransitApproximate || undefined,
     ...(inTransitChildren.length > 0 ? { children: inTransitChildren } : {}),

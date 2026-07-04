@@ -314,7 +314,8 @@ describe("loadBalanceSheet — assembly (24-05)", () => {
     expect(rec.lines).toHaveLength(1)
     expect(rec.lines.find((l) => l.key === "receivables-wb")!.amountRub).toBeCloseTo(5000, 2)
 
-    // Запасы: WB_WAREHOUSE 1000 (= 600 + 400) + прочие локации 0 + "в пути из Китая" 1000 = 2000
+    // Запасы: WB_WAREHOUSE 1000 (= 600 + 400) + готов к отгрузке 1000 (purch-transit SHIPMENT)
+    //         + в пути 0 (нет TRANSIT-закупки в фикстуре) = 2000
     // (purch-warehouse-excluded НЕ учитывается — B2; unvalued-строка IVANOVO не входит в сумму — D-11)
     expect(sheet.assets.groups.find((g) => g.key === "inventory")!.subtotalRub).toBeCloseTo(2000, 2)
 
@@ -401,15 +402,32 @@ describe("drill-down children (260704-cvz)", () => {
     expect(stockWb.children!.length).toBeGreaterThan(0)
   })
 
-  it("инвариант Σ листьев = amountRub для stock-in-transit-china", async () => {
+  // 260704-fzt: purch-transit имеет этап SHIPMENT → новая строка stock-ready-to-ship
+  it("инвариант Σ листьев = amountRub для stock-ready-to-ship (SHIPMENT)", async () => {
     const sheet = await loadBalanceSheet(ASOF)
 
     const inv = sheet.assets.groups.find((g) => g.key === "inventory")!
-    const transit = inv.lines.find((l) => l.key === "stock-in-transit-china")!
+    const readyToShip = inv.lines.find((l) => l.key === "stock-ready-to-ship")
+    expect(readyToShip).toBeDefined()
 
-    // purch-transit: 1000 ₽ → p1:600 + p3:400
-    expect(transit.amountRub).toBeCloseTo(1000, 2)
-    expect(sumLeaves(transit)).toBeCloseTo(transit.amountRub, 2)
+    // purch-transit: 1000 ₽, этап SHIPMENT → p1:600 + p3:400 (веса 6×100=600 и 4×100=400)
+    expect(readyToShip!.amountRub).toBeCloseTo(1000, 2)
+    expect(sumLeaves(readyToShip!)).toBeCloseTo(readyToShip!.amountRub, 2)
+    expect(readyToShip!.children).toBeDefined()
+  })
+
+  // 260704-fzt: stock-in-transit (ключ без -china); в фикстуре нет TRANSIT-закупки → amountRub=0
+  it("строка stock-in-transit существует с amountRub=0 (нет TRANSIT в фикстуре)", async () => {
+    const sheet = await loadBalanceSheet(ASOF)
+
+    const inv = sheet.assets.groups.find((g) => g.key === "inventory")!
+    const transit = inv.lines.find((l) => l.key === "stock-in-transit")
+    expect(transit).toBeDefined()
+
+    // Нет TRANSIT-закупки в фикстуре → 0
+    expect(transit!.amountRub).toBeCloseTo(0, 2)
+    // Инвариант Σлистьев === amountRub (0 = 0 тривиально, children отсутствуют)
+    expect(sumLeaves(transit!)).toBeCloseTo(transit!.amountRub, 2)
   })
 
   it("инвариант Σ листьев = amountRub для advances-suppliers", async () => {
