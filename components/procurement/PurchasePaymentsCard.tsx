@@ -25,6 +25,7 @@ export interface PaymentDraft {
   ordinal: number
   percent: number | null
   amount: number
+  amountRub: number | null // факт. оплачено ₽ (260704-go2)
   currency: string
   dueDate: string // yyyy-mm-dd
   paidDate: string | null // yyyy-mm-dd | null
@@ -153,6 +154,7 @@ export function PurchasePaymentsCard({
         ordinal: nextOrdinal,
         percent: null,
         amount: 0,
+        amountRub: null,
         currency,
         dueDate: todayInput(),
         paidDate: null,
@@ -178,6 +180,7 @@ export function PurchasePaymentsCard({
           ordinal: p.ordinal,
           percent: p.percent ?? null,
           amount: p.amount,
+          amountRub: p.amountRub ?? null,
           currency: p.currency,
           dueDate: p.dueDate,
           paidDate: p.paidDate ?? null,
@@ -261,7 +264,7 @@ export function PurchasePaymentsCard({
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className={`grid gap-2 ${p.currency !== "RUB" && p.currency !== "RUR" ? "grid-cols-2 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"}`}>
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] text-muted-foreground">Процент, %</label>
                   <input
@@ -288,12 +291,26 @@ export function PurchasePaymentsCard({
                     disabled={!canManage}
                     className={`${inputCls} text-right tabular-nums`}
                   />
-                  {rubEquivalent != null && (
-                    <span className="text-[11px] text-muted-foreground">
-                      ≈ {formatMoney(rubEquivalent)} ₽
-                    </span>
-                  )}
                 </div>
+                {p.currency !== "RUB" && p.currency !== "RUR" && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-muted-foreground">Оплачено ₽ (факт)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={p.amountRub ?? ""}
+                      onChange={(e) =>
+                        updatePayment(idx, {
+                          amountRub: e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                      disabled={!canManage}
+                      placeholder={rubEquivalent != null ? `≈ ${formatMoney(rubEquivalent)}` : undefined}
+                      className={`${inputCls} text-right tabular-nums`}
+                    />
+                  </div>
+                )}
                 <div className="flex flex-col gap-1">
                   <label className="text-[11px] text-muted-foreground">Дата платежа</label>
                   <input

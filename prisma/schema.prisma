@@ -1635,6 +1635,7 @@ model PurchasePayment {
   ordinal    Int
   percent    Decimal?      @db.Decimal(5, 2)
   amount     Decimal       @db.Decimal(14, 2)
+  amountRub  Decimal?      @db.Decimal(14, 2) // факт. оплачено, ₽ (валютные платежи; 260704-go2)
   currency   String
   dueDate    DateTime
   paidDate   DateTime?
