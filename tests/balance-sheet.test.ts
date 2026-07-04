@@ -247,12 +247,13 @@ beforeEach(() => {
   ] as unknown as never)
 
   // ── product.findMany мок (новый вызов для drill-down, 260704-cvz) ──────────
-  // p1 и p3 — в одной категории, разных подкатегориях
+  // p1 и p3 — одно направление, одна категория, разные подкатегории (260704: + brand.direction)
   vi.mocked(prisma.product.findMany).mockResolvedValueOnce([
     {
       id: "p1",
       sku: "УКТ-000001",
       name: "Товар 1",
+      brand: { direction: { id: "dir-1", name: "Направление 1" } },
       category: { id: "cat-a", name: "Категория А" },
       subcategory: { id: "sub-a1", name: "Подкатегория А1" },
     },
@@ -260,6 +261,7 @@ beforeEach(() => {
       id: "p3",
       sku: "УКТ-000003",
       name: "Товар 3",
+      brand: { direction: { id: "dir-1", name: "Направление 1" } },
       category: { id: "cat-a", name: "Категория А" },
       subcategory: { id: "sub-a2", name: "Подкатегория А2" },
     },
@@ -459,23 +461,30 @@ describe("drill-down children (260704-cvz)", () => {
     expect(bankRub.children![1].amountRub).toBeCloseTo(40000, 2)
   })
 
-  it("stock-wb-warehouse children (категории) отсортированы по убыванию amountRub", async () => {
+  it("stock-wb-warehouse дерево Направление→Категория→Подкатегория отсортировано desc на каждом уровне", async () => {
     const sheet = await loadBalanceSheet(ASOF)
 
     const inv = sheet.assets.groups.find((g) => g.key === "inventory")!
     const stockWb = inv.lines.find((l) => l.key === "stock-wb-warehouse")!
 
-    // p1 и p3 в одной категории → один категорийный узел (cat-a с суммой 1000)
-    // Инвариант Σ на уровне категорий
+    // Дерево: dir-1 (1000) → cat-a (1000) → [sub-a1(600), sub-a2(400)]
     expect(stockWb.children).toBeDefined()
-    assertSortedDesc(stockWb.children!)
-
-    // Проверяем сортировку на уровне подкатегорий (вложенно)
-    for (const catNode of stockWb.children!) {
-      if (catNode.children && catNode.children.length > 1) {
-        assertSortedDesc(catNode.children)
+    assertSortedDesc(stockWb.children!) // направления desc
+    for (const dirNode of stockWb.children!) {
+      assertSortedDesc(dirNode.children ?? []) // категории desc
+      for (const catNode of dirNode.children ?? []) {
+        if (catNode.children && catNode.children.length > 1) {
+          assertSortedDesc(catNode.children) // подкатегории desc
+        }
       }
     }
+
+    // Первый уровень — направление, ключ содержит /dir:
+    expect(stockWb.children![0].key).toContain("/dir:")
+    // sub-a1 (600) перед sub-a2 (400) внутри cat-a под dir-1
+    const catA = stockWb.children![0].children![0]
+    expect(catA.children![0].amountRub).toBeCloseTo(600, 2)
+    expect(catA.children![1].amountRub).toBeCloseTo(400, 2)
   })
 
   it("loans-balance дерево Кредитор→Кредит отсортировано desc", async () => {

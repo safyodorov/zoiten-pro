@@ -197,6 +197,8 @@ interface ProductContrib {
 
 /** Метаданные товара из общего product-lookup. */
 interface ProductMeta {
+  dirId: string
+  dirName: string | null
   catId: string
   catName: string | null
   subId: string
@@ -204,14 +206,14 @@ interface ProductMeta {
 }
 
 /**
- * Обобщённый билдер дерева Категория → Подкатегория → Товар.
- * Принимает parentKey и массив листовых вкладов, строит 3 уровня.
+ * Обобщённый билдер дерева Направление → Категория → Подкатегория → Товар.
+ * Принимает parentKey и массив листовых вкладов, строит 4 уровня.
  * Дети на КАЖДОМ уровне сортированы по убыванию amountRub.
- * Узлы «Без категории» / «Без подкатегории» / «Без распределения» поддерживаются.
+ * Узлы «Без направления»/«Без категории»/«Без подкатегории»/«Без распределения» поддерживаются.
  *
  * @param parentKey - ключ родительской строки баланса (например "stock-wb-warehouse")
  * @param contribs  - массив вкладов (productId может быть "none" для «Без распределения»)
- * @param metaMap   - Map из product.findMany: productId → {catId, catName, subId, subName}
+ * @param metaMap   - Map из product.findMany: productId → {dirId, dirName, catId, catName, subId, subName}
  */
 function buildProductTree(
   parentKey: string,
@@ -221,43 +223,56 @@ function buildProductTree(
   if (contribs.length === 0) return []
 
   // Агрегируем вклады по productId (может прийти несколько строк одного товара)
-  const byProduct = new Map<string, { label: string; amount: number; catId: string; catName: string | null; subId: string; subName: string | null }>()
+  const byProduct = new Map<
+    string,
+    { label: string; amount: number; dirId: string; dirName: string | null; catId: string; catName: string | null; subId: string; subName: string | null }
+  >()
   for (const c of contribs) {
     const existing = byProduct.get(c.productId)
     if (existing) {
       existing.amount = round2(existing.amount + c.amountRub)
-    } else {
+    } else if (c.productId === "none") {
       // Специальный случай: productId="none" → «Без распределения»
-      if (c.productId === "none") {
-        byProduct.set("none", {
-          label: c.productLabel,
-          amount: round2(c.amountRub),
-          catId: "none",
-          catName: null,
-          subId: "none",
-          subName: null,
-        })
-      } else {
-        const meta = metaMap.get(c.productId)
-        byProduct.set(c.productId, {
-          label: c.productLabel,
-          amount: round2(c.amountRub),
-          catId: meta?.catId ?? "none",
-          catName: meta?.catName ?? null,
-          subId: meta?.subId ?? "none",
-          subName: meta?.subName ?? null,
-        })
-      }
+      byProduct.set("none", {
+        label: c.productLabel,
+        amount: round2(c.amountRub),
+        dirId: "none",
+        dirName: null,
+        catId: "none",
+        catName: null,
+        subId: "none",
+        subName: null,
+      })
+    } else {
+      const meta = metaMap.get(c.productId)
+      byProduct.set(c.productId, {
+        label: c.productLabel,
+        amount: round2(c.amountRub),
+        dirId: meta?.dirId ?? "none",
+        dirName: meta?.dirName ?? null,
+        catId: meta?.catId ?? "none",
+        catName: meta?.catName ?? null,
+        subId: meta?.subId ?? "none",
+        subName: meta?.subName ?? null,
+      })
     }
   }
 
-  // Группируем по категории → подкатегории
-  const byCat = new Map<string, { name: string | null; subs: Map<string, { name: string | null; products: Map<string, { label: string; amount: number }> }> }>()
+  // Группируем по направлению → категории → подкатегории
+  const byDir = new Map<
+    string,
+    { name: string | null; cats: Map<string, { name: string | null; subs: Map<string, { name: string | null; products: Map<string, { label: string; amount: number }> }> }> }
+  >()
   for (const [productId, info] of byProduct) {
-    let catEntry = byCat.get(info.catId)
+    let dirEntry = byDir.get(info.dirId)
+    if (!dirEntry) {
+      dirEntry = { name: info.dirName, cats: new Map() }
+      byDir.set(info.dirId, dirEntry)
+    }
+    let catEntry = dirEntry.cats.get(info.catId)
     if (!catEntry) {
       catEntry = { name: info.catName, subs: new Map() }
-      byCat.set(info.catId, catEntry)
+      dirEntry.cats.set(info.catId, catEntry)
     }
     let subEntry = catEntry.subs.get(info.subId)
     if (!subEntry) {
@@ -267,49 +282,57 @@ function buildProductTree(
     subEntry.products.set(productId, { label: info.label, amount: info.amount })
   }
 
-  // Строим дерево BalanceLine[]
-  const catNodes: BalanceLine[] = []
-  for (const [catId, catInfo] of byCat) {
-    const catKey = `${parentKey}/cat:${catId}`
-    const subNodes: BalanceLine[] = []
+  // Строим дерево BalanceLine[]: Направление → Категория → Подкатегория → Товар
+  const dirNodes: BalanceLine[] = []
+  for (const [dirId, dirInfo] of byDir) {
+    const dirKey = `${parentKey}/dir:${dirId}`
+    const catNodes: BalanceLine[] = []
 
-    for (const [subId, subInfo] of catInfo.subs) {
-      const subKey = `${catKey}/sub:${subId}`
-      const prodNodes: BalanceLine[] = []
+    for (const [catId, catInfo] of dirInfo.cats) {
+      const catKey = `${dirKey}/cat:${catId}`
+      const subNodes: BalanceLine[] = []
 
-      for (const [productId, prodInfo] of subInfo.products) {
-        prodNodes.push({
-          key: `${subKey}/prod:${productId}`,
-          label: prodInfo.label,
-          amountRub: prodInfo.amount,
+      for (const [subId, subInfo] of catInfo.subs) {
+        const subKey = `${catKey}/sub:${subId}`
+        const prodNodes: BalanceLine[] = []
+
+        for (const [productId, prodInfo] of subInfo.products) {
+          prodNodes.push({
+            key: `${subKey}/prod:${productId}`,
+            label: prodInfo.label,
+            amountRub: prodInfo.amount,
+          })
+        }
+        prodNodes.sort((a, b) => b.amountRub - a.amountRub) // товары desc
+        const subAmount = round2(prodNodes.reduce((s, p) => s + p.amountRub, 0))
+        subNodes.push({
+          key: subKey,
+          label: subInfo.name ?? "Без подкатегории",
+          amountRub: subAmount,
+          children: prodNodes,
         })
       }
-      // Сортировка товаров по убыванию суммы
-      prodNodes.sort((a, b) => b.amountRub - a.amountRub)
-
-      const subAmount = round2(prodNodes.reduce((s, p) => s + p.amountRub, 0))
-      subNodes.push({
-        key: subKey,
-        label: subInfo.name ?? "Без подкатегории",
-        amountRub: subAmount,
-        children: prodNodes,
+      subNodes.sort((a, b) => b.amountRub - a.amountRub) // подкатегории desc
+      const catAmount = round2(subNodes.reduce((s, s2) => s + s2.amountRub, 0))
+      catNodes.push({
+        key: catKey,
+        label: catInfo.name ?? "Без категории",
+        amountRub: catAmount,
+        children: subNodes,
       })
     }
-    // Сортировка подкатегорий по убыванию суммы
-    subNodes.sort((a, b) => b.amountRub - a.amountRub)
-
-    const catAmount = round2(subNodes.reduce((s, s2) => s + s2.amountRub, 0))
-    catNodes.push({
-      key: catKey,
-      label: catInfo.name ?? "Без категории",
-      amountRub: catAmount,
-      children: subNodes,
+    catNodes.sort((a, b) => b.amountRub - a.amountRub) // категории desc
+    const dirAmount = round2(catNodes.reduce((s, c) => s + c.amountRub, 0))
+    dirNodes.push({
+      key: dirKey,
+      label: dirInfo.name ?? "Без направления",
+      amountRub: dirAmount,
+      children: catNodes,
     })
   }
-  // Сортировка категорий по убыванию суммы
-  catNodes.sort((a, b) => b.amountRub - a.amountRub)
+  dirNodes.sort((a, b) => b.amountRub - a.amountRub) // направления desc
 
-  return catNodes
+  return dirNodes
 }
 
 // ── loadBalanceSheet ──────────────────────────────────────────────────────────
@@ -690,6 +713,7 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
       id: true,
       sku: true,
       name: true,
+      brand: { select: { direction: { select: { id: true, name: true } } } },
       category: { select: { id: true, name: true } },
       subcategory: { select: { id: true, name: true } },
     },
@@ -698,6 +722,8 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     productMetaRows.map((p) => [
       p.id,
       {
+        dirId: p.brand?.direction?.id ?? "none",
+        dirName: p.brand?.direction?.name ?? null,
         catId: p.category?.id ?? "none",
         catName: p.category?.name ?? null,
         subId: p.subcategory?.id ?? "none",
