@@ -591,13 +591,13 @@ Plans:
 
 ⚠ Этапы 3–5 деплоить **плотной серией**, первую версию зафиксировать в день деплоя этапа 5 (минимизация unconstrained-зоны прошлого — §6.1 доки).
 
-**Plans:** 3/10 plans executed
+**Plans:** 4/10 plans executed
 
 Plans:
 - [x] 25-00-PLAN.md — Wave 0: 7 RED тест-стабов движка (engine/arrivals/iu/date-buckets/plan-fact/virtual/pdds-feed) + golden ИУ 438 068 120 ₽
 - [x] 25-01-PLAN.md — Wave 1 (Этап 1): [BLOCKING] рукописная миграция 20260705_sales_plan_v2 (5 таблиц + enum + Purchase.plannedArrivalDate + back-relations + сид 9 AppSetting) + schema.prisma
 - [x] 25-02-PLAN.md — Wave 1 (Этап 1): pure-ядро движка (date-buckets 6 бакетов + types/dates/iu/arrivals/engine) → 4 стаба GREEN
-- [ ] 25-03-PLAN.md — Wave 2 (Этап 1): data-loader (loadSalesPlanInputs/loadFactDaily, DI) + bootstrap-скрипт миграции старых overrides
+- [x] 25-03-PLAN.md — Wave 2 (Этап 1): data-loader (loadSalesPlanInputs/loadFactDaily, DI) + bootstrap-скрипт миграции старых overrides
 - [ ] 25-05-PLAN.md — Wave 3 (Этап 2): Товары actions (saveMonthLevels/scale/saveDayOverrides/params/model/getProductPlanDays, все SALES MANAGE) + плановая дата прихода в карточке закупки
 - [ ] 25-04-PLAN.md — Wave 4 (Этап 2): Товары UI (Tabs/Filters/ModelParamsBar/IncomingBadges/ProductPlanTable/Cell/Dialog + RSC page + section-titles) — realtime «Сток(расч)»
 - [ ] 25-06-PLAN.md — Wave 5 (Этап 3): Сводный (plan-fact движок → GREEN + PlanFactControls/SummaryCards/Chart/Matrix + переработка page; IU_REMAINING_RUB/DEFAULT_END_DATE удалены)
