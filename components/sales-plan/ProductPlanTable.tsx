@@ -1,0 +1,620 @@
+"use client"
+
+import { useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+import Image from "next/image"
+import { RotateCcw, Calculator, Scale } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { TableBody, TableCell, TableRow } from "@/components/ui/table"
+import { IncomingBadges, IncomingBadgesLegend } from "./IncomingBadges"
+import { ProductPlanCell } from "./ProductPlanCell"
+import { ProductPlanDialog } from "./ProductPlanDialog"
+import { saveMonthLevels, scaleMonthLevels } from "@/app/actions/sales-plan"
+import type { ProductPlanResult, ArrivalBatch } from "@/lib/sales-plan/types"
+
+// ── Форматирование чисел (паттерн SalesForecastTable) ──────────────────────────
+
+function fmtNum(n: number, digits = 0): string {
+  return n.toLocaleString("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })
+}
+
+function fmtAdaptive(n: number): string {
+  return Math.abs(n) >= 2 ? fmtNum(Math.round(n), 0) : fmtNum(n, 1)
+}
+
+function fmtRub(n: number): string {
+  if (Math.abs(n) >= 1_000_000) {
+    return `${(n / 1_000_000).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} М`
+  }
+  if (Math.abs(n) >= 10_000) {
+    return `${(n / 1_000).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} К`
+  }
+  return fmtNum(Math.round(n))
+}
+
+function fmtPct(n: number): string {
+  return (n * 100).toFixed(1) + "%"
+}
+
+// ── Типы ──────────────────────────────────────────────────────────────────────
+
+// Сериализуемые факт-данные (Map→объект для RSC→client границы)
+type FactMonthByProduct = Record<string, Record<string, {
+  buyoutsRub: number
+  ordersRub: number
+  buyoutsUnits: number
+  ordersUnits: number
+}>>
+
+interface ProductRow {
+  productId: string
+  sku: string
+  name: string
+  photoUrl: string | null
+  stockNow: number
+  baselineOrdersPerDay: number
+  avgPriceRub: number
+  // monthLevels как запись для быстрого lookup: month → targetOrdersPerDay
+  currentLevels: Record<string, number | null>
+  // dayOverrides месяца → маркер •д
+  dayOverrideMonths: string[]
+  arrivals: ArrivalBatch[]
+  planResult: ProductPlanResult
+}
+
+type Mode = "compare" | "edit"
+
+interface ProductPlanTableProps {
+  products: ProductRow[]
+  months: string[]        // ["2026-07-01", ..., "2026-12-01"]
+  mode: Mode
+  readOnly: boolean
+  factByProduct: FactMonthByProduct
+  today: string
+}
+
+// ── Sticky-константы ──────────────────────────────────────────────────────────
+
+const STICKY_TH = "sticky top-0 z-20 bg-background border-b text-xs px-2 h-8 align-middle whitespace-nowrap font-medium"
+const STICKY_TD = "sticky z-10 bg-background border-r text-xs px-2 align-middle"
+const MONTH_LABEL: Record<string, string> = {
+  "2026-07-01": "Июл", "2026-08-01": "Авг", "2026-09-01": "Сен",
+  "2026-10-01": "Окт", "2026-11-01": "Ноя", "2026-12-01": "Дек",
+}
+
+function monthLabel(m: string): string {
+  return MONTH_LABEL[m] ?? m.slice(0, 7)
+}
+
+function daysInMonth(monthIso: string): number {
+  const [y, mo] = monthIso.split("-").map(Number)
+  return new Date(y, mo, 0).getDate()
+}
+
+// Агрегат факта по месяцу для товара
+function getMonthFact(
+  factByProduct: FactMonthByProduct,
+  productId: string,
+  monthIso: string,
+): { buyoutsRub: number; buyoutsUnits: number } | null {
+  const byDate = factByProduct[productId]
+  if (!byDate) return null
+  let buyoutsRub = 0, buyoutsUnits = 0, hasData = false
+  const prefix = monthIso.slice(0, 7)
+  for (const [date, row] of Object.entries(byDate)) {
+    if (date.startsWith(prefix)) {
+      buyoutsRub += row.buyoutsRub
+      buyoutsUnits += row.buyoutsUnits
+      hasData = true
+    }
+  }
+  return hasData ? { buyoutsRub, buyoutsUnits } : null
+}
+
+// ── ProductPlanTable ──────────────────────────────────────────────────────────
+
+export function ProductPlanTable({
+  products,
+  months,
+  mode,
+  readOnly,
+  factByProduct,
+  today,
+}: ProductPlanTableProps) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  // Bulk-drafts: Record<productId, Record<month, string>>
+  const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({})
+
+  // Диалог
+  const [dialogProductId, setDialogProductId] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  // Scale месяца
+  const [scaleDialogOpen, setScaleDialogOpen] = useState(false)
+  const [scaleMonth, setScaleMonth] = useState<string | null>(null)
+  const [scaleFactor, setScaleFactor] = useState("1.1")
+  const [isScaling, startScaleTransition] = useTransition()
+
+  // Подсчёт изменившихся ячеек (pending changed count)
+  const pendingChangedCount = useMemo(() => {
+    let cnt = 0
+    for (const [pid, monthDrafts] of Object.entries(drafts)) {
+      const product = products.find((p) => p.productId === pid)
+      if (!product) continue
+      for (const [month, txt] of Object.entries(monthDrafts)) {
+        const parsed = txt.trim() === "" ? null : parseFloat(txt.replace(",", "."))
+        const cur = product.currentLevels[month] ?? null
+        if (parsed === null && cur === null) continue
+        if (parsed === null && cur !== null) { cnt++; continue }
+        if (parsed !== null && cur === null) { cnt++; continue }
+        if (parsed !== null && cur !== null && Math.abs(parsed - cur) > 1e-6) cnt++
+      }
+    }
+    return cnt
+  }, [drafts, products])
+
+  function setDraft(pid: string, month: string, value: string) {
+    setDrafts((prev) => ({
+      ...prev,
+      [pid]: { ...(prev[pid] ?? {}), [month]: value },
+    }))
+  }
+
+  function clearDraft(pid: string, month: string) {
+    setDrafts((prev) => ({
+      ...prev,
+      [pid]: { ...(prev[pid] ?? {}), [month]: "" },
+    }))
+  }
+
+  // «Пересчитать план (N)»
+  function applyRecalc() {
+    const payload: Array<{
+      productId: string
+      month: string
+      targetOrdersPerDay: number | null
+      priceRub: number | null
+      buyoutPct: number | null
+    }> = []
+
+    for (const [pid, monthDrafts] of Object.entries(drafts)) {
+      for (const [month, txt] of Object.entries(monthDrafts)) {
+        const trimmed = txt.trim().replace(",", ".")
+        const parsed = trimmed === "" ? null : parseFloat(trimmed)
+        const targetOrdersPerDay = parsed !== null && Number.isFinite(parsed) && parsed >= 0
+          ? parsed
+          : null
+
+        payload.push({
+          productId: pid,
+          month,
+          targetOrdersPerDay,
+          priceRub: null,
+          buyoutPct: null,
+        })
+      }
+    }
+
+    if (payload.length === 0) return
+
+    startTransition(async () => {
+      const r = await saveMonthLevels(payload)
+      if (!r.ok) {
+        toast.error(r.error || "Не удалось сохранить")
+        return
+      }
+      router.refresh()
+      setDrafts({})
+    })
+  }
+
+  // «Масштабировать месяц»
+  function handleScale() {
+    if (!scaleMonth) return
+    const factor = parseFloat(scaleFactor.replace(",", "."))
+    if (!Number.isFinite(factor) || factor <= 0) {
+      toast.error("Введите корректный коэффициент")
+      return
+    }
+
+    startScaleTransition(async () => {
+      const r = await scaleMonthLevels({ month: scaleMonth, factor })
+      if (!r.ok) {
+        toast.error(r.error || "Не удалось масштабировать")
+        return
+      }
+      toast.success(
+        `Масштабировано: ${r.scaledCount ?? 0} с уровнем, ${r.materializedCount ?? 0} материализовано из baseline`,
+      )
+      setScaleDialogOpen(false)
+      setScaleMonth(null)
+      router.refresh()
+    })
+  }
+
+  // Итоги по строкам
+  const totals = useMemo(() => {
+    const byMonth: Record<string, { planRub: number; factRub: number }> = {}
+    let totalPlanRub = 0, totalFactRub = 0
+
+    for (const p of products) {
+      for (const month of months) {
+        const mt = p.planResult.monthTotals.find((t) => t.month === month)
+        const planRub = mt ? mt.buyoutsRub : 0
+        const factRow = getMonthFact(factByProduct, p.productId, month)
+        const factRub = factRow?.buyoutsRub ?? 0
+
+        if (!byMonth[month]) byMonth[month] = { planRub: 0, factRub: 0 }
+        byMonth[month].planRub += planRub
+        byMonth[month].factRub += factRub
+        totalPlanRub += planRub
+        totalFactRub += factRub
+      }
+    }
+    return { byMonth, totalPlanRub, totalFactRub }
+  }, [products, months, factByProduct])
+
+  const isEditMode = mode === "edit"
+
+  // Открыть диалог товара
+  function openDialog(productId: string) {
+    setDialogProductId(productId)
+    setDialogOpen(true)
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Тулбар */}
+      <div className="flex items-center gap-2 py-2 flex-wrap border-b px-2">
+        {isEditMode && !readOnly && (
+          <>
+            <Button
+              size="sm"
+              disabled={pendingChangedCount === 0 || isPending}
+              onClick={applyRecalc}
+              className="gap-1.5"
+            >
+              <Calculator className="h-4 w-4" />
+              Пересчитать план{pendingChangedCount > 0 ? ` (${pendingChangedCount})` : ""}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={pendingChangedCount === 0 || isPending}
+              onClick={() => setDrafts({})}
+              className="gap-1.5"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Отменить правки
+            </Button>
+          </>
+        )}
+        {!readOnly && (
+          <div className="flex items-center gap-1 ml-auto">
+            <span className="text-xs text-muted-foreground">Масштабировать:</span>
+            {months.map((m) => (
+              <Button
+                key={m}
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs gap-1"
+                onClick={() => {
+                  setScaleMonth(m)
+                  setScaleFactor("1.1")
+                  setScaleDialogOpen(true)
+                }}
+              >
+                <Scale className="h-3 w-3" />
+                {monthLabel(m)}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Таблица */}
+      <div className="overflow-auto flex-1 min-h-0">
+        <table className="w-full border-separate border-spacing-0">
+          <thead className="bg-background">
+            <tr>
+              {/* Sticky-left: Фото */}
+              <th
+                className={`${STICKY_TH} sticky left-0 z-30 border-r`}
+                style={{ width: 60, minWidth: 60 }}
+              >
+                Фото
+              </th>
+              {/* Sticky: SKU */}
+              <th
+                className={`${STICKY_TH} sticky border-r`}
+                style={{ left: 60, width: 90, minWidth: 90 }}
+              >
+                SKU
+              </th>
+              {/* Sticky: Название */}
+              <th
+                className={`${STICKY_TH} sticky border-r`}
+                style={{ left: 150, width: 200, minWidth: 200 }}
+              >
+                Название
+              </th>
+              {/* Sticky: Приходы */}
+              <th
+                className={`${STICKY_TH} sticky border-r`}
+                style={{ left: 350, width: 140, minWidth: 140 }}
+              >
+                Приходы
+              </th>
+              {/* Сток */}
+              <th className={`${STICKY_TH} text-right border-r`} style={{ width: 70 }}>Сток</th>
+              {/* Месяцы */}
+              {months.map((m) => (
+                <th
+                  key={m}
+                  className={`${STICKY_TH} text-center border-r`}
+                  style={{ width: 110, minWidth: 100 }}
+                >
+                  {monthLabel(m)}
+                  <span className="ml-1 text-[10px] text-muted-foreground">
+                    {daysInMonth(m)} дн
+                  </span>
+                </th>
+              ))}
+              {/* Итог */}
+              <th className={`${STICKY_TH} text-right`} style={{ width: 100 }}>Итог ₽</th>
+            </tr>
+          </thead>
+          <TableBody>
+            {products.map((p) => {
+              const totalRub = p.planResult.monthTotals.reduce((s, t) => s + t.buyoutsRub, 0)
+
+              return (
+                <TableRow
+                  key={p.productId}
+                  className="cursor-pointer group"
+                  onClick={() => openDialog(p.productId)}
+                >
+                  {/* Фото */}
+                  <TableCell
+                    className={`${STICKY_TD} left-0 border-r w-[60px] p-1`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {p.photoUrl ? (
+                      <Image
+                        src={p.photoUrl}
+                        alt={p.name}
+                        width={40}
+                        height={54}
+                        className="object-cover rounded w-10 h-14"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-10 h-14 rounded bg-muted" />
+                    )}
+                  </TableCell>
+                  {/* SKU */}
+                  <TableCell
+                    className={`${STICKY_TD} border-r font-mono text-xs`}
+                    style={{ left: 60 }}
+                  >
+                    {p.sku}
+                  </TableCell>
+                  {/* Название */}
+                  <TableCell
+                    className={`${STICKY_TD} border-r`}
+                    style={{ left: 150 }}
+                  >
+                    <span className="text-xs line-clamp-2">{p.name}</span>
+                  </TableCell>
+                  {/* Приходы */}
+                  <TableCell
+                    className={`${STICKY_TD} border-r`}
+                    style={{ left: 350 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <IncomingBadges arrivals={p.arrivals} />
+                  </TableCell>
+                  {/* Сток */}
+                  <TableCell className="text-right text-xs tabular-nums px-2 border-r">
+                    {p.stockNow}
+                  </TableCell>
+                  {/* Месяцы */}
+                  {months.map((month) => {
+                    const mt = p.planResult.monthTotals.find((t) => t.month === month)
+                    const planRub = mt?.buyoutsRub ?? 0
+                    const planUnits = mt?.buyoutsUnits ?? 0
+                    const factRow = getMonthFact(factByProduct, p.productId, month)
+                    const isPast = month < today.slice(0, 8) + "01"
+                    const isCurrent = month.slice(0, 7) === today.slice(0, 7)
+                    const hasFactData = isPast || isCurrent
+                    const pct = planRub > 0 && factRow
+                      ? (factRow.buyoutsRub - planRub) / planRub
+                      : null
+                    const hasDayOverrides = p.dayOverrideMonths.includes(month)
+                    const currentLevel = p.currentLevels[month] ?? null
+                    const draftVal = drafts[p.productId]?.[month]
+
+                    return (
+                      <TableCell
+                        key={month}
+                        className="text-right px-2 border-r align-top py-1"
+                        onClick={(e) => {
+                          if (isEditMode) e.stopPropagation()
+                        }}
+                      >
+                        {isEditMode && !readOnly ? (
+                          <ProductPlanCell
+                            productId={p.productId}
+                            month={month}
+                            value={
+                              draftVal !== undefined && draftVal.trim() !== ""
+                                ? (parseFloat(draftVal.replace(",", ".")) || null)
+                                : currentLevel
+                            }
+                            baseline={p.baselineOrdersPerDay}
+                            readOnly={false}
+                            hasDayOverrides={hasDayOverrides}
+                            avgPriceRub={p.avgPriceRub}
+                            onChange={(draft) => setDraft(p.productId, month, draft)}
+                            onClear={() => clearDraft(p.productId, month)}
+                          />
+                        ) : (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-sm tabular-nums whitespace-nowrap">
+                              П {fmtRub(planRub)}
+                              {hasDayOverrides && (
+                                <span className="ml-0.5 text-[10px] text-primary" title="Есть дневные правки">•д</span>
+                              )}
+                            </span>
+                            {hasFactData && factRow && (
+                              <span className="text-xs tabular-nums text-muted-foreground whitespace-nowrap">
+                                Ф {fmtRub(factRow.buyoutsRub)}
+                              </span>
+                            )}
+                            {pct !== null && (
+                              <span
+                                className={`text-[10px] tabular-nums ${
+                                  pct >= 0
+                                    ? "text-emerald-600"
+                                    : pct >= -0.05
+                                    ? "text-amber-500"
+                                    : "text-red-500"
+                                }`}
+                              >
+                                {pct >= 0 ? "+" : ""}{fmtPct(pct)}
+                              </span>
+                            )}
+                            {!hasFactData && (
+                              <span className="text-[10px] text-muted-foreground">
+                                ≈ {fmtAdaptive(planUnits)} шт
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                    )
+                  })}
+                  {/* Итог */}
+                  <TableCell className="text-right tabular-nums text-sm px-2">
+                    {fmtRub(totalRub)}
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+          <tfoot>
+            <tr className="sticky bottom-0 bg-muted border-t">
+              <td
+                colSpan={4}
+                className="sticky left-0 bg-muted px-2 h-8 text-xs font-semibold"
+                style={{ minWidth: 490 }}
+              >
+                Итого
+              </td>
+              <td className="text-right tabular-nums text-xs px-2 border-r font-medium">
+                {products.reduce((s, p) => s + p.stockNow, 0)}
+              </td>
+              {months.map((m) => {
+                const t = totals.byMonth[m] ?? { planRub: 0, factRub: 0 }
+                return (
+                  <td key={m} className="text-right px-2 border-r">
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="text-xs font-semibold tabular-nums whitespace-nowrap">
+                        {fmtRub(t.planRub)}
+                      </span>
+                      {t.factRub > 0 && (
+                        <span className="text-[10px] text-muted-foreground tabular-nums">
+                          Ф {fmtRub(t.factRub)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                )
+              })}
+              <td className="text-right tabular-nums text-xs font-semibold px-2">
+                {fmtRub(totals.totalPlanRub)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* Легенда */}
+      <div className="border-t px-4 py-2">
+        <IncomingBadgesLegend />
+      </div>
+
+      {/* Диалог товара */}
+      {dialogProductId && (
+        <ProductPlanDialog
+          productId={dialogProductId}
+          productName={products.find((p) => p.productId === dialogProductId)?.name ?? ""}
+          productSku={products.find((p) => p.productId === dialogProductId)?.sku ?? ""}
+          months={months}
+          readOnly={readOnly}
+          open={dialogOpen}
+          onOpenChange={(open) => {
+            setDialogOpen(open)
+            if (!open) {
+              // Обновляем данные после закрытия если были изменения
+            }
+          }}
+          today={today}
+        />
+      )}
+
+      {/* Диалог масштабирования */}
+      {scaleDialogOpen && scaleMonth && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg border shadow-xl p-6 max-w-sm w-full">
+            <h3 className="font-semibold mb-4">
+              Масштабировать {monthLabel(scaleMonth)} {scaleMonth.slice(0, 4)}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-muted-foreground block mb-1">
+                  Коэффициент (например 1.1 = +10%)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={scaleFactor}
+                  onChange={(e) => setScaleFactor(e.target.value)}
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm tabular-nums"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Товары с ручным уровнем — умножаются на коэффициент.
+                Товары без уровня (авто) — материализуются из baseline × коэффициент.
+                Дневные правки месяца не изменяются.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScaleDialogOpen(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={isScaling}
+                  onClick={handleScale}
+                >
+                  Масштабировать
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
