@@ -41,6 +41,29 @@ export function ratePerUnit(valute: CbrValute): number {
 }
 
 /**
+ * Курсы ЦБ РФ за КОНКРЕТНУЮ дату через архивный эндпоинт cbr-xml-daily.ru.
+ * Используется для бэкфилла исторических курсов (260704-fzt).
+ *
+ * URL: https://www.cbr-xml-daily.ru/archive/YYYY/MM/DD/daily_json.js
+ * Формат ответа идентичен daily_json.js — переиспользуем CbrResponse/CbrValute.
+ * На !res.ok (404 — выходной, праздник, дата слишком ранняя) возвращает null
+ * (не бросает), чтобы скрипт бэкфилла мог спокойно пропустить дату.
+ */
+export async function fetchCbrRatesForDate(date: Date): Promise<CbrResponse | null> {
+  const yyyy = date.getUTCFullYear()
+  const mm = String(date.getUTCMonth() + 1).padStart(2, "0")
+  const dd = String(date.getUTCDate()).padStart(2, "0")
+  const url = `https://www.cbr-xml-daily.ru/archive/${yyyy}/${mm}/${dd}/daily_json.js`
+
+  const res = await fetch(url, { cache: "no-store" })
+  if (!res.ok) {
+    // 404 = нет курса за эту дату (выходной/праздник) — нормальная ситуация
+    return null
+  }
+  return res.json() as Promise<CbrResponse>
+}
+
+/**
  * Fallback: последняя сохранённая запись курса для кода валюты.
  * Используется когда сегодняшнего курса ещё нет (выходные/праздники ЦБ РФ).
  */
