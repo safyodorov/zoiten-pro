@@ -263,10 +263,15 @@ export function VirtualPurchasesTable({
   const acceptedIds = accepted.map((r) => r.id)
 
   if (rows.length === 0) {
+    const emptyText =
+      statusFilter === "suggested" ? "Предложений нет"
+      : statusFilter === "accepted" ? "Нет подтверждённых закупок"
+      : statusFilter === "dismissed" ? "Нет отклонённых"
+      : "Виртуальных закупок нет"
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          Предложений нет
+          {emptyText}
         </div>
         <HowItWorksDetails />
       </div>
@@ -308,7 +313,7 @@ export function VirtualPurchasesTable({
                   {/* all-select checkbox — covered per-section */}
                 </th>
               )}
-              <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left whitespace-nowrap font-medium text-xs text-muted-foreground">УКТ</th>
+              <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left whitespace-nowrap font-medium text-xs text-muted-foreground">SKU</th>
               <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left font-medium text-xs text-muted-foreground">Название</th>
               <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right whitespace-nowrap font-medium text-xs text-muted-foreground">Сток</th>
               <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right whitespace-nowrap font-medium text-xs text-muted-foreground">План шт/д</th>

@@ -470,6 +470,13 @@ export function ProductPlanTable({
             </tr>
           </thead>
           <TableBody>
+            {products.length === 0 && (
+              <tr>
+                <td colSpan={8 + months.length} className="py-12 text-center text-sm text-muted-foreground">
+                  Нет товаров по выбранным фильтрам
+                </td>
+              </tr>
+            )}
             {products.map((p) => {
               const totalRub = p.planResult.monthTotals.reduce((s, t) => s + t.buyoutsRub, 0)
 
@@ -526,9 +533,9 @@ export function ProductPlanTable({
                               router.refresh()
                             })
                           }}
-                          className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded p-0.5"
+                          className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded p-1"
                         >
-                          <Eraser className="h-3 w-3" />
+                          <Eraser className="h-3.5 w-3.5" />
                         </button>
                       )}
                     </div>

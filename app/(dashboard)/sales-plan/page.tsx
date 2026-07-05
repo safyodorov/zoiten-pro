@@ -438,7 +438,7 @@ export default async function SalesPlanPage({
   )
 
   return (
-    <div className="h-full flex flex-col gap-4 min-h-0">
+    <div className="flex flex-col h-full gap-3 p-4 min-h-0">
       {/* Табы */}
       <SalesPlanTabs />
 

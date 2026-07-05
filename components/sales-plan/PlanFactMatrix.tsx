@@ -155,7 +155,7 @@ export function PlanFactMatrix({
   const footerNote =
     metric === "buyouts-rub" || metric === "buyouts-units"
       ? "Факт = Фактический оборот = выкупы − возвраты по дате реализации (Statistics Sales API), цена продавца до СПП. Совпадает с «Фактическим оборотом» кабинета WB. Свежие дни (позже today−2) дозаполняются."
-      : "Факт включает 73 артикула WB без привязки к товарам (~13,2 М ₽/мес по заказам, ~6%)"
+      : "Факт включает артикулы WB без привязки к товарам"
 
   return (
     <div className="rounded-md border bg-card overflow-hidden">
@@ -304,7 +304,7 @@ export function PlanFactMatrix({
                     className={cn(STICKY_BASE, "bg-muted font-semibold text-foreground/70")}
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                   >
-                    ИУ (438,1 М ₽ на H2)
+                    ИУ-план
                   </td>
                   {columns.map((b, i) => (
                     <td key={b.key}
@@ -350,14 +350,14 @@ export function PlanFactMatrix({
                   ))}
                 </tr>
 
-                {/* Выполнение ИУ % */}
+                {/* Откл. от ИУ % */}
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background pl-6")}
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                   >
                     <span className="text-muted-foreground mr-1">└</span>
-                    Выполнение ИУ, %
+                    Откл. от ИУ, %
                   </td>
                   {columns.map((b) => (
                     <td
@@ -403,7 +403,7 @@ export function PlanFactMatrix({
 
             {/* ── Раздел: «Вне плана» ── */}
             {columns.some((b) => b.unplannedRub != null) && (
-              <CollapsibleRow label="Вне плана (73 арт. без привязки)" colCount={colCount}>
+              <CollapsibleRow label="Вне плана (арт. без привязки)" colCount={colCount}>
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background pl-6")}

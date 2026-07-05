@@ -212,7 +212,7 @@ function SuggestedVirtualBadge({
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border border-dashed border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
       >
-        <span aria-hidden="true">⚠</span>
+        <span aria-hidden="true">◇</span>
         <span className="tabular-nums whitespace-nowrap">
           {formatDateShort(arrival.date)} ×{arrival.qty}
         </span>
@@ -226,7 +226,7 @@ function SuggestedVirtualBadge({
             aria-hidden="true"
           />
           <div className="absolute left-0 top-full mt-1 z-50 min-w-[200px] max-w-[280px] rounded-md border bg-popover p-3 shadow-md text-xs space-y-1.5">
-            <div className="font-medium text-foreground">Авто-предложение (⚠ учтена в плане)</div>
+            <div className="font-medium text-foreground">Авто-предложение (◇ учтена в плане)</div>
             <div className="text-muted-foreground">
               <span className="font-medium">Приход:</span>{" "}
               <span className="tabular-nums">{formatDateShort(arrival.date)}</span>
@@ -335,7 +335,7 @@ export function IncomingBadgesLegend() {
       </span>
       <span className="flex items-center gap-1">
         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-dashed border-amber-400 text-amber-700 dark:text-amber-400">
-          ⚠ DD.MM ×N
+          ◇ DD.MM ×N
         </span>
         авто-предложение (учтено в плане)
       </span>
