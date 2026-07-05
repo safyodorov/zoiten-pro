@@ -16,9 +16,13 @@ import { SalesPlanFilters } from "@/components/sales-plan/SalesPlanFilters"
 import { ModelParamsBar } from "@/components/sales-plan/ModelParamsBar"
 import { ProductPlanTable } from "@/components/sales-plan/ProductPlanTable"
 import type { ModelParams } from "@/lib/sales-plan/types"
-import { buttonVariants } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import { Pencil, Eye } from "lucide-react"
+
+// Статические классы кнопки (= buttonVariants({variant:"outline",size:"sm"})).
+// buttonVariants нельзя вызывать здесь: components/ui/button.tsx — "use client",
+// вызов client-функции из RSC падает в рантайме (Next.js client reference).
+const MODE_TOGGLE_BTN_CLASS =
+  "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-lg border text-[0.8rem] font-medium transition-all outline-none select-none h-7 gap-1.5 px-2.5 border-border bg-background hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
 
 // ── Горизонт H2-2026 ─────────────────────────────────────────────────────────
 
@@ -280,7 +284,7 @@ export default async function SalesPlanProductsPage({
         {canManage && !versionId && (
           <a
             href={modeToggleUrl}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
+            className={MODE_TOGGLE_BTN_CLASS}
           >
             {mode === "edit"
               ? <><Eye className="h-3.5 w-3.5" /> Просмотр</>
