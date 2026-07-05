@@ -262,14 +262,22 @@ export function suggestVirtualPurchases(input: VpSuggestInput): VpSuggestion[] {
       return false
     }
 
+    // Курсор поиска пробоя. КРИТИЧНО: следующий пробой ищем ПОСЛЕ прихода
+    // последней предложенной партии. Иначе для товара, уже сегодня в дефиците,
+    // пробой (< today+leadTime) не лечится приходом (clamp «не прошлым числом»)
+    // и каждая итерация предлагала бы одинаковую партию на ту же дату
+    // (инцидент 2026-07-05: несколько заказов с приходом 19.08 на один товар).
+    let minSearchDate = today
+
     for (let iteration = 0; iteration < maxIterationsPerProduct; iteration++) {
       // Симуляция с текущим набором arrivals
       const simDays = simulate(product, workArrivals, today, horizonTo)
 
-      // Нахождение breach: первый день, где projectedStock < safetyStockDays × rate
+      // Нахождение breach: первый день ≥ minSearchDate, где projectedStock < safetyStockDays × rate
       let breachIdx = -1
       for (let i = 0; i < simDays.length; i++) {
         const day = simDays[i]
+        if (day.date < minSearchDate) continue
         const safetyThreshold = safetyStockDays * day.rateRequested
         if (day.stockEnd < safetyThreshold) {
           breachIdx = i
@@ -331,6 +339,9 @@ export function suggestVirtualPurchases(input: VpSuggestInput): VpSuggestion[] {
 
       // Добавляем партию в workArrivals для следующей итерации (roll-forward)
       workArrivals.push({ date: expectedArrivalDate, qty })
+
+      // Следующий пробой ищем после прихода этой партии (товар в стоке с arrival+1)
+      minSearchDate = addDays(expectedArrivalDate, 1)
     }
   }
 

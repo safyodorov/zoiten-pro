@@ -190,6 +190,34 @@ describe("suggestVirtualPurchases — итеративный roll-forward", () =
     )
     expect(prod1Suggestions.length).toBeLessThanOrEqual(6)
   })
+
+  it("товар уже в дефиците сегодня → даты приходов СТРОГО возрастают (без дублей одной датой)", () => {
+    // Регрессия инцидента 2026-07-05: пробой ДО today+leadTime не лечится приходом
+    // (clamp «не прошлым числом») → каждая итерация предлагала одинаковую партию
+    // на ту же дату (несколько заказов с приходом 19.08 на один товар).
+    const input = {
+      params: DEFAULT_PARAMS,
+      products: [
+        makeProductInput({
+          stockNow: 0, // дефицит прямо сейчас
+          baselineOrdersPerDay: 5,
+        }),
+      ],
+    }
+    const suggestions = suggestVirtualPurchases(input)
+    const prod1 = suggestions.filter((s: { productId: string }) => s.productId === "prod-1")
+
+    expect(prod1.length).toBeGreaterThanOrEqual(1)
+    // Первый приход = today + leadTime (раньше стандартного цикла не приедет)
+    expect(prod1[0].expectedArrivalDate).toBe("2026-08-15") // 2026-07-01 + 45
+    // Даты приходов строго возрастают — никаких двух партий одной датой
+    for (let i = 1; i < prod1.length; i++) {
+      expect(prod1[i].expectedArrivalDate > prod1[i - 1].expectedArrivalDate).toBe(true)
+    }
+    // И следующая партия — только после исчерпания покрытия предыдущей (> arrival)
+    const uniqueDates = new Set(prod1.map((s) => s.expectedArrivalDate))
+    expect(uniqueDates.size).toBe(prod1.length)
+  })
 })
 
 describe("suggestVirtualPurchases — DISMISSED подавляет повторение", () => {
