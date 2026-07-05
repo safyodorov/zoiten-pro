@@ -17,7 +17,7 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
-import { suggestVirtualPurchases, rollForwardAcceptedArrivals } from "@/lib/sales-plan/virtual-purchases"
+import { suggestVirtualPurchases, rollForwardAcceptedArrivals, computeEffectiveOrderEnabled } from "@/lib/sales-plan/virtual-purchases"
 import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
 import { distributeMonthLevelForward } from "@/lib/sales-plan/distribute-forward"
@@ -951,6 +951,8 @@ export async function regenerateVirtualPurchasesInternal(productIds?: string[]):
         status: vp.status as "SUGGESTED" | "ACCEPTED" | "DISMISSED" | "CONVERTED",
       })),
       unitPrice: unitPriceByProduct.get(p.productId) ?? null,
+      // Phase 27: гейт «заказываем» — единый helper (T-27-01; инлайн-формула запрещена)
+      effectiveOrderEnabled: computeEffectiveOrderEnabled(p.abcStatus, p.orderEnabled),
     }))
 
     const suggestions = suggestVirtualPurchases({
@@ -1603,4 +1605,74 @@ async function getLeadTimeDays(
     }
   }
   return defaultVal
+}
+
+// ── Phase 27: updateProductAbcStatus ──────────────────────────────────────────
+
+/**
+ * Обновляет глобальный ABC-статус товара (Product.abcStatus) и регенерирует VP.
+ * C влияет на effectiveOrderEnabled → смена с/на C гасит или возобновляет виртуальные закупки.
+ * D-2: статус глобальный — виден везде (таблица товаров, карточки, prices/wb и т.д.).
+ * D-5: write требует SALES MANAGE; SUPERADMIN bypass через requireSection.
+ */
+const AbcStatusSchema = z.object({
+  productId: z.string().min(1),
+  status: z.enum(["A", "B", "C"]).nullable(),
+})
+
+export async function updateProductAbcStatus(
+  productId: string,
+  status: "A" | "B" | "C" | null,
+): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = AbcStatusSchema.safeParse({ productId, status })
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+  try {
+    await prisma.product.update({
+      where: { id: parsed.data.productId },
+      data: { abcStatus: parsed.data.status },
+    })
+    // C влияет на effectiveOrderEnabled → регенерируем VP по товару
+    await regenerateVirtualPurchasesInternal([parsed.data.productId])
+    revalidateSalesPlanPaths()
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (err) {
+    console.error("[updateProductAbcStatus]", err)
+    return { ok: false, error: "Не удалось обновить ABC-статус" }
+  }
+}
+
+// ── Phase 27: updateProductOrderEnabled ──────────────────────────────────────
+
+/**
+ * Обновляет глобальный флаг «заказываем» (Product.orderEnabled) и регенерирует VP.
+ * При false — SUGGESTED VP по товару удаляются (effectiveOrderEnabled=false → skip в suggester).
+ * D-5: write требует SALES MANAGE.
+ */
+const OrderEnabledSchema = z.object({
+  productId: z.string().min(1),
+  enabled: z.boolean(),
+})
+
+export async function updateProductOrderEnabled(
+  productId: string,
+  enabled: boolean,
+): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = OrderEnabledSchema.safeParse({ productId, enabled })
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+  try {
+    await prisma.product.update({
+      where: { id: parsed.data.productId },
+      data: { orderEnabled: parsed.data.enabled },
+    })
+    await regenerateVirtualPurchasesInternal([parsed.data.productId])
+    revalidateSalesPlanPaths()
+    revalidatePath("/products")
+    return { ok: true }
+  } catch (err) {
+    console.error("[updateProductOrderEnabled]", err)
+    return { ok: false, error: "Не удалось обновить флаг заказа" }
+  }
 }
