@@ -927,8 +927,15 @@ export async function regenerateVirtualPurchasesInternal(productIds?: string[]):
       existingByProduct.set(productId, updatedVps)
     }
 
-    // Подготавливаем VpProductInput для каждого ProductPlanInput
-    const vpProducts = inputs.products.map((p) => ({
+    // Подготавливаем VpProductInput для каждого ProductPlanInput.
+    // КРИТИЧНО: при scoped-вызове (productIds) генерируем предложения ТОЛЬКО для этих
+    // товаров — deleteMany ниже чистит только их, а createMany писал предложения ВСЕХ
+    // товаров → каждый scoped-вызов (смена ABC/тумблера/сброс уровней) плодил полный
+    // набор дублей всем остальным позициям (инцидент 2026-07-05: десятки VP одной датой).
+    const scopedProducts = productIds
+      ? inputs.products.filter((p) => productIds.includes(p.productId))
+      : inputs.products
+    const vpProducts = scopedProducts.map((p) => ({
       productId: p.productId,
       sku: p.sku,
       name: p.name,
