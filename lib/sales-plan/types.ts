@@ -70,6 +70,9 @@ export interface ProductPlanInput {
   dayOverrides: Record<string, number>   // "2026-07-15" → 20
   arrivals: ArrivalBatch[]
   seedOrders: Record<string, number>     // заказы [today−3, today−1] из funnel
+  // Phase 27: ABC-статус и флаг «заказываем» (гейт виртуальных закупок)
+  abcStatus?: "A" | "B" | "C" | null
+  orderEnabled?: boolean                 // глобальный флаг Product.orderEnabled
 }
 
 // ── Параметры модели ─────────────────────────────────────────────────────────

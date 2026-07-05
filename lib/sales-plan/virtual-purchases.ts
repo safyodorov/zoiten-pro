@@ -52,6 +52,9 @@ export interface VpProductInput {
   arrivals: Array<{ date: string; qty: number }>   // реальные партии (уже в формате ArrivalBatch)
   existingVirtualPurchases: VpArrivalInput[]       // ACCEPTED/DISMISSED/manual — не трогаются
   unitPrice?: number | null                        // из SupplierProductLink
+  // Phase 27: вычисленный флаг гейта — подаётся снаружи (из computeEffectiveOrderEnabled).
+  // undefined = обратная совместимость (заказываем).
+  effectiveOrderEnabled?: boolean
 }
 
 /** Входной объект генератора */
@@ -223,6 +226,10 @@ export function suggestVirtualPurchases(input: VpSuggestInput): VpSuggestion[] {
   const allSuggestions: VpSuggestion[] = []
 
   for (const product of input.products) {
+    // Phase 27: гейт «заказываем». Товар выведен из ассортимента (C) или помечен
+    // «не заказываем» → виртуальные закупки не считаются. undefined = совместимость (заказываем).
+    if (product.effectiveOrderEnabled === false) continue
+
     const leadTimeDays = product.leadTimeDays ?? defaultLeadTimeDays
 
     // Начальный arrivals: реальные партии + ACCEPTED/manual виртуальные
@@ -328,4 +335,22 @@ export function suggestVirtualPurchases(input: VpSuggestInput): VpSuggestion[] {
   }
 
   return allSuggestions
+}
+
+// ── Phase 27: Единый helper гейта «заказываем» ───────────────────────────────
+
+/**
+ * Phase 27: единая формула гейта «заказываем». SOURCE OF TRUTH.
+ * Используется в regenerateVirtualPurchasesInternal (vpProducts), page.tsx (tableProducts)
+ * и тестах — инлайн формулы `(abc !== 'C') && (orderEnabled ?? true)` в других местах ЗАПРЕЩЁН.
+ *
+ * - C = вне ассортимента → всегда false (тумблер принудительно off + заблокирован).
+ * - A/B: результат определяется orderEnabled.
+ * - orderEnabled=undefined → true (совместимость до миграции: товары без orderEnabled = «заказываем»).
+ */
+export function computeEffectiveOrderEnabled(
+  abcStatus: "A" | "B" | "C" | null | undefined,
+  orderEnabled: boolean | null | undefined,
+): boolean {
+  return abcStatus !== "C" && (orderEnabled ?? true)
 }

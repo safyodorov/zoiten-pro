@@ -462,6 +462,9 @@ export async function loadSalesPlanInputs(
       dayOverrides,
       arrivals,
       seedOrders,
+      // Phase 27: скалярные поля грузятся через include автоматически (не select → не нужны явно)
+      abcStatus: p.abcStatus ?? null,
+      orderEnabled: p.orderEnabled,
     })
   }
 
