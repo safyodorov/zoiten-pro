@@ -545,6 +545,23 @@ export function ProductPlanTable({
                     const currentLevel = p.currentLevels[month] ?? null
                     const draftVal = drafts[p.productId]?.[month]
 
+                    // Метрики среза (SP-16) — per-month из planResult.days, порог по доле потерь месяца.
+                    const psr = p.planResult
+                    const monthPrefix = month.slice(0, 7)
+                    const monthPlanUnits = mt?.buyoutsUnits ?? 0
+                    // Per-month недолив: Σ(rateRequested − ordersUnits) по дням ЭТОГО месяца.
+                    const sf = monthShortfall(psr.days, monthPrefix, p.avgPriceRub)
+                    // Стокаут пришёлся на этот месяц или раньше (для выбора reference-даты прихода)?
+                    const stockoutInOrBefore = psr.firstStockoutDate != null && psr.firstStockoutDate.slice(0, 7) <= monthPrefix
+                    // Ближайший приход после стокаута (или после today, если стокаут раньше горизонта):
+                    const arrivalRef = psr.firstStockoutDate ?? today
+                    const nextArr = nextArrivalAfter(p.arrivals, arrivalRef)
+                    // Пустой месяц = ноль плана И был/есть стокаут (нет товара весь месяц).
+                    const isEmptyMonth = monthPlanUnits < 0.5 && stockoutInOrBefore
+                    // Срезанный месяц = собственный недолив месяца выше порога (D-4 ~2%), но не пустой.
+                    const isCutMonth = !isEmptyMonth && sf.lostShare > 0.02
+                    const cutPct = Math.round(sf.lostShare * 100)
+
                     return (
                       <TableCell
                         key={month}
@@ -598,6 +615,16 @@ export function ProductPlanTable({
                             {!hasFactData && (
                               <span className="text-[10px] text-muted-foreground">
                                 ≈ {fmtAdaptive(planUnits)} шт
+                              </span>
+                            )}
+                            {isEmptyMonth && (
+                              <span className="text-[10px] text-red-500 whitespace-nowrap" title="План обнулён: нет товара">
+                                ⚠ нет товара{nextArr ? ` · ${fmtDayMonth(nextArr)}` : ` · придёт в ${fmtMonthShort(month)}`}
+                              </span>
+                            )}
+                            {isCutMonth && (
+                              <span className="text-[10px] text-amber-600 whitespace-nowrap" title={`План месяца срезан на ${cutPct}% из-за нехватки стока`}>
+                                срезано −{cutPct}%{nextArr ? ` · приход ${fmtDayMonth(nextArr)}` : ""}
                               </span>
                             )}
                           </div>
