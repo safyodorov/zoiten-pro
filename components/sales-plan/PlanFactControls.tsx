@@ -223,32 +223,34 @@ export function PlanFactControls({
         ))}
       </div>
 
-      {/* Метрика — native <select> (CLAUDE.md: НЕ base-ui) */}
-      <div className="flex items-center gap-1.5 text-sm">
-        <span className="text-muted-foreground">Метрика:</span>
-        <select
-          value={metric}
-          onChange={handleMetric}
-          className="rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {METRIC_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="flex items-center gap-3 ml-auto">
+        {/* Метрика — native <select> (CLAUDE.md: НЕ base-ui) */}
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="text-muted-foreground">Метрика:</span>
+          <select
+            value={metric}
+            onChange={handleMetric}
+            className="rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {METRIC_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* Нарастающим итогом */}
-      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-        <input
-          type="checkbox"
-          checked={cumulative}
-          onChange={handleCumulative}
-          className="rounded"
-        />
-        <span className="text-muted-foreground">Нарастающим итогом</span>
-      </label>
+        {/* Нарастающим итогом */}
+        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={cumulative}
+            onChange={handleCumulative}
+            className="rounded"
+          />
+          <span className="text-muted-foreground">Нарастающим итогом</span>
+        </label>
+      </div>
 
       {/* Notice при превышении day-окна */}
       {granularity === "day" && dayWindowExceeded && (

@@ -110,7 +110,7 @@ function ActionCell({
           type="button"
           onClick={handleAccept}
           disabled={isPending}
-          className="px-2 py-0.5 text-xs rounded border border-green-500 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50 whitespace-nowrap"
+          className="px-2 py-0.5 text-xs rounded border border-emerald-500 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50 whitespace-nowrap"
         >
           Подтвердить
         </button>
@@ -283,7 +283,7 @@ export function VirtualPurchasesTable({
             type="button"
             onClick={handleBulkAccept}
             disabled={isPendingBulk}
-            className="px-3 py-1 rounded border border-green-500 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+            className="px-3 py-1 rounded border border-emerald-500 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors disabled:opacity-50"
           >
             Подтвердить все
           </button>

@@ -16,6 +16,9 @@ import { SalesPlanFilters } from "@/components/sales-plan/SalesPlanFilters"
 import { ModelParamsBar } from "@/components/sales-plan/ModelParamsBar"
 import { ProductPlanTable } from "@/components/sales-plan/ProductPlanTable"
 import type { ModelParams } from "@/lib/sales-plan/types"
+import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { Pencil, Eye } from "lucide-react"
 
 // ── Горизонт H2-2026 ─────────────────────────────────────────────────────────
 
@@ -277,9 +280,11 @@ export default async function SalesPlanProductsPage({
         {canManage && !versionId && (
           <a
             href={modeToggleUrl}
-            className="text-xs text-primary underline-offset-2 hover:underline"
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
           >
-            {mode === "edit" ? "← Просмотр" : "Редактировать →"}
+            {mode === "edit"
+              ? <><Eye className="h-3.5 w-3.5" /> Просмотр</>
+              : <><Pencil className="h-3.5 w-3.5" /> Редактировать</>}
           </a>
         )}
       </div>

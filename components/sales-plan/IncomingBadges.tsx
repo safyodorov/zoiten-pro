@@ -244,7 +244,7 @@ function SuggestedVirtualBadge({
                   type="button"
                   onClick={handleAccept}
                   disabled={isPending}
-                  className="text-green-700 dark:text-green-400 hover:underline underline-offset-2 disabled:opacity-50"
+                  className="text-emerald-700 dark:text-emerald-400 hover:underline underline-offset-2 disabled:opacity-50"
                 >
                   Подтвердить
                 </button>

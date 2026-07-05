@@ -127,7 +127,7 @@ export function ProductPlanCell({
         }
       }}
       className={`flex flex-col items-end gap-0.5 w-full min-w-[80px] text-right ${
-        !readOnly ? "hover:bg-muted/50 rounded px-1 py-0.5 cursor-text" : "cursor-default"
+        !readOnly ? "rounded border border-dashed border-border/60 hover:border-primary/50 hover:bg-muted/50 px-1 py-0.5 cursor-text" : "cursor-default"
       }`}
     >
       <span className="text-sm tabular-nums whitespace-nowrap flex items-center gap-0.5">
@@ -136,7 +136,7 @@ export function ProductPlanCell({
             type="button"
             title="Сбросить на авто"
             onClick={(e) => { e.stopPropagation(); onClear() }}
-            className="text-[10px] text-muted-foreground hover:text-red-500 leading-none"
+            className="h-5 w-5 flex items-center justify-center text-[10px] text-muted-foreground hover:text-destructive leading-none"
           >
             ✕
           </button>

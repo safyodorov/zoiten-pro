@@ -152,10 +152,10 @@ export function PlanFactSummaryCards({
       </div>
 
       {/* 5: Отставание от ИУ нарастающим — ГЛАВНАЯ «ТРЕВОЖНАЯ ЛАМПОЧКА» */}
-      <div className="rounded-md border bg-card p-3 ring-1 ring-border">
+      <div className="rounded-md border bg-card p-3 ring-2 ring-primary/60">
         <div className="text-xs text-muted-foreground">Отставание от ИУ нарастающим</div>
         <div className={cn("text-3xl font-bold tabular-nums mt-1", gapColor)}>
-          {fmtRub(Math.abs(vsIuGapRub))}
+          {fmtM(vsIuGapRub)}
           <span className="text-lg ml-1">{vsIuGapRub >= 0 ? "▲" : "▼"}</span>
         </div>
         <div className="text-xs text-muted-foreground mt-1 space-y-0.5">

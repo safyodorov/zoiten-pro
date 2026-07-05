@@ -403,7 +403,7 @@ export function PlanFactMatrix({
 
             {/* ── Раздел: «Вне плана» ── */}
             {columns.some((b) => b.unplannedRub != null) && (
-              <CollapsibleRow label="▾ Вне плана (73 арт. без привязки)" colCount={colCount}>
+              <CollapsibleRow label="Вне плана (73 арт. без привязки)" colCount={colCount}>
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background pl-6")}

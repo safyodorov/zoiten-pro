@@ -671,10 +671,10 @@ export function ProductPlanTable({
                               <span
                                 className={`text-[10px] tabular-nums ${
                                   pct >= 0
-                                    ? "text-emerald-600"
+                                    ? "text-emerald-600 dark:text-emerald-500"
                                     : pct >= -0.05
-                                    ? "text-amber-500"
-                                    : "text-red-500"
+                                    ? "text-amber-600 dark:text-amber-500"
+                                    : "text-destructive"
                                 }`}
                               >
                                 {pct >= 0 ? "+" : ""}{fmtPct(pct)}
@@ -686,12 +686,12 @@ export function ProductPlanTable({
                               </span>
                             )}
                             {isEmptyMonth && (
-                              <span className="text-[10px] text-red-500 whitespace-nowrap" title="План обнулён: нет товара">
+                              <span className="text-[11px] font-medium text-destructive whitespace-nowrap" title="План обнулён: нет товара">
                                 ⚠ нет товара{nextArr ? ` · ${fmtDayMonth(nextArr)}` : ` · придёт в ${fmtMonthShort(month)}`}
                               </span>
                             )}
                             {isCutMonth && (
-                              <span className="text-[10px] text-amber-600 whitespace-nowrap" title={`План месяца срезан на ${cutPct}% из-за нехватки стока`}>
+                              <span className="text-[11px] font-medium text-amber-600 whitespace-nowrap" title={`План месяца срезан на ${cutPct}% из-за нехватки стока`}>
                                 срезано −{cutPct}%{nextArr ? ` · приход ${fmtDayMonth(nextArr)}` : ""}
                               </span>
                             )}

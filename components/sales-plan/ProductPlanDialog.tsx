@@ -273,7 +273,7 @@ export function ProductPlanDialog({
               <div className="py-8 text-center text-sm text-muted-foreground">Загрузка…</div>
             )}
             {loadError && (
-              <div className="py-4 text-center text-sm text-red-500">{loadError}</div>
+              <div className="py-4 text-center text-sm text-destructive">{loadError}</div>
             )}
 
             {!loading && !loadError && displayDays.length > 0 && (
@@ -321,7 +321,7 @@ export function ProductPlanDialog({
                             {fmtRub(d.buyoutsRub)}
                           </td>
                           <td className={`px-2 py-1 border-b text-right tabular-nums ${
-                            d.stockEnd <= 0 ? "text-red-500 font-medium" : ""
+                            d.stockEnd <= 0 ? "text-destructive font-medium" : ""
                           }`}>
                             {Math.round(d.stockEnd)}
                             {d.stockEnd <= 0 && <span className="ml-1 text-[10px]">⚠</span>}
