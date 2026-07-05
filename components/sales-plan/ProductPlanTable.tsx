@@ -46,12 +46,16 @@ function fmtThousands(n: number): string {
 }
 
 // Плашки «план»/«факт» в ячейках месяца и футере (просьба пользователя 2026-07-05).
-// border даёт видимость и на bg-muted (sticky-футер); alpha-фон плашки поверх
-// СПЛОШНОГО фона ячейки конвенцию sticky не нарушает.
+// Одинаковый размер; план — жёлто-оранжевая; факт — зелёная (факт ≥ план) /
+// красная (факт < план). border даёт видимость и на bg-muted (sticky-футер);
+// alpha-фон плашки поверх СПЛОШНОГО фона ячейки конвенцию sticky не нарушает.
+const CHIP_BASE = "rounded border px-1 py-px text-[10px] leading-3 font-medium select-none"
 const PLAN_CHIP =
-  "rounded border border-border bg-muted px-1 py-px text-[9px] leading-3 font-medium text-muted-foreground select-none"
-const FACT_CHIP =
-  "rounded border border-primary/30 bg-primary/10 px-1 py-px text-[9px] leading-3 font-medium text-primary select-none"
+  `${CHIP_BASE} border-amber-400/60 bg-amber-100 text-amber-800 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-400`
+const FACT_CHIP_GOOD =
+  `${CHIP_BASE} border-emerald-400/60 bg-emerald-100 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400`
+const FACT_CHIP_BAD =
+  `${CHIP_BASE} border-red-400/60 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-950/50 dark:text-red-400`
 
 // ── Типы ──────────────────────────────────────────────────────────────────────
 
@@ -476,7 +480,7 @@ export function ProductPlanTable({
                 <th
                   key={m}
                   className={`${STICKY_TH} text-center border-r`}
-                  style={{ width: 150, minWidth: 140 }}
+                  style={{ width: 170, minWidth: 160 }}
                 >
                   {monthLabel(m)}
                   <span className="ml-1 text-[10px] text-muted-foreground">
@@ -690,16 +694,19 @@ export function ProductPlanTable({
                             {/* Строка 1: [план] тыс ₽ · шт (всегда видна) */}
                             <span className="flex items-center gap-1 text-sm tabular-nums whitespace-nowrap">
                               <span className={PLAN_CHIP}>план</span>
-                              {fmtThousands(planRub)} тыс · {fmtAdaptive(planUnits)} шт
+                              {fmtThousands(planRub)} тыс ₽ · {fmtAdaptive(planUnits)} шт
                               {hasDayOverrides && (
                                 <span className="text-[10px] text-primary" title="Есть дневные правки">•д</span>
                               )}
                             </span>
-                            {/* Строка 2: [факт] тыс ₽ · шт (только если есть данные) */}
+                            {/* Строка 2: [факт] тыс ₽ · шт — тот же шрифт что план;
+                                плашка зелёная (факт ≥ план) / красная (факт < план).
+                                Сравнение: pro-rata pct если есть версия (честно для
+                                текущего месяца), иначе напрямую числа ячейки. */}
                             {hasFactData && factRow && (
-                              <span className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-                                <span className={FACT_CHIP}>факт</span>
-                                {fmtThousands(factRow.buyoutsRub)} тыс · {fmtAdaptive(factRow.buyoutsUnits)} шт
+                              <span className="flex items-center gap-1 text-sm tabular-nums text-muted-foreground whitespace-nowrap">
+                                <span className={(pct !== null ? pct >= 0 : factRow.buyoutsRub >= planRub) ? FACT_CHIP_GOOD : FACT_CHIP_BAD}>факт</span>
+                                {fmtThousands(factRow.buyoutsRub)} тыс ₽ · {fmtAdaptive(factRow.buyoutsUnits)} шт
                               </span>
                             )}
                             {/* Строка 3: pro-rata отклонение от плана версии прошедших дней */}
@@ -761,12 +768,12 @@ export function ProductPlanTable({
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="flex items-center gap-1 text-xs font-semibold tabular-nums whitespace-nowrap">
                         <span className={PLAN_CHIP}>план</span>
-                        {fmtThousands(t.planRub)} тыс
+                        {fmtThousands(t.planRub)} тыс ₽
                       </span>
                       {t.factRub > 0 && (
-                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-                          <span className={FACT_CHIP}>факт</span>
-                          {fmtThousands(t.factRub)} тыс
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                          <span className={t.factRub >= t.planRub ? FACT_CHIP_GOOD : FACT_CHIP_BAD}>факт</span>
+                          {fmtThousands(t.factRub)} тыс ₽
                         </span>
                       )}
                     </div>

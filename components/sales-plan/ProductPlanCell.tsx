@@ -12,7 +12,7 @@ function fmtNum(n: number, digits = 0): string {
 
 // Суммы в тыс ₽ (единый формат таблицы «Товары» — без К/М, просьба пользователя)
 function fmtThousandsRub(n: number): string {
-  return `${fmtNum(Math.round(n / 1000))} тыс`
+  return `${fmtNum(Math.round(n / 1000))} тыс ₽`
 }
 
 function daysInMonth(monthIso: string): number {
