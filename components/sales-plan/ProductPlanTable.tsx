@@ -10,7 +10,7 @@ import { TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { IncomingBadges, IncomingBadgesLegend } from "./IncomingBadges"
 import { ProductPlanCell } from "./ProductPlanCell"
 import { ProductPlanDialog } from "./ProductPlanDialog"
-import { saveMonthLevels, scaleMonthLevels, resetMonthLevelsToAuto } from "@/app/actions/sales-plan"
+import { saveMonthLevels, scaleMonthLevels, resetMonthLevelsToAuto, updateProductAbcStatus, updateProductOrderEnabled } from "@/app/actions/sales-plan"
 import type { ProductPlanResult, ArrivalBatch, PlanDayRow } from "@/lib/sales-plan/types"
 
 // ── Форматирование чисел ────────────────────────────────────────────────────────
@@ -63,6 +63,9 @@ interface ProductRow {
   // dayOverrides месяца → маркер •д
   dayOverrideMonths: string[]
   arrivals: ArrivalBatch[]
+  abcStatus: "A" | "B" | "C" | null
+  orderEnabled: boolean
+  effectiveOrderEnabled: boolean
   planResult: ProductPlanResult
 }
 
@@ -73,6 +76,7 @@ interface ProductPlanTableProps {
   months: string[]        // ["2026-07-01", ..., "2026-12-01"]
   mode: Mode
   readOnly: boolean
+  canManage: boolean
   factByProduct: FactMonthByProduct
   today: string
 }
@@ -81,6 +85,13 @@ interface ProductPlanTableProps {
 
 const STICKY_TH = "sticky top-0 z-20 bg-background border-b text-xs px-2 h-8 align-middle whitespace-nowrap font-medium"
 const STICKY_TD = "sticky z-10 bg-background border-r text-xs px-2 align-middle"
+
+const ABC_CLASSES: Record<string, string> = {
+  A: "bg-green-100 text-green-800",
+  B: "bg-blue-100 text-blue-800",
+  C: "bg-orange-100 text-orange-800",
+}
+
 const MONTH_LABEL: Record<string, string> = {
   "2026-07-01": "Июл", "2026-08-01": "Авг", "2026-09-01": "Сен",
   "2026-10-01": "Окт", "2026-11-01": "Ноя", "2026-12-01": "Дек",
@@ -169,6 +180,7 @@ export function ProductPlanTable({
   months,
   mode,
   readOnly,
+  canManage,
   factByProduct,
   today,
 }: ProductPlanTableProps) {
@@ -436,6 +448,10 @@ export function ProductPlanTable({
               </th>
               {/* Сток */}
               <th className={`${STICKY_TH} text-right border-r`} style={{ width: 70 }}>Сток</th>
+              {/* ABC */}
+              <th className={`${STICKY_TH} text-center border-r`} style={{ width: 56 }}>ABC</th>
+              {/* Заказ */}
+              <th className={`${STICKY_TH} text-center border-r`} style={{ width: 90 }}>Заказ</th>
               {/* Месяцы */}
               {months.map((m) => (
                 <th
@@ -528,6 +544,58 @@ export function ProductPlanTable({
                   {/* Сток */}
                   <TableCell className="text-right text-xs tabular-nums px-2 border-r">
                     {p.stockNow}
+                  </TableCell>
+                  {/* ABC */}
+                  <TableCell className="text-center px-1 border-r" onClick={(e) => e.stopPropagation()}>
+                    {canManage ? (
+                      <select
+                        value={p.abcStatus ?? ""}
+                        disabled={isPending}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          const next = v === "" ? null : (v as "A" | "B" | "C")
+                          startTransition(async () => {
+                            const r = await updateProductAbcStatus(p.productId, next)
+                            if (!r.ok) { toast.error(r.error || "Не удалось обновить ABC"); return }
+                            router.refresh()
+                          })
+                        }}
+                        className={`rounded px-1 py-0.5 text-xs font-semibold border ${p.abcStatus ? ABC_CLASSES[p.abcStatus] : "text-muted-foreground"}`}
+                      >
+                        <option value="">—</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                      </select>
+                    ) : (
+                      <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${p.abcStatus ? ABC_CLASSES[p.abcStatus] : "text-muted-foreground"}`}>
+                        {p.abcStatus ?? "—"}
+                      </span>
+                    )}
+                  </TableCell>
+                  {/* Заказ */}
+                  <TableCell className="text-center px-1 border-r" onClick={(e) => e.stopPropagation()}>
+                    <label
+                      className="inline-flex items-center gap-1 cursor-pointer text-xs"
+                      title={p.abcStatus === "C" ? "Статус C — вне ассортимента" : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={p.effectiveOrderEnabled}
+                        disabled={!canManage || isPending || p.abcStatus === "C"}
+                        onChange={(e) => {
+                          const enabled = e.target.checked
+                          startTransition(async () => {
+                            const r = await updateProductOrderEnabled(p.productId, enabled)
+                            if (!r.ok) { toast.error(r.error || "Не удалось обновить флаг"); return }
+                            router.refresh()
+                          })
+                        }}
+                      />
+                      <span className={p.effectiveOrderEnabled ? "" : "text-muted-foreground"}>
+                        {p.effectiveOrderEnabled ? "заказ" : "нет"}
+                      </span>
+                    </label>
                   </TableCell>
                   {/* Месяцы */}
                   {months.map((month) => {
@@ -652,6 +720,8 @@ export function ProductPlanTable({
               <td className="text-right tabular-nums text-xs px-2 border-r font-medium">
                 {products.reduce((s, p) => s + p.stockNow, 0)}
               </td>
+              <td className="border-r" />
+              <td className="border-r" />
               {months.map((m) => {
                 const t = totals.byMonth[m] ?? { planRub: 0, factRub: 0 }
                 return (

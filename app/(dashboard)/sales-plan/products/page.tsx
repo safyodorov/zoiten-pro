@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma"
 import { requireSection, getSectionRole } from "@/lib/rbac"
 import { loadSalesPlanInputs, loadFactDaily } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
+import { computeEffectiveOrderEnabled } from "@/lib/sales-plan/virtual-purchases"
 import { SalesPlanTabs } from "@/components/sales-plan/SalesPlanTabs"
 import { PlanVersionBar } from "@/components/sales-plan/PlanVersionBar"
 import type { PlanVersion } from "@/components/sales-plan/PlanVersionBar"
@@ -236,6 +237,9 @@ export default async function SalesPlanProductsPage({
       ),
       dayOverrideMonths: dayOverrideMonthsMap.get(p.productId) ?? [],
       arrivals: p.arrivals,
+      abcStatus: p.abcStatus ?? null,
+      orderEnabled: p.orderEnabled ?? true,
+      effectiveOrderEnabled: computeEffectiveOrderEnabled(p.abcStatus, p.orderEnabled),
       planResult: pr ?? {
         productId: p.productId,
         days: [],
@@ -303,6 +307,7 @@ export default async function SalesPlanProductsPage({
           months={MONTHS}
           mode={mode as "compare" | "edit"}
           readOnly={readOnly}
+          canManage={canManage}
           factByProduct={factByProduct}
           today={today}
         />
