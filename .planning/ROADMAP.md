@@ -627,7 +627,7 @@ Plans:
 **Depends on:** Phase 25 (модель SalesPlan*, движок lib/sales-plan/, /sales-plan UI, cron dispatcher).
 **Секция:** остаётся `SALES` (write — `SALES MANAGE`). Новая ERP_SECTION не нужна.
 
-**Plans:** 3/3 complete. ✅ **Исполнено + верифицировано 2026-07-05** — 11/11 must-haves в коде (gsd-verifier), tsc=0, build OK, 69/69 sales-plan тестов зелёные, регрессий нет (движок не тронут, golden iu=438 068 120 цел). Коммиты `e44c2c2..348bee9`. Без Prisma-миграции. 4 пункта — live-UAT после деплоя (галка автопротяжки, бейдж среза, массовый сброс, крон-endpoint). Развёрнуто: _ожидает деплой_.
+**Plans:** 3/3 complete. ✅ **Исполнено + верифицировано 2026-07-05** — 11/11 must-haves в коде (gsd-verifier), tsc=0, build OK, 69/69 sales-plan тестов зелёные, регрессий нет (движок не тронут, golden iu=438 068 120 цел). Коммиты `e44c2c2..348bee9`. Без Prisma-миграции. ✅ Развёрнуто + UAT пройден в живой работе 2026-07-05 (закрыто пользователем).
 
 Plans:
 - [x] 26-01-PLAN.md — SP-15: автопротяжка уровня вперёд (saveMonthLevels(distributeForward) + distributeMonthLevelForward, пишет только в авто-месяцы) + сброс ручных→авто (resetMonthLevelsToAuto по товару/месяцу/выбранным, заметный ✕ в ячейке) + галка тулбара. Тест «протяжка не перезаписывает ручные».
@@ -648,8 +648,23 @@ Plans:
 **Depends on:** Phase 25 (движок lib/sales-plan/, suggester, /sales-plan Товары), Phase 26 (regenerateVirtualPurchasesInternal). Модель: `Product.abcStatus` (есть), `Product.orderEnabled` (новое поле — рукописная миграция + `prisma migrate deploy`).
 **Секция:** `SALES` (write — `SALES MANAGE`; инлайн-правки ABC/флага из sales-plan мутируют глобальные поля Product — принято, т.к. пользователь хочет менять «прямо в таблицах, глобально»).
 
-**Plans:** 2/2 complete. ✅ **Исполнено + верифицировано 2026-07-05** — 11/11 must-haves в коде (gsd-verifier), tsc=0, 48/48 целевых тестов зелёные (order-gate 11 + golden iu=438 068 120 + engine + virtual), регрессий нет, движок продаж не тронут (D-4). Коммиты `6a12056..87bdd28`. **Есть миграция** `Product.orderEnabled` (prisma migrate deploy). 3 пункта — live-UAT после деплоя (дефолт тумблера, C→off+disabled, удаление VP при смене на C). Развёрнуто: _ожидает деплой_.
+**Plans:** 2/2 complete. ✅ **Исполнено + верифицировано 2026-07-05** — 11/11 must-haves в коде (gsd-verifier), tsc=0, 48/48 целевых тестов зелёные (order-gate 11 + golden iu=438 068 120 + engine + virtual), регрессий нет, движок продаж не тронут (D-4). Коммиты `6a12056..87bdd28`. **Есть миграция** `Product.orderEnabled` (prisma migrate deploy). ✅ Развёрнуто + UAT пройден в живой работе 2026-07-05 (гейт подтверждён на УКТ-000001 abc=C → 0 виртуальных закупок; закрыто пользователем).
 
 Plans:
 - [x] 27-01-PLAN.md — SP-19 фундамент: [BLOCKING] рукописная миграция `Product.orderEnabled` + `prisma generate`; загрузка `abcStatus`/`orderEnabled` в `loadSalesPlanInputs` -> `ProductPlanInput`; гейт `effectiveOrderEnabled=(abcStatus!=='C')&&orderEnabled` в `suggestVirtualPurchases` (skip) + проброс в `regenerateVirtualPurchasesInternal`; server actions `updateProductAbcStatus`/`updateProductOrderEnabled` (SALES MANAGE + регенерация VP + revalidate); vitest-тесты гейта (C/не-заказываем -> 0; A/B заказываем -> без изменений; C форсит off).
 - [x] 27-02-PLAN.md — SP-18 UI: сериализация `abcStatus`/`orderEnabled`/`effectiveOrderEnabled` в `tableProducts` (page.tsx); ABC-бейдж с инлайн-сменой A/B/C/«—» (native select, глобально) + тумблер «заказываем/не заказываем» (для C — off+disabled+tooltip) в `ProductPlanTable`; optimistic useTransition + router.refresh.
+
+### Phase 28: ПДДС — план движения денежных средств (/finance/cashflow)
+
+**Goal:** Прогноз денежных потоков компании на горизонте плана продаж (H2-2026): когда и сколько денег придёт и уйдёт, где кассовые разрывы. Второй из трёх финансовых отчётов (Баланс ✅ → **ОДДС/ПДДС** → ОПиУ). Потребляет готовый контракт `lib/sales-plan/pdds-feed.ts` (Phase 25): `getPlannedRevenueSeries(versionId)` — плановые выкупы по дням; `getPlannedVirtualPayments(versionId)` — DEPOSIT/BALANCE платежи виртуальных закупок с live-сверкой статусов и forward-fill курса CNY/USD→₽.
+
+**Кандидаты-источники потоков (уточняется ресёчем + решениями пользователя):**
+- Притоки: выплаты WB по плановой выручке (недельный цикл выплат WB, за вычетом комиссии/логистики/ДРР — методику определить), прочие поступления.
+- Оттоки: платежи по реальным закупкам (PurchasePayment DEPOSIT/BALANCE, курсы ЦБ), платежи по виртуальным закупкам (pdds-feed), график кредитов (Loan/LoanPayment — тело+проценты), операционные расходы (касса/зарплаты — по среднему?), налоги (7% НДС + 1%).
+- Начальная позиция: остатки банк (BankAccount) + касса (CashEntry) на дату старта.
+- Выход: дневной/недельный/месячный ряд остатка денег, подсветка кассовых разрывов, сценарии.
+
+**Depends on:** Phase 25 (pdds-feed, SalesPlanVersion), Phase 20 (Закупки/платежи), Phase 21 (Кредиты), Phase 22 (Банк), Phase 23 (Касса), Phase 24 (Баланс — паттерны finance).
+**Секция:** вероятно `FINANCE` (существующая, /finance/*) — уточнить при планировании.
+
+**Plans:** not yet planned. Следующий шаг: ресёч (28-RESEARCH) → вопросы пользователю → /gsd-plan-phase 28.

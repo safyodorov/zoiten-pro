@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 27 (abc) — COMPLETE ✅ (исполнено + верифицировано 2026-07-05, 11/11 must-haves; ожидает деплой с миграцией orderEnabled + live-UAT)
+Phase: 27 (abc) — CLOSED ✅ (в проде + UAT пройден 2026-07-05; Phases 25/26/27 закрыты)
 Plan: 2 of 2
-Next: деплой Phase 27 (миграция Product.orderEnabled через prisma migrate deploy) → live-UAT → фаза ПДДС (/finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts). Phase 26 уже в проде (a5cd09d).
+Next: Phase 28 — ПДДС (план движения денежных средств, /finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts). Ресёч запущен.
 
 ## Performance Metrics
 
