@@ -80,7 +80,8 @@ function quartersInRange(
  *    (потоки первого дня горизонта входят в факт-ряд и симуляцию, не в старт — CR-01)
  * 3. revenueSeries — getPlannedRevenueSeries, фильтрация по горизонту
  * 4. virtualPayments + versionStale — getPlannedVirtualPayments
- * 5. realPurchasePayments — PurchasePayment PLANNED, amountRub-приоритет
+ * 5. realPurchasePayments — PurchasePayment PLANNED + OVERDUE (отток = max(dueDate,
+ *    сегодня МСК, horizonFrom)), amountRub-приоритет
  * 6. loanPayments — LoanPayment principal + interest
  * 7. taxPayments — computeQuarterAccrual per квартал H2-2026
  * 8. actualBalanceSeries — BankTransaction + CashEntry накопительно (≤ сегодня МСК)
@@ -162,18 +163,25 @@ export async function loadCashflowInputs(
     .map((p) => ({ date: p.dueDate, amountRub: p.amountRub }))
   const versionStale = vpResult.versionStale
 
-  // ── 5. realPurchasePayments (PLANNED, в горизонте) ────────────────────────
+  // ── 5. realPurchasePayments (PLANNED в горизонте + OVERDUE) ───────────────
+
+  // Сегодня по МСК (согласованно с finance/balance); используется и в шаге 8
+  const todayIsoMsk = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10)
 
   const purchasePaymentRows = await db.purchasePayment.findMany({
     where: {
-      status: "PLANNED",
-      dueDate: { gte: horizonFromDate, lte: horizonToDate },
+      OR: [
+        { status: "PLANNED", dueDate: { gte: horizonFromDate, lte: horizonToDate } },
+        // WR-07: просроченные, но не оплаченные — отток всё ещё впереди
+        { status: "OVERDUE", dueDate: { lte: horizonToDate } },
+      ],
     },
     select: {
       amount: true,
       amountRub: true,
       currency: true,
       dueDate: true,
+      status: true,
     },
   })
 
@@ -186,6 +194,12 @@ export async function loadCashflowInputs(
 
   for (const payment of purchasePaymentRows) {
     const dueIso = payment.dueDate.toISOString().slice(0, 10)
+    // WR-07: просроченный платёж уплачивается не раньше сегодня
+    // (и не раньше старта горизонта — иначе движок его молча отбросит)
+    const outflowIso =
+      payment.status === "OVERDUE"
+        ? [dueIso, todayIsoMsk, horizonFrom].reduce((a, b) => (a > b ? a : b))
+        : dueIso
     let amountRub: number
     if (payment.amountRub != null) {
       amountRub = Number(payment.amountRub)
@@ -199,7 +213,7 @@ export async function loadCashflowInputs(
       }
       amountRub = Number(payment.amount) * rateToRub
     }
-    realPurchasePayments.push({ date: dueIso, amountRub })
+    realPurchasePayments.push({ date: outflowIso, amountRub })
   }
 
   // ── 6. loanPayments (в горизонте) ─────────────────────────────────────────
@@ -242,10 +256,7 @@ export async function loadCashflowInputs(
 
   // ── 8. actualBalanceSeries (D-4): факт-ряд BankTransaction + CashEntry ─────
 
-  // Сегодня по МСК (согласованно с finance/balance)
-  const todayIsoMsk = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10)
-
-  // Ограничиваем [horizonFrom .. min(horizonTo, сегодня)]
+  // Ограничиваем [horizonFrom .. min(horizonTo, сегодня МСК)]
   const actualTo = todayIsoMsk < horizonTo ? todayIsoMsk : horizonTo
   let actualBalanceSeries: Array<{ date: string; balanceRub: number }> = []
 

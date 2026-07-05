@@ -87,9 +87,9 @@ export function CashflowMethodologyDialog() {
             <SectionTitle>Оттоки</SectionTitle>
 
             <Item term="Закупки (реальные)">
-              Платежи PurchasePayment (статус PLANNED). Используется поле{" "}
-              <code>amountRub</code> если задано, иначе <code>amount × rate</code> ЦБ на дату
-              платежа.
+              Платежи PurchasePayment (статусы PLANNED и OVERDUE; просроченные датируются
+              max(срок, сегодня)). Используется поле <code>amountRub</code> если задано, иначе{" "}
+              <code>amount × rate</code> ЦБ на дату платежа.
             </Item>
             <Item term="Закупки (виртуальные)">
               Предложения виртуальных закупок из плана продаж. Антидвойной счёт: статус
