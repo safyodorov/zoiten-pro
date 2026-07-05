@@ -211,12 +211,13 @@ export default async function SalesPlanProductsPage({
   })
 
   // ── Сериализуем данные для клиента ─────────────────────────────────────────
-  // factByProduct: Map → объект (RSC→client граница не сериализует Map)
+  // Факт per-товар — по дате реализации (redemptionByProduct, НЕТТО), не когортный funnel.
+  // Примечание: funnel byProduct в loadFactDaily НЕ удалён — может пригодиться Сводному.
   const factByProduct: Record<string, Record<string, {
     buyoutsRub: number; ordersRub: number; buyoutsUnits: number; ordersUnits: number
   }>> = {}
 
-  for (const [productId, dateMap] of factData.byProduct.entries()) {
+  for (const [productId, dateMap] of factData.redemptionByProduct.entries()) {
     factByProduct[productId] = {}
     for (const [date, row] of dateMap.entries()) {
       factByProduct[productId][date] = {
@@ -225,6 +226,28 @@ export default async function SalesPlanProductsPage({
         buyoutsUnits: row.buyoutsUnits,
         ordersUnits: row.ordersUnits,
       }
+    }
+  }
+
+  // ── D-4: pro-rata план активной версии для прошедших дней ──────────────────
+  // versionPastPlanByProduct[productId][monthIso] = Σ planBuyoutsRub по дням ≤ today−1
+  const versionPastPlanByProduct: Record<string, Record<string, number>> = {}
+  if (activeVersionId) {
+    const yesterday = new Date(new Date(today + "T00:00:00Z").getTime() - 86_400_000)
+      .toISOString().slice(0, 10)
+    const versionDays = await prisma.salesPlanVersionDay.findMany({
+      where: {
+        versionId: activeVersionId,
+        date: { gte: new Date(HORIZON_FROM + "T00:00:00Z"), lte: new Date(yesterday + "T00:00:00Z") },
+      },
+      select: { productId: true, date: true, planBuyoutsRub: true },
+    })
+    for (const r of versionDays) {
+      const monthIso = r.date.toISOString().slice(0, 7) + "-01"
+      const pid = r.productId
+      if (!versionPastPlanByProduct[pid]) versionPastPlanByProduct[pid] = {}
+      versionPastPlanByProduct[pid][monthIso] =
+        (versionPastPlanByProduct[pid][monthIso] ?? 0) + r.planBuyoutsRub
     }
   }
 
@@ -247,6 +270,7 @@ export default async function SalesPlanProductsPage({
       abcStatus: p.abcStatus ?? null,
       orderEnabled: p.orderEnabled ?? true,
       effectiveOrderEnabled: computeEffectiveOrderEnabled(p.abcStatus, p.orderEnabled),
+      versionPastPlanRub: versionPastPlanByProduct[p.productId] ?? {},
       planResult: pr ?? {
         productId: p.productId,
         days: [],
