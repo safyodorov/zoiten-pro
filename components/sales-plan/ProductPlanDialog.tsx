@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useCallback, useMemo } from "react"
+import { useState, useTransition, useCallback, useMemo, useEffect } from "react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import {
@@ -188,8 +188,12 @@ export function ProductPlanDialog({
   )
 
   // ── Открытие диалога ─────────────────────────────────────────────────────
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (nextOpen) {
+  // КРИТИЧНО: загрузка — по эффекту от prop `open`, НЕ в onOpenChange.
+  // Таблица открывает диалог программно (setState open=true) — base-ui в этом
+  // случае onOpenChange НЕ вызывает (он срабатывает только на действия
+  // пользователя внутри диалога), и тело оставалось пустым.
+  useEffect(() => {
+    if (open) {
       loadHorizon()
       if (months.length > 0) {
         const m = months[0]
@@ -197,6 +201,10 @@ export function ProductPlanDialog({
         loadMonth(m)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, productId])
+
+  const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setDayDrafts({})
       setLevelDrafts({})
@@ -429,7 +437,9 @@ export function ProductPlanDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[95vw] xl:max-w-7xl max-h-[92vh] overflow-y-auto">
+      {/* sm:-префикс ОБЯЗАТЕЛЕН: базовый DialogContent имеет sm:max-w-sm (384px),
+          непрефиксованный max-w его не перебивает (урок fast-260704) */}
+      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[95vw] xl:max-w-[1500px] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-baseline gap-3">
             <span className="font-mono text-sm text-muted-foreground">{productSku}</span>
