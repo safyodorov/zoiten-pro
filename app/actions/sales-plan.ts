@@ -747,6 +747,132 @@ export async function getProductPlanDays(
   }
 }
 
+// ── getProductPlanHorizon ──────────────────────────────────────────
+
+/**
+ * Read-action (SALES VIEW): весь горизонт H2 + сериализуемый ProductPlanInput + факт по дням.
+ * Используется большой модалкой товара для отображения графика всего горизонта.
+ */
+export async function getProductPlanHorizon(
+  productId: string,
+): Promise<
+  | {
+      ok: true
+      productInput: ProductPlanInput
+      days: PlanDayRow[]
+      factUnitsDaily: Array<{ date: string; units: number }>
+    }
+  | { ok: false; error: string }
+> {
+  await requireSection("SALES")
+
+  // 1. Параметры модели из AppSetting
+  const [deliveryDays, returnDays, wbInboundLagDays, transitDays, defaultLeadTimeDays] =
+    await Promise.all([
+      getLeadTimeDays("deliveryDays", 3),
+      getLeadTimeDays("returnDays", 3),
+      getSettingNumber("salesPlan.wbInboundLagDays", 0),
+      getSettingNumber("salesPlan.transitDays", 20),
+      getSettingNumber("salesPlan.defaultLeadTimeDays", 45),
+    ])
+
+  const nowMsk = new Date(Date.now() + 3 * 60 * 60 * 1000)
+  const todayMsk = nowMsk.toISOString().slice(0, 10)
+
+  // Горизонт из AppSetting (дефолт: сегодня → 31.12)
+  const horizonRow = await prisma.appSetting.findUnique({ where: { key: "salesPlan.horizon" } })
+  let horizonFrom = todayMsk
+  let horizonTo = todayMsk.slice(0, 4) + "-12-31"
+  if (horizonRow) {
+    try {
+      const h = JSON.parse(horizonRow.value) as { from?: string; to?: string }
+      if (h.from) horizonFrom = h.from
+      if (h.to) horizonTo = h.to
+    } catch {
+      // Используем defaults
+    }
+  }
+
+  try {
+    // 2. Загрузка входов плана и поиск товара
+    const inputs = await loadSalesPlanInputs(prisma, {
+      today: todayMsk,
+      horizonFrom,
+      horizonTo,
+      deliveryDays,
+      returnDays,
+      wbInboundLagDays,
+      transitDays,
+      defaultLeadTimeDays,
+      safetyStockDays: await getSettingNumber("salesPlan.safetyStockDays", 14),
+      vpCoverDays: await getSettingNumber("salesPlan.vpCoverDays", 60),
+    })
+
+    const productInput = inputs.products.find((p) => p.productId === productId)
+    if (!productInput) return { ok: false, error: "Товар не найден в плане продаж" }
+
+    // 3. Расчёт всего горизонта — БЕЗ фильтра по месяцу
+    const result = computeSalesPlan({
+      ...inputs,
+      products: [productInput],
+    })
+
+    const productResult = result.products[0]
+    const days: PlanDayRow[] = productResult ? productResult.days : []
+
+    // 4. Факт заказов по дням из WbCardOrdersDaily
+    const nmIds = productInput.nmIds
+    let factUnitsDaily: Array<{ date: string; units: number }> = []
+
+    if (nmIds.length > 0) {
+      const factFrom = new Date(horizonFrom + "T00:00:00Z")
+      const factTo = new Date(todayMsk + "T00:00:00Z")
+
+      const orderRows = await prisma.wbCardOrdersDaily.findMany({
+        where: {
+          nmId: { in: nmIds },
+          date: { gte: factFrom, lte: factTo },
+        },
+        select: { date: true, qty: true },
+      })
+
+      if (orderRows.length > 0) {
+        // Суммируем qty по date
+        const byDate = new Map<string, number>()
+        for (const row of orderRows) {
+          const key = row.date.toISOString().slice(0, 10)
+          byDate.set(key, (byDate.get(key) ?? 0) + row.qty)
+        }
+        factUnitsDaily = [...byDate.entries()]
+          .map(([date, units]) => ({ date, units }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+      } else {
+        // Fallback: WbSalesDaily (нетто выкупов)
+        const salesRows = await prisma.wbSalesDaily.findMany({
+          where: {
+            nmId: { in: nmIds },
+            date: { gte: factFrom, lte: factTo },
+          },
+          select: { date: true, buyoutsCount: true, returnsCount: true },
+        })
+        const byDate = new Map<string, number>()
+        for (const row of salesRows) {
+          const key = row.date.toISOString().slice(0, 10)
+          byDate.set(key, (byDate.get(key) ?? 0) + Math.max(0, row.buyoutsCount - row.returnsCount))
+        }
+        factUnitsDaily = [...byDate.entries()]
+          .map(([date, units]) => ({ date, units }))
+          .sort((a, b) => a.date.localeCompare(b.date))
+      }
+    }
+
+    return { ok: true, productInput, days, factUnitsDaily }
+  } catch (err) {
+    console.error("[getProductPlanHorizon]", err)
+    return { ok: false, error: "Не удалось загрузить данные плана" }
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Phase 25 wave 6: Виртуальные закупки (VP-actions)
 // Все write — SALES MANAGE. convertVirtualPurchase — + PROCUREMENT MANAGE.
