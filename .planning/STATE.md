@@ -388,6 +388,8 @@ None yet.
 
 | 260705-o9x | UI-правки /sales-plan по внешнему дизайн-ревью (Claude design, 2026-07-05): 20 правок P0/P1/P2 — dark-тема ABC-бейджей и графиков (oklch-хардкоды → var(--chart-1/2/iu), новый токен --chart-iu), sticky-футер «Итого» per-td, z-30 frozen-заголовков, единая семантика цветов (red-500→destructive, green→emerald), dashed-affordance инлайн-ячеек, ring-2 акцент KPI-5, кнопка Редактировать через buttonVariants (БЕЗ asChild — base-ui), unsettled-бары приглушены per-Cell, УКТ→SKU, контекстные empty states, ⚠→◇ у suggested-VP, hit-area. Ревью сверено с кодом до исполнения (1 корректировка: asChild). Gate: tsc 0, build OK, 31 тест GREEN. UI-only — движок/actions/БД не тронуты | 2026-07-05 | 145a8fa |  | [260705-o9x-sales-plan-design-review-ui](./quick/260705-o9x-sales-plan-design-review-ui/) |
 
+| fast-260705b | fix: hotfix buttonVariants в RSC (products/page.tsx 500 в рантайме — client-функция из "use client" модуля не вызывается на сервере; build пропускает на динамических страницах) → статические классы. + fix: scoped-регенерация VP плодила дубли — regenerateVirtualPurchasesInternal(productIds) чистил только productIds, а генерил предложения ВСЕМ товарам → каждая смена ABC/тумблера добавляла полный комплект всем позициям (7644 VP, до 180/товар при лимите 6). Фикс scopedProducts + полная перегенерация на проде: 7644→258, max 6/товар | 2026-07-05 | 5705ed4 + 2b17d49 |  | inline (products/page.tsx, app/actions/sales-plan.ts) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
