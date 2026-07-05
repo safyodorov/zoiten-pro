@@ -627,9 +627,9 @@ Plans:
 **Depends on:** Phase 25 (модель SalesPlan*, движок lib/sales-plan/, /sales-plan UI, cron dispatcher).
 **Секция:** остаётся `SALES` (write — `SALES MANAGE`). Новая ERP_SECTION не нужна.
 
-**Plans:** 3 plans
+**Plans:** 3/3 complete. ✅ **Исполнено + верифицировано 2026-07-05** — 11/11 must-haves в коде (gsd-verifier), tsc=0, build OK, 69/69 sales-plan тестов зелёные, регрессий нет (движок не тронут, golden iu=438 068 120 цел). Коммиты `e44c2c2..348bee9`. Без Prisma-миграции. 4 пункта — live-UAT после деплоя (галка автопротяжки, бейдж среза, массовый сброс, крон-endpoint). Развёрнуто: _ожидает деплой_.
 
 Plans:
-- [ ] 26-01-PLAN.md — SP-15: автопротяжка уровня вперёд (saveMonthLevels(distributeForward) + distributeMonthLevelForward, пишет только в авто-месяцы) + сброс ручных→авто (resetMonthLevelsToAuto по товару/месяцу/выбранным, заметный ✕ в ячейке) + галка тулбара. Тест «протяжка не перезаписывает ручные».
-- [ ] 26-02-PLAN.md — SP-16: предупреждение о срезе плана (проброс firstStockoutDate/lostRubToStockout/lostUnitsToStockout + «ближайший приход» из arrivals → бейдж «срезано · приход dd.mm» / плашка «нет товара» в ячейке месяца). UI-only, движок не менять.
-- [ ] 26-03-PLAN.md — SP-17: динамический roll-forward (rollForwardAcceptedArrivals — сдвиг просроченных авто-ACCEPTED в regenerateVirtualPurchasesInternal; manual не трогать) + ежедневный крон sales-plan-rollforward + wiring dispatcher (vpRollforwardCronTime ~04:40 / vpRollforwardLastRun, x-cron-secret). Тест инварианта «не прошлым числом» для ACCEPTED.
+- [x] 26-01-PLAN.md — SP-15: автопротяжка уровня вперёд (saveMonthLevels(distributeForward) + distributeMonthLevelForward, пишет только в авто-месяцы) + сброс ручных→авто (resetMonthLevelsToAuto по товару/месяцу/выбранным, заметный ✕ в ячейке) + галка тулбара. Тест «протяжка не перезаписывает ручные».
+- [x] 26-02-PLAN.md — SP-16: предупреждение о срезе плана (проброс firstStockoutDate/lostRubToStockout/lostUnitsToStockout + «ближайший приход» из arrivals → бейдж «срезано · приход dd.mm» / плашка «нет товара» в ячейке месяца). UI-only, движок не менять.
+- [x] 26-03-PLAN.md — SP-17: динамический roll-forward (rollForwardAcceptedArrivals — сдвиг просроченных авто-ACCEPTED в regenerateVirtualPurchasesInternal; manual не трогать) + ежедневный крон sales-plan-rollforward + wiring dispatcher (vpRollforwardCronTime ~04:40 / vpRollforwardLastRun, x-cron-secret). Тест инварианта «не прошлым числом» для ACCEPTED.
