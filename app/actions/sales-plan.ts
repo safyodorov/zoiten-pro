@@ -385,6 +385,57 @@ export async function scaleMonthLevels(payload: {
   }
 }
 
+// ── resetMonthLevelsToAuto ─────────────────────────────────────────
+
+const ResetMonthLevelsSchema = z
+  .object({
+    productId: z.string().min(1).optional(),
+    month: z.string().regex(/^\d{4}-\d{2}-01$/).optional(),
+    productIds: z.array(z.string().min(1)).optional(),
+  })
+  .refine(
+    (v) =>
+      v.productId != null ||
+      v.month != null ||
+      (v.productIds && v.productIds.length > 0),
+    { message: "Нужен хотя бы один критерий" },
+  )
+
+/**
+ * Сброс ручных месячных уровней → авто (baseline) по товару и/или месяцу.
+ * Удаляет все явные SalesPlanMonthLevel, совпадающие с критерием.
+ * Можно комбинировать productId + month для сброса конкретной ячейки.
+ * После сброса регенерирует виртуальные закупки.
+ */
+export async function resetMonthLevelsToAuto(payload: {
+  productId?: string
+  month?: string
+  productIds?: string[]
+}): Promise<ActionResult & { deletedCount?: number }> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = ResetMonthLevelsSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные критерии сброса" }
+  try {
+    const where: Record<string, unknown> = {}
+    if (parsed.data.productId) where.productId = parsed.data.productId
+    if (parsed.data.productIds && parsed.data.productIds.length > 0)
+      where.productId = { in: parsed.data.productIds }
+    if (parsed.data.month)
+      where.month = new Date(parsed.data.month + "T00:00:00Z")
+    const res = await prisma.salesPlanMonthLevel.deleteMany({ where })
+    await regenerateVirtualPurchasesInternal(
+      parsed.data.productId
+        ? [parsed.data.productId]
+        : parsed.data.productIds,
+    )
+    revalidateSalesPlanPaths()
+    return { ok: true, deletedCount: res.count }
+  } catch (err) {
+    console.error("[resetMonthLevelsToAuto]", err)
+    return { ok: false, error: "Не удалось сбросить уровни" }
+  }
+}
+
 // ── saveDayOverrides ───────────────────────────────────────────────
 
 const SaveDayOverridesSchema = z.object({
