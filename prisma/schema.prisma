@@ -1132,6 +1132,28 @@ model WbCardFunnelDaily {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// Quick 260705-f1p: Дневной факт ВЫКУПОВ по дате РЕАЛИЗАЦИИ.
+// Источник — Statistics Sales API supplier/sales (priceWithDisc × saleID[0]=='S').
+// В отличие от WbCardFunnelDaily (дата ЗАКАЗА/когорта) — дата продажи.
+// nmId БЕЗ FK (паттерн проекта: WbCard может быть soft-delete).
+// ──────────────────────────────────────────────────────────────────
+
+model WbSalesDaily {
+  id           Int      @id @default(autoincrement())
+  nmId         Int // ссылка на WbCard.nmId БЕЗ FK
+  date         DateTime @db.Date // дата реализации (MSK day)
+  buyoutsRub   Float    @default(0) // Σ priceWithDisc по выкупам (saleID startsWith 'S'), цена продавца до СПП
+  buyoutsCount Int      @default(0)
+  returnsRub   Float    @default(0) // Σ priceWithDisc по возвратам (saleID НЕ 'S', обычно 'R')
+  returnsCount Int      @default(0)
+  forPayRub    Float    @default(0) // Σ forPay по выкупам (к перечислению)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([nmId, date])
+  @@index([date])
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Phase 19: Управление рекламой WB. Источник данных — WB Advert API
 // (advert-api.wildberries.ru). Связь с нашими товарами через nmId БЕЗ FK
 // (паттерн проекта — WbCard может быть soft-delete, исторические данные выживают).

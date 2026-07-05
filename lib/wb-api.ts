@@ -1493,3 +1493,78 @@ export async function fetchBuyerPricesViaCurlV4(
   )
   return result
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260705-f1p: Дневной факт выкупов по дате РЕАЛИЗАЦИИ.
+// Источник — Statistics Sales API supplier/sales.
+// Агрегируется в WbSalesDaily (clean-replace через cron wb-sales-daily).
+// ──────────────────────────────────────────────────────────────────
+
+export interface WbSaleRow {
+  date: string
+  nmId: number
+  saleID: string
+  priceWithDisc: number
+  forPay: number
+}
+
+export interface WbSalesDailyAgg {
+  nmId: number
+  date: string
+  buyoutsRub: number
+  buyoutsCount: number
+  returnsRub: number
+  returnsCount: number
+  forPayRub: number
+}
+
+/**
+ * Pure: агрегирует записи supplier/sales в дневной разрез по (nmId, дата реализации).
+ * Дата реализации = row.date.slice(0,10).
+ * saleID startsWith 'S' → выкуп (продажа), иначе → возврат.
+ * priceWithDisc = цена продавца до СПП (метрика ИУ, не finishedPrice).
+ */
+export function aggregateSalesRows(rows: WbSaleRow[]): WbSalesDailyAgg[] {
+  const map = new Map<string, WbSalesDailyAgg>()
+  for (const r of rows) {
+    const nmId = Number(r.nmId)
+    if (!Number.isFinite(nmId)) continue
+    const iso = String(r.date ?? "").slice(0, 10)
+    if (iso.length !== 10) continue
+    const key = `${nmId}|${iso}`
+    let agg = map.get(key)
+    if (!agg) {
+      agg = { nmId, date: iso, buyoutsRub: 0, buyoutsCount: 0, returnsRub: 0, returnsCount: 0, forPayRub: 0 }
+      map.set(key, agg)
+    }
+    const price = Number(r.priceWithDisc) || 0
+    const forPay = Number(r.forPay) || 0
+    if (String(r.saleID ?? "").startsWith("S")) {
+      agg.buyoutsRub += price
+      agg.buyoutsCount++
+      agg.forPayRub += forPay
+    } else {
+      agg.returnsRub += price
+      agg.returnsCount++
+    }
+  }
+  return Array.from(map.values())
+}
+
+/**
+ * Тянет supplier/sales за [dateFrom; now] через Statistics API,
+ * агрегирует в дневной разрез выкупов по дате реализации.
+ * Использует wbFetch (cooldown bucket "statistics-sales" + WbRateLimitError на 429).
+ */
+export async function fetchSalesDaily(dateFrom: string): Promise<WbSalesDailyAgg[]> {
+  const token = await getToken()
+  const res = await wbFetch(
+    "Statistics API sales",
+    `https://statistics-api.wildberries.ru/api/v1/supplier/sales?dateFrom=${dateFrom}&flag=0`,
+    { headers: { Authorization: token } },
+  )
+  if (!res.ok) throw new Error(`Sales API ошибка ${res.status}: ${await res.text()}`)
+  const data = await res.json()
+  if (!Array.isArray(data)) return []
+  return aggregateSalesRows(data as WbSaleRow[])
+}
