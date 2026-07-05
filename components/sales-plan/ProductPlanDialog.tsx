@@ -398,15 +398,15 @@ export function ProductPlanDialog({
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={chartData} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
                   <Tooltip
                     formatter={(value: unknown) => [fmtNum(Number(value)), "Заказы шт"]}
                   />
                   <Bar dataKey="план" fill="var(--primary)" opacity={0.8} />
                   {/* ReferenceLine для приходов — Wave 6 */}
                   {displayDays.some((d) => d.stockEnd <= 0) && (
-                    <ReferenceLine y={0} stroke="red" strokeDasharray="3 3" />
+                    <ReferenceLine y={0} stroke="var(--destructive)" strokeDasharray="3 3" />
                   )}
                 </BarChart>
               </ResponsiveContainer>

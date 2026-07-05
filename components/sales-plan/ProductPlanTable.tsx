@@ -87,9 +87,9 @@ const STICKY_TH = "sticky top-0 z-20 bg-background border-b text-xs px-2 h-8 ali
 const STICKY_TD = "sticky z-10 bg-background border-r text-xs px-2 align-middle"
 
 const ABC_CLASSES: Record<string, string> = {
-  A: "bg-green-100 text-green-800",
-  B: "bg-blue-100 text-blue-800",
-  C: "bg-orange-100 text-orange-800",
+  A: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-400",
+  B: "bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-400",
+  C: "bg-orange-100 text-orange-800 dark:bg-orange-950/50 dark:text-orange-400",
 }
 
 const MONTH_LABEL: Record<string, string> = {
@@ -427,21 +427,21 @@ export function ProductPlanTable({
               </th>
               {/* Sticky: SKU */}
               <th
-                className={`${STICKY_TH} sticky border-r`}
+                className={`${STICKY_TH} sticky z-30 border-r`}
                 style={{ left: 60, width: 90, minWidth: 90 }}
               >
                 SKU
               </th>
               {/* Sticky: Название */}
               <th
-                className={`${STICKY_TH} sticky border-r`}
+                className={`${STICKY_TH} sticky z-30 border-r`}
                 style={{ left: 150, width: 200, minWidth: 200 }}
               >
                 Название
               </th>
               {/* Sticky: Приходы */}
               <th
-                className={`${STICKY_TH} sticky border-r`}
+                className={`${STICKY_TH} sticky z-30 border-r`}
                 style={{ left: 350, width: 140, minWidth: 140 }}
               >
                 Приходы
@@ -709,23 +709,23 @@ export function ProductPlanTable({
             })}
           </TableBody>
           <tfoot>
-            <tr className="sticky bottom-0 bg-muted border-t">
+            <tr>
               <td
                 colSpan={4}
-                className="sticky left-0 bg-muted px-2 h-8 text-xs font-semibold"
+                className="sticky bottom-0 left-0 z-20 bg-muted border-t px-2 h-8 text-xs font-semibold"
                 style={{ minWidth: 490 }}
               >
                 Итого
               </td>
-              <td className="text-right tabular-nums text-xs px-2 border-r font-medium">
+              <td className="sticky bottom-0 z-10 bg-muted border-t text-right tabular-nums text-xs px-2 border-r font-medium">
                 {products.reduce((s, p) => s + p.stockNow, 0)}
               </td>
-              <td className="border-r" />
-              <td className="border-r" />
+              <td className="sticky bottom-0 z-10 bg-muted border-t border-r" />
+              <td className="sticky bottom-0 z-10 bg-muted border-t border-r" />
               {months.map((m) => {
                 const t = totals.byMonth[m] ?? { planRub: 0, factRub: 0 }
                 return (
-                  <td key={m} className="text-right px-2 border-r">
+                  <td key={m} className="sticky bottom-0 z-10 bg-muted border-t text-right px-2 border-r">
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="text-xs font-semibold tabular-nums whitespace-nowrap">
                         {fmtRub(t.planRub)}
@@ -739,7 +739,7 @@ export function ProductPlanTable({
                   </td>
                 )
               })}
-              <td className="text-right tabular-nums text-xs font-semibold px-2">
+              <td className="sticky bottom-0 z-10 bg-muted border-t text-right tabular-nums text-xs font-semibold px-2">
                 {fmtRub(totals.totalPlanRub)}
               </td>
             </tr>

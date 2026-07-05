@@ -8,6 +8,7 @@
 import {
   ComposedChart,
   Bar,
+  Cell,
   Line,
   XAxis,
   YAxis,
@@ -132,11 +133,11 @@ export function PlanFactChart({ data, cumulative = false, today }: Props) {
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             interval={data.length > 20 ? Math.floor(data.length / 12) : 0}
           />
           <YAxis
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
             tickFormatter={fmtTick}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -149,17 +150,20 @@ export function PlanFactChart({ data, cumulative = false, today }: Props) {
           <Bar
             dataKey="factRub"
             name="Факт"
-            fill="oklch(0.55 0.15 145)"
+            fill="var(--chart-1)"
             radius={[2, 2, 0, 0]}
-            opacity={0.8}
-          />
+          >
+            {chartData.map((d) => (
+              <Cell key={d.key} opacity={d.unsettled ? 0.45 : 0.8} />
+            ))}
+          </Bar>
 
           {/* План — ступенчатая line */}
           <Line
             dataKey="planRub"
             name="План"
             type="stepAfter"
-            stroke="oklch(0.55 0.18 28)"
+            stroke="var(--chart-2)"
             strokeWidth={2}
             dot={false}
           />
@@ -170,7 +174,7 @@ export function PlanFactChart({ data, cumulative = false, today }: Props) {
               dataKey="iuRub"
               name="ИУ"
               type={cumulative ? "linear" : "monotone"}
-              stroke="oklch(0.50 0.15 270)"
+              stroke="var(--chart-iu)"
               strokeWidth={1.5}
               strokeDasharray="5 4"
               dot={false}
@@ -181,13 +185,13 @@ export function PlanFactChart({ data, cumulative = false, today }: Props) {
           {todayLabel && (
             <ReferenceLine
               x={todayLabel}
-              stroke="oklch(0.60 0.10 60)"
+              stroke="var(--muted-foreground)"
               strokeDasharray="4 4"
               label={{
                 value: "сегодня",
                 position: "top",
                 fontSize: 10,
-                fill: "oklch(0.50 0.10 60)",
+                fill: "var(--muted-foreground)",
               }}
             />
           )}
