@@ -17,7 +17,7 @@ import { requireSection } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
-import { suggestVirtualPurchases } from "@/lib/sales-plan/virtual-purchases"
+import { suggestVirtualPurchases, rollForwardAcceptedArrivals } from "@/lib/sales-plan/virtual-purchases"
 import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
 import { distributeMonthLevelForward } from "@/lib/sales-plan/distribute-forward"
@@ -802,7 +802,7 @@ async function loadModelParamsForRegenerate() {
  * Транзакция: deleteMany(SUGGESTED+auto) + createMany(новые предложения).
  * ACCEPTED/DISMISSED/CONVERTED/manual неприкосновенны.
  */
-async function regenerateVirtualPurchasesInternal(productIds?: string[]): Promise<void> {
+export async function regenerateVirtualPurchasesInternal(productIds?: string[]): Promise<void> {
   try {
     const modelParams = await loadModelParamsForRegenerate()
     const {
@@ -904,6 +904,29 @@ async function regenerateVirtualPurchasesInternal(productIds?: string[]): Promis
       }
     }
 
+    // SP-17 (D-4): сдвиг просроченных авто-ACCEPTED.
+    // Применяем rollForwardAcceptedArrivals per товар после того как minLeadTimeByProduct известен.
+    // Обновляем existingByProduct «сдвинутыми» датами — suggester увидит актуальную expectedArrivalDate.
+    const allShiftedVps: Array<{ id: string; orderDate: string; expectedArrivalDate: string }> = []
+    for (const [productId, vps] of existingByProduct) {
+      const leadTimeDays = minLeadTimeByProduct.get(productId) ?? defaultLeadTimeDays
+      const rollResults = rollForwardAcceptedArrivals(vps, todayMsk, leadTimeDays)
+      for (const r of rollResults) {
+        if (r.shifted) {
+          allShiftedVps.push({ id: r.id, orderDate: r.orderDate, expectedArrivalDate: r.expectedArrivalDate })
+        }
+      }
+      // Обновляем даты в existingByProduct, чтобы suggester видел сдвинутые expectedArrivalDate
+      const updatedVps = vps.map((vp) => {
+        const shift = rollResults.find((r) => r.id === vp.id)
+        if (shift?.shifted) {
+          return { ...vp, orderDate: shift.orderDate, expectedArrivalDate: shift.expectedArrivalDate }
+        }
+        return vp
+      })
+      existingByProduct.set(productId, updatedVps)
+    }
+
     // Подготавливаем VpProductInput для каждого ProductPlanInput
     const vpProducts = inputs.products.map((p) => ({
       productId: p.productId,
@@ -966,6 +989,17 @@ async function regenerateVirtualPurchasesInternal(productIds?: string[]): Promis
             source: "auto",
             status: "SUGGESTED",
           })),
+        })
+      }
+
+      // SP-17: UPDATE просроченных авто-ACCEPTED (инвариант «не прошлым числом» для ACCEPTED)
+      for (const s of allShiftedVps) {
+        await tx.virtualPurchase.update({
+          where: { id: s.id },
+          data: {
+            orderDate: new Date(s.orderDate + "T00:00:00Z"),
+            expectedArrivalDate: new Date(s.expectedArrivalDate + "T00:00:00Z"),
+          },
         })
       }
     })
