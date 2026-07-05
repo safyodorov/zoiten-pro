@@ -392,6 +392,8 @@ None yet.
 
 | fast-260705c | fix: каскад виртуальных закупок — для товара уже в дефиците пробой (< today+leadTime) не лечится приходом → каждая итерация предлагала одинаковую партию одной датой (несколько заказов с приходом 19.08 на УКТ-000003). Фикс: курсор minSearchDate — следующий пробой строго после прихода предыдущей партии. Регрессионный тест (даты строго возрастают). Прод: УКТ-000003 = 3 партии 19.08/20.10/21.12, max 3/товар | 2026-07-05 | a4fff87 |  | inline (lib/sales-plan/virtual-purchases.ts + tests/sales-plan-virtual.test.ts) |
 
+| fast-260705d | UX: параметры модели /sales-plan «Товары» — русские подписи (Lead time→Срок поставки, Покрытие VP→Покрытие закупки, Лаг WB→Лаг приёмки WB, Выкуп/Возврат T+→Срок выкупа/возврата) + hover-tooltip на каждый параметр (что это и на что влияет; семантика сверена с engine/arrivals/suggester). Паттерн PromoTooltip (base-ui render-prop span, cursor-help + dotted underline) | 2026-07-05 | (см. git) |  | inline (ModelParamsBar.tsx) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
