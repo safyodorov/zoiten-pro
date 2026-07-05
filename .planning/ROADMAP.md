@@ -633,3 +633,22 @@ Plans:
 - [x] 26-01-PLAN.md — SP-15: автопротяжка уровня вперёд (saveMonthLevels(distributeForward) + distributeMonthLevelForward, пишет только в авто-месяцы) + сброс ручных→авто (resetMonthLevelsToAuto по товару/месяцу/выбранным, заметный ✕ в ячейке) + галка тулбара. Тест «протяжка не перезаписывает ручные».
 - [x] 26-02-PLAN.md — SP-16: предупреждение о срезе плана (проброс firstStockoutDate/lostRubToStockout/lostUnitsToStockout + «ближайший приход» из arrivals → бейдж «срезано · приход dd.mm» / плашка «нет товара» в ячейке месяца). UI-only, движок не менять.
 - [x] 26-03-PLAN.md — SP-17: динамический roll-forward (rollForwardAcceptedArrivals — сдвиг просроченных авто-ACCEPTED в regenerateVirtualPurchasesInternal; manual не трогать) + ежедневный крон sales-plan-rollforward + wiring dispatcher (vpRollforwardCronTime ~04:40 / vpRollforwardLastRun, x-cron-secret). Тест инварианта «не прошлым числом» для ACCEPTED.
+
+### Phase 27: План продаж — ABC-статус + флаг «заказываем» (гейт виртуальных закупок и планирования продаж)
+
+**Goal:** В `/sales-plan «Товары»` выводить ABC-статус товара (A/B/C) с инлайн-сменой (меняется **глобально** — `Product.abcStatus`) и флаг **«заказываем / не заказываем»**. Статус C = вывод из ассортимента (принудительно «не заказываем»); A/B — тумблер по выбору. Флаг гейтит движок плана: для «не заказываем»/C товаров **виртуальные закупки не считаются**, а **план продаж будущих периодов** сводится к распродаже текущего остатка (потом 0) — без пополнений.
+
+**Зафиксированные решения пользователя (2026-07-05):**
+1. **Область — только `/sales-plan «Товары»`** (ABC-бейдж с инлайн-сменой A/B/C + тумблер «заказываем/не заказываем» в строке товара). В остальные товарные таблицы не выносим.
+2. **ABC меняется глобально** — инлайн-смена пишет `Product.abcStatus` (enum A/B/C уже существует), видно везде, где показывается статус.
+3. **Флаг «заказываем» — новое глобальное поле** `Product.orderEnabled Boolean @default(true)`. Эффективное значение = `abcStatus !== 'C' && orderEnabled`. При C тумблер выключен и заблокирован.
+4. **Остаток при C / «не заказываем» — «распродаём остаток, потом 0»**: движок продаж НЕ переписываем (он уже делает `orders=min(ставка,сток)`); достаточно исключить товар из генерации виртуальных закупок (suggester skip) -> сток истощается без пополнений -> продажи сходят к 0. Полного обнуления будущих продаж НЕ делаем.
+
+**Requirements**: SP-18, SP-19 (см. `.planning/REQUIREMENTS.md # Phase 27 Requirements`). SP-18 = ABC инлайн-смена (глобально); SP-19 = флаг «заказываем» + гейт виртуальных закупок/плана.
+**Depends on:** Phase 25 (движок lib/sales-plan/, suggester, /sales-plan Товары), Phase 26 (regenerateVirtualPurchasesInternal). Модель: `Product.abcStatus` (есть), `Product.orderEnabled` (новое поле — рукописная миграция + `prisma migrate deploy`).
+**Секция:** `SALES` (write — `SALES MANAGE`; инлайн-правки ABC/флага из sales-plan мутируют глобальные поля Product — принято, т.к. пользователь хочет менять «прямо в таблицах, глобально»).
+
+**Plans:** 2 plans
+Plans:
+- [ ] 27-01-PLAN.md — SP-19 фундамент: [BLOCKING] рукописная миграция `Product.orderEnabled` + `prisma generate`; загрузка `abcStatus`/`orderEnabled` в `loadSalesPlanInputs` -> `ProductPlanInput`; гейт `effectiveOrderEnabled=(abcStatus!=='C')&&orderEnabled` в `suggestVirtualPurchases` (skip) + проброс в `regenerateVirtualPurchasesInternal`; server actions `updateProductAbcStatus`/`updateProductOrderEnabled` (SALES MANAGE + регенерация VP + revalidate); vitest-тесты гейта (C/не-заказываем -> 0; A/B заказываем -> без изменений; C форсит off).
+- [ ] 27-02-PLAN.md — SP-18 UI: сериализация `abcStatus`/`orderEnabled`/`effectiveOrderEnabled` в `tableProducts` (page.tsx); ABC-бейдж с инлайн-сменой A/B/C/«—» (native select, глобально) + тумблер «заказываем/не заказываем» (для C — off+disabled+tooltip) в `ProductPlanTable`; optimistic useTransition + router.refresh.
