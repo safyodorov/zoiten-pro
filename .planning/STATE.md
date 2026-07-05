@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
-stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-05T19:52:14.683Z"
+stopped_at: Completed 28-cashflow-28-03-PLAN.md
+last_updated: "2026-07-05T20:01:54.870Z"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -130,6 +130,7 @@ Next: Phase 28 — ПДДС (план движения денежных сред
 | Phase 25-v2-h2-2026 P01 | 25 | 2 tasks | 4 files |
 | Phase 28-cashflow P28-01 | 324s | 3 tasks | 5 files |
 | Phase 28 P28-02 | 364s | 3 tasks | 4 files |
+| Phase 28 P28-03 | 402s | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -416,6 +417,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-05T19:52:14.675Z
+Last session: 2026-07-05T20:01:54.862Z
 Stopped at: Completed 24-finance-balance-24-01-PLAN.md
 Resume file: None
