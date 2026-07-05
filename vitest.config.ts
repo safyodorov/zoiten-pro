@@ -8,6 +8,9 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     environment: "node",
     globals: false,
+    // Windows + Node.js 24: default "threads" pool имеет проблему с runner-контекстом.
+    // vmForks изолирует каждый тест-файл в отдельный fork с VM-контекстом — стабильно на win32.
+    pool: "vmForks",
   },
   resolve: {
     alias: {

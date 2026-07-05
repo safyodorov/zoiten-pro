@@ -143,6 +143,55 @@ function simulate(
   return result
 }
 
+// ── SP-17: Roll-forward просроченных авто-ACCEPTED ────────────────────────────
+
+/** Результат сдвига одной виртуальной закупки */
+export interface RollForwardResult {
+  id: string
+  orderDate: string              // >= today (инвариант «не прошлым числом»)
+  expectedArrivalDate: string    // >= today + leadTimeDays (инвариант)
+  qty: number
+  shifted: boolean               // true если даты были сдвинуты
+}
+
+/**
+ * Сдвигает просроченные авто-ACCEPTED виртуальные закупки вперёд (SP-17, D-4).
+ * Просроченная = source === "auto" && status === "ACCEPTED" && orderDate < today.
+ * Сдвиг: orderDate -> today, expectedArrivalDate -> today + leadTimeDays.
+ * source === "manual" НЕ трогается (пользователь управляет датой вручную).
+ * Инвариант «не прошлым числом»: orderDate >= today, expectedArrivalDate >= today + leadTimeDays.
+ *
+ * @param items существующие VP (ACCEPTED/manual/…)
+ * @param today ISO "YYYY-MM-DD"
+ * @param leadTimeDays дней от заказа до прихода
+ */
+export function rollForwardAcceptedArrivals(
+  items: Array<{ id: string; status: string; source: string; orderDate: string; expectedArrivalDate: string; qty: number }>,
+  today: string,
+  leadTimeDays: number,
+): RollForwardResult[] {
+  return items.map((vp) => {
+    const isAutoAccepted = vp.source === "auto" && vp.status === "ACCEPTED"
+    const overdue = vp.orderDate < today
+    if (isAutoAccepted && overdue) {
+      return {
+        id: vp.id,
+        orderDate: today,
+        expectedArrivalDate: addDays(today, leadTimeDays),
+        qty: vp.qty,
+        shifted: true,
+      }
+    }
+    return {
+      id: vp.id,
+      orderDate: vp.orderDate,
+      expectedArrivalDate: vp.expectedArrivalDate,
+      qty: vp.qty,
+      shifted: false,
+    }
+  })
+}
+
 // ── Основная функция ─────────────────────────────────────────────────────────
 
 /**
