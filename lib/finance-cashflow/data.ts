@@ -179,21 +179,28 @@ export async function loadCashflowInputs(
 
   // amountRub-приоритет (паттерн D-3 / balance-data B1 / quick-260704-go2)
   // поле курса getRateForDate = rateToRub (НЕ rate)
-  const realPurchasePayments = await Promise.all(
-    purchasePaymentRows.map(async (payment) => {
-      let amountRub: number
-      if (payment.amountRub != null) {
-        amountRub = Number(payment.amountRub)
-      } else {
+  // WR-05: курсы резолвятся последовательно с кэшем per (валюта, дата) —
+  // вместо залпа параллельных запросов в пул соединений на каждый платёж
+  const rateCache = new Map<string, number>()
+  const realPurchasePayments: Array<{ date: string; amountRub: number }> = []
+
+  for (const payment of purchasePaymentRows) {
+    const dueIso = payment.dueDate.toISOString().slice(0, 10)
+    let amountRub: number
+    if (payment.amountRub != null) {
+      amountRub = Number(payment.amountRub)
+    } else {
+      const cacheKey = `${payment.currency}:${dueIso}`
+      let rateToRub = rateCache.get(cacheKey)
+      if (rateToRub === undefined) {
         const rate = await getRateForDate(payment.currency, payment.dueDate)
-        amountRub = Number(payment.amount) * (rate?.rateToRub ?? 1)
+        rateToRub = rate?.rateToRub ?? 1
+        rateCache.set(cacheKey, rateToRub)
       }
-      return {
-        date: payment.dueDate.toISOString().slice(0, 10),
-        amountRub,
-      }
-    }),
-  )
+      amountRub = Number(payment.amount) * rateToRub
+    }
+    realPurchasePayments.push({ date: dueIso, amountRub })
+  }
 
   // ── 6. loanPayments (в горизонте) ─────────────────────────────────────────
 
