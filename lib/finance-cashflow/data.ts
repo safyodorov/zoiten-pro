@@ -10,6 +10,11 @@ import type { PrismaClient } from "@prisma/client"
 import { getPlannedRevenueSeries, getPlannedVirtualPayments } from "@/lib/sales-plan/pdds-feed"
 import { getBankBalanceAsOf, getRateForDate } from "@/lib/balance-data"
 import { computeQuarterAccrual } from "@/lib/balance-math"
+import {
+  CASHFLOW_SETTING_KEYS,
+  CASHFLOW_SETTING_DEFAULTS,
+  type CashflowSettingKey,
+} from "@/lib/cashflow-schemas"
 import { eachDayIso } from "./engine"
 import type { CashflowInputs } from "./types"
 
@@ -23,11 +28,10 @@ export interface LoadCashflowParams {
 
 // ── Ключи AppSetting ────────────────────────────────────────────────────────
 
-const CASHFLOW_SETTING_KEYS = [
-  "finance.cashflow.wbPayoutPct",
-  "finance.cashflow.wbPayoutLagWeeks",
-  "finance.cashflow.opexMonthlyRub",
-  "finance.cashflow.gapThresholdRub",
+// IN-01: канонический список и дефолты — lib/cashflow-schemas.ts. Здесь только
+// расширение налоговыми ключами (они не редактируются через AssumptionsBar).
+const LOADER_SETTING_KEYS = [
+  ...CASHFLOW_SETTING_KEYS,
   "finance.vatPct",
   "finance.incomeTaxPct",
 ] as const
@@ -98,14 +102,17 @@ export async function loadCashflowInputs(
   // ── 1. AppSetting ──────────────────────────────────────────────────────────
 
   const settingRows = await db.appSetting.findMany({
-    where: { key: { in: [...CASHFLOW_SETTING_KEYS] } },
+    where: { key: { in: [...LOADER_SETTING_KEYS] } },
   })
   const settingsMap = new Map(settingRows.map((r) => [r.key, r.value]))
 
-  const wbPayoutPct = Number(settingsMap.get("finance.cashflow.wbPayoutPct") ?? "55")
-  const wbPayoutLagWeeks = Number(settingsMap.get("finance.cashflow.wbPayoutLagWeeks") ?? "1")
-  const opexMonthlyRub = Number(settingsMap.get("finance.cashflow.opexMonthlyRub") ?? "0")
-  const gapThresholdRub = Number(settingsMap.get("finance.cashflow.gapThresholdRub") ?? "0")
+  const settingOrDefault = (key: CashflowSettingKey): number =>
+    Number(settingsMap.get(key) ?? CASHFLOW_SETTING_DEFAULTS[key])
+
+  const wbPayoutPct = settingOrDefault("finance.cashflow.wbPayoutPct")
+  const wbPayoutLagWeeks = settingOrDefault("finance.cashflow.wbPayoutLagWeeks")
+  const opexMonthlyRub = settingOrDefault("finance.cashflow.opexMonthlyRub")
+  const gapThresholdRub = settingOrDefault("finance.cashflow.gapThresholdRub")
   const vatPct = Number(settingsMap.get("finance.vatPct") ?? "7")
   const incomeTaxPct = Number(settingsMap.get("finance.incomeTaxPct") ?? "1")
 
