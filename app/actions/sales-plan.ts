@@ -103,6 +103,25 @@ export async function bulkUpdateArrivalDates(
 // Все write — SALES MANAGE (фикс дыры VIEW-write, SP-13).
 // ═══════════════════════════════════════════════════════════════════
 
+// ── distributeMonthLevelForward ────────────────────────────────────
+
+/**
+ * Возвращает список ДОПОЛНИТЕЛЬНЫХ месяцев (кроме targetMonth) горизонта > targetMonth,
+ * у которых НЕТ собственного явного уровня (авто-месяцы) — куда протянуть value.
+ * Месяцы из manualMonths (ручные, явный SalesPlanMonthLevel) исключаются (D-2).
+ * targetMonth сам НЕ включается (его пишет вызывающий отдельно).
+ */
+export function distributeMonthLevelForward(args: {
+  targetMonth: string          // "2026-08-01"
+  horizonMonths: string[]      // все месяцы горизонта (из клиента / MONTHS)
+  manualMonths: string[]       // месяцы с явным SalesPlanMonthLevel для этого товара
+}): string[] {
+  const manual = new Set(args.manualMonths)
+  return args.horizonMonths.filter(
+    (m) => m > args.targetMonth && !manual.has(m),
+  )
+}
+
 // ── saveMonthLevels ────────────────────────────────────────────────
 
 const MonthLevelItemSchema = z.object({
@@ -118,6 +137,10 @@ const SaveMonthLevelsSchema = z.array(MonthLevelItemSchema)
 /**
  * Upsert помесячных плановых уровней per товар.
  * Если все три поля null — удаляем запись (нет уровня → fallback на baseline).
+ *
+ * opts.distributeForward=true + opts.horizonMonths:
+ *   протягивает targetOrdersPerDay во все последующие авто-месяцы горизонта,
+ *   НЕ перезаписывая месяцы с уже существующим явным уровнем (D-1, D-2).
  */
 export async function saveMonthLevels(
   payload: Array<{
@@ -127,12 +150,59 @@ export async function saveMonthLevels(
     priceRub: number | null
     buyoutPct: number | null
   }>,
+  opts?: { distributeForward?: boolean; horizonMonths?: string[] },
 ): Promise<ActionResult> {
   await requireSection("SALES", "MANAGE")
   const parsed = SaveMonthLevelsSchema.safeParse(payload)
   if (!parsed.success) return { ok: false, error: "Невалидные данные" }
   try {
-    for (const item of parsed.data) {
+    // ── Автопротяжка: определяем дополнительные месяцы для upsert ──
+    let expandedPayload = parsed.data
+    if (opts?.distributeForward && opts.horizonMonths && opts.horizonMonths.length > 0) {
+      // Уникальные productId из payload
+      const uniqueProductIds = [...new Set(parsed.data.map((i) => i.productId))]
+      // Загружаем существующие явные уровни для затронутых товаров
+      const existing = await prisma.salesPlanMonthLevel.findMany({
+        where: { productId: { in: uniqueProductIds } },
+        select: { productId: true, month: true },
+      })
+      // Map productId → Set<month ISO string>
+      const manualMonthsByProduct = new Map<string, string[]>()
+      for (const row of existing) {
+        const monthIso = row.month.toISOString().slice(0, 10)
+        const arr = manualMonthsByProduct.get(row.productId) ?? []
+        arr.push(monthIso)
+        manualMonthsByProduct.set(row.productId, arr)
+      }
+      // Set ключей "productId|month" из исходного payload — для дедупа (payload имеет приоритет)
+      const payloadKeys = new Set(parsed.data.map((i) => `${i.productId}|${i.month}`))
+      // Строим дополнительные записи от протяжки
+      const distributed: typeof parsed.data = []
+      for (const item of parsed.data) {
+        if (item.targetOrdersPerDay === null) continue // протягиваем только заданный уровень
+        const extraMonths = distributeMonthLevelForward({
+          targetMonth: item.month,
+          horizonMonths: opts.horizonMonths,
+          manualMonths: manualMonthsByProduct.get(item.productId) ?? [],
+        })
+        for (const m of extraMonths) {
+          const key = `${item.productId}|${m}`
+          if (!payloadKeys.has(key)) {
+            distributed.push({
+              productId: item.productId,
+              month: m,
+              targetOrdersPerDay: item.targetOrdersPerDay,
+              priceRub: null,
+              buyoutPct: null,
+            })
+            payloadKeys.add(key) // дедуп: не добавлять дважды
+          }
+        }
+      }
+      expandedPayload = [...parsed.data, ...distributed]
+    }
+
+    for (const item of expandedPayload) {
       const monthDate = new Date(item.month + "T00:00:00Z")
       if (
         item.targetOrdersPerDay === null &&
