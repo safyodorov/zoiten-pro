@@ -23,8 +23,9 @@ function daysInMonth(isoDate: string): number {
   return new Date(Date.UTC(y, m, 0)).getUTCDate()
 }
 
-/** Генератор ISO-строк [from..to] включительно (шаг 1 день UTC) */
-function eachDayIso(from: string, to: string): string[] {
+/** Генератор ISO-строк [from..to] включительно (шаг 1 день UTC).
+ * Экспортируется для data.ts (форвард-филл факт-ряда, WR-03). */
+export function eachDayIso(from: string, to: string): string[] {
   const days: string[] = []
   let cur = new Date(from + "T00:00:00Z").getTime()
   const end = new Date(to + "T00:00:00Z").getTime()

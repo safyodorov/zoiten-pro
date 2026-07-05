@@ -10,6 +10,7 @@ import type { PrismaClient } from "@prisma/client"
 import { getPlannedRevenueSeries, getPlannedVirtualPayments } from "@/lib/sales-plan/pdds-feed"
 import { getBankBalanceAsOf, getRateForDate } from "@/lib/balance-data"
 import { computeQuarterAccrual } from "@/lib/balance-math"
+import { eachDayIso } from "./engine"
 import type { CashflowInputs } from "./types"
 
 // ── Параметры загрузчика ────────────────────────────────────────────────────
@@ -277,19 +278,14 @@ export async function loadCashflowInputs(
       dayDeltaMap.set(d, (dayDeltaMap.get(d) ?? 0) + delta)
     }
 
-    // Накопительный ряд от startingBalance
-    const sortedDays = Array.from(dayDeltaMap.keys()).sort()
+    // Накопительный ряд от startingBalance с форвард-филлом (WR-03):
+    // в день без движений остаток не «неизвестен» — он равен остатку
+    // предыдущего дня, иначе линия факта на графике рвётся на сегменты.
     let runningBalance = startingBalance
-    const balanceByDay = new Map<string, number>()
-
-    for (const d of sortedDays) {
+    for (const d of eachDayIso(horizonFrom, actualTo)) {
       runningBalance += dayDeltaMap.get(d) ?? 0
-      balanceByDay.set(d, runningBalance)
+      actualBalanceSeries.push({ date: d, balanceRub: runningBalance })
     }
-
-    actualBalanceSeries = Array.from(balanceByDay.entries())
-      .map(([date, balanceRub]) => ({ date, balanceRub }))
-      .sort((a, b) => (a.date < b.date ? -1 : 1))
   }
 
   // ── Сборка результата ──────────────────────────────────────────────────────
