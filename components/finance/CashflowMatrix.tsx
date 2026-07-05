@@ -38,7 +38,6 @@ function gapCellClass(hasGap: boolean): string {
 
 interface CashflowMatrixProps {
   buckets: CashflowBucket[]
-  gapThresholdRub: number
 }
 
 // ── Строки матрицы ────────────────────────────────────────────────────────────
@@ -108,7 +107,7 @@ const ROWS: MatrixRow[] = [
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function CashflowMatrix({ buckets, gapThresholdRub: _gapThresholdRub }: CashflowMatrixProps) {
+export function CashflowMatrix({ buckets }: CashflowMatrixProps) {
   if (buckets.length === 0) {
     return (
       <div className="rounded-md border bg-card p-4">

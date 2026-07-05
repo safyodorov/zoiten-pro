@@ -167,10 +167,7 @@ export default async function FinanceCashflowPage({
       />
 
       {/* Sticky-матрица потоков × бакеты */}
-      <CashflowMatrix
-        buckets={result.buckets}
-        gapThresholdRub={inputs.gapThresholdRub}
-      />
+      <CashflowMatrix buckets={result.buckets} />
     </div>
   )
 }
