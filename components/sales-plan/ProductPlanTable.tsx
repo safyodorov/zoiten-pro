@@ -809,6 +809,7 @@ export function ProductPlanTable({
             }
           }}
           today={today}
+          abcStatus={products.find((p) => p.productId === dialogProductId)?.abcStatus ?? null}
         />
       )}
 
