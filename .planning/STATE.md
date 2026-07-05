@@ -398,6 +398,8 @@ None yet.
 
 | fast-260705e | UX «Товары»: плашки [план]/[факт] в ячейках месяца и футере + «тыс ₽» у сумм + ширина колонок месяцев 110→170 + подстрочник edit-ячейки без К/М. Итерация 2 по фидбеку: план и факт одним шрифтом (text-sm), план-плашка жёлто-оранжевая (amber), факт-плашка зелёная (факт ≥ план) / красная (факт < план; сравнение по pro-rata pct при наличии версии, иначе напрямую) | 2026-07-05 | (см. git) |  | inline (ProductPlanTable.tsx, ProductPlanCell.tsx) |
 
+| 260705-tlc | Большая модалка товара в /sales-plan «Товары» (клик по строке): БЕЗ табов, max-w-7xl. ComposedChart весь горизонт H2 по дням (план шт/день chart-2 bars + факт шт/день chart-1 bars из WbCardOrdersDaily (fallback WbSalesDaily нетто) + линия Сток(расч) chart-iu правая ось + «сегодня» + вертикальные отметки приходов с qty, реальные/виртуальные). Grid 6 месяцев: заказы/день + цена ₽ с REALTIME-пересчётом графика (computeSalesPlan client) + «План H2: тыс ₽ · шт»; сохранение saveMonthLevels (null=сброс на авто). Приходы списком + стокаут/потери. «Правка по дням» сохранена как <details>. Новый action getProductPlanHorizon (SALES read). ParamsTab удалён | 2026-07-05 | 2aae7b0 |  | [260705-tlc-product-plan-modal-v2](./quick/260705-tlc-product-plan-modal-v2/) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
