@@ -54,7 +54,8 @@ const goldenInputs: CashflowInputs = {
   payoutModel: "coefficient",
   realPurchasePayments: [],
   virtualPayments: [{ date: "2026-07-05", amountRub: 1_000_000 }],
-  loanPayments: [{ date: "2026-07-15", amountRub: 5_200_000 }],
+  // Дата внутри горизонта (to = 2026-07-14) — иначе ветка loanRub не проверяется (IN-06)
+  loanPayments: [{ date: "2026-07-14", amountRub: 5_200_000 }],
   taxPayments: [],
   opexMonthlyRub: 0,
 }
@@ -135,6 +136,17 @@ describe("computeCashflow", () => {
 
     // Кастомная (90%) должна давать больше, чем дефолтная (55%)
     expect(totalWbPayoutCustom).toBeGreaterThan(totalWbPayoutDefault)
+  })
+
+  // ── Test 6: кредитные оттоки ─────────────────────────────────────
+  it("Test 6 — loanRub: кредитный платёж в горизонте попадает в отток своего дня", () => {
+    const result = computeCashflow(goldenInputs)
+    const day14 = result.days.find((d) => d.date === "2026-07-14")
+    expect(day14?.loanRub).toBe(5_200_000)
+    expect(day14?.totalOutflow).toBeGreaterThanOrEqual(5_200_000)
+    // Ни на какой другой день кредитный отток не попадает
+    const totalLoan = result.days.reduce((acc, d) => acc + d.loanRub, 0)
+    expect(totalLoan).toBe(5_200_000)
   })
 })
 
