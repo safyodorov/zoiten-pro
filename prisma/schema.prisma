@@ -398,6 +398,7 @@ model Product {
   subcategory              Subcategory?           @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   label                    String?                @db.VarChar(100)
   abcStatus                AbcStatus?
+  orderEnabled             Boolean                @default(true)
   availability             Availability           @default(IN_STOCK)
   weightKg                 Float?
   heightCm                 Float?
