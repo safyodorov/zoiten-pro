@@ -394,6 +394,8 @@ None yet.
 
 | fast-260705d | UX: параметры модели /sales-plan «Товары» — русские подписи (Lead time→Срок поставки, Покрытие VP→Покрытие закупки, Лаг WB→Лаг приёмки WB, Выкуп/Возврат T+→Срок выкупа/возврата) + hover-tooltip на каждый параметр (что это и на что влияет; семантика сверена с engine/arrivals/suggester). Паттерн PromoTooltip (base-ui render-prop span, cursor-help + dotted underline) | 2026-07-05 | (см. git) |  | inline (ModelParamsBar.tsx) |
 
+| 260705-seb | /sales-plan «Товары» v2 по UAT: (D-1) ETA приходов с floor по текущему этапу закупки — «Готов к отгрузке» → today+транзит, ранние этапы → today+срок поставки, max(createdAt+45, floor), manual/TRANSIT не тронуты (+4 arrivals-теста); (D-3) факт per-товар → по дате реализации нетто (redemptionByProduct); (D-4) pro-rata: pct = факт/план прошедших дней активной версии, план месяца = версия(прошлое)+движок(остаток) — довершено оркестратором после ревью (5f0ce0d); (D-5) ячейки «407 · 61 шт» в тыс ₽ без П/Ф/К/М, штуки во всех месяцах, легенда, «Итог, тыс ₽». Post-deploy: transitDays 20→40 + regenerate VP | 2026-07-05 | 5f0ce0d |  | [260705-seb-arrivals-stage-eta-cells](./quick/260705-seb-arrivals-stage-eta-cells/) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
