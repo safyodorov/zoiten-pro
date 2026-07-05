@@ -36,6 +36,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbCardsRefreshCronTime",
           "cbrRateSyncCronTime",
           "financeBalanceSnapshotCronTime",
+          "wbSalesDailyCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbCardsRefreshLastRun",
           "cbrRateSyncLastRun",
           "financeBalanceSnapshotLastRun",
+          "wbSalesDailyLastRun",
         ],
       },
     },
@@ -57,6 +59,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const cardsRefreshTime = settings.wbCardsRefreshCronTime ?? "05:30"
   const cbrTime = settings.cbrRateSyncCronTime ?? "12:00"
   const financeSnapshotTime = settings.financeBalanceSnapshotCronTime ?? "06:00"
+  const salesTime = settings.wbSalesDailyCronTime ?? "04:30"
   const ordersLastRun = settings.wbOrdersDailyLastRun ?? null
   const pricesLastRun = settings.wbPricesDailyLastRun ?? null
   const funnelLastRun = settings.wbFunnelDailyLastRun ?? null
@@ -65,6 +68,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const cardsRefreshLastRun = settings.wbCardsRefreshLastRun ?? null
   const cbrLastRun = settings.cbrRateSyncLastRun ?? null
   const financeSnapshotLastRun = settings.financeBalanceSnapshotLastRun ?? null
+  const salesLastRun = settings.wbSalesDailyLastRun ?? null
 
   const fired: string[] = []
 
@@ -124,6 +128,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] funnel error:", e)
       fired.push("funnel:error")
+    }
+  }
+
+  // Quick 260705-f1p: дневной факт выкупов по дате реализации (Statistics Sales API).
+  // 04:30 МСК — между funnel (04:00) и orders (05:00). Отдельный bucket statistics-sales.
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: salesTime,
+      lastRunDate: salesLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: salesHandler } = await import("../wb-sales-daily/route")
+      const res = await salesHandler(req)
+      fired.push(`sales:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] sales error:", e)
+      fired.push("sales:error")
     }
   }
 
