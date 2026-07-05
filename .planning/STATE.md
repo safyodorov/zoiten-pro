@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
-status: Milestone complete
+status: ready_to_plan
 stopped_at: Completed 28-cashflow-28-03-PLAN.md
 last_updated: "2026-07-05T20:01:54.870Z"
 progress:
   total_phases: 6
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
   completed_plans: 22
-  percent: 100
+  percent: 117
 ---
 
 # Project State
@@ -24,15 +24,15 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 
 ## Current Position
 
-Phase: 28 (ПДДС — план движения денежных средств (/finance/cashflow)) — EXECUTING
-Plan: 3 of 3
+Phase: 999.1
+Plan: Not started
 Next: Phase 28 — ПДДС (план движения денежных средств, /finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts). Ресёч запущен.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 30
+- Total plans completed: 33
 - Average duration: -
 - Total execution time: -
 
@@ -40,7 +40,7 @@ Next: Phase 28 — ПДДС (план движения денежных сред
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 28 | 3 | - | - |
 
 **Recent Trend:**
 
