@@ -37,6 +37,37 @@ function parseUtcDate(isoDate: string): Date {
   return new Date(isoDate + "T00:00:00Z")
 }
 
+// ── Helper: календарные кварталы, пересекающиеся с горизонтом ───────────────
+
+/**
+ * Кварталы любого года, пересекающиеся с [fromIso..toIso].
+ * payDate = последний день квартала, обрезанный по toIso (частичный квартал
+ * в конце горизонта платится в последний день горизонта — упрощение v1).
+ */
+function quartersInRange(
+  fromIso: string,
+  toIso: string,
+): Array<{ from: string; to: string; payDate: string }> {
+  const result: Array<{ from: string; to: string; payDate: string }> = []
+  let year = Number(fromIso.slice(0, 4))
+  let quarter = Math.ceil(Number(fromIso.slice(5, 7)) / 3)
+  for (;;) {
+    const from = `${year}-${String((quarter - 1) * 3 + 1).padStart(2, "0")}-01`
+    if (from > toIso) break
+    const endMonth = quarter * 3
+    const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate()
+    const to = `${year}-${String(endMonth).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`
+    result.push({ from, to, payDate: to < toIso ? to : toIso })
+    if (quarter === 4) {
+      quarter = 1
+      year += 1
+    } else {
+      quarter += 1
+    }
+  }
+  return result
+}
+
 // ── loadCashflowInputs ──────────────────────────────────────────────────────
 
 /**
@@ -183,22 +214,14 @@ export async function loadCashflowInputs(
 
   // ── 7. taxPayments per квартал (конец квартала = дата уплаты, упрощение v1) ─
 
-  // Квартальные бакеты в горизонте H2-2026
-  // Q3 2026: 2026-07-01 .. 2026-09-30, уплата конец 2026-09-30
-  // Q4 2026: 2026-10-01 .. 2026-12-31, уплата конец 2026-12-31
-  const quarters = [
-    { from: "2026-07-01", to: "2026-09-30", payDate: "2026-09-30" },
-    { from: "2026-10-01", to: "2026-12-31", payDate: "2026-12-31" },
-  ]
+  // WR-02: кварталы вычисляются из горизонта (любой год), не захардкожены.
+  // Для H2-2026: Q3 (уплата 2026-09-30) + Q4 (уплата 2026-12-31).
+  const quarters = quartersInRange(horizonFrom, horizonTo)
 
   const taxPayments: Array<{ date: string; amountRub: number }> = []
 
   for (const qtr of quarters) {
-    // Проверяем, что квартал пересекается с горизонтом
-    if (qtr.to < horizonFrom || qtr.from > horizonTo) continue
-    if (qtr.payDate < horizonFrom || qtr.payDate > horizonTo) continue
-
-    // Σ buyoutsRub за квартал из revenueSeries
+    // Σ buyoutsRub за квартал из revenueSeries (уже обрезан по горизонту)
     const qtrBuyoutsRub = revenueSeries
       .filter((r) => r.date >= qtr.from && r.date <= qtr.to)
       .reduce((sum, r) => sum + r.buyoutsRub, 0)
