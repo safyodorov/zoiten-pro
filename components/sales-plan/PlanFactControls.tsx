@@ -25,7 +25,7 @@ const GRANULARITY_OPTIONS: { value: Granularity; label: string }[] = [
 ]
 
 const METRIC_OPTIONS = [
-  { value: "buyouts-rub",   label: "Выкуплено ₽ (реализация)" },
+  { value: "buyouts-rub",   label: "Фактический оборот ₽" },
   { value: "buyouts-units", label: "Выкуплено шт (реализация)" },
   { value: "orders-rub",    label: "Заказы ₽" },
   { value: "orders-units",  label: "Заказы шт" },

@@ -492,9 +492,10 @@ export interface FactDailyResult {
   byProduct: Map<string, Map<string, FactDailyRow>>
   /** Дни строго <= settledThroughIso считаются settled (выкупы финализированы WB) */
   settledThroughIso: string
-  /** Redemption-факт выкупов по дате РЕАЛИЗАЦИИ (WbSalesDaily) — company-level */
+  /** Redemption-факт по дате РЕАЛИЗАЦИИ (WbSalesDaily) — company-level.
+   *  buyoutsRub = НЕТТО = выкупы − возвраты (кабинетный «Фактический оборот» WB). */
   redemptionCompany: Map<string, FactDailyRow>
-  /** Redemption-факт по товарам (productId → date → row) */
+  /** Redemption-факт по товарам (productId → date → row); buyoutsRub = нетто (выкупы − возвраты). */
   redemptionByProduct: Map<string, Map<string, FactDailyRow>>
   /** Дни <= этой даты считаются settled для redemption (today−2, НЕ today−7) */
   redemptionSettledThroughIso: string
@@ -611,15 +612,16 @@ export async function loadFactDaily(
 
   const salesRows = await db.wbSalesDaily.findMany({
     where: { date: { gte: parseDate(from), lte: parseDate(to) } },
-    select: { nmId: true, date: true, buyoutsRub: true, buyoutsCount: true },
+    select: { nmId: true, date: true, buyoutsRub: true, returnsRub: true, buyoutsCount: true },
   })
 
-  // company-level: суммируем все nmId кабинета (включая непривязанных к товарам)
+  // company-level: суммируем все nmId кабинета (включая непривязанных к товарам).
+  // buyoutsRub = НЕТТО = выкупы + возвраты (returnsRub отрицательный) = кабинетный «Фактический оборот».
   const redemptionCompany = new Map<string, FactDailyRow>()
   for (const s of salesRows) {
     const iso = toIso(s.date)
     const cur = redemptionCompany.get(iso) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
-    cur.buyoutsRub += s.buyoutsRub ?? 0
+    cur.buyoutsRub += (s.buyoutsRub ?? 0) + (s.returnsRub ?? 0)
     cur.buyoutsUnits += s.buyoutsCount ?? 0
     redemptionCompany.set(iso, cur)
   }
@@ -634,7 +636,7 @@ export async function loadFactDaily(
       if (!redemptionByProduct.has(productId)) redemptionByProduct.set(productId, new Map())
       const m = redemptionByProduct.get(productId)!
       const cur = m.get(iso) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
-      cur.buyoutsRub += s.buyoutsRub ?? 0
+      cur.buyoutsRub += (s.buyoutsRub ?? 0) + (s.returnsRub ?? 0) // нетто (выкупы − возвраты)
       cur.buyoutsUnits += s.buyoutsCount ?? 0
       m.set(iso, cur)
     }
