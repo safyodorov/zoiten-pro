@@ -25,6 +25,7 @@ function makeInput(overrides: Record<string, unknown> = {}) {
     wbInboundLagDays: 0,
     transitDays: 20,
     defaultLeadTimeDays: 45,
+    today: "2026-07-05",
     ...overrides,
   }
 }
@@ -41,6 +42,7 @@ describe("resolveArrivalBatches — уровень 1: plannedArrivalDate (при
           transitQty: 0,
           transitDate: null,
           leadTimeDays: 45,
+          reachedStages: [],
         },
       ],
     })
@@ -64,6 +66,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
           transitQty: 100,
           transitDate: "2026-07-10",
           leadTimeDays: 20,
+          reachedStages: [],
         },
       ],
     })
@@ -76,6 +79,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
 
   it("TRANSIT.qty = 0 → пропускается на уровень 3 (leadtime-eta)", () => {
     const input = makeInput({
+      today: "2026-05-01",  // floor = 2026-05-01+45 = 2026-06-15; createdAt+45 = 2026-06-15 → floor tie, OK
       purchases: [
         {
           id: "pur-3",
@@ -85,6 +89,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
           transitQty: 0,
           transitDate: "2026-07-10",
           leadTimeDays: 45,
+          reachedStages: [],
         },
       ],
     })
@@ -95,6 +100,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
 
   it("TRANSIT.date = null → пропускается на уровень 3 (leadtime-eta)", () => {
     const input = makeInput({
+      today: "2026-05-01",
       purchases: [
         {
           id: "pur-4",
@@ -104,6 +110,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
           transitQty: 30,
           transitDate: null,
           leadTimeDays: 45,
+          reachedStages: [],
         },
       ],
     })
@@ -123,6 +130,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
           transitQty: 40, // < qtyRemaining(100) → сплит
           transitDate: "2026-07-10",
           leadTimeDays: 45,
+          reachedStages: [],
         },
       ],
     })
@@ -143,6 +151,7 @@ describe("resolveArrivalBatches — уровень 2: TRANSIT.date + transitDays
 describe("resolveArrivalBatches — уровень 3: createdAt + leadTimeDays", () => {
   it("нет планов/транзита → dateSource = 'leadtime-eta', дата = createdAt + 45", () => {
     const input = makeInput({
+      today: "2026-05-01", // floor = 2026-05-01+45 = 2026-06-15; createdAt+45 = 2026-07-16 > 2026-06-15 → max=2026-07-16
       purchases: [
         {
           id: "pur-6",
@@ -152,6 +161,7 @@ describe("resolveArrivalBatches — уровень 3: createdAt + leadTimeDays",
           transitQty: 0,
           transitDate: null,
           leadTimeDays: 45,
+          reachedStages: [],
         },
       ],
     })
@@ -175,6 +185,7 @@ describe("resolveArrivalBatches — уровень 4: legacy ProductIncoming.exp
           transitQty: 0,
           transitDate: null,
           leadTimeDays: null, // без lead time → уровень 3 не даёт дату → уровень 4
+          reachedStages: [],
         },
       ],
       legacyIncoming: {
@@ -201,6 +212,7 @@ describe("resolveArrivalBatches — уровень 5: нет данных → п
           transitQty: 0,
           transitDate: null,
           leadTimeDays: null,
+          reachedStages: [],
         },
       ],
       legacyIncoming: null,
@@ -227,5 +239,97 @@ describe("resolveArrivalBatches — виртуальные закупки", () =
     const batch = batches.find((b: { refId: string }) => b.refId === "vp-1")
     expect(batch?.source).toBe("virtual")
     expect(batch?.date).toBe("2026-09-15")
+  })
+})
+
+describe("resolveArrivalBatches — floor по текущему этапу (D-1)", () => {
+  // today = "2026-07-05", transitDays = 20, defaultLeadTimeDays = 45
+
+  it("Кейс A: PRODUCTION этап → floor = today+45 = 2026-08-19 побеждает createdAt+45 = 2026-07-16", () => {
+    // createdAt "2026-06-01" + 45 = "2026-07-16"; floor "2026-07-05"+45 = "2026-08-19" → max = "2026-08-19"
+    const input = makeInput({
+      purchases: [
+        {
+          id: "pur-A",
+          plannedArrivalDate: null,
+          createdAt: "2026-06-01",
+          qtyRemaining: 100,
+          transitQty: 0,
+          transitDate: null,
+          leadTimeDays: 45,
+          reachedStages: ["PRODUCTION"],
+        },
+      ],
+    })
+    const batches = resolveArrivalBatches(input)
+    const batch = batches.find((b: { refId: string }) => b.refId === "pur-A")
+    expect(batch?.dateSource).toBe("leadtime-eta")
+    expect(batch?.date).toBe("2026-08-19") // floor today+45
+  })
+
+  it("Кейс B: SHIPMENT этап → floor = today+transit = 2026-07-25 побеждает createdAt+45 = 2026-07-16", () => {
+    // createdAt "2026-06-01" + 45 = "2026-07-16"; floor "2026-07-05"+20 = "2026-07-25" → max = "2026-07-25"
+    const input = makeInput({
+      purchases: [
+        {
+          id: "pur-B",
+          plannedArrivalDate: null,
+          createdAt: "2026-06-01",
+          qtyRemaining: 100,
+          transitQty: 0,
+          transitDate: null,
+          leadTimeDays: 45,
+          reachedStages: ["PRODUCTION", "INSPECTION", "SHIPMENT"],
+        },
+      ],
+    })
+    const batches = resolveArrivalBatches(input)
+    const batch = batches.find((b: { refId: string }) => b.refId === "pur-B")
+    expect(batch?.dateSource).toBe("leadtime-eta")
+    expect(batch?.date).toBe("2026-07-25") // SHIPMENT floor: today+transit
+  })
+
+  it("Кейс C: max сохраняет позднейшую — createdAt+45 > floor → ETA = createdAt+45", () => {
+    // createdAt "2026-08-01" + 45 = "2026-09-15"; floor "2026-07-05"+45 = "2026-08-19" → max = "2026-09-15"
+    const input = makeInput({
+      purchases: [
+        {
+          id: "pur-C",
+          plannedArrivalDate: null,
+          createdAt: "2026-08-01",
+          qtyRemaining: 100,
+          transitQty: 0,
+          transitDate: null,
+          leadTimeDays: 45,
+          reachedStages: ["PRODUCTION"],
+        },
+      ],
+    })
+    const batches = resolveArrivalBatches(input)
+    const batch = batches.find((b: { refId: string }) => b.refId === "pur-C")
+    expect(batch?.dateSource).toBe("leadtime-eta")
+    expect(batch?.date).toBe("2026-09-15") // createdAt+45 > floor
+  })
+
+  it("Кейс D: plannedArrivalDate → floor НЕ применяется (dateSource = manual)", () => {
+    // plannedArrivalDate "2026-07-06" < today+45 = "2026-08-19", но manual имеет приоритет
+    const input = makeInput({
+      purchases: [
+        {
+          id: "pur-D",
+          plannedArrivalDate: "2026-07-06",
+          createdAt: "2026-06-01",
+          qtyRemaining: 100,
+          transitQty: 0,
+          transitDate: null,
+          leadTimeDays: 45,
+          reachedStages: ["PRODUCTION"],
+        },
+      ],
+    })
+    const batches = resolveArrivalBatches(input)
+    const batch = batches.find((b: { refId: string }) => b.refId === "pur-D")
+    expect(batch?.dateSource).toBe("manual") // floor НЕ применён
+    expect(batch?.date).toBe("2026-07-06")
   })
 })

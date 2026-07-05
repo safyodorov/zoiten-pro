@@ -279,6 +279,7 @@ export async function loadSalesPlanInputs(
     transitQty: number
     transitDate: string | null
     leadTimeDays: number | null
+    reachedStages: string[]
   }
   const purchasesByProductId = new Map<string, PurchaseInputForProduct[]>()
 
@@ -305,6 +306,7 @@ export async function loadSalesPlanInputs(
         transitQty,
         transitDate,
         leadTimeDays: minLeadTimeByProduct.get(productId) ?? null,
+        reachedStages: item.stages.map((s) => s.stage),
       })
       purchasesByProductId.set(productId, arr)
     }
@@ -437,6 +439,7 @@ export async function loadSalesPlanInputs(
       wbInboundLagDays,
       transitDays,
       defaultLeadTimeDays,
+      today,
     }
     const arrivals = resolveArrivalBatches(arrivalInput)
 
