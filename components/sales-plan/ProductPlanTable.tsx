@@ -11,7 +11,7 @@ import { IncomingBadges, IncomingBadgesLegend } from "./IncomingBadges"
 import { ProductPlanCell } from "./ProductPlanCell"
 import { ProductPlanDialog } from "./ProductPlanDialog"
 import { saveMonthLevels, scaleMonthLevels, resetMonthLevelsToAuto } from "@/app/actions/sales-plan"
-import type { ProductPlanResult, ArrivalBatch } from "@/lib/sales-plan/types"
+import type { ProductPlanResult, ArrivalBatch, PlanDayRow } from "@/lib/sales-plan/types"
 
 // ── Форматирование чисел ────────────────────────────────────────────────────────
 
@@ -113,6 +113,53 @@ function getMonthFact(
     }
   }
   return hasData ? { buyoutsRub, buyoutsUnits } : null
+}
+
+// ── SP-16: хелперы бейджа среза ──────────────────────────────────────────────
+
+/** Первый приход строго после reference-даты (стокаут или today). ISO или null. */
+function nextArrivalAfter(arrivals: ArrivalBatch[], ref: string): string | null {
+  const future = arrivals.map((a) => a.date).filter((d) => d > ref).sort()
+  return future[0] ?? null
+}
+
+/** "2026-09-28" -> "28.09" */
+function fmtDayMonth(iso: string): string {
+  const [, m, d] = iso.split("-")
+  return `${d}.${m}`
+}
+
+const MONTH_SHORT: Record<string, string> = {
+  "01": "янв", "02": "фев", "03": "мар", "04": "апр", "05": "май", "06": "июн",
+  "07": "июл", "08": "авг", "09": "сен", "10": "окт", "11": "ноя", "12": "дек",
+}
+/** "2026-09-01" -> "сен" */
+function fmtMonthShort(iso: string): string {
+  return MONTH_SHORT[iso.slice(5, 7)] ?? iso.slice(0, 7)
+}
+
+/**
+ * Per-month срез из дней движка. Возвращает недолив ЭТОГО месяца в единицах и ₽,
+ * и его долю от планового спроса месяца (rateRequested). Данные из planResult.days.
+ * planUnits — Σ ordersUnits (после сток-лимита), requested — Σ rateRequested (до лимита).
+ */
+function monthShortfall(
+  days: PlanDayRow[],
+  monthPrefix: string,     // "2026-09"
+  avgPriceRub: number,
+): { lostUnits: number; lostRub: number; lostShare: number } {
+  let requested = 0, filled = 0
+  for (const d of days) {
+    if (!d.date.startsWith(monthPrefix)) continue
+    requested += d.rateRequested
+    filled += d.ordersUnits
+  }
+  const lostUnits = Math.max(0, requested - filled)
+  return {
+    lostUnits,
+    lostRub: lostUnits * avgPriceRub,
+    lostShare: requested > 0 ? lostUnits / requested : 0,
+  }
 }
 
 // ── ProductPlanTable ──────────────────────────────────────────────────────────
