@@ -390,6 +390,8 @@ None yet.
 
 | fast-260705b | fix: hotfix buttonVariants в RSC (products/page.tsx 500 в рантайме — client-функция из "use client" модуля не вызывается на сервере; build пропускает на динамических страницах) → статические классы. + fix: scoped-регенерация VP плодила дубли — regenerateVirtualPurchasesInternal(productIds) чистил только productIds, а генерил предложения ВСЕМ товарам → каждая смена ABC/тумблера добавляла полный комплект всем позициям (7644 VP, до 180/товар при лимите 6). Фикс scopedProducts + полная перегенерация на проде: 7644→258, max 6/товар | 2026-07-05 | 5705ed4 + 2b17d49 |  | inline (products/page.tsx, app/actions/sales-plan.ts) |
 
+| fast-260705c | fix: каскад виртуальных закупок — для товара уже в дефиците пробой (< today+leadTime) не лечится приходом → каждая итерация предлагала одинаковую партию одной датой (несколько заказов с приходом 19.08 на УКТ-000003). Фикс: курсор minSearchDate — следующий пробой строго после прихода предыдущей партии. Регрессионный тест (даты строго возрастают). Прод: УКТ-000003 = 3 партии 19.08/20.10/21.12, max 3/товар | 2026-07-05 | a4fff87 |  | inline (lib/sales-plan/virtual-purchases.ts + tests/sales-plan-virtual.test.ts) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
