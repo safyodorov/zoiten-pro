@@ -62,24 +62,6 @@ export type PayoutFn = (
   byProduct?: Array<{ productId: string; buyoutsRub: number }>,
 ) => number
 
-// ── buildWbPayoutSchedule ────────────────────────────────────────────────────
-
-/**
- * Агрегирует buyoutsRub по cashDate (понедельники) × effectivePayout.
- * Дневной ряд выкупов обязателен (не помесячный) — §8 Phase 25.
- */
-function buildWbPayoutSchedule(
-  revenueSeries: CashflowInputs["revenueSeries"],
-  effectivePayout: PayoutFn,
-): Map<string, number> {
-  const schedule = new Map<string, number>()
-  for (const row of revenueSeries) {
-    const cashDate = wbCashDay(row.date, 1) // lagWeeks берётся из замыкания в computeCashflow
-    schedule.set(cashDate, (schedule.get(cashDate) ?? 0) + effectivePayout(row.date, row.buyoutsRub, row.byProduct))
-  }
-  return schedule
-}
-
 // ── computeCashflow ──────────────────────────────────────────────────────────
 
 /**
