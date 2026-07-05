@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-05T09:54:20.977Z"
+last_updated: "2026-07-05T13:25:23.378Z"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -20,13 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 26 — roll-forward
+**Current focus:** Phase 27 — abc
 
 ## Current Position
 
-Phase: 26 (roll-forward) — COMPLETE ✅ (исполнено + верифицировано 2026-07-05, 11/11 must-haves в коде; ожидает деплой + live-UAT)
-Plan: 3 of 3
-Next: деплой Phase 26 (без миграции — только код + крон-роут) → live-UAT → фаза ПДДС (/finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts)
+Phase: 27 (abc) — COMPLETE ✅ (исполнено + верифицировано 2026-07-05, 11/11 must-haves; ожидает деплой с миграцией orderEnabled + live-UAT)
+Plan: 2 of 2
+Next: деплой Phase 27 (миграция Product.orderEnabled через prisma migrate deploy) → live-UAT → фаза ПДДС (/finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts). Phase 26 уже в проде (a5cd09d).
 
 ## Performance Metrics
 
