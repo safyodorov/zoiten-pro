@@ -10,14 +10,9 @@ function fmtNum(n: number, digits = 0): string {
   })
 }
 
-function fmtRub(n: number): string {
-  if (Math.abs(n) >= 1_000_000) {
-    return `${(n / 1_000_000).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} М`
-  }
-  if (Math.abs(n) >= 10_000) {
-    return `${(n / 1_000).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} К`
-  }
-  return fmtNum(Math.round(n))
+// Суммы в тыс ₽ (единый формат таблицы «Товары» — без К/М, просьба пользователя)
+function fmtThousandsRub(n: number): string {
+  return `${fmtNum(Math.round(n / 1000))} тыс`
 }
 
 function daysInMonth(monthIso: string): number {
@@ -103,7 +98,7 @@ export function ProductPlanCell({
           </button>
         </div>
         <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-          ≈ {Math.round(effectiveRate * days)} шт · {fmtRub(monthTotal)}
+          ≈ {Math.round(effectiveRate * days)} шт · {fmtThousandsRub(monthTotal)}
         </span>
       </div>
     )
@@ -150,7 +145,7 @@ export function ProductPlanCell({
         )}
       </span>
       <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
-        {fmtRub(monthTotal)}
+        {fmtThousandsRub(monthTotal)}
       </span>
     </div>
   )
