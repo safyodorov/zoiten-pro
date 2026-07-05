@@ -27,8 +27,10 @@ vi.mock("@/lib/rbac", () => ({ requireSection: requireSectionMock }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }))
 
-// Статический импорт — ПОСЛЕ регистрации моков
-import { distributeMonthLevelForward } from "@/app/actions/sales-plan"
+// Статический импорт — ПОСЛЕ регистрации моков.
+// distributeMonthLevelForward живёт в чистом lib-модуле (без "use server"),
+// но моки выше нужны чтобы vitest мог загрузить @/app/actions/sales-plan без краша.
+import { distributeMonthLevelForward } from "@/lib/sales-plan/distribute-forward"
 
 // ── Тесты ────────────────────────────────────────────────────────────────────
 

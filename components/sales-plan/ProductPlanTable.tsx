@@ -4,13 +4,13 @@ import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import Image from "next/image"
-import { RotateCcw, Calculator, Scale } from "lucide-react"
+import { RotateCcw, Calculator, Scale, Eraser } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableBody, TableCell, TableRow } from "@/components/ui/table"
 import { IncomingBadges, IncomingBadgesLegend } from "./IncomingBadges"
 import { ProductPlanCell } from "./ProductPlanCell"
 import { ProductPlanDialog } from "./ProductPlanDialog"
-import { saveMonthLevels, scaleMonthLevels } from "@/app/actions/sales-plan"
+import { saveMonthLevels, scaleMonthLevels, resetMonthLevelsToAuto } from "@/app/actions/sales-plan"
 import type { ProductPlanResult, ArrivalBatch } from "@/lib/sales-plan/types"
 
 // ── Форматирование чисел ────────────────────────────────────────────────────────
@@ -135,6 +135,12 @@ export function ProductPlanTable({
   const [dialogProductId, setDialogProductId] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
+  // Автопротяжка вперёд (D-1): по умолчанию ВКЛ, сессионное состояние
+  const [distributeForward, setDistributeForward] = useState(true)
+
+  // Сброс ручных уровней → авто
+  const [isResetting, startResetTransition] = useTransition()
+
   // Scale месяца
   const [scaleDialogOpen, setScaleDialogOpen] = useState(false)
   const [scaleMonth, setScaleMonth] = useState<string | null>(null)
@@ -204,7 +210,7 @@ export function ProductPlanTable({
     if (payload.length === 0) return
 
     startTransition(async () => {
-      const r = await saveMonthLevels(payload)
+      const r = await saveMonthLevels(payload, { distributeForward, horizonMonths: months })
       if (!r.ok) {
         toast.error(r.error || "Не удалось сохранить")
         return
@@ -293,10 +299,19 @@ export function ProductPlanTable({
               <RotateCcw className="h-4 w-4" />
               Отменить правки
             </Button>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={distributeForward}
+                onChange={(e) => setDistributeForward(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Распространить на последующие месяцы
+            </label>
           </>
         )}
         {!readOnly && (
-          <div className="flex items-center gap-1 ml-auto">
+          <div className="flex items-center gap-1 ml-auto flex-wrap">
             <span className="text-xs text-muted-foreground">Масштабировать:</span>
             {months.map((m) => (
               <Button
@@ -311,6 +326,27 @@ export function ProductPlanTable({
                 }}
               >
                 <Scale className="h-3 w-3" />
+                {monthLabel(m)}
+              </Button>
+            ))}
+            <span className="text-xs text-muted-foreground ml-2">Сбросить ручные (месяц):</span>
+            {months.map((m) => (
+              <Button
+                key={`reset-${m}`}
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs gap-1"
+                disabled={isResetting}
+                onClick={() => {
+                  startResetTransition(async () => {
+                    const r = await resetMonthLevelsToAuto({ month: m })
+                    if (!r.ok) { toast.error(r.error || "Не удалось сбросить"); return }
+                    toast.success(`Сброшено ручных уровней: ${r.deletedCount ?? 0}`)
+                    router.refresh()
+                  })
+                }}
+              >
+                <Eraser className="h-3 w-3" />
                 {monthLabel(m)}
               </Button>
             ))}
@@ -409,8 +445,30 @@ export function ProductPlanTable({
                   <TableCell
                     className={`${STICKY_TD} border-r`}
                     style={{ left: 150 }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <span className="text-xs line-clamp-2">{p.name}</span>
+                    <div className="flex items-start gap-1">
+                      <span className="text-xs line-clamp-2 flex-1 cursor-pointer" onClick={() => openDialog(p.productId)}>{p.name}</span>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          title="Сбросить ручные уровни товара → авто"
+                          disabled={isResetting}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            startResetTransition(async () => {
+                              const r = await resetMonthLevelsToAuto({ productId: p.productId })
+                              if (!r.ok) { toast.error(r.error || "Не удалось сбросить"); return }
+                              toast.success(`Сброшено: ${r.deletedCount ?? 0}`)
+                              router.refresh()
+                            })
+                          }}
+                          className="shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted rounded p-0.5"
+                        >
+                          <Eraser className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
                   </TableCell>
                   {/* Приходы */}
                   <TableCell

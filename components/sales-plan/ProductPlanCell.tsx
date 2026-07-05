@@ -109,20 +109,38 @@ export function ProductPlanCell({
     )
   }
 
+  // В не-editing состоянии: внешняя обёртка — div role="button" (не button),
+  // чтобы вложить настоящую <button> для ✕ без нарушения HTML-валидности.
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={readOnly ? -1 : 0}
       onClick={() => {
         if (!readOnly) {
+          setEditing(true)
+        }
+      }}
+      onKeyDown={(e) => {
+        if (!readOnly && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault()
           setEditing(true)
         }
       }}
       className={`flex flex-col items-end gap-0.5 w-full min-w-[80px] text-right ${
         !readOnly ? "hover:bg-muted/50 rounded px-1 py-0.5 cursor-text" : "cursor-default"
       }`}
-      tabIndex={readOnly ? -1 : 0}
     >
-      <span className="text-sm tabular-nums whitespace-nowrap">
+      <span className="text-sm tabular-nums whitespace-nowrap flex items-center gap-0.5">
+        {value != null && !readOnly && (
+          <button
+            type="button"
+            title="Сбросить на авто"
+            onClick={(e) => { e.stopPropagation(); onClear() }}
+            className="text-[10px] text-muted-foreground hover:text-red-500 leading-none"
+          >
+            ✕
+          </button>
+        )}
         {value != null
           ? fmtNum(value, value < 2 ? 1 : 0)
           : <span className="text-muted-foreground text-xs">авто {fmtNum(baseline, baseline < 2 ? 1 : 0)}</span>
@@ -134,6 +152,6 @@ export function ProductPlanCell({
       <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
         {fmtRub(monthTotal)}
       </span>
-    </button>
+    </div>
   )
 }

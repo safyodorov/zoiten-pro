@@ -20,6 +20,7 @@ import { computeSalesPlan } from "@/lib/sales-plan/engine"
 import { suggestVirtualPurchases } from "@/lib/sales-plan/virtual-purchases"
 import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
+import { distributeMonthLevelForward } from "@/lib/sales-plan/distribute-forward"
 import { auth } from "@/lib/auth"
 
 type ActionResult = { ok: true } | { ok: false; error: string }
@@ -102,25 +103,6 @@ export async function bulkUpdateArrivalDates(
 // Phase 25 wave 3: новые actions плана продаж v2
 // Все write — SALES MANAGE (фикс дыры VIEW-write, SP-13).
 // ═══════════════════════════════════════════════════════════════════
-
-// ── distributeMonthLevelForward ────────────────────────────────────
-
-/**
- * Возвращает список ДОПОЛНИТЕЛЬНЫХ месяцев (кроме targetMonth) горизонта > targetMonth,
- * у которых НЕТ собственного явного уровня (авто-месяцы) — куда протянуть value.
- * Месяцы из manualMonths (ручные, явный SalesPlanMonthLevel) исключаются (D-2).
- * targetMonth сам НЕ включается (его пишет вызывающий отдельно).
- */
-export function distributeMonthLevelForward(args: {
-  targetMonth: string          // "2026-08-01"
-  horizonMonths: string[]      // все месяцы горизонта (из клиента / MONTHS)
-  manualMonths: string[]       // месяцы с явным SalesPlanMonthLevel для этого товара
-}): string[] {
-  const manual = new Set(args.manualMonths)
-  return args.horizonMonths.filter(
-    (m) => m > args.targetMonth && !manual.has(m),
-  )
-}
 
 // ── saveMonthLevels ────────────────────────────────────────────────
 
