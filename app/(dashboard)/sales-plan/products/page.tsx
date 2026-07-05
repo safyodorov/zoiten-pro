@@ -231,7 +231,9 @@ export default async function SalesPlanProductsPage({
 
   // ── D-4: pro-rata план активной версии для прошедших дней ──────────────────
   // versionPastPlanByProduct[productId][monthIso] = Σ planBuyoutsRub по дням ≤ today−1
+  // versionPastUnitsByProduct — то же в штуках (для строки «план · шт» текущего/прошлых месяцев)
   const versionPastPlanByProduct: Record<string, Record<string, number>> = {}
+  const versionPastUnitsByProduct: Record<string, Record<string, number>> = {}
   if (activeVersionId) {
     const yesterday = new Date(new Date(today + "T00:00:00Z").getTime() - 86_400_000)
       .toISOString().slice(0, 10)
@@ -240,14 +242,17 @@ export default async function SalesPlanProductsPage({
         versionId: activeVersionId,
         date: { gte: new Date(HORIZON_FROM + "T00:00:00Z"), lte: new Date(yesterday + "T00:00:00Z") },
       },
-      select: { productId: true, date: true, planBuyoutsRub: true },
+      select: { productId: true, date: true, planBuyoutsRub: true, planBuyoutsUnits: true },
     })
     for (const r of versionDays) {
       const monthIso = r.date.toISOString().slice(0, 7) + "-01"
       const pid = r.productId
       if (!versionPastPlanByProduct[pid]) versionPastPlanByProduct[pid] = {}
+      if (!versionPastUnitsByProduct[pid]) versionPastUnitsByProduct[pid] = {}
       versionPastPlanByProduct[pid][monthIso] =
         (versionPastPlanByProduct[pid][monthIso] ?? 0) + r.planBuyoutsRub
+      versionPastUnitsByProduct[pid][monthIso] =
+        (versionPastUnitsByProduct[pid][monthIso] ?? 0) + r.planBuyoutsUnits
     }
   }
 
@@ -271,6 +276,7 @@ export default async function SalesPlanProductsPage({
       orderEnabled: p.orderEnabled ?? true,
       effectiveOrderEnabled: computeEffectiveOrderEnabled(p.abcStatus, p.orderEnabled),
       versionPastPlanRub: versionPastPlanByProduct[p.productId] ?? {},
+      versionPastPlanUnits: versionPastUnitsByProduct[p.productId] ?? {},
       planResult: pr ?? {
         productId: p.productId,
         days: [],

@@ -72,6 +72,7 @@ interface ProductRow {
   orderEnabled: boolean
   effectiveOrderEnabled: boolean
   versionPastPlanRub: Record<string, number>  // month → Σ planBuyoutsRub версии за прошедшие дни; {} если нет версии
+  versionPastPlanUnits: Record<string, number> // month → Σ planBuyoutsUnits версии за прошедшие дни; {} если нет версии
   planResult: ProductPlanResult
 }
 
@@ -317,7 +318,8 @@ export function ProductPlanTable({
     for (const p of products) {
       for (const month of months) {
         const mt = p.planResult.monthTotals.find((t) => t.month === month)
-        const planRub = mt ? mt.buyoutsRub : 0
+        // План месяца = версия(прошедшие дни) + движок(остаток) — как в ячейках (D-4)
+        const planRub = (mt ? mt.buyoutsRub : 0) + (p.versionPastPlanRub[month] ?? 0)
         const factRow = getMonthFact(factByProduct, p.productId, month)
         const factRub = factRow?.buyoutsRub ?? 0
 
@@ -487,7 +489,9 @@ export function ProductPlanTable({
               </tr>
             )}
             {products.map((p) => {
+              // Итог строки = движок + версия(прошедшие дни всех месяцев) — согласован с ячейками (D-4)
               const totalRub = p.planResult.monthTotals.reduce((s, t) => s + t.buyoutsRub, 0)
+                + Object.values(p.versionPastPlanRub).reduce((s, v) => s + v, 0)
 
               return (
                 <TableRow
@@ -616,14 +620,17 @@ export function ProductPlanTable({
                   {/* Месяцы */}
                   {months.map((month) => {
                     const mt = p.planResult.monthTotals.find((t) => t.month === month)
-                    const planRub = mt?.buyoutsRub ?? 0
-                    const planUnits = mt?.buyoutsUnits ?? 0
+                    // План месяца = версия(прошедшие дни, ≤ вчера) + движок(остаток с сегодня) — D-4.
+                    // Движок не симулирует прошлое, поэтому без добавки версии текущий месяц занижен.
+                    const versionBase = p.versionPastPlanRub[month] ?? 0
+                    const versionPastUnits = p.versionPastPlanUnits[month] ?? 0
+                    const planRub = (mt?.buyoutsRub ?? 0) + versionBase
+                    const planUnits = (mt?.buyoutsUnits ?? 0) + versionPastUnits
                     const factRow = getMonthFact(factByProduct, p.productId, month)
                     const isPast = month < today.slice(0, 8) + "01"
                     const isCurrent = month.slice(0, 7) === today.slice(0, 7)
                     const hasFactData = isPast || isCurrent
                     // База pct = план ПРОШЕДШИХ дней из активной версии (D-4). Нет версии/база 0 → скрыт.
-                    const versionBase = p.versionPastPlanRub[month] ?? 0
                     const pct = versionBase > 0 && factRow ? factRow.buyoutsRub / versionBase - 1 : null
                     const hasDayOverrides = p.dayOverrideMonths.includes(month)
                     const currentLevel = p.currentLevels[month] ?? null
