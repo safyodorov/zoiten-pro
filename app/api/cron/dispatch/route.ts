@@ -37,6 +37,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "cbrRateSyncCronTime",
           "financeBalanceSnapshotCronTime",
           "wbSalesDailyCronTime",
+          "vpRollforwardCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
@@ -46,6 +47,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "cbrRateSyncLastRun",
           "financeBalanceSnapshotLastRun",
           "wbSalesDailyLastRun",
+          "vpRollforwardLastRun",
         ],
       },
     },
@@ -69,6 +71,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const cbrLastRun = settings.cbrRateSyncLastRun ?? null
   const financeSnapshotLastRun = settings.financeBalanceSnapshotLastRun ?? null
   const salesLastRun = settings.wbSalesDailyLastRun ?? null
+  const rollforwardTime = settings.vpRollforwardCronTime ?? "04:40"
+  const rollforwardLastRun = settings.vpRollforwardLastRun ?? null
 
   const fired: string[] = []
 
@@ -148,6 +152,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] sales error:", e)
       fired.push("sales:error")
+    }
+  }
+
+  // Phase 26 (SP-17): roll-forward виртуальных отгрузок. 04:40 МСК — после
+  // wb-sales-daily (04:30). Регенерирует авто-SUGGESTED + сдвигает авто-ACCEPTED.
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: rollforwardTime,
+      lastRunDate: rollforwardLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: rollforwardHandler } = await import("../sales-plan-rollforward/route")
+      const res = await rollforwardHandler(req)
+      fired.push(`sp-rollforward:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] sp-rollforward error:", e)
+      fired.push("sp-rollforward:error")
     }
   }
 
