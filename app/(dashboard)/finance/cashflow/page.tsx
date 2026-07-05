@@ -1,17 +1,25 @@
 // app/(dashboard)/finance/cashflow/page.tsx
 // Phase 28-02: RSC-страница ПДДС.
+// Phase 28-03: canManage + CashflowAssumptionsBar + CashflowMethodologyDialog.
 // force-dynamic, RBAC-гейт, loadCashflowInputs → computeCashflow → рендер.
 
 import Link from "next/link"
-import { requireSection } from "@/lib/rbac"
+import { requireSection, getSectionRole } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import type { Granularity } from "@/lib/date-buckets"
 import { FinanceTabs } from "@/components/finance/FinanceTabs"
 import { CashflowKpiCards } from "@/components/finance/CashflowKpiCards"
 import { CashflowChart } from "@/components/finance/CashflowChart"
 import { CashflowMatrix } from "@/components/finance/CashflowMatrix"
+import { CashflowAssumptionsBar } from "@/components/finance/CashflowAssumptionsBar"
+import { CashflowMethodologyDialog } from "@/components/finance/CashflowMethodologyDialog"
 import { loadCashflowInputs } from "@/lib/finance-cashflow/data"
 import { computeCashflow } from "@/lib/finance-cashflow/engine"
+import {
+  CASHFLOW_SETTING_KEYS,
+  CASHFLOW_SETTING_DEFAULTS,
+  type CashflowSettingKey,
+} from "@/lib/cashflow-schemas"
 
 export const metadata = { title: "Финансы — ОДДС — Zoiten ERP" }
 export const dynamic = "force-dynamic"
@@ -31,6 +39,8 @@ export default async function FinanceCashflowPage({
 }) {
   // D-8: RBAC гейт на входе — до любой загрузки данных (T-28-04)
   await requireSection("FINANCE")
+  // D-8/D-9: MANAGE-флаг для рендера AssumptionsBar (T-28-07: VIEW не видит бар)
+  const canManage = (await getSectionRole("FINANCE")) === "MANAGE"
 
   // Валидация granularity allow-list (T-28-05: произвольное значение отбрасывается)
   const sp = await searchParams
@@ -38,11 +48,28 @@ export default async function FinanceCashflowPage({
     ["day", "week", "month"].includes(sp.granularity ?? "") ? sp.granularity : "month"
   ) as Granularity
 
-  // Читаем ActiveVersionId + горизонт из AppSetting
+  // Читаем ActiveVersionId + горизонт + допущения ПДДС из AppSetting
   const settingRows = await prisma.appSetting.findMany({
-    where: { key: { in: ["salesPlan.activeVersionId", "salesPlan.horizon"] } },
+    where: {
+      key: {
+        in: [
+          "salesPlan.activeVersionId",
+          "salesPlan.horizon",
+          ...CASHFLOW_SETTING_KEYS,
+        ],
+      },
+    },
   })
   const settingsMap = new Map(settingRows.map((r) => [r.key, r.value]))
+
+  // Собираем initialSettings для CashflowAssumptionsBar
+  const initialSettings = Object.fromEntries(
+    CASHFLOW_SETTING_KEYS.map((key) => {
+      const raw = settingsMap.get(key)
+      const n = Number(raw)
+      return [key, Number.isFinite(n) && raw != null ? n : CASHFLOW_SETTING_DEFAULTS[key]]
+    }),
+  ) as Record<CashflowSettingKey, number>
 
   const activeVersionId = settingsMap.get("salesPlan.activeVersionId") ?? null
 
@@ -98,8 +125,9 @@ export default async function FinanceCashflowPage({
     <div className="h-full flex flex-col gap-4">
       <FinanceTabs />
 
-      {/* Панель управления: переключатель гранулярности */}
-      <div className="flex items-center gap-2">
+      {/* Панель управления: диалог + переключатель гранулярности */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <CashflowMethodologyDialog />
         <div className="flex items-center gap-1 border rounded-md p-0.5">
           {GRANULARITY_OPTIONS.map((opt) => (
             <Link
@@ -117,6 +145,9 @@ export default async function FinanceCashflowPage({
           ))}
         </div>
       </div>
+
+      {/* Допущения ПДДС — только MANAGE (T-28-07/D-8) */}
+      {canManage && <CashflowAssumptionsBar initialSettings={initialSettings} />}
 
       {/* Предупреждение: versionStale */}
       {result.versionStale && (
