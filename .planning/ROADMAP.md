@@ -667,7 +667,7 @@ Plans:
 **Depends on:** Phase 25 (pdds-feed, SalesPlanVersion), Phase 20 (Закупки/платежи), Phase 21 (Кредиты), Phase 22 (Банк), Phase 23 (Касса), Phase 24 (Баланс — паттерны finance).
 **Секция:** `FINANCE` (существующая, /finance/*).
 
-**Plans:** 3 plans (3 волны, деплоябельные под-этапы). Следующий шаг: `/gsd-execute-phase 28`.
-- [ ] 28-01-PLAN.md — Движок + DI-загрузчик + golden-тесты + AppSetting-сид (невидимый деплой)
+**Plans:** 1/3 plans executed
+- [x] 28-01-PLAN.md — Движок + DI-загрузчик + golden-тесты + AppSetting-сид (невидимый деплой)
 - [ ] 28-02-PLAN.md — RSC-страница + матрица + KPI + график (замена ComingSoon-заглушки)
 - [ ] 28-03-PLAN.md — AssumptionsBar (MANAGE) + server actions (zod) + методология

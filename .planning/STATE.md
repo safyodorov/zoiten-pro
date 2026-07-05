@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-05T19:33:23.578Z"
+last_updated: "2026-07-05T19:43:21.826Z"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-21)
 
 **Core value:** Единая база товаров компании, от которой зависят все остальные процессы ERP
-**Current focus:** Phase 27 — abc
+**Current focus:** Phase 28 — ПДДС — план движения денежных средств (/finance/cashflow)
 
 ## Current Position
 
-Phase: 27 (abc) — CLOSED ✅ (в проде + UAT пройден 2026-07-05; Phases 25/26/27 закрыты)
-Plan: 2 of 2
+Phase: 28 (ПДДС — план движения денежных средств (/finance/cashflow)) — EXECUTING
+Plan: 2 of 3
 Next: Phase 28 — ПДДС (план движения денежных средств, /finance/cashflow, потребляет lib/sales-plan/pdds-feed.ts). Ресёч запущен.
 
 ## Performance Metrics
@@ -128,6 +128,7 @@ Next: Phase 28 — ПДДС (план движения денежных сред
 | Phase 23 P04 | 20m | 3 tasks | 6 files |
 | Phase 24-finance-balance P01 | 10min | 3 tasks | 11 files |
 | Phase 25-v2-h2-2026 P01 | 25 | 2 tasks | 4 files |
+| Phase 28-cashflow P28-01 | 324s | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -414,6 +415,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-04T15:15:43.325Z
+Last session: 2026-07-05T19:43:21.819Z
 Stopped at: Completed 24-finance-balance-24-01-PLAN.md
 Resume file: None
