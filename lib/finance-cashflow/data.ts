@@ -44,7 +44,8 @@ function parseUtcDate(isoDate: string): Date {
  *
  * Шаги:
  * 1. AppSetting — настройки (с дефолтами)
- * 2. Стартовый баланс — Σ getBankBalanceAsOf (RUR) + касса (накопительно)
+ * 2. Стартовый баланс — Σ getBankBalanceAsOf (RUR) + касса на КОНЕЦ дня перед horizonFrom
+ *    (потоки первого дня горизонта входят в факт-ряд и симуляцию, не в старт — CR-01)
  * 3. revenueSeries — getPlannedRevenueSeries, фильтрация по горизонту
  * 4. virtualPayments + versionStale — getPlannedVirtualPayments
  * 5. realPurchasePayments — PurchasePayment PLANNED, amountRub-приоритет
@@ -83,15 +84,20 @@ export async function loadCashflowInputs(
     select: { id: true },
   })
 
+  // CR-01: якорь = конец дня, ПРЕДШЕСТВУЮЩЕГО horizonFrom. getBankBalanceAsOf
+  // включает транзакции с date === asOf, поэтому asOf = horizonFrom дал бы
+  // двойной счёт первого дня (те же записи снова входят в факт-ряд, шаг 8).
+  const dayBeforeHorizon = new Date(horizonFromDate.getTime() - 86_400_000)
+
   const bankBalances = await Promise.all(
-    bankAccounts.map((acc) => getBankBalanceAsOf(acc.id, horizonFromDate)),
+    bankAccounts.map((acc) => getBankBalanceAsOf(acc.id, dayBeforeHorizon)),
   )
   const bankRurTotal = bankBalances.reduce<number>((sum, b) => sum + (b ?? 0), 0)
 
-  // Касса: накопительный остаток на horizonFrom
+  // Касса: накопительный остаток на конец дня перед horizonFrom (строго ДО — CR-01)
   const cashGroups = await db.cashEntry.groupBy({
     by: ["direction"],
-    where: { date: { lte: horizonFromDate } },
+    where: { date: { lt: horizonFromDate } },
     _sum: { amount: true },
   })
   let cashIncome = 0

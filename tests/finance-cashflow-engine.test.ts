@@ -1,6 +1,20 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
+import type { PrismaClient } from "@prisma/client"
 import { computeCashflow } from "@/lib/finance-cashflow/engine"
+import { loadCashflowInputs } from "@/lib/finance-cashflow/data"
+import { getBankBalanceAsOf } from "@/lib/balance-data"
 import type { CashflowInputs } from "@/lib/finance-cashflow/types"
+
+// Моки prisma-зависимых модулей для регрессии CR-01 (loadCashflowInputs).
+// Фабрики хойстятся vitest'ом — engine-тесты они не затрагивают (engine их не импортирует).
+vi.mock("@/lib/balance-data", () => ({
+  getBankBalanceAsOf: vi.fn(async () => 1_000),
+  getRateForDate: vi.fn(async () => null),
+}))
+vi.mock("@/lib/sales-plan/pdds-feed", () => ({
+  getPlannedRevenueSeries: vi.fn(async () => []),
+  getPlannedVirtualPayments: vi.fn(async () => ({ payments: [], versionStale: false })),
+}))
 
 // ──────────────────────────────────────────────────────────────────
 // Golden inputs — 2 недели для проверки тайминга WB
@@ -121,5 +135,61 @@ describe("computeCashflow", () => {
 
     // Кастомная (90%) должна давать больше, чем дефолтная (55%)
     expect(totalWbPayoutCustom).toBeGreaterThan(totalWbPayoutDefault)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// CR-01 регрессия: граница horizonFrom в loadCashflowInputs.
+// Транзакция, датированная ровно первым днём горизонта, должна попасть
+// в факт-ряд РОВНО один раз и НЕ попасть в стартовый баланс.
+// ──────────────────────────────────────────────────────────────────
+
+describe("loadCashflowInputs — CR-01: потоки первого дня горизонта не удваиваются", () => {
+  it("старт якорится на конец предыдущего дня; дельта дня 1 — только в факт-ряду", async () => {
+    const horizonFromDate = new Date("2025-01-01T00:00:00Z")
+
+    // Fake db: только методы, реально используемые loadCashflowInputs
+    const raw = {
+      appSetting: { findMany: vi.fn(async () => []) },
+      bankAccount: { findMany: vi.fn(async () => [{ id: "acc-1" }]) },
+      cashEntry: {
+        groupBy: vi.fn(async (_args: unknown) => []),
+        findMany: vi.fn(async () => []),
+      },
+      purchasePayment: { findMany: vi.fn(async () => []) },
+      loanPayment: { findMany: vi.fn(async () => []) },
+      bankTransaction: {
+        findMany: vi.fn(async () => [
+          // транзакция ровно в день horizonFrom
+          { date: horizonFromDate, direction: "CREDIT", amount: 500 },
+        ]),
+      },
+    }
+    const db = raw as unknown as PrismaClient
+
+    const inputs = await loadCashflowInputs(db, {
+      versionId: "v-test",
+      horizonFrom: "2025-01-01",
+      horizonTo: "2025-01-31",
+    })
+
+    // Банк: asOf = конец предыдущего дня (2024-12-31), НЕ horizonFrom
+    expect(vi.mocked(getBankBalanceAsOf)).toHaveBeenCalledWith(
+      "acc-1",
+      new Date("2024-12-31T00:00:00Z"),
+    )
+
+    // Касса: строго ДО первого дня горизонта (lt, не lte)
+    const groupByArgs = raw.cashEntry.groupBy.mock.calls[0]?.[0] as {
+      where?: { date?: { lt?: Date; lte?: Date } }
+    }
+    expect(groupByArgs?.where?.date?.lt).toEqual(horizonFromDate)
+    expect(groupByArgs?.where?.date?.lte).toBeUndefined()
+
+    // Транзакция 500 ₽ дня horizonFrom НЕ входит в стартовый баланс…
+    expect(inputs.startingBalance).toBe(1_000)
+    // …но ровно один раз входит в факт-ряд первого дня
+    const day1 = inputs.actualBalanceSeries?.find((d) => d.date === "2025-01-01")
+    expect(day1?.balanceRub).toBe(1_500)
   })
 })
