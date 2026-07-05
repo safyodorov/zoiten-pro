@@ -665,6 +665,9 @@ Plans:
 - Выход: дневной/недельный/месячный ряд остатка денег, подсветка кассовых разрывов, сценарии.
 
 **Depends on:** Phase 25 (pdds-feed, SalesPlanVersion), Phase 20 (Закупки/платежи), Phase 21 (Кредиты), Phase 22 (Банк), Phase 23 (Касса), Phase 24 (Баланс — паттерны finance).
-**Секция:** вероятно `FINANCE` (существующая, /finance/*) — уточнить при планировании.
+**Секция:** `FINANCE` (существующая, /finance/*).
 
-**Plans:** not yet planned. Следующий шаг: ресёч (28-RESEARCH) → вопросы пользователю → /gsd-plan-phase 28.
+**Plans:** 3 plans (3 волны, деплоябельные под-этапы). Следующий шаг: `/gsd-execute-phase 28`.
+- [ ] 28-01-PLAN.md — Движок + DI-загрузчик + golden-тесты + AppSetting-сид (невидимый деплой)
+- [ ] 28-02-PLAN.md — RSC-страница + матрица + KPI + график (замена ComingSoon-заглушки)
+- [ ] 28-03-PLAN.md — AssumptionsBar (MANAGE) + server actions (zod) + методология

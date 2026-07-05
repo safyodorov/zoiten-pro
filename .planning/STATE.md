@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Служба поддержки WB
 status: Milestone complete
 stopped_at: Completed 24-finance-balance-24-01-PLAN.md
-last_updated: "2026-07-05T13:25:23.378Z"
+last_updated: "2026-07-05T19:33:23.578Z"
 progress:
   total_phases: 6
   completed_phases: 6
