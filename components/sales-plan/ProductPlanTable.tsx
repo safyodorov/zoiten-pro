@@ -40,6 +40,11 @@ function fmtPct(n: number): string {
   return (n * 100).toFixed(1) + "%"
 }
 
+/** Число в тыс ₽ с разделителями, без буквы: 407123 → "407", 762456 → "762". Округление до целых тыс. */
+function fmtThousands(n: number): string {
+  return fmtNum(Math.round(n / 1000), 0)
+}
+
 // ── Типы ──────────────────────────────────────────────────────────────────────
 
 // Сериализуемые факт-данные (Map→объект для RSC→client границы)
@@ -66,6 +71,7 @@ interface ProductRow {
   abcStatus: "A" | "B" | "C" | null
   orderEnabled: boolean
   effectiveOrderEnabled: boolean
+  versionPastPlanRub: Record<string, number>  // month → Σ planBuyoutsRub версии за прошедшие дни; {} если нет версии
   planResult: ProductPlanResult
 }
 
@@ -369,8 +375,11 @@ export function ProductPlanTable({
             </label>
           </>
         )}
+        <span className="text-xs text-muted-foreground ml-auto self-center whitespace-nowrap">
+          план / факт · тыс ₽ · шт
+        </span>
         {!readOnly && (
-          <div className="flex items-center gap-1 ml-auto flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
             <span className="text-xs text-muted-foreground">Масштабировать:</span>
             {months.map((m) => (
               <Button
@@ -466,7 +475,7 @@ export function ProductPlanTable({
                 </th>
               ))}
               {/* Итог */}
-              <th className={`${STICKY_TH} text-right`} style={{ width: 100 }}>Итог ₽</th>
+              <th className={`${STICKY_TH} text-right`} style={{ width: 100 }}>Итог, тыс ₽</th>
             </tr>
           </thead>
           <TableBody>
@@ -613,9 +622,9 @@ export function ProductPlanTable({
                     const isPast = month < today.slice(0, 8) + "01"
                     const isCurrent = month.slice(0, 7) === today.slice(0, 7)
                     const hasFactData = isPast || isCurrent
-                    const pct = planRub > 0 && factRow
-                      ? (factRow.buyoutsRub - planRub) / planRub
-                      : null
+                    // База pct = план ПРОШЕДШИХ дней из активной версии (D-4). Нет версии/база 0 → скрыт.
+                    const versionBase = p.versionPastPlanRub[month] ?? 0
+                    const pct = versionBase > 0 && factRow ? factRow.buyoutsRub / versionBase - 1 : null
                     const hasDayOverrides = p.dayOverrideMonths.includes(month)
                     const currentLevel = p.currentLevels[month] ?? null
                     const draftVal = drafts[p.productId]?.[month]
@@ -663,17 +672,20 @@ export function ProductPlanTable({
                           />
                         ) : (
                           <div className="flex flex-col items-end gap-0.5">
+                            {/* Строка 1: план тыс ₽ · шт (всегда видна) */}
                             <span className="text-sm tabular-nums whitespace-nowrap">
-                              П {fmtRub(planRub)}
+                              {fmtThousands(planRub)} · {fmtAdaptive(planUnits)} шт
                               {hasDayOverrides && (
                                 <span className="ml-0.5 text-[10px] text-primary" title="Есть дневные правки">•д</span>
                               )}
                             </span>
+                            {/* Строка 2: факт тыс ₽ · шт (только если есть данные) */}
                             {hasFactData && factRow && (
                               <span className="text-xs tabular-nums text-muted-foreground whitespace-nowrap">
-                                Ф {fmtRub(factRow.buyoutsRub)}
+                                {fmtThousands(factRow.buyoutsRub)} · {fmtAdaptive(factRow.buyoutsUnits)} шт
                               </span>
                             )}
+                            {/* Строка 3: pro-rata отклонение от плана версии прошедших дней */}
                             {pct !== null && (
                               <span
                                 className={`text-[10px] tabular-nums ${
@@ -684,14 +696,10 @@ export function ProductPlanTable({
                                     : "text-destructive"
                                 }`}
                               >
-                                {pct >= 0 ? "+" : ""}{fmtPct(pct)}
+                                {pct >= 0 ? "+" : ""}{Math.round(pct * 100)}%
                               </span>
                             )}
-                            {!hasFactData && (
-                              <span className="text-[10px] text-muted-foreground">
-                                ≈ {fmtAdaptive(planUnits)} шт
-                              </span>
-                            )}
+                            {/* Бейджи среза/нет товара — без изменений */}
                             {isEmptyMonth && (
                               <span className="text-[11px] font-medium text-destructive whitespace-nowrap" title="План обнулён: нет товара">
                                 ⚠ нет товара{nextArr ? ` · ${fmtDayMonth(nextArr)}` : ` · придёт в ${fmtMonthShort(month)}`}
@@ -709,7 +717,7 @@ export function ProductPlanTable({
                   })}
                   {/* Итог */}
                   <TableCell className="text-right tabular-nums text-sm px-2">
-                    {fmtRub(totalRub)}
+                    {fmtThousands(totalRub)}
                   </TableCell>
                 </TableRow>
               )
@@ -735,11 +743,11 @@ export function ProductPlanTable({
                   <td key={m} className="sticky bottom-0 z-10 bg-muted border-t text-right px-2 border-r">
                     <div className="flex flex-col items-end gap-0.5">
                       <span className="text-xs font-semibold tabular-nums whitespace-nowrap">
-                        {fmtRub(t.planRub)}
+                        {fmtThousands(t.planRub)}
                       </span>
                       {t.factRub > 0 && (
                         <span className="text-[10px] text-muted-foreground tabular-nums">
-                          Ф {fmtRub(t.factRub)}
+                          {fmtThousands(t.factRub)}
                         </span>
                       )}
                     </div>
@@ -747,7 +755,7 @@ export function ProductPlanTable({
                 )
               })}
               <td className="sticky bottom-0 z-10 bg-muted border-t text-right tabular-nums text-xs font-semibold px-2">
-                {fmtRub(totals.totalPlanRub)}
+                {fmtThousands(totals.totalPlanRub)}
               </td>
             </tr>
           </tfoot>
