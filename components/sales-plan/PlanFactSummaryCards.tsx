@@ -100,6 +100,7 @@ export function PlanFactSummaryCards({
         <div className="text-2xl font-semibold tabular-nums mt-1">
           {fmtM(factTotalRub)}
         </div>
+        <div className="text-[10px] text-muted-foreground mt-0.5">выкуплено за день (реализация)</div>
         {deviationTotalPct != null && (
           <div className={cn("text-xs mt-1 tabular-nums font-medium", deviationColor)}>
             {fmtPct(deviationTotalPct)} от плана ({fmtM(deviationTotalRub)})

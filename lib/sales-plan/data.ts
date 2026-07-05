@@ -492,6 +492,12 @@ export interface FactDailyResult {
   byProduct: Map<string, Map<string, FactDailyRow>>
   /** Дни строго <= settledThroughIso считаются settled (выкупы финализированы WB) */
   settledThroughIso: string
+  /** Redemption-факт выкупов по дате РЕАЛИЗАЦИИ (WbSalesDaily) — company-level */
+  redemptionCompany: Map<string, FactDailyRow>
+  /** Redemption-факт по товарам (productId → date → row) */
+  redemptionByProduct: Map<string, Map<string, FactDailyRow>>
+  /** Дни <= этой даты считаются settled для redemption (today−2, НЕ today−7) */
+  redemptionSettledThroughIso: string
 }
 
 /**
@@ -543,6 +549,8 @@ export async function loadFactDaily(
   })
 
   const byProduct = new Map<string, Map<string, FactDailyRow>>()
+  // Объявляем в общем scope для переиспользования в redemption-блоке
+  const nmIdToProductId = new Map<number, string>()
 
   if (wbMarketplace) {
     // Загружаем все WB-артикулы с привязкой к товарам
@@ -555,7 +563,6 @@ export async function loadFactDaily(
     })
 
     // nmId → productId
-    const nmIdToProductId = new Map<number, string>()
     const linkedNmIds: number[] = []
     for (const a of articles) {
       const nmId = parseInt(a.article, 10)
@@ -598,5 +605,47 @@ export async function loadFactDaily(
     }
   }
 
-  return { company, byProduct, settledThroughIso }
+  // ── Redemption (дата реализации, WbSalesDaily) ──────────────────────────────
+  // settledThrough = today−2 (выкупы финализируются быстрее когортного funnel)
+  const redemptionSettledThroughIso = addDays(todayMsk, -2)
+
+  const salesRows = await db.wbSalesDaily.findMany({
+    where: { date: { gte: parseDate(from), lte: parseDate(to) } },
+    select: { nmId: true, date: true, buyoutsRub: true, buyoutsCount: true },
+  })
+
+  // company-level: суммируем все nmId кабинета (включая непривязанных к товарам)
+  const redemptionCompany = new Map<string, FactDailyRow>()
+  for (const s of salesRows) {
+    const iso = toIso(s.date)
+    const cur = redemptionCompany.get(iso) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
+    cur.buyoutsRub += s.buyoutsRub ?? 0
+    cur.buyoutsUnits += s.buyoutsCount ?? 0
+    redemptionCompany.set(iso, cur)
+  }
+
+  // product-level: тот же nmId→productId join (nmIdToProductId собран выше)
+  const redemptionByProduct = new Map<string, Map<string, FactDailyRow>>()
+  if (wbMarketplace) {
+    for (const s of salesRows) {
+      const productId = nmIdToProductId.get(s.nmId)
+      if (!productId) continue
+      const iso = toIso(s.date)
+      if (!redemptionByProduct.has(productId)) redemptionByProduct.set(productId, new Map())
+      const m = redemptionByProduct.get(productId)!
+      const cur = m.get(iso) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
+      cur.buyoutsRub += s.buyoutsRub ?? 0
+      cur.buyoutsUnits += s.buyoutsCount ?? 0
+      m.set(iso, cur)
+    }
+  }
+
+  return {
+    company,
+    byProduct,
+    settledThroughIso,
+    redemptionCompany,
+    redemptionByProduct,
+    redemptionSettledThroughIso,
+  }
 }

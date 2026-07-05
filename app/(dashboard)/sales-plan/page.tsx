@@ -174,9 +174,23 @@ export default async function SalesPlanPage({
 
   // ── Данные ─────────────────────────────────────────────────────────────────
 
-  // Факт — loadFactDaily (company + byProduct)
+  // Факт — loadFactDaily (company + byProduct + redemption)
   const factResult = await loadFactDaily(prisma, from, to)
-  const { company: companyFactMap, byProduct: byProductMap, settledThroughIso } = factResult
+  const {
+    company: companyFactMap,
+    byProduct: byProductMap,
+    settledThroughIso,
+    redemptionCompany,
+    redemptionByProduct,
+    redemptionSettledThroughIso,
+  } = factResult
+
+  // Для метрик выкупов факт берётся по дате РЕАЛИЗАЦИИ (WbSalesDaily),
+  // для метрик заказов — из funnel (WbCardFunnelDaily, дата ЗАКАЗА/когорта).
+  const isBuyoutMetric = metric === "buyouts-rub" || metric === "buyouts-units"
+  const factSource = isBuyoutMetric ? redemptionByProduct : byProductMap
+  const companySource = isBuyoutMetric ? redemptionCompany : companyFactMap
+  const settledIso = isBuyoutMetric ? redemptionSettledThroughIso : settledThroughIso
 
   // Дневной ряд плана — из активной/выбранной версии или драфта
   // Для Сводного используем company-level plan (Σ по всем товарам)
@@ -361,9 +375,9 @@ export default async function SalesPlanPage({
     }
   }
 
-  // Факт product-level (Σ по всем товарам)
+  // Факт product-level (Σ по всем товарам) — из factSource (redemption или funnel)
   const productFactByDate = new Map<string, { buyoutsRub: number; ordersRub: number; buyoutsUnits: number; ordersUnits: number }>()
-  for (const [, dailyMap] of byProductMap) {
+  for (const [, dailyMap] of factSource) {
     for (const [date, row] of dailyMap) {
       const cur = productFactByDate.get(date) ?? { buyoutsRub: 0, ordersRub: 0, buyoutsUnits: 0, ordersUnits: 0 }
       cur.buyoutsRub += row.buyoutsRub
@@ -380,7 +394,7 @@ export default async function SalesPlanPage({
     ...row,
   }))
 
-  const companyFactDays = Array.from(companyFactMap.entries()).map(([date, row]) => ({
+  const companyFactDays = Array.from(companySource.entries()).map(([date, row]) => ({
     date,
     ...row,
   }))
@@ -399,7 +413,7 @@ export default async function SalesPlanPage({
     from,
     to,
     cumulative,
-    settledThroughIso,
+    settledThroughIso: settledIso,
     metric: metricForReport,
   })
 
