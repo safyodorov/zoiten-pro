@@ -47,9 +47,11 @@ interface TooltipProps {
 
 function CustomTooltip({ active, payload, label }: TooltipProps) {
   if (!active || !payload || payload.length === 0) return null
+  // label = полная ISO-дата (IN-05) → "DD.MM.YYYY"
+  const dateLabel = label ? label.split("-").reverse().join(".") : ""
   return (
     <div className="rounded-md border bg-background p-2 shadow-md text-xs min-w-[200px]">
-      <div className="font-medium mb-1.5">{label}</div>
+      <div className="font-medium mb-1.5">{dateLabel}</div>
       {payload.map((p) => {
         if (p.value == null) return null
         return (
@@ -82,14 +84,14 @@ export function CashflowChart({ days, today, gapThresholdRub }: CashflowChartPro
     )
   }
 
+  // IN-05: категория — полная ISO-дата (уникальна и через границу года,
+  // "MM-DD" давал бы дубликаты категорий при горизонте 2026→2027);
+  // короткий вид MM-DD — только в tickFormatter оси X.
   const chartData = days.map((d) => ({
-    label: d.date.slice(5), // "MM-DD"
+    date: d.date,
     balanceEnd: d.balanceEnd,
     actualBalance: d.actualBalance,
   }))
-
-  // ReferenceLine «сегодня»: ищем точку с label = today.slice(5)
-  const todayLabel = today.slice(5)
 
   // Интервал тиков — не перегружать при большом диапазоне
   const tickInterval = days.length > 60 ? Math.floor(days.length / 20) : days.length > 20 ? Math.floor(days.length / 12) : 0
@@ -101,8 +103,9 @@ export function CashflowChart({ days, today, gapThresholdRub }: CashflowChartPro
         <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
           <XAxis
-            dataKey="label"
+            dataKey="date"
             tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+            tickFormatter={(v: string) => v.slice(5)}
             interval={tickInterval}
           />
           <YAxis
@@ -146,9 +149,9 @@ export function CashflowChart({ days, today, gapThresholdRub }: CashflowChartPro
             }}
           />
 
-          {/* Сегодня */}
+          {/* Сегодня — x по полной ISO-дате (IN-05) */}
           <ReferenceLine
-            x={todayLabel}
+            x={today}
             stroke="var(--muted-foreground)"
             strokeDasharray="4 4"
             label={{
