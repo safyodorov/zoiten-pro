@@ -6,6 +6,7 @@
 // Образец: components/sales-plan/PlanFactMatrix.tsx
 // Phase 28-02.
 
+import { cn } from "@/lib/utils"
 import type { CashflowBucket } from "@/lib/finance-cashflow/types"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -149,8 +150,14 @@ export function CashflowMatrix({ buckets }: CashflowMatrixProps) {
               return (
                 <tr key={row.label} className={isSubtotal ? "" : "hover:bg-muted/20 transition-colors"}>
                   {/* Label cell — sticky левая колонка */}
+                  {/* WR-08: cn() (tailwind-merge) — bg-muted детерминированно
+                      перебивает bg-background из STICKY_BASE (без cn победитель
+                      зависел от порядка utility в собранном CSS) */}
                   <td
-                    className={`${STICKY_BASE} ${isSubtotal ? "bg-muted font-semibold text-foreground/80" : "bg-background"}`}
+                    className={cn(
+                      STICKY_BASE,
+                      isSubtotal ? "bg-muted font-semibold text-foreground/80" : "bg-background",
+                    )}
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                   >
                     {indent && (
@@ -176,7 +183,7 @@ export function CashflowMatrix({ buckets }: CashflowMatrixProps) {
                     return (
                       <td
                         key={b.key}
-                        className={`${PERIOD_BASE} ${gapClass} ${subtotalClass} ${netClass}`}
+                        className={cn(PERIOD_BASE, gapClass, subtotalClass, netClass)}
                       >
                         {fmtN(value)}
                       </td>
