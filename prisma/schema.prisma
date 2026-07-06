@@ -1996,6 +1996,7 @@ model SalesPlanVersion {
   createdBy   User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime            @default(now())
   days        SalesPlanVersionDay[]
+  seasonality SalesPlanSeasonality[]
 
   @@index([createdAt])
 }
@@ -2020,4 +2021,28 @@ model SalesPlanVersionDay {
 
   @@unique([versionId, productId, date])
   @@index([versionId, date])
+}
+
+// Индекс сезонности — помесячный множитель плана продаж (× ставки).
+// scope-разрешение: SUBCATEGORY → CATEGORY → DIRECTION → GLOBAL (один самый точный).
+// versionId=null → черновик (редактируемый); set → снапшот версии (read-only, immutable).
+// indexPct — хранимая кривая; эффективный = stored(m)/stored(текущий_месяц)×100 (пере-якорение).
+enum SeasonalityScope {
+  GLOBAL
+  DIRECTION
+  CATEGORY
+  SUBCATEGORY
+}
+
+model SalesPlanSeasonality {
+  id        String            @id @default(cuid())
+  versionId String?
+  version   SalesPlanVersion? @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  scope     SeasonalityScope
+  scopeId   String? // id направления/категории/подкатегории; null для GLOBAL
+  month     DateTime          @db.Date // первый день месяца
+  indexPct  Float
+
+  @@unique([versionId, scope, scopeId, month])
+  @@index([versionId])
 }

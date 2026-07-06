@@ -15,6 +15,12 @@
 import type { PrismaClient } from "@prisma/client"
 import { PRODUCT_HIERARCHY_ORDER_BY } from "@/lib/product-order"
 import type { SalesPlanInputs, ProductPlanInput, BuyoutSource } from "./types"
+import {
+  groupSeasonality,
+  resolveIndexByMonth,
+  monthsInRange,
+  type SeasonalityScopeStr,
+} from "./seasonality"
 import { resolveArrivalBatches } from "./arrivals"
 import type { ArrivalBatchesInput } from "./arrivals"
 
@@ -312,6 +318,22 @@ export async function loadSalesPlanInputs(
     }
   }
 
+  // ── 7.5 Индекс сезонности (черновик, versionId=null) ────────────────────
+  const seasonRows = await db.salesPlanSeasonality.findMany({
+    where: { versionId: null },
+    select: { scope: true, scopeId: true, month: true, indexPct: true },
+  })
+  const groupedSeason = groupSeasonality(
+    seasonRows.map((r) => ({
+      scope: r.scope as SeasonalityScopeStr,
+      scopeId: r.scopeId,
+      month: r.month.toISOString().slice(0, 10),
+      indexPct: r.indexPct,
+    })),
+  )
+  const currentMonthIso = today.slice(0, 7) + "-01"
+  const horizonMonths = monthsInRange(horizonFrom, horizonTo)
+
   // ── 8. Сборка ProductPlanInput[] ────────────────────────────────────────
   const productInputs: ProductPlanInput[] = []
 
@@ -468,6 +490,15 @@ export async function loadSalesPlanInputs(
       // Phase 27: скалярные поля грузятся через include автоматически (не select → не нужны явно)
       abcStatus: p.abcStatus ?? null,
       orderEnabled: p.orderEnabled,
+      // Индекс сезонности — эффективная кривая per товар (нормирована на текущий месяц)
+      indexByMonth: resolveIndexByMonth({
+        grouped: groupedSeason,
+        directionId: p.brand?.direction?.id ?? null,
+        categoryId: p.categoryId ?? null,
+        subcategoryId: p.subcategoryId ?? null,
+        currentMonth: currentMonthIso,
+        horizonMonths,
+      }),
     })
   }
 

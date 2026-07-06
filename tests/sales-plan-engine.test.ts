@@ -40,6 +40,29 @@ const goldenInputs: SalesPlanInputs = {
   ],
 }
 
+describe("computeSalesPlan — индекс сезонности (множитель ставки)", () => {
+  it("indexByMonth авг=200 → rateRequested(08-01) = 15 × 2 = 30; июль без индекса не тронут", () => {
+    const withSeason: SalesPlanInputs = {
+      ...goldenInputs,
+      products: [{ ...goldenInputs.products[0], indexByMonth: { "2026-08-01": 200 } }],
+    }
+    const r = computeSalesPlan(withSeason)
+    const aug = r.products[0].days.find((d) => d.date === "2026-08-01")
+    expect(aug?.rateRequested).toBeCloseTo(30, 6) // 15 × 200/100
+    // Июль без индекса — dayOverride 07-15 = 20, monthLevel 07-01 = 12 не изменились
+    const jul15 = r.products[0].days.find((d) => d.date === "2026-07-15")
+    expect(jul15?.rateRequested).toBe(20)
+    const jul01 = r.products[0].days.find((d) => d.date === "2026-07-01")
+    expect(jul01?.rateRequested).toBe(12)
+  })
+
+  it("отсутствие indexByMonth не меняет golden (обратная совместимость)", () => {
+    const r = computeSalesPlan(goldenInputs)
+    const aug = r.products[0].days.find((d) => d.date === "2026-08-01")
+    expect(aug?.rateRequested).toBe(15)
+  })
+})
+
 describe("computeSalesPlan — golden test", () => {
   const result = computeSalesPlan(goldenInputs)
 

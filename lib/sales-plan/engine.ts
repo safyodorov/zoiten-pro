@@ -159,14 +159,25 @@ function simulateProductPlan(product: ProductPlanInput, params: SimParams): Prod
     return best
   }
 
+  // Множитель сезонности для дня d (эффективный %, уже нормирован; отсутствие = 100).
+  function seasonIndex(d: string): number {
+    if (!product.indexByMonth) return 1
+    const key = d.slice(0, 7) + "-01"
+    const pct = product.indexByMonth[key]
+    return pct != null ? pct / 100 : 1
+  }
+
   function getRateRequested(d: string): number {
-    // 1. dayOverrides
-    if (product.dayOverrides[d] !== undefined) return product.dayOverrides[d]
-    // 2. monthLevel.targetOrdersPerDay
-    const level = getMonthLevel(d)
-    if (level?.targetOrdersPerDay != null) return level.targetOrdersPerDay
-    // 3. baseline
-    return product.baselineOrdersPerDay
+    // База: dayOverrides → monthLevel.targetOrdersPerDay → baseline
+    let base: number
+    if (product.dayOverrides[d] !== undefined) {
+      base = product.dayOverrides[d]
+    } else {
+      const level = getMonthLevel(d)
+      base = level?.targetOrdersPerDay != null ? level.targetOrdersPerDay : product.baselineOrdersPerDay
+    }
+    // Индекс сезонности множит итоговую ставку
+    return base * seasonIndex(d)
   }
 
   function getPriceRub(d: string): number {
