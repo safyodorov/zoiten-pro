@@ -88,13 +88,30 @@ export interface PlanFactBucket {
   hasUnsettledDays: boolean
   /** Количество дней бакета */
   dayCount: number
+  /** Полный план бакета (без pro-rata; для текущего = весь месяц) */
+  planRubFull: number
+  /** План за прошедшие дни (≤ вчера); для текущего = planRub */
+  planRubToDate: number
+  /** Полный ИУ бакета (= iuRub, не обрезан) */
+  iuRubFull: number
+  /** ИУ за прошедшие дни (≤ вчера) */
+  iuRubToDate: number
+  /** Прогноз бакета = factRub + (planRubFull − planRubToDate).
+   *  past → factRub, текущий → факт + план остатка, future → planRubFull. */
+  forecastRub: number
+  /** Прошедших дней в бакете (≤ вчера) */
+  elapsedDays: number
+  /** Всего дней в бакете (= dayCount) */
+  totalDays: number
 }
 
 export interface PlanFactKpi {
   /** Суммарный факт за период */
   factTotalRub: number
-  /** Суммарный план за период */
+  /** Суммарный план за период (pro-rata текущего бакета — как в buckets) */
   planTotalRub: number
+  /** Полный план всего горизонта (без pro-rata текущего месяца) */
+  planHorizonFullRub: number
   /** Итоговое отклонение ₽ */
   deviationTotalRub: number
   /** Итоговое отклонение % */
@@ -220,9 +237,11 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
     planRubProRata: number
     factRub: number
     iuRub: number
+    iuRubToDate: number
     companyRub: number
     hasUnsettled: boolean
     dayCount: number
+    elapsedDays: number
   }
 
   const bucketMap = new Map<string, BucketAcc>()
@@ -240,9 +259,11 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
         planRubProRata: 0,
         factRub: 0,
         iuRub: 0,
+        iuRubToDate: 0,
         companyRub: 0,
         hasUnsettled: false,
         dayCount: 0,
+        elapsedDays: 0,
       })
       bucketOrder.push(key)
     }
@@ -266,8 +287,13 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
       acc.factRub += dayRub(factDay, metric)
     }
 
-    // ИУ
-    acc.iuRub += iuDailyRub(date)
+    // ИУ (полный + за прошедшие дни)
+    const iuDay = iuDailyRub(date)
+    acc.iuRub += iuDay
+    if (date <= yesterday) {
+      acc.iuRubToDate += iuDay
+      acc.elapsedDays++
+    }
 
     // Company-level (для «Вне плана»)
     if (companyFactDays) {
@@ -320,6 +346,13 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
       unplannedUnits,
       hasUnsettledDays: acc.hasUnsettled,
       dayCount: acc.dayCount,
+      planRubFull: acc.planRub,
+      planRubToDate: acc.planRubProRata,
+      iuRubFull: acc.iuRub,
+      iuRubToDate: acc.iuRubToDate,
+      forecastRub: acc.factRub + (acc.planRub - acc.planRubProRata),
+      elapsedDays: acc.elapsedDays,
+      totalDays: acc.dayCount,
     }
   })
 
@@ -353,6 +386,13 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
     unplannedUnits: totalUnplannedRub,
     hasUnsettledDays: buckets.some((b) => b.hasUnsettledDays),
     dayCount: allDays.length,
+    planRubFull: buckets.reduce((s, b) => s + b.planRubFull, 0),
+    planRubToDate: buckets.reduce((s, b) => s + b.planRubToDate, 0),
+    iuRubFull: buckets.reduce((s, b) => s + b.iuRubFull, 0),
+    iuRubToDate: buckets.reduce((s, b) => s + b.iuRubToDate, 0),
+    forecastRub: buckets.reduce((s, b) => s + b.forecastRub, 0),
+    elapsedDays: buckets.reduce((s, b) => s + b.elapsedDays, 0),
+    totalDays: allDays.length,
   }
 
   // ── KPI ────────────────────────────────────────────────────────────────────
@@ -401,6 +441,7 @@ export function buildPlanFactReport(input: BuildPlanFactReportInput): PlanFactRe
   const kpi: PlanFactKpi = {
     factTotalRub: totalFactRub,
     planTotalRub: totalPlanRub,
+    planHorizonFullRub: total.planRubFull,
     deviationTotalRub: totalDeviationRub,
     deviationTotalPct: totalDeviationPct,
     iuTotalRub: totalIuRub,
