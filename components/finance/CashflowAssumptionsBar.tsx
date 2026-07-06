@@ -10,7 +10,7 @@
 
 "use client"
 
-import { useCallback, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
@@ -98,6 +98,25 @@ export function CashflowAssumptionsBar({ initialSettings }: CashflowAssumptionsB
     Partial<Record<CashflowSettingKey, ReturnType<typeof setTimeout>>>
   >({})
 
+  // IN-03: последнее УСПЕШНО сохранённое значение per-поле — цель отката
+  // при ошибке сохранения (иначе поле продолжает показывать отклонённое значение).
+  const lastSavedRef = useRef<Record<CashflowSettingKey, string>>(
+    Object.fromEntries(
+      SETTINGS.map(({ key }) => [key, String(initialSettings[key] ?? 0)]),
+    ) as Record<CashflowSettingKey, string>,
+  )
+
+  // IN-03: очистка pending-таймеров на unmount — отложенный save не должен
+  // выстрелить после ухода со страницы.
+  useEffect(() => {
+    const timers = timersRef.current
+    return () => {
+      for (const t of Object.values(timers)) {
+        if (t) clearTimeout(t)
+      }
+    }
+  }, [])
+
   /** Debounced save через updateCashflowSetting server action (500 ms).
    *  Отдельный таймер на каждое поле — изменение одного не сбрасывает pending save другого. */
   const handleChange = useCallback(
@@ -115,11 +134,19 @@ export function CashflowAssumptionsBar({ initialSettings }: CashflowAssumptionsB
         startTransition(async () => {
           const result = await updateCashflowSetting(key, newValue)
           if (result.ok) {
+            lastSavedRef.current[key] = newValue
             toast.success("Настройка сохранена")
             // Пересчёт RSC с новыми допущениями
             router.refresh()
           } else {
             toast.error(result.error || "Не удалось сохранить настройку")
+            // IN-03: откат к последнему сохранённому — только если пользователь
+            // не начал печатать новое значение, пока save был в полёте
+            setValues((prev) =>
+              prev[key] === newValue
+                ? { ...prev, [key]: lastSavedRef.current[key] }
+                : prev,
+            )
           }
         })
       }, 500)
