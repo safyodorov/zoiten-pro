@@ -407,6 +407,8 @@ None yet.
 
 | 260705-tlc | Большая модалка товара в /sales-plan «Товары» (клик по строке): БЕЗ табов, max-w-7xl. ComposedChart весь горизонт H2 по дням (план шт/день chart-2 bars + факт шт/день chart-1 bars из WbCardOrdersDaily (fallback WbSalesDaily нетто) + линия Сток(расч) chart-iu правая ось + «сегодня» + вертикальные отметки приходов с qty, реальные/виртуальные). Grid 6 месяцев: заказы/день + цена ₽ с REALTIME-пересчётом графика (computeSalesPlan client) + «План H2: тыс ₽ · шт»; сохранение saveMonthLevels (null=сброс на авто). Приходы списком + стокаут/потери. «Правка по дням» сохранена как <details>. Новый action getProductPlanHorizon (SALES read). ParamsTab удалён | 2026-07-05 | 2aae7b0 |  | [260705-tlc-product-plan-modal-v2](./quick/260705-tlc-product-plan-modal-v2/) |
 
+| 260706-jmt | /sales-plan «Сводный» редизайн наглядности: plan-fact += planRubFull/planRubToDate/iuRubFull/iuRubToDate/forecastRub/elapsed·totalDays + kpi.planHorizonFullRub (existing поля не тронуты, +6 тестов); график — текущий месяц в ПОЛНОМ масштабе (факт сплошной + прогноз штриховкой + метка «N/M дн»), «нарастающим» по умолчанию; карточки — блоки «Темп на сегодня» / «Прогноз до 31.12» (План весь период 325М, до ИУ −102М), убрана «−95% от плана»; таблица — план/ИУ полный месяц + строка «Прогноз», сравнения прогноз−план/ИУ, pro-rata в tooltip. tsc чисто, 93/93 sales-plan тестов | 2026-07-06 | 96e2b3e, bfea34c |  | [260706-jmt-redesign-sales-plan-svodny-chart-cards-t](./quick/260706-jmt-redesign-sales-plan-svodny-chart-cards-t/) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
