@@ -205,7 +205,7 @@ export function PlanFactMatrix({
                 style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                 colSpan={1}
               >
-                Наш план / Факт
+                План / Факт / Прогноз
               </td>
               {columns.map((b, i) => (
                 <td key={b.key}
@@ -220,7 +220,7 @@ export function PlanFactMatrix({
                 className={cn(STICKY_BASE, "bg-background")}
                 style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
               >
-                <span className="text-muted-foreground">Метрика · </span>
+                <span className="text-muted-foreground">План · </span>
                 <span>
                   {metric === "buyouts-rub" ? "Выкупы ₽" :
                    metric === "buyouts-units" ? "Выкупы шт" :
@@ -228,7 +228,11 @@ export function PlanFactMatrix({
                 </span>
               </td>
               {columns.map((b) => (
-                <Cell key={b.key} value={b.planRub} title={b.isCurrentBucket ? "pro-rata (только дни ≤ вчера)" : undefined} />
+                <Cell
+                  key={b.key}
+                  value={b.planRubFull}
+                  title={b.isCurrentBucket ? `полный месяц · за ${b.elapsedDays}/${b.totalDays} дн: ${fmtM(b.planRubToDate)}` : undefined}
+                />
               ))}
             </tr>
 
@@ -246,54 +250,54 @@ export function PlanFactMatrix({
                   key={b.key}
                   value={b.factRub}
                   className={b.hasUnsettledDays ? "opacity-60" : undefined}
+                  title={b.isCurrentBucket ? `за прошедшие ${b.elapsedDays}/${b.totalDays} дн` : undefined}
                 />
               ))}
             </tr>
 
-            {/* Отклонение ₽ */}
+            {/* Прогноз ₽ (факт + план остатка) */}
             <tr className="hover:bg-muted/20 transition-colors">
               <td
                 className={cn(STICKY_BASE, "bg-background pl-6")}
                 style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
               >
                 <span className="text-muted-foreground mr-1">└</span>
-                Отклонение
+                Прогноз
               </td>
               {columns.map((b) => (
-                <td
+                <Cell
                   key={b.key}
-                  className={cn(
-                    PERIOD_BASE,
-                    b.deviationRub > 0 ? "text-emerald-600 dark:text-emerald-500 font-medium" :
-                    b.deviationRub < 0 ? "text-destructive font-medium" : "text-muted-foreground",
-                  )}
-                >
-                  {b.factRub === 0 ? <span className="text-muted-foreground">—</span> : fmtDev(b.deviationRub)}
-                </td>
+                  value={b.forecastRub}
+                  className="font-medium"
+                  title={b.isCurrentBucket ? "факт по вчера + план остатка месяца" : undefined}
+                />
               ))}
             </tr>
 
-            {/* Отклонение % */}
+            {/* Прогноз − план ₽ */}
             <tr className="hover:bg-muted/20 transition-colors">
               <td
                 className={cn(STICKY_BASE, "bg-background pl-6")}
                 style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
               >
                 <span className="text-muted-foreground mr-1">└</span>
-                Отклонение, %
+                Прогноз − план
               </td>
-              {columns.map((b) => (
-                <td
-                  key={b.key}
-                  className={cn(
-                    PERIOD_BASE,
-                    b.deviationPct != null && b.deviationPct > 0 ? "text-emerald-600 dark:text-emerald-500" :
-                    b.deviationPct != null && b.deviationPct < 0 ? "text-destructive" : "text-muted-foreground",
-                  )}
-                >
-                  {b.factRub === 0 ? <span className="text-muted-foreground">—</span> : fmtPct(b.deviationPct)}
-                </td>
-              ))}
+              {columns.map((b) => {
+                const dev = b.forecastRub - b.planRubFull
+                return (
+                  <td
+                    key={b.key}
+                    className={cn(
+                      PERIOD_BASE,
+                      dev > 0 ? "text-emerald-600 dark:text-emerald-500 font-medium" :
+                      dev < 0 ? "text-destructive font-medium" : "text-muted-foreground",
+                    )}
+                  >
+                    {b.planRubFull === 0 ? <span className="text-muted-foreground">—</span> : fmtDev(dev)}
+                  </td>
+                )
+              })}
             </tr>
 
             {/* ── Раздел: ИУ ── */}
@@ -313,7 +317,7 @@ export function PlanFactMatrix({
                   ))}
                 </tr>
 
-                {/* ИУ-план ₽ */}
+                {/* ИУ-план ₽ (полный месяц) */}
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background")}
@@ -322,81 +326,67 @@ export function PlanFactMatrix({
                     ИУ-план, ₽
                   </td>
                   {columns.map((b) => (
-                    <Cell key={b.key} value={b.iuRub} />
+                    <Cell
+                      key={b.key}
+                      value={b.iuRubFull}
+                      title={b.isCurrentBucket ? `полный месяц · за ${b.elapsedDays}/${b.totalDays} дн: ${fmtM(b.iuRubToDate)}` : undefined}
+                    />
                   ))}
                 </tr>
 
-                {/* Факт − ИУ ₽ */}
+                {/* Прогноз − ИУ ₽ */}
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background pl-6")}
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                   >
                     <span className="text-muted-foreground mr-1">└</span>
-                    Факт − ИУ
+                    Прогноз − ИУ
                   </td>
-                  {columns.map((b) => (
-                    <td
-                      key={b.key}
-                      className={cn(
-                        PERIOD_BASE,
-                        b.factRub === 0 ? "text-muted-foreground" :
-                        b.factVsIuRub >= 0 ? "text-emerald-600 dark:text-emerald-500 font-medium" :
-                        "text-destructive font-medium",
-                      )}
-                    >
-                      {b.factRub === 0 ? <span className="text-muted-foreground">—</span> : fmtDev(b.factVsIuRub)}
-                    </td>
-                  ))}
+                  {columns.map((b) => {
+                    const dev = b.forecastRub - b.iuRubFull
+                    return (
+                      <td
+                        key={b.key}
+                        className={cn(
+                          PERIOD_BASE,
+                          b.iuRubFull === 0 ? "text-muted-foreground" :
+                          dev >= 0 ? "text-emerald-600 dark:text-emerald-500 font-medium" :
+                          "text-destructive font-medium",
+                        )}
+                      >
+                        {b.iuRubFull === 0 ? <span className="text-muted-foreground">—</span> : fmtDev(dev)}
+                      </td>
+                    )
+                  })}
                 </tr>
 
-                {/* Откл. от ИУ % */}
+                {/* Прогноз к ИУ, % */}
                 <tr className="hover:bg-muted/20 transition-colors">
                   <td
                     className={cn(STICKY_BASE, "bg-background pl-6")}
                     style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                   >
                     <span className="text-muted-foreground mr-1">└</span>
-                    Откл. от ИУ, %
+                    Прогноз к ИУ, %
                   </td>
-                  {columns.map((b) => (
-                    <td
-                      key={b.key}
-                      className={cn(
-                        PERIOD_BASE,
-                        b.iuFulfillmentPct == null || b.factRub === 0 ? "text-muted-foreground" :
-                        b.iuFulfillmentPct >= 100 ? "text-emerald-600 dark:text-emerald-500" :
-                        b.iuFulfillmentPct >= 90 ? "text-amber-600 dark:text-amber-500" :
-                        "text-destructive",
-                      )}
-                    >
-                      {b.factRub === 0 ? <span className="text-muted-foreground">—</span> : fmtPct(b.iuFulfillmentPct ? b.iuFulfillmentPct - 100 : null)}
-                    </td>
-                  ))}
-                </tr>
-
-                {/* ИУ нарастающим: отклонение */}
-                <tr className="hover:bg-muted/20 transition-colors">
-                  <td
-                    className={cn(STICKY_BASE, "bg-background pl-6")}
-                    style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
-                  >
-                    <span className="text-muted-foreground mr-1">└</span>
-                    ИУ нараст.: откл.
-                  </td>
-                  {columns.map((b) => (
-                    <td
-                      key={b.key}
-                      className={cn(
-                        PERIOD_BASE,
-                        b.factRub === 0 ? "text-muted-foreground" :
-                        b.factVsIuRub >= 0 ? "text-emerald-600 dark:text-emerald-500" :
-                        "text-destructive",
-                      )}
-                    >
-                      {b.factRub === 0 ? <span className="text-muted-foreground">—</span> : fmtDev(b.factVsIuRub)}
-                    </td>
-                  ))}
+                  {columns.map((b) => {
+                    const pct = b.iuRubFull > 0 ? (b.forecastRub / b.iuRubFull) * 100 : null
+                    return (
+                      <td
+                        key={b.key}
+                        className={cn(
+                          PERIOD_BASE,
+                          pct == null ? "text-muted-foreground" :
+                          pct >= 100 ? "text-emerald-600 dark:text-emerald-500" :
+                          pct >= 90 ? "text-amber-600 dark:text-amber-500" :
+                          "text-destructive",
+                        )}
+                      >
+                        {pct == null ? <span className="text-muted-foreground">—</span> : `${pct.toLocaleString("ru-RU", { maximumFractionDigits: 0 })}%`}
+                      </td>
+                    )
+                  })}
                 </tr>
               </>
             )}
@@ -428,7 +418,7 @@ export function PlanFactMatrix({
 
       {/* Footer — метрико-зависимый footnote + текущий бакет */}
       <div className="px-3 py-2 border-t text-[11px] text-muted-foreground space-y-0.5">
-        <div>* текущий бакет: факт по вчера, план pro-rata (полный план периода — в tooltip)</div>
+        <div>* текущий месяц — в полном масштабе; Прогноз = факт по вчера + план остатка; «за N/M дн» в tooltip</div>
         <div>{footerNote} — <a href="/cards/wb" className="underline hover:text-foreground">настроить → /cards/wb</a></div>
       </div>
     </div>

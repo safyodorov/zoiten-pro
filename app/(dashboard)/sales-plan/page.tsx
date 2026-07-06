@@ -102,7 +102,9 @@ export default async function SalesPlanPage({
   const metric: string =
     sp.metric && VALID_METRICS.includes(sp.metric) ? sp.metric : "buyouts-rub"
 
-  const cumulative = sp.cumulative === "1"
+  // Нарастающим итогом — включено ПО УМОЛЧАНИЮ (не ломается на неполном месяце);
+  // выключается явным cumulative=0 из тумблера.
+  const cumulative = sp.cumulative !== "0"
 
   // Дневная разбивка — ограничена 62 днями
   const dayCount = Math.round(
@@ -425,9 +427,12 @@ export default async function SalesPlanPage({
   const chartPoints: PlanFactChartPoint[] = report.buckets.map((b) => ({
     key: b.key,
     label: b.label,
-    planRub: b.planRub,
     factRub: b.factRub,
-    iuRub: b.iuRub,
+    forecastRub: b.forecastRub,
+    planRubFull: b.planRubFull,
+    iuRub: b.iuRubFull,
+    elapsedDays: b.elapsedDays,
+    totalDays: b.totalDays,
     unsettled: b.hasUnsettledDays,
     isCurrentBucket: b.isCurrentBucket,
   }))

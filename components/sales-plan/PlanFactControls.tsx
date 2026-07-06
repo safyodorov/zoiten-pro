@@ -137,7 +137,8 @@ export function PlanFactControls({
   }
 
   const handleCumulative = (e: React.ChangeEvent<HTMLInputElement>) => {
-    pushParams({ cumulative: e.target.checked ? "1" : "" })
+    // default ВКЛ: включённое = пусто (чистый URL), выключенное = "0" (персистится)
+    pushParams({ cumulative: e.target.checked ? "" : "0" })
   }
 
   // Пресеты
