@@ -106,15 +106,23 @@ export async function loadCashflowInputs(
   })
   const settingsMap = new Map(settingRows.map((r) => [r.key, r.value]))
 
+  // WR-04: NaN-guard — повреждённое значение AppSetting (нечисловая/пустая
+  // строка после ручного SQL или сбоя импорта) не должно утекать в симуляцию:
+  // NaN каскадом рушит balanceEnd на всех днях, KPI и график.
+  const settingNum = (raw: string | undefined, def: number): number => {
+    if (raw == null || raw.trim() === "") return def
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : def
+  }
   const settingOrDefault = (key: CashflowSettingKey): number =>
-    Number(settingsMap.get(key) ?? CASHFLOW_SETTING_DEFAULTS[key])
+    settingNum(settingsMap.get(key), CASHFLOW_SETTING_DEFAULTS[key])
 
   const wbPayoutPct = settingOrDefault("finance.cashflow.wbPayoutPct")
   const wbPayoutLagWeeks = settingOrDefault("finance.cashflow.wbPayoutLagWeeks")
   const opexMonthlyRub = settingOrDefault("finance.cashflow.opexMonthlyRub")
   const gapThresholdRub = settingOrDefault("finance.cashflow.gapThresholdRub")
-  const vatPct = Number(settingsMap.get("finance.vatPct") ?? "7")
-  const incomeTaxPct = Number(settingsMap.get("finance.incomeTaxPct") ?? "1")
+  const vatPct = settingNum(settingsMap.get("finance.vatPct"), 7)
+  const incomeTaxPct = settingNum(settingsMap.get("finance.incomeTaxPct"), 1)
 
   // ── 2. Стартовый баланс (D-6): RUR BankAccount + Касса ────────────────────
 
