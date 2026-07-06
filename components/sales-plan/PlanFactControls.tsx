@@ -77,7 +77,6 @@ interface Props {
   from: string
   to: string
   metric: string
-  cumulative: boolean
   /** Флаг: текущее day-окно превышает 62 дня */
   dayWindowExceeded?: boolean
 }
@@ -89,7 +88,6 @@ export function PlanFactControls({
   from,
   to,
   metric,
-  cumulative,
   dayWindowExceeded,
 }: Props) {
   const router = useRouter()
@@ -134,11 +132,6 @@ export function PlanFactControls({
 
   const handleMetric = (e: React.ChangeEvent<HTMLSelectElement>) => {
     pushParams({ metric: e.target.value })
-  }
-
-  const handleCumulative = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // default ВКЛ: включённое = пусто (чистый URL), выключенное = "0" (персистится)
-    pushParams({ cumulative: e.target.checked ? "" : "0" })
   }
 
   // Пресеты
@@ -241,16 +234,6 @@ export function PlanFactControls({
           </select>
         </div>
 
-        {/* Нарастающим итогом */}
-        <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={cumulative}
-            onChange={handleCumulative}
-            className="rounded"
-          />
-          <span className="text-muted-foreground">Нарастающим итогом</span>
-        </label>
       </div>
 
       {/* Notice при превышении day-окна */}

@@ -409,6 +409,8 @@ None yet.
 
 | 260706-jmt | /sales-plan «Сводный» редизайн наглядности: plan-fact += planRubFull/planRubToDate/iuRubFull/iuRubToDate/forecastRub/elapsed·totalDays + kpi.planHorizonFullRub (existing поля не тронуты, +6 тестов); график — текущий месяц в ПОЛНОМ масштабе (факт сплошной + прогноз штриховкой + метка «N/M дн»), «нарастающим» по умолчанию; карточки — блоки «Темп на сегодня» / «Прогноз до 31.12» (План весь период 325М, до ИУ −102М), убрана «−95% от плана»; таблица — план/ИУ полный месяц + строка «Прогноз», сравнения прогноз−план/ИУ, pro-rata в tooltip. tsc чисто, 93/93 sales-plan тестов | 2026-07-06 | 96e2b3e, bfea34c |  | [260706-jmt-redesign-sales-plan-svodny-chart-cards-t](./quick/260706-jmt-redesign-sales-plan-svodny-chart-cards-t/) |
 
+| fast-260706 | /sales-plan «Сводный» — два графика вместо тумблера: сверху «По периодам» (не нарастающий), ниже «Нарастающий итог», оба всегда видны; убран тумблер «Нарастающим итогом» из PlanFactControls | 2026-07-06 | (см. git) |  | inline (page.tsx + PlanFactControls.tsx) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing

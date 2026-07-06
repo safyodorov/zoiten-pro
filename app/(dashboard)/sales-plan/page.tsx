@@ -102,9 +102,6 @@ export default async function SalesPlanPage({
   const metric: string =
     sp.metric && VALID_METRICS.includes(sp.metric) ? sp.metric : "buyouts-rub"
 
-  // Нарастающим итогом — включено ПО УМОЛЧАНИЮ (не ломается на неполном месяце);
-  // выключается явным cumulative=0 из тумблера.
-  const cumulative = sp.cumulative !== "0"
 
   // Дневная разбивка — ограничена 62 днями
   const dayCount = Math.round(
@@ -414,7 +411,6 @@ export default async function SalesPlanPage({
     granularity: effectiveGranularity,
     from,
     to,
-    cumulative,
     settledThroughIso: settledIso,
     metric: metricForReport,
   })
@@ -463,7 +459,6 @@ export default async function SalesPlanPage({
         from={from}
         to={to}
         metric={metric}
-        cumulative={cumulative}
         dayWindowExceeded={dayWindowExceeded}
       />
 
@@ -481,10 +476,16 @@ export default async function SalesPlanPage({
         horizonToLabel="31.12"
       />
 
-      {/* График */}
+      {/* Графики: сверху «По периодам», ниже «Нарастающий итог» */}
       <PlanFactChart
         data={chartPoints}
-        cumulative={cumulative}
+        cumulative={false}
+        today={today}
+        metric={metric}
+      />
+      <PlanFactChart
+        data={chartPoints}
+        cumulative={true}
         today={today}
         metric={metric}
       />
