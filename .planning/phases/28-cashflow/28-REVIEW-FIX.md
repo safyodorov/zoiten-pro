@@ -1,23 +1,23 @@
 ---
 phase: 28-cashflow
-fixed_at: 2026-07-05T20:30:00Z
+fixed_at: 2026-07-06T05:10:00Z
 review_path: .planning/phases/28-cashflow/28-REVIEW.md
-iteration: 1
-findings_in_scope: 11
-fixed: 11
+iteration: 2
+findings_in_scope: 18
+fixed: 18
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 28: Code Review Fix Report
 
-**Fixed at:** 2026-07-05T20:30:00Z
+**Fixed at:** 2026-07-06T05:10:00Z (волна 2) / 2026-07-05T20:30:00Z (волна 1)
 **Source review:** .planning/phases/28-cashflow/28-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2 (две волны)
 
 **Summary:**
-- Findings in scope: 11 (по явному scope промпта: CR-01, WR-01, WR-02, WR-03, WR-05 лайт, WR-06, WR-07, WR-10, IN-01, IN-02, IN-06)
-- Fixed: 11
+- Findings in scope: 18 (волна 1: CR-01, WR-01, WR-02, WR-03, WR-05 лайт, WR-06, WR-07, WR-10, IN-01, IN-02, IN-06; волна 2: WR-04, WR-08, WR-09, IN-03, IN-04, IN-05, IN-07)
+- Fixed: 18
 - Skipped: 0
 
 **Гейты:**
@@ -93,15 +93,27 @@ status: all_fixed
 **Commit:** aa9d777
 **Applied fix:** Prop удалён из интерфейса и вызова.
 
-## Не в scope (зафиксированы в REVIEW.md, ждут отдельного решения)
+## Волна 2 (2026-07-06) — оставшиеся находки
 
-- **WR-04** (NaN-guard AppSetting в data.ts) — не входил в scope фиксов; частично смягчён IN-01 (дефолты из канонического источника), но `Number("abc")` guard не добавлялся.
-- **WR-08** (конфликт bg-классов в CashflowMatrix) — не входил в scope.
-- **WR-09** (факт-ряд включает счета без анкера баланса) — не входил в scope.
-- **IN-03** (ресинк/откат AssumptionsBar), **IN-04** (сырой текст ошибки в toast), **IN-05** (метки MM-DD через границу года), **IN-07** (валидация salesPlan.horizon) — явно исключены промптом.
+Закрыты все находки, не вошедшие в волну 1. Гейты волны 2:
+- `npx vitest run tests/finance-cashflow-engine.test.ts tests/sales-plan-engine.test.ts tests/sales-plan-iu.test.ts` — 29/29 green (включая новые регрессы WR-04 и WR-09)
+- `npx tsc --noEmit` — чист
+- `npm run build` — зелёный
+
+| ID | Коммит | Файлы | Что сделано |
+|----|--------|-------|-------------|
+| WR-04 | `5822d65` | `lib/finance-cashflow/data.ts`, `tests/finance-cashflow-engine.test.ts` | NaN-guard настроек: `settingNum()` (Number.isFinite + пустая строка → дефолт) для 4 ключей бара + vatPct/incomeTaxPct. Регрессионный тест на fake db. |
+| WR-08 | `6358725` | `components/finance/CashflowMatrix.tsx` | Конфликт `bg-background`+`bg-muted` на sticky label-ячейке решён через `cn()` (tailwind-merge) — цвет subtotal детерминирован. Period-ячейки тоже переведены на `cn()`. |
+| WR-09 | `ea33e1c` | `lib/finance-cashflow/data.ts`, `tests/finance-cashflow-engine.test.ts` | Факт-ряд фильтруется по `anchoredAccountIds` (счета, где `getBankBalanceAsOf` ≠ null) — единый набор счетов со стартовым балансом. Регрессионный тест (счёт без анкера исключается из txRows). |
+| IN-03 | `8a97204` | `components/finance/CashflowAssumptionsBar.tsx` | Откат поля к последнему сохранённому значению при `result.ok=false` (через `lastSavedRef`, без клоббера если пользователь уже печатает новое) + `useEffect`-cleanup pending debounce-таймеров на unmount. |
+| IN-04 | `dcee0db` | `app/actions/cashflow.ts` | Оба catch возвращают нейтральное сообщение («Не удалось сохранить настройку» / «Не удалось проверить доступ»), сырая ошибка — в `console.error` на сервере. |
+| IN-05 | `b3853cd` | `components/finance/CashflowChart.tsx` | Категория оси X — полная ISO-дата (уникальна через границу года), MM-DD только в `tickFormatter`; `ReferenceLine x={today}`; tooltip — DD.MM.YYYY. |
+| IN-07 | `4fd31e5` | `app/(dashboard)/finance/cashflow/page.tsx` | `salesPlan.horizon`: regex `YYYY-MM-DD` на from/to + `from <= to`, иначе fallback H2-2026 (вместо молчаливого «Нет данных»). |
+
+Замечание из IN-03(c) — `disabled={isPending}` на инпутах (кратковременная потеря фокуса) — сознательно не менялось: секция Fix ревью его не требовала, изменение UX вне scope.
 
 ---
 
-_Fixed: 2026-07-05T20:30:00Z_
+_Fixed: 2026-07-06T05:10:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
