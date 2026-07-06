@@ -8,7 +8,10 @@ import type { CashflowInputs } from "@/lib/finance-cashflow/types"
 // Моки prisma-зависимых модулей для регрессии CR-01 (loadCashflowInputs).
 // Фабрики хойстятся vitest'ом — engine-тесты они не затрагивают (engine их не импортирует).
 vi.mock("@/lib/balance-data", () => ({
-  getBankBalanceAsOf: vi.fn(async () => 1_000),
+  // id-aware: "acc-no-anchor" моделирует счёт без closingBalance/balanceDate → null (WR-09)
+  getBankBalanceAsOf: vi.fn(async (accountId: string) =>
+    accountId === "acc-no-anchor" ? null : 1_000,
+  ),
   getRateForDate: vi.fn(async () => null),
 }))
 vi.mock("@/lib/sales-plan/pdds-feed", () => ({
@@ -243,5 +246,45 @@ describe("loadCashflowInputs — WR-04: NaN-guard настроек AppSetting", 
     expect(inputs.gapThresholdRub).toBe(250_000) // валидное значение не трогается
     expect(inputs.wbPayoutLagWeeks).toBe(1)    // отсутствующий ключ → дефолт
     expect(Number.isFinite(inputs.startingBalance)).toBe(true)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// WR-09 регрессия: транзакции счёта без анкера (getBankBalanceAsOf → null)
+// не должны попадать в факт-ряд — набор счетов един со стартовым балансом.
+// ──────────────────────────────────────────────────────────────────
+
+describe("loadCashflowInputs — WR-09: счета без анкера исключены из факт-ряда", () => {
+  it("txRows фильтруются по счетам, вошедшим в стартовый баланс", async () => {
+    const raw = {
+      appSetting: { findMany: vi.fn(async () => []) },
+      bankAccount: {
+        // acc-1 — с анкером (1000 ₽), acc-no-anchor — без (null)
+        findMany: vi.fn(async () => [{ id: "acc-1" }, { id: "acc-no-anchor" }]),
+      },
+      cashEntry: {
+        groupBy: vi.fn(async () => []),
+        findMany: vi.fn(async () => []),
+      },
+      purchasePayment: { findMany: vi.fn(async () => []) },
+      loanPayment: { findMany: vi.fn(async () => []) },
+      bankTransaction: { findMany: vi.fn(async () => []) },
+    }
+    const db = raw as unknown as PrismaClient
+
+    const inputs = await loadCashflowInputs(db, {
+      versionId: "v-test",
+      horizonFrom: "2025-01-01",
+      horizonTo: "2025-01-31",
+    })
+
+    // Счёт без анкера не даёт вклад в стартовый баланс…
+    expect(inputs.startingBalance).toBe(1_000)
+
+    // …и его транзакции исключены из факт-ряда (шаг 8)
+    const txArgs = raw.bankTransaction.findMany.mock.calls[0]?.[0] as {
+      where?: { accountId?: { in?: string[] } }
+    }
+    expect(txArgs?.where?.accountId?.in).toEqual(["acc-1"])
   })
 })

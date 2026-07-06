@@ -142,6 +142,14 @@ export async function loadCashflowInputs(
   )
   const bankRurTotal = bankBalances.reduce<number>((sum, b) => sum + (b ?? 0), 0)
 
+  // WR-09: счёт без анкера (closingBalance/balanceDate) даёт null и НЕ входит
+  // в стартовый баланс. Его транзакции исключаются и из факт-ряда (шаг 8) —
+  // единый набор счетов, иначе дельты двигают линию факта от якоря,
+  // в котором этого счёта нет (систематический перекос план/факт).
+  const anchoredAccountIds = bankAccounts
+    .filter((_, i) => bankBalances[i] != null)
+    .map((acc) => acc.id)
+
   // Касса: накопительный остаток на конец дня перед horizonFrom (строго ДО — CR-01)
   const cashGroups = await db.cashEntry.groupBy({
     by: ["direction"],
@@ -279,11 +287,12 @@ export async function loadCashflowInputs(
     const actualFromDate = horizonFromDate
     const actualToDate = parseUtcDate(actualTo)
 
-    // BankTransaction по RUR-счетам за горизонт
+    // BankTransaction за горизонт — только счета, вошедшие в стартовый баланс
+    // (WR-09: тот же набор счетов, что и в шаге 2; bankAccounts уже RUR-only)
     const txRows = await db.bankTransaction.findMany({
       where: {
         date: { gte: actualFromDate, lte: actualToDate },
-        account: { currency: "RUR" },
+        accountId: { in: anchoredAccountIds },
       },
       select: { date: true, direction: true, amount: true },
     })
