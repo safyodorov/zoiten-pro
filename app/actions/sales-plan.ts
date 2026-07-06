@@ -19,6 +19,7 @@ import { loadSalesPlanInputs } from "@/lib/sales-plan/data"
 import { computeSalesPlan } from "@/lib/sales-plan/engine"
 import { suggestVirtualPurchases, rollForwardAcceptedArrivals, computeEffectiveOrderEnabled } from "@/lib/sales-plan/virtual-purchases"
 import { getMskTodayIso, addDays } from "@/lib/sales-plan/dates"
+import { storedFromEntered } from "@/lib/sales-plan/seasonality"
 import type { ProductPlanInput, PlanDayRow } from "@/lib/sales-plan/types"
 import { distributeMonthLevelForward } from "@/lib/sales-plan/distribute-forward"
 import { auth } from "@/lib/auth"
@@ -1387,6 +1388,91 @@ const CHUNK_SIZE = 5000
  *
  * Immutable: нет UPDATE строк SalesPlanVersionDay.
  */
+// ── Индекс сезонности (черновик, versionId=null) ───────────────────
+const seasonalityScopeSchema = z.enum(["GLOBAL", "DIRECTION", "CATEGORY", "SUBCATEGORY"])
+const saveSeasonalitySchema = z.object({
+  scope: seasonalityScopeSchema,
+  scopeId: z.string().nullable(),
+  // {"2026-08-01": 120, …} — эффективные % (текущий+будущие месяцы горизонта)
+  monthValues: z.record(z.string(), z.number().min(1).max(1000)),
+})
+
+/**
+ * Сохранить помесячные индексы сезонности для одного scope (заменяет весь набор
+ * scope в черновике). Введённые эффективные % пишутся с обратной нормировкой
+ * (stored = entered × stored(текущий)/100), 100% не хранятся. Дёргает регенерацию VP.
+ */
+export async function saveSeasonalityIndex(payload: {
+  scope: "GLOBAL" | "DIRECTION" | "CATEGORY" | "SUBCATEGORY"
+  scopeId: string | null
+  monthValues: Record<string, number>
+}): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = saveSeasonalitySchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: "Невалидные данные" }
+  const { scope, monthValues } = parsed.data
+  const scopeId = scope === "GLOBAL" ? null : parsed.data.scopeId
+  if (scope !== "GLOBAL" && !scopeId) return { ok: false, error: "Не указан объект области" }
+
+  try {
+    const currentMonthIso = getMskTodayIso().slice(0, 7) + "-01"
+    // divisor = текущее stored(currentMonth) для scope (до удаления), default 100
+    const existing = await prisma.salesPlanSeasonality.findMany({
+      where: { versionId: null, scope, scopeId },
+      select: { month: true, indexPct: true },
+    })
+    const curRow = existing.find((e) => e.month.toISOString().slice(0, 10) === currentMonthIso)
+    const divisor = curRow?.indexPct ?? 100
+
+    const rows = Object.entries(monthValues)
+      .map(([month, entered]) => ({ month, stored: storedFromEntered(entered, divisor) }))
+      .filter((r) => Math.abs(r.stored - 100) > 1e-6) // 100% = дефолт, не храним
+      .map((r) => ({
+        versionId: null,
+        scope,
+        scopeId,
+        month: new Date(r.month + "T00:00:00Z"),
+        indexPct: r.stored,
+      }))
+
+    await prisma.$transaction(async (tx) => {
+      await tx.salesPlanSeasonality.deleteMany({ where: { versionId: null, scope, scopeId } })
+      if (rows.length > 0) await tx.salesPlanSeasonality.createMany({ data: rows })
+    })
+
+    await regenerateVirtualPurchasesInternal()
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[saveSeasonalityIndex]", err)
+    return { ok: false, error: "Не удалось сохранить индекс сезонности" }
+  }
+}
+
+/** Сбросить индексы сезонности черновика (весь набор или один scope) к 100%. */
+export async function resetSeasonality(payload?: {
+  scope?: "GLOBAL" | "DIRECTION" | "CATEGORY" | "SUBCATEGORY"
+  scopeId?: string | null
+}): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  try {
+    const where = payload?.scope
+      ? {
+          versionId: null,
+          scope: payload.scope,
+          scopeId: payload.scope === "GLOBAL" ? null : (payload.scopeId ?? null),
+        }
+      : { versionId: null }
+    await prisma.salesPlanSeasonality.deleteMany({ where })
+    await regenerateVirtualPurchasesInternal()
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[resetSeasonality]", err)
+    return { ok: false, error: "Не удалось сбросить индексы" }
+  }
+}
+
 export async function fixSalesPlanVersion(payload: {
   label?: string
   note?: string
@@ -1637,6 +1723,23 @@ export async function fixSalesPlanVersion(payload: {
       for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
         await tx.salesPlanVersionDay.createMany({
           data: rows.slice(i, i + CHUNK_SIZE),
+        })
+      }
+
+      // Снапшот индексов сезонности черновика в версию (immutable)
+      const draftSeason = await tx.salesPlanSeasonality.findMany({
+        where: { versionId: null },
+        select: { scope: true, scopeId: true, month: true, indexPct: true },
+      })
+      if (draftSeason.length > 0) {
+        await tx.salesPlanSeasonality.createMany({
+          data: draftSeason.map((s) => ({
+            versionId: version.id,
+            scope: s.scope,
+            scopeId: s.scopeId,
+            month: s.month,
+            indexPct: s.indexPct,
+          })),
         })
       }
 
