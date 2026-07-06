@@ -1,16 +1,18 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "sales-plan-recalc-no-forward: /sales-plan/products, режим редактирования, УКТ-000068 план 50→40 шт/день, «Пересчитать план» — последующие месяцы не пересчитываются (остаётся 50). Вчера работало. Регрессия."
 created: 2026-07-06T00:00:00Z
 updated: 2026-07-06T00:00:00Z
+resolved: 2026-07-06T00:00:00Z
+commit: 49ed389
 ---
 
 ## Current Focus
 
 hypothesis: CONFIRMED — distribute-forward пишет ЯВНЫЕ SalesPlanMonthLevel-строки в будущие месяцы; при повторном редактировании ранее протянутые месяцы считаются «ручными» (manualMonths) и НЕ перезаписываются. Нет маркера, отличающего авто-протянутую строку от ручной правки.
-test: фикс реализован (маркер autoDistributed) + миграция + 2 новых теста GREEN; локальный typecheck чист; регрессий в полном сьюте нет (42 пред-существующих падения не связаны)
-expecting: после деплоя миграции повторная протяжка на УКТ-000068 перезапишет Aug–Dec на 40
-next_action: деплой оркестратором + ручная проверка пользователем на проде
+test: фикс задеплоен коммитом 49ed389 (маркер autoDistributed) + миграция применена на проде; повторная протяжка перезаписывает вперёд
+expecting: —
+next_action: — (resolved)
 
 ## Symptoms
 
@@ -72,8 +74,11 @@ verification: >
   авто-протянутые месяцы (Jul 40 → Aug–Dec=40, autoDistributed=true), (2) реально-ручной месяц
   (autoDistributed=false) защищён (D-2). Typecheck чист (единственная ошибка exceljs — пред-существующая,
   не связана). Полный сьют: 42 падения ЕСТЬ и на чистом HEAD (stash-проверка) — ни одного нового
-  регресса, +2 новых прохода. E2E на проде НЕ выполнен (нет локальной БД, миграция ещё не задеплоена) —
-  требует деплоя + ручной проверки пользователем.
+  регресса, +2 новых прохода.
+  PROD (коммит 49ed389, deploy.sh): https://zoiten.pro → 200, zoiten-erp.service active/running;
+  миграция применена — колонка SalesPlanMonthLevel.autoDistributed есть, backfill 119/119 строк = true;
+  УКТ-000068: Jul=40, Aug–Dec=50, все autoDistributed=true → следующая протяжка корректно перезапишет
+  вперёд. Подтверждено пользователем: «confirmed fixed».
 files_changed:
   - prisma/schema.prisma (SalesPlanMonthLevel.autoDistributed Boolean @default(false))
   - prisma/migrations/20260706_sales_plan_month_level_auto_distributed/migration.sql (ADD COLUMN + backfill всех строк в true)
