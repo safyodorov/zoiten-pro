@@ -56,7 +56,9 @@ export async function updateCashflowSetting(
   } catch (e) {
     const authErr = handleAuthError(e)
     if (authErr) return authErr
-    return { ok: false, error: (e as Error).message }
+    // IN-04: сырое сообщение внутренней ошибки — только в server log, не в toast
+    console.error("updateCashflowSetting (auth):", e)
+    return { ok: false, error: "Не удалось проверить доступ" }
   }
 
   const parsed = cashflowSettingSchema.safeParse({ key, value })
@@ -75,6 +77,9 @@ export async function updateCashflowSetting(
     revalidatePath("/finance/cashflow")
     return { ok: true }
   } catch (e) {
-    return { ok: false, error: (e as Error).message }
+    // IN-04: текст Prisma-ошибки (имена таблиц, детали подключения) не должен
+    // уходить в клиентский toast — в лог сервера, клиенту нейтральное сообщение
+    console.error("updateCashflowSetting:", e)
+    return { ok: false, error: "Не удалось сохранить настройку" }
   }
 }
