@@ -91,12 +91,21 @@ export default async function FinanceCashflowPage({
   }
 
   // Горизонт из AppSetting (fallback H2-2026)
+  // IN-07: формат дат валидируется — мусор в salesPlan.horizon дал бы пустой
+  // eachDayIso → страница молча показывала бы «Нет данных» вместо fallback.
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
   let horizon = { from: "2026-07-01", to: "2026-12-31" }
   const horizonRaw = settingsMap.get("salesPlan.horizon")
   if (horizonRaw) {
     try {
       const parsed = JSON.parse(horizonRaw) as { from?: string; to?: string }
-      if (parsed.from && parsed.to) {
+      if (
+        typeof parsed.from === "string" &&
+        typeof parsed.to === "string" &&
+        ISO_DATE_RE.test(parsed.from) &&
+        ISO_DATE_RE.test(parsed.to) &&
+        parsed.from <= parsed.to
+      ) {
         horizon = { from: parsed.from, to: parsed.to }
       }
     } catch {
