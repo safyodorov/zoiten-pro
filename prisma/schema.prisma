@@ -1921,6 +1921,9 @@ model SalesPlanMonthLevel {
   priceRub           Float? // плановая цена выкупа ₽; null = live avgPrice
   buyoutPct          Float? // 0..100 override % выкупа; null = fallback-цепочка
   comment            String?
+  // true = строка материализована авто-протяжкой (distribute-forward), НЕ ручной правкой.
+  // Повторная протяжка ПЕРЕЗАПИСЫВАЕТ такие месяцы; реально-ручные (false) защищены (D-2).
+  autoDistributed    Boolean  @default(false)
   updatedAt          DateTime @updatedAt
   updatedBy          String?
 

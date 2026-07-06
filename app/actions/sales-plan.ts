@@ -139,18 +139,35 @@ export async function saveMonthLevels(
   if (!parsed.success) return { ok: false, error: "Невалидные данные" }
   try {
     // ── Автопротяжка: определяем дополнительные месяцы для upsert ──
-    let expandedPayload = parsed.data
+    // Каждая строка помечается autoDistributed: payload (ручной ввод) = false,
+    // протянутые месяцы = true. manualMonths (защита D-2) считаем ТОЛЬКО по строкам
+    // с autoDistributed=false — иначе ранее протянутый месяц выглядит «ручным»
+    // и повторная протяжка его пропускает (баг sales-plan-recalc-no-forward).
+    type ExpandedItem = {
+      productId: string
+      month: string
+      targetOrdersPerDay: number | null
+      priceRub: number | null
+      buyoutPct: number | null
+      autoDistributed: boolean
+    }
+    const expandedPayload: ExpandedItem[] = parsed.data.map((i) => ({
+      ...i,
+      autoDistributed: false,
+    }))
     if (opts?.distributeForward && opts.horizonMonths && opts.horizonMonths.length > 0) {
       // Уникальные productId из payload
       const uniqueProductIds = [...new Set(parsed.data.map((i) => i.productId))]
-      // Загружаем существующие явные уровни для затронутых товаров
+      // Загружаем существующие явные уровни для затронутых товаров + маркер
       const existing = await prisma.salesPlanMonthLevel.findMany({
         where: { productId: { in: uniqueProductIds } },
-        select: { productId: true, month: true },
+        select: { productId: true, month: true, autoDistributed: true },
       })
-      // Map productId → Set<month ISO string>
+      // Map productId → месяцы, которые НЕЛЬЗЯ перезаписывать (реально-ручные).
+      // Авто-протянутые (autoDistributed=true) в защиту НЕ попадают — их можно перезаписать.
       const manualMonthsByProduct = new Map<string, string[]>()
       for (const row of existing) {
+        if (row.autoDistributed) continue
         const monthIso = row.month.toISOString().slice(0, 10)
         const arr = manualMonthsByProduct.get(row.productId) ?? []
         arr.push(monthIso)
@@ -159,7 +176,6 @@ export async function saveMonthLevels(
       // Set ключей "productId|month" из исходного payload — для дедупа (payload имеет приоритет)
       const payloadKeys = new Set(parsed.data.map((i) => `${i.productId}|${i.month}`))
       // Строим дополнительные записи от протяжки
-      const distributed: typeof parsed.data = []
       for (const item of parsed.data) {
         if (item.targetOrdersPerDay === null) continue // протягиваем только заданный уровень
         const extraMonths = distributeMonthLevelForward({
@@ -170,18 +186,18 @@ export async function saveMonthLevels(
         for (const m of extraMonths) {
           const key = `${item.productId}|${m}`
           if (!payloadKeys.has(key)) {
-            distributed.push({
+            expandedPayload.push({
               productId: item.productId,
               month: m,
               targetOrdersPerDay: item.targetOrdersPerDay,
               priceRub: null,
               buyoutPct: null,
+              autoDistributed: true,
             })
             payloadKeys.add(key) // дедуп: не добавлять дважды
           }
         }
       }
-      expandedPayload = [...parsed.data, ...distributed]
     }
 
     for (const item of expandedPayload) {
@@ -206,11 +222,13 @@ export async function saveMonthLevels(
             targetOrdersPerDay: item.targetOrdersPerDay,
             priceRub: item.priceRub,
             buyoutPct: item.buyoutPct,
+            autoDistributed: item.autoDistributed,
           },
           update: {
             targetOrdersPerDay: item.targetOrdersPerDay,
             priceRub: item.priceRub,
             buyoutPct: item.buyoutPct,
+            autoDistributed: item.autoDistributed,
           },
         })
       }
