@@ -2,10 +2,11 @@
 
 // components/sales-plan/SeasonalityBar.tsx
 // Панель индекса сезонности над таблицей «Товары» (/sales-plan/products).
-// Scope: Глобально / Направление / Категория / Подкатегория. Месяцы горизонта:
-// текущий = 100% (якорь), будущие редактируются (%). Значения — эффективные
-// (нормированы на текущий месяц); сохранение debounced → saveSeasonalityIndex.
-// Quick 260706-q5a.
+// Каскадный выбор области: Направление → Категория → Подкатегория (каждый сужает
+// следующий; «все» на уровне = child показывает полный список). Самый глубокий
+// выбранный уровень = scope; ничего не выбрано = Глобально.
+// Месяцы горизонта: текущий = 100% (якорь), будущие редактируются (%).
+// Quick 260706-q5a · каскад 260707.
 
 import { useState, useRef, useTransition } from "react"
 import { useRouter } from "next/navigation"
@@ -16,12 +17,14 @@ import { cn } from "@/lib/utils"
 
 type Scope = "GLOBAL" | "DIRECTION" | "CATEGORY" | "SUBCATEGORY"
 interface Named { id: string; name: string }
+interface Cat extends Named { directionId: string | null }
+interface Sub extends Named { categoryId: string | null }
 interface Row { scope: string; scopeId: string | null; month: string; indexPct: number }
 
 interface Props {
   directions: Named[]
-  categories: Named[]
-  subcategories: Named[]
+  categories: Cat[]
+  subcategories: Sub[]
   months: string[] // ISO "YYYY-MM-01" (горизонт)
   currentMonth: string // ISO "YYYY-MM-01"
   rows: Row[] // stored (черновик или версия)
@@ -36,13 +39,6 @@ function keyOf(scope: string, scopeId: string | null): string {
   return `${scope}|${scopeId ?? ""}`
 }
 
-const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
-  { value: "GLOBAL", label: "Глобально" },
-  { value: "DIRECTION", label: "Направление" },
-  { value: "CATEGORY", label: "Категория" },
-  { value: "SUBCATEGORY", label: "Подкатегория" },
-]
-
 const SELECT_CLS =
   "rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 
@@ -52,6 +48,13 @@ export function SeasonalityBar({
   const router = useRouter()
   const [isPending, start] = useTransition()
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Карты иерархии
+  const catDirMap = new Map(categories.map((c) => [c.id, c.directionId]))
+  const subCatMap = new Map(subcategories.map((s) => [s.id, s.categoryId]))
+  const catDir = (id: string) => catDirMap.get(id) ?? null
+  const subCat = (id: string) => subCatMap.get(id) ?? null
+  const subDir = (id: string) => { const c = subCat(id); return c ? catDir(c) : null }
 
   // Группировка stored по scope
   const grouped = new Map<string, Map<string, number>>()
@@ -65,7 +68,6 @@ export function SeasonalityBar({
   const anchorInHorizon = months.includes(currentMonth)
   const futureMonths = months.filter((m) => m > currentMonth)
 
-  // Эффективная кривая для scope (нормировка на текущий месяц)
   function effectiveFor(scope: Scope, scopeId: string | null): Record<string, number> {
     const curve = grouped.get(keyOf(scope, scopeId)) ?? new Map<string, number>()
     const divisor = curve.get(currentMonth) ?? 100
@@ -77,27 +79,49 @@ export function SeasonalityBar({
     return out
   }
 
-  const [scope, setScope] = useState<Scope>("GLOBAL")
-  const [scopeId, setScopeId] = useState<string | null>(null)
+  // Каскад выбора
+  const [selDir, setSelDir] = useState<string | null>(null)
+  const [selCat, setSelCat] = useState<string | null>(null)
+  const [selSub, setSelSub] = useState<string | null>(null)
   const [values, setValues] = useState<Record<string, number>>(() => effectiveFor("GLOBAL", null))
 
-  function selectScope(nextScope: Scope, nextId: string | null) {
-    setScope(nextScope)
-    setScopeId(nextId)
-    setValues(effectiveFor(nextScope, nextId))
+  function deriveScope(dir: string | null, cat: string | null, sub: string | null): [Scope, string | null] {
+    if (sub) return ["SUBCATEGORY", sub]
+    if (cat) return ["CATEGORY", cat]
+    if (dir) return ["DIRECTION", dir]
+    return ["GLOBAL", null]
+  }
+  const [scope, scopeId] = deriveScope(selDir, selCat, selSub)
+
+  function applyCascade(dir: string | null, cat: string | null, sub: string | null) {
+    setSelDir(dir); setSelCat(cat); setSelSub(sub)
+    const [s, id] = deriveScope(dir, cat, sub)
+    setValues(effectiveFor(s, id))
   }
 
-  function scopeItems(): Named[] {
-    return scope === "DIRECTION" ? directions
-      : scope === "CATEGORY" ? categories
-      : scope === "SUBCATEGORY" ? subcategories
-      : []
+  function onDir(v: string | null) {
+    let cat = selCat
+    let sub = selSub
+    if (v != null) {
+      if (cat && catDir(cat) !== v) cat = null
+      if (sub && subDir(sub) !== v) sub = null
+    }
+    applyCascade(v, cat, sub)
+  }
+  function onCat(v: string | null) {
+    let sub = selSub
+    if (v != null && sub && subCat(sub) !== v) sub = null
+    applyCascade(selDir, v, sub)
+  }
+  function onSub(v: string | null) {
+    applyCascade(selDir, selCat, v)
   }
 
-  const canEdit = !readOnly && (scope === "GLOBAL" || Boolean(scopeId))
+  // Опции с сужением
+  const catOptions = selDir ? categories.filter((c) => c.directionId === selDir) : categories
+  const subOptions = selCat ? subcategories.filter((s) => s.categoryId === selCat) : subcategories
 
   function doSave(next: Record<string, number>) {
-    if (scope !== "GLOBAL" && !scopeId) return
     const monthValues: Record<string, number> = { [currentMonth]: 100 }
     for (const m of futureMonths) monthValues[m] = next[m] ?? 100
     if (timer.current) clearTimeout(timer.current)
@@ -121,7 +145,7 @@ export function SeasonalityBar({
     start(async () => {
       const res = await resetSeasonality()
       if (!res.ok) toast.error(res.error)
-      else { toast.success("Индексы сброшены"); selectScope(scope, scopeId); router.refresh() }
+      else { toast.success("Индексы сброшены"); setValues(effectiveFor(scope, scopeId)); router.refresh() }
     })
   }
   function resetScope(s: Scope, id: string | null) {
@@ -137,35 +161,42 @@ export function SeasonalityBar({
     const list = s === "DIRECTION" ? directions : s === "CATEGORY" ? categories : subcategories
     return list.find((x) => x.id === id)?.name ?? "—"
   }
+  function selectChip(s: string, id: string | null) {
+    if (s === "GLOBAL") applyCascade(null, null, null)
+    else if (s === "DIRECTION") applyCascade(id, null, null)
+    else if (s === "CATEGORY") applyCascade(id ? catDir(id) : null, id, null)
+    else applyCascade(id ? subDir(id) : null, id ? subCat(id) : null, id)
+  }
 
   const activeKeys = [...grouped.keys()]
+  const targetLabel = scope === "GLOBAL" ? "Глобально (все товары)" : nameFor(scope, scopeId)
 
   return (
     <div className="rounded-md border bg-card px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-2">
       <span className="text-sm font-medium whitespace-nowrap">Сезонность</span>
 
-      {/* Выбор области */}
+      {/* Каскад выбора области */}
       <div className="flex items-center gap-2">
-        <select
-          value={scope}
-          disabled={readOnly}
-          onChange={(e) => selectScope(e.target.value as Scope, null)}
-          className={SELECT_CLS}
-        >
-          {SCOPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        <select value={selDir ?? ""} disabled={readOnly} onChange={(e) => onDir(e.target.value || null)} className={SELECT_CLS}>
+          <option value="">Все направления</option>
+          {directions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
-        {scope !== "GLOBAL" && (
-          <select
-            value={scopeId ?? ""}
-            disabled={readOnly}
-            onChange={(e) => selectScope(scope, e.target.value || null)}
-            className={SELECT_CLS}
-          >
-            <option value="">— выберите —</option>
-            {scopeItems().map((it) => <option key={it.id} value={it.id}>{it.name}</option>)}
-          </select>
-        )}
+        <span className="text-muted-foreground text-xs">›</span>
+        <select value={selCat ?? ""} disabled={readOnly} onChange={(e) => onCat(e.target.value || null)} className={SELECT_CLS}>
+          <option value="">Все категории</option>
+          {catOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <span className="text-muted-foreground text-xs">›</span>
+        <select value={selSub ?? ""} disabled={readOnly} onChange={(e) => onSub(e.target.value || null)} className={SELECT_CLS}>
+          <option value="">Все подкатегории</option>
+          {subOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
       </div>
+
+      {/* Целевая область */}
+      <span className="text-xs text-muted-foreground whitespace-nowrap">
+        Индекс для: <span className="text-foreground font-medium">{targetLabel}</span>
+      </span>
 
       {/* Инпуты по месяцам */}
       <div className="flex items-end gap-1.5">
@@ -188,7 +219,7 @@ export function SeasonalityBar({
               min={1}
               max={1000}
               value={values[m] ?? 100}
-              disabled={!canEdit}
+              disabled={readOnly}
               onChange={(e) => onInput(m, e.target.value)}
               className={cn(
                 "w-14 rounded border bg-background px-1 py-0.5 text-center text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-ring",
@@ -217,7 +248,7 @@ export function SeasonalityBar({
                   selected ? "border-primary bg-primary/10" : "bg-muted/40",
                 )}
               >
-                <button type="button" onClick={() => selectScope(s as Scope, id)} className="hover:underline">
+                <button type="button" onClick={() => selectChip(s, id)} className="hover:underline">
                   {nameFor(s, id)}
                 </button>
                 {!readOnly && (

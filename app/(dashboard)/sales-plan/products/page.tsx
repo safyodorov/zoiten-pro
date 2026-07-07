@@ -212,6 +212,13 @@ export default async function SalesPlanProductsPage({
     indexPct: s.indexPct,
   }))
   const currentMonthIso = today.slice(0, 7) + "-01"
+  // Категории с производным directionId (через бренд) — для каскада сезонности
+  const brandDirMap = new Map(brands.map((b) => [b.id, b.directionId]))
+  const categoriesForBar = categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    directionId: c.brandId ? (brandDirMap.get(c.brandId) ?? null) : null,
+  }))
 
   // ── Применяем каскадные фильтры к товарам ──────────────────────────────────
   const productResultMap = new Map(planResult.products.map((pr) => [pr.productId, pr]))
@@ -356,7 +363,7 @@ export default async function SalesPlanProductsPage({
       {/* Сезонность */}
       <SeasonalityBar
         directions={directions}
-        categories={categories}
+        categories={categoriesForBar}
         subcategories={subcategories}
         months={MONTHS}
         currentMonth={currentMonthIso}
