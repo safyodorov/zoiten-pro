@@ -15,6 +15,7 @@ import type { PlanVersion } from "@/components/sales-plan/PlanVersionBar"
 import { SalesPlanFilters } from "@/components/sales-plan/SalesPlanFilters"
 import { ModelParamsBar } from "@/components/sales-plan/ModelParamsBar"
 import { ProductPlanTable } from "@/components/sales-plan/ProductPlanTable"
+import { SeasonalityBar } from "@/components/sales-plan/SeasonalityBar"
 import type { ModelParams } from "@/lib/sales-plan/types"
 import { Pencil, Eye } from "lucide-react"
 
@@ -199,6 +200,19 @@ export default async function SalesPlanProductsPage({
     }),
   ])
 
+  // Индексы сезонности: черновик (versionId=null) или просматриваемая версия
+  const seasonalityRaw = await prisma.salesPlanSeasonality.findMany({
+    where: { versionId: versionId ?? null },
+    select: { scope: true, scopeId: true, month: true, indexPct: true },
+  })
+  const seasonalityRows = seasonalityRaw.map((s) => ({
+    scope: s.scope as string,
+    scopeId: s.scopeId,
+    month: s.month.toISOString().slice(0, 10),
+    indexPct: s.indexPct,
+  }))
+  const currentMonthIso = today.slice(0, 7) + "-01"
+
   // ── Применяем каскадные фильтры к товарам ──────────────────────────────────
   const productResultMap = new Map(planResult.products.map((pr) => [pr.productId, pr]))
 
@@ -337,6 +351,17 @@ export default async function SalesPlanProductsPage({
         selectedCategoryIds={selectedCategoryIds}
         selectedSubcategoryIds={selectedSubcategoryIds}
         basePath="/sales-plan/products"
+      />
+
+      {/* Сезонность */}
+      <SeasonalityBar
+        directions={directions}
+        categories={categories}
+        subcategories={subcategories}
+        months={MONTHS}
+        currentMonth={currentMonthIso}
+        rows={seasonalityRows}
+        readOnly={readOnly}
       />
 
       {/* Таблица */}
