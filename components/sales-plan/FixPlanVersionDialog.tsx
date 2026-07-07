@@ -49,7 +49,9 @@ export function FixPlanVersionDialog({
   const [isPending, startTransition] = useTransition()
 
   const todayLabel = getMskTodayLabel()
-  const [label, setLabel] = useState(`План от ${todayLabel}`)
+  // Пользователь вводит только НАЗВАНИЕ; дата добавляется автоматически (формат «Название · Дата»)
+  const [name, setName] = useState("")
+  const finalLabel = `${name.trim() || "План"} · ${todayLabel}`
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
 
@@ -66,7 +68,7 @@ export function FixPlanVersionDialog({
 
     startTransition(async () => {
       const result = await fixSalesPlanVersion({
-        label: label.trim() || undefined,
+        label: finalLabel,
         note: note.trim() || undefined,
       })
 
@@ -76,7 +78,7 @@ export function FixPlanVersionDialog({
       }
 
       toast.success("План зафиксирован", {
-        description: label.trim() || `План от ${todayLabel}`,
+        description: finalLabel,
       })
 
       // Редирект на ?version=<newId>
@@ -136,17 +138,20 @@ export function FixPlanVersionDialog({
           {/* Название */}
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium" htmlFor="fix-plan-label">
-              Название версии
+              Название плана
             </label>
             <input
               id="fix-plan-label"
               type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder={`План от ${todayLabel}`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="напр. Осенний план / После закупки Q3"
               disabled={isPending}
               className="border rounded px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
             />
+            <span className="text-xs text-muted-foreground">
+              Итог: <span className="text-foreground font-medium">{finalLabel}</span> — дата добавится сама
+            </span>
           </div>
 
           {/* Примечание */}
