@@ -411,6 +411,8 @@ None yet.
 
 | fast-260706 | /sales-plan «Сводный» — два графика вместо тумблера: сверху «По периодам» (не нарастающий), ниже «Нарастающий итог», оба всегда видны; убран тумблер «Нарастающим итогом» из PlanFactControls | 2026-07-06 | (см. git) |  | inline (page.tsx + PlanFactControls.tsx) |
 
+| 260706-q5a | Индекс сезонности в План продаж → Товары: помесячный множитель ставки (× план + виртуальные закупки). Модель SalesPlanSeasonality (versionId?/scope/scopeId/month/indexPct, NULLS NOT DISTINCT); pure lib/sales-plan/seasonality.ts — resolveIndexByMonth (приоритет подкат→кат→напр→глоб) + пере-якорение effective=stored(m)/stored(тек)×100; engine rate×index/100; actions save/reset + снапшот в fixSalesPlanVersion; SeasonalityBar над таблицей. Спека docs/superpowers/specs/2026-07-06. tsc чисто, тесты 100/100, задеплоен (миграция применена) | 2026-07-06 | fb9e982, 5e21816, da31a47 |  | [260706-q5a-seasonality-index-in-sales-plan-tovary-p](./quick/260706-q5a-seasonality-index-in-sales-plan-tovary-p/) |
+
 ### Blockers/Concerns
 
 - Phase 6: Existing nginx config on VPS is unknown — run `nginx -T` before editing
