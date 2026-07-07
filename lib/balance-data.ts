@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/prisma"
 import { currentStageOf } from "@/lib/purchase-stages"
 import { startOfDayMsk } from "@/lib/date-periods"
-import { computeLoanAggregates } from "@/lib/loan-math"
+import { computeLoanAggregates, computeAccruedInterest } from "@/lib/loan-math"
 import { computeQuarterAccrual, computeTaxLiability, computeCapital } from "@/lib/balance-math"
 
 /** Остаток банковского счёта на произвольную дату asOf (не только anchor = balanceDate). */
@@ -446,9 +446,12 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
 
   // Кредиты (M3 — point-in-time: не выдан на asOf → пропуск; soft-delete по дате удаления)
   // Drill-down: дерево Кредитор → Кредит (260704-cvz)
+  // quick 260707-iax: группа расщепляется на ДВЕ сестринские строки — «Остаток тела» +
+  // «Начисленные проценты» (loanAccruedTotal, НЕ путать с accruedTotal — TAX-начисление ниже).
   let loansTotal = 0
-  // Map: lenderId → {name, loans: [{loanId, contractNumber, balance}]}
-  const lenderMap = new Map<string, { name: string; loans: Array<{ loanId: string; contractNumber: string | null; balance: number }> }>()
+  let loanAccruedTotal = 0
+  // Map: lenderId → {name, loans: [{loanId, contractNumber, balance, accrued}]}
+  const lenderMap = new Map<string, { name: string; loans: Array<{ loanId: string; contractNumber: string | null; balance: number; accrued: number }> }>()
 
   for (const loan of loans) {
     const issued = loan.issueDate ?? loan.createdAt
@@ -462,6 +465,8 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     }))
     const agg = computeLoanAggregates(amount, payments, asOf)
     loansTotal += agg.currentBalance
+    const accrued = computeAccruedInterest(amount, payments, asOf, loan.issueDate ?? null)
+    loanAccruedTotal += accrued
 
     // Drill-down: копим per-кредитор
     const lenderId = loan.lenderId ?? "unknown"
@@ -475,10 +480,11 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
       loanId: loan.id,
       contractNumber: loan.contractNumber ?? null,
       balance: agg.currentBalance,
+      accrued,
     })
   }
 
-  // Строим дерево Кредитор → Кредит для loans-balance
+  // Строим дерево Кредитор → Кредит для loans-balance (Остаток тела)
   const lenderNodes: BalanceLine[] = []
   for (const [lenderId, lenderInfo] of lenderMap) {
     const lenderKey = `loans-balance/lender:${lenderId}`
@@ -500,18 +506,47 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
   // Сортировка кредиторов по убыванию суммы
   lenderNodes.sort((a, b) => b.amountRub - a.amountRub)
 
+  // Параллельное дерево Кредитор → Кредит для loans-accrued-interest (та же lenderMap, только accrued>0)
+  const accruedLenderNodes: BalanceLine[] = []
+  for (const [lenderId, lenderInfo] of lenderMap) {
+    const accruedLenderKey = `loans-accrued-interest/lender:${lenderId}`
+    const accruedLoans = lenderInfo.loans.filter((l) => l.accrued > 0)
+    if (accruedLoans.length === 0) continue
+    const accruedLoanNodes: BalanceLine[] = accruedLoans.map((l) => ({
+      key: `${accruedLenderKey}/loan:${l.loanId}`,
+      label: l.contractNumber ?? l.loanId,
+      amountRub: round2(l.accrued),
+    }))
+    accruedLoanNodes.sort((a, b) => b.amountRub - a.amountRub)
+    const accruedLenderAmount = round2(accruedLoanNodes.reduce((s, l) => s + l.amountRub, 0))
+    accruedLenderNodes.push({
+      key: accruedLenderKey,
+      label: lenderInfo.name,
+      amountRub: accruedLenderAmount,
+      children: accruedLoanNodes,
+    })
+  }
+  accruedLenderNodes.sort((a, b) => b.amountRub - a.amountRub)
+
   const loansBalanceLine: BalanceLine = {
     key: "loans-balance",
-    label: "Остаток по кредитам",
+    label: "Остаток тела",
     amountRub: round2(loansTotal),
     ...(lenderNodes.length > 0 ? { children: lenderNodes } : {}),
+  }
+
+  const accruedInterestLine: BalanceLine = {
+    key: "loans-accrued-interest",
+    label: "Начисленные проценты",
+    amountRub: round2(loanAccruedTotal),
+    ...(accruedLenderNodes.length > 0 ? { children: accruedLenderNodes } : {}),
   }
 
   const loansGroup: BalanceGroup = {
     key: "loans",
     label: "Кредиты и займы",
-    lines: [loansBalanceLine],
-    subtotalRub: round2(loansTotal),
+    lines: [loansBalanceLine, accruedInterestLine],
+    subtotalRub: round2(loansTotal + loanAccruedTotal),
   }
 
   // Ручные статьи (D-08)
