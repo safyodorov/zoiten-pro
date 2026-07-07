@@ -3,6 +3,7 @@ import {
   computeSchedule,
   computeLoanAggregates,
   computeStatus,
+  computeAccruedInterest,
   bucketKey,
   bucketLabel,
   type PaymentInput,
@@ -129,6 +130,75 @@ describe("computeLoanAggregates", () => {
       )
       expect(agg.currentBalance).toBe(750000)
     })
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// computeAccruedInterest (quick task 260707-iax)
+// ──────────────────────────────────────────────────────────────────
+
+describe("computeAccruedInterest", () => {
+  it("mid-period: 15/30 дней прошло между платежами → половина interest.next", () => {
+    // prev=2026-06-01 (уплачен), next=2026-07-01 (interest=1000), asOf=2026-06-16 → 15/30 × 1000 = 500
+    const payments: PaymentInput[] = [
+      { date: "2026-06-01", principal: 10000, interest: 500 },
+      { date: "2026-07-01", principal: 0, interest: 1000 },
+    ]
+    const result = computeAccruedInterest(100000, payments, new Date(Date.UTC(2026, 5, 16)))
+    expect(result).toBe(500)
+  })
+
+  it("D до первого платежа, issueDate задан → пропорция от issueDate", () => {
+    // issueDate=2026-01-01, платёж 2026-01-31 (interest=300, период 30 дней), asOf=2026-01-11 (10 дней прошло) → 100
+    const payments: PaymentInput[] = [{ date: "2026-01-31", principal: 100000, interest: 300 }]
+    const result = computeAccruedInterest(
+      100000,
+      payments,
+      new Date(Date.UTC(2026, 0, 11)),
+      new Date(Date.UTC(2026, 0, 1))
+    )
+    expect(result).toBe(100)
+  })
+
+  it("D до первого платежа, issueDate не задан → prevDate=nextPayment.date (periodDays=0) → 0", () => {
+    const payments: PaymentInput[] = [{ date: "2026-01-31", principal: 100000, interest: 300 }]
+    const result = computeAccruedInterest(100000, payments, new Date(Date.UTC(2026, 0, 11)))
+    expect(result).toBe(0)
+  })
+
+  it("D после последнего платежа (нет nextPayment) → 0", () => {
+    const payments: PaymentInput[] = [{ date: "2026-01-01", principal: 100000, interest: 500 }]
+    const result = computeAccruedInterest(200000, payments, new Date(Date.UTC(2026, 5, 1)))
+    expect(result).toBe(0)
+  })
+
+  it("погашенный кредит (Σ principal(≤D) ≥ amount → currentBalance ≤ 0) → 0", () => {
+    const payments: PaymentInput[] = [{ date: "2026-01-01", principal: 100000, interest: 500 }]
+    const result = computeAccruedInterest(100000, payments, new Date(Date.UTC(2026, 1, 1)))
+    expect(result).toBe(0)
+  })
+
+  it("nextPayment.interest = 0 → 0", () => {
+    const payments: PaymentInput[] = [
+      { date: "2026-06-01", principal: 0, interest: 1000 },
+      { date: "2026-07-01", principal: 0, interest: 0 },
+    ]
+    const result = computeAccruedInterest(100000, payments, new Date(Date.UTC(2026, 5, 16)))
+    expect(result).toBe(0)
+  })
+
+  it("пустой payments[] → 0", () => {
+    const result = computeAccruedInterest(100000, [], new Date(Date.UTC(2026, 5, 16)))
+    expect(result).toBe(0)
+  })
+
+  it("D ровно на дату платежа → эта дата становится prevDate, elapsed=0 → 0", () => {
+    const payments: PaymentInput[] = [
+      { date: "2026-06-01", principal: 10000, interest: 500 },
+      { date: "2026-07-01", principal: 0, interest: 1000 },
+    ]
+    const result = computeAccruedInterest(100000, payments, new Date(Date.UTC(2026, 5, 1)))
+    expect(result).toBe(0)
   })
 })
 
