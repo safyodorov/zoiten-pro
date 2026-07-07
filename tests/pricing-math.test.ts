@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
   calculatePricing,
+  calculatePricingStandard,
   COLUMN_ORDER,
   type PricingInputs,
 } from "@/lib/pricing-math"
@@ -180,5 +181,123 @@ describe("COLUMN_ORDER", () => {
     expect(COLUMN_ORDER).toContain("К перечислению")
     expect(COLUMN_ORDER).toContain("Прибыль, руб.")
     expect(COLUMN_ORDER).toContain("Re продаж, %")
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// calculatePricingStandard — std-golden test (Фаза B, 2026-07-07)
+// ──────────────────────────────────────────────────────────────────
+//
+// Source: docs/superpowers/specs/2026-07-07-wb-planned-prices-standard-finres-design.md §4.
+// Использует goldenInputs (nmId 800750522) + std-параметры ниже.
+// Точный пересчёт вручную из формул §4 (НЕ иллюстративное число из плана):
+//   Л_туда = (46 + 14×max(0,5−1)) × 1.0 × 1.0 = 102
+//   Л_эфф  = [102 + (1−0.9)×50] / 0.9 = 107/0.9 = 118.888888… ₽
+//   Хранение = 0.07 × 5 × 1.0 × 60 = 21 ₽
+//   base.profit (commFbwPct=25 std, deliveryCostRub=Л_эфф) ≈ 1066.236811 ₽
+//   profitStd = base.profit − 21 ≈ 1045.236811 ₽
+//   roiPctStd = profitStd / 2204 × 100 ≈ 47.4245 %
+//   returnOnSalesPctStd = profitStd / 7749.9 × 100 ≈ 13.4871 %
+
+const stdParams = {
+  commStdPct: 25,
+  volumeLiters: 5,
+  buyoutPct: 90,
+  delivBase: 46,
+  delivLiter: 14,
+  delivCoefPct: 100,
+  localizationIndex: 1.0,
+  returnLogisticsRub: 50,
+  storageBasePerLiter: 0.07,
+  storageCoefPct: 100,
+  daysInStock: 60,
+}
+
+describe("calculatePricingStandard — std-golden test nmId 800750522", () => {
+  const out = calculatePricingStandard({ ...goldenInputs, ...stdParams })
+
+  it("logisticsToAmount (Л_туда) = 102 ₽", () => {
+    expect(out.logisticsToAmount).toBeCloseTo(102, 2)
+  })
+
+  it("logisticsEffAmount (Л_эфф) ≈ 118.8889 ₽", () => {
+    expect(out.logisticsEffAmount).toBeCloseTo(118.8889, 3)
+  })
+
+  it("storageAmount (Хранение) = 21 ₽", () => {
+    expect(out.storageAmount).toBeCloseTo(21, 2)
+  })
+
+  it("profitStd ≈ 1045.24 ₽ (std-golden, не 1044.74 из иллюстрации плана)", () => {
+    expect(out.profitStd).toBeCloseTo(1045.2368, 2)
+  })
+
+  it("roiPctStd ≈ 47.42 %", () => {
+    expect(out.roiPctStd).toBeCloseTo(47.4245, 1)
+  })
+
+  it("returnOnSalesPctStd ≈ 13.49 %", () => {
+    expect(out.returnOnSalesPctStd).toBeCloseTo(13.4871, 1)
+  })
+
+  it("возвращает конечный base.profit (не золотой — комиссия/доставка переопределены на std)", () => {
+    // out.profit здесь — ЭТО profit std-ядра (commFbwPct=25, deliveryCostRub=Л_эфф),
+    // а НЕ golden 567.683 (тот считается отдельно через calculatePricing(goldenInputs)
+    // без std-переопределений — см. следующий describe).
+    expect(Number.isFinite(out.profit)).toBe(true)
+    expect(out.profit).toBeCloseTo(1066.2368, 2)
+  })
+})
+
+describe("calculatePricing — golden первого блока НЕ сломан std-функцией", () => {
+  it("calculatePricing(goldenInputs) без std-полей — profit/roiPct/returnOnSalesPct как раньше", () => {
+    const out = calculatePricing(goldenInputs)
+    expect(out.profit).toBeCloseTo(567.683, 1)
+    expect(out.roiPct).toBeCloseTo(25.76, 1)
+    expect(out.returnOnSalesPct).toBeCloseTo(7.33, 1)
+    // Опциональные std-поля отсутствуют в PricingOutputs первого блока
+    expect(out.profitStd).toBeUndefined()
+  })
+})
+
+describe("calculatePricingStandard — zero guards", () => {
+  it("buyoutPct=0 → logisticsEffAmount = logisticsToAmount (guard, без NaN/Infinity)", () => {
+    const out = calculatePricingStandard({
+      ...goldenInputs,
+      ...stdParams,
+      buyoutPct: 0,
+    })
+    expect(out.logisticsEffAmount).toBe(out.logisticsToAmount)
+    expect(Number.isFinite(out.logisticsEffAmount)).toBe(true)
+    expect(Number.isFinite(out.profitStd)).toBe(true)
+    expect(Number.isNaN(out.profitStd)).toBe(false)
+  })
+
+  it("costPrice=0 → roiPctStd=0 (без NaN)", () => {
+    const out = calculatePricingStandard({
+      ...goldenInputs,
+      ...stdParams,
+      costPrice: 0,
+    })
+    expect(out.roiPctStd).toBe(0)
+    expect(Number.isFinite(out.roiPctStd)).toBe(true)
+  })
+
+  it("priceBeforeDiscount=0 → sellerPrice=0 → returnOnSalesPctStd=0 (без Infinity)", () => {
+    const out = calculatePricingStandard({
+      ...goldenInputs,
+      ...stdParams,
+      priceBeforeDiscount: 0,
+    })
+    expect(out.sellerPrice).toBe(0)
+    expect(out.returnOnSalesPctStd).toBe(0)
+    expect(Number.isFinite(out.returnOnSalesPctStd)).toBe(true)
+  })
+
+  it("без std-входов (volumeLiters/delivBase и т.п. отсутствуют) — дефолты не дают NaN", () => {
+    const out = calculatePricingStandard(goldenInputs)
+    expect(Number.isFinite(out.profitStd)).toBe(true)
+    expect(Number.isFinite(out.storageAmount)).toBe(true)
+    expect(out.storageAmount).toBe(0) // storageBasePerLiter default 0 → без габаритов хранение = 0
   })
 })

@@ -68,6 +68,30 @@ export interface PricingInputs {
   overheadPct: number
   /** Налог, % */
   taxPct: number
+
+  // ── Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» ──
+  // Все поля опциональны — существующий golden test (без std-входов)
+  // не затрагивается, calculatePricingStandard не вызывается implicitly.
+  /** Стандартная комиссия (не ИУ), % — обычно card.commFbwStd. */
+  commStdPct?: number
+  /** Объём товара, литры (Д×Ш×В/1000), округляется до 0,1 л внутри функции. */
+  volumeLiters?: number
+  /** Базовая ставка логистики (первый литр), ₽ — WbBoxTariffEffective.delivBase. */
+  delivBase?: number
+  /** Ставка логистики за доп. литр, ₽ — WbBoxTariffEffective.delivLiter. */
+  delivLiter?: number
+  /** Коэффициент логистики склада, % (обычно 100) — WbBoxTariffEffective.delivCoefPct. */
+  delivCoefPct?: number
+  /** Индекс локализации (множитель, ~1.0) — AppSetting.wbLocalizationIndex. */
+  localizationIndex?: number
+  /** Стоимость обратной логистики при невыкупе, ₽ — AppSetting.wbReturnLogisticsRub. */
+  returnLogisticsRub?: number
+  /** Базовая ставка хранения, ₽/л/сутки — WbBoxTariffEffective.storageBasePerLiter. */
+  storageBasePerLiter?: number
+  /** Коэффициент хранения склада, % (обычно 100) — WbBoxTariffEffective.storageCoefPct. */
+  storageCoefPct?: number
+  /** Дней на складе (оборачиваемость) — остаток / продажи в день, fallback 60. */
+  daysInStock?: number
 }
 
 /** Результат расчёта — все вычисляемые значения 31 колонок формы «Управление ценами». */
@@ -115,6 +139,22 @@ export interface PricingOutputs {
   returnOnSalesPct: number
   /** ROI (прибыль / закупка), % */
   roiPct: number
+
+  // ── Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» ──
+  // Все поля опциональны — calculatePricing (первый блок) их не заполняет,
+  // только calculatePricingStandard.
+  /** Прибыль на стандартных условиях, ₽. */
+  profitStd?: number
+  /** ROI на стандартных условиях, %. */
+  roiPctStd?: number
+  /** Re продаж на стандартных условиях, %. */
+  returnOnSalesPctStd?: number
+  /** Хранение (на проданную единицу через оборачиваемость), ₽. */
+  storageAmount?: number
+  /** Логистика эффективная (с учётом выкупа и амортизации возврата), ₽. */
+  logisticsEffAmount?: number
+  /** Логистика «туда» (без учёта выкупа/возврата), ₽. */
+  logisticsToAmount?: number
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -402,5 +442,85 @@ export function calculatePricing(inputs: PricingInputs): PricingOutputs {
     profit,
     returnOnSalesPct,
     roiPct,
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Фаза B (2026-07-07): второй фин-рез «на стандартных условиях»
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Рассчитать юнит-экономику «на стандартных условиях» — параллельно основному
+ * расчёту по ИУ (calculatePricing), но со стандартной комиссией, полной моделью
+ * логистики к клиенту (с учётом выкупа и амортизацией возврата при невыкупе)
+ * и хранением (на проданную единицу через оборачиваемость).
+ *
+ * **Pure function**, переиспользует calculatePricing как ядро (комиссия = std,
+ * доставка = логистика эффективная), затем вычитает Хранение сверху.
+ *
+ * Формулы (спека `docs/superpowers/specs/2026-07-07-...-design.md` §4):
+ * ```
+ *  V       = round(max(0, volumeLiters) × 10) / 10       (округл. до 0,1 л)
+ *  ПВ      = buyoutPct / 100
+ *  Л_туда  = (delivBase + delivLiter × max(0, V−1)) × (delivCoefPct/100) × ИЛ
+ *  Л_эфф   = ПВ > 0 ? [Л_туда + (1−ПВ) × returnLogisticsRub] / ПВ : Л_туда
+ *  Хранение = storageBasePerLiter × V × (storageCoefPct/100) × daysInStock
+ *
+ *  profitStd = calculatePricing({ commFbwPct: commStdPct, deliveryCostRub: Л_эфф }).profit
+ *              − Хранение
+ *  roiPctStd           = costPrice > 0  ? profitStd / costPrice × 100  : 0
+ *  returnOnSalesPctStd = sellerPrice > 0 ? profitStd / sellerPrice × 100 : 0
+ * ```
+ *
+ * std-golden (детерминированный, на базе goldenInputs nmId 800750522 +
+ * { commStdPct:25, volumeLiters:5, buyoutPct:90, delivBase:46, delivLiter:14,
+ *   delivCoefPct:100, localizationIndex:1.0, returnLogisticsRub:50,
+ *   storageBasePerLiter:0.07, storageCoefPct:100, daysInStock:60 }):
+ *   Л_туда=102, Л_эфф≈118.8889, Хранение=21, profitStd≈1045.24 ₽,
+ *   roiPctStd≈47.42%, returnOnSalesPctStd≈13.48% (см. tests/pricing-math.test.ts).
+ */
+export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs {
+  const delivBase = inputs.delivBase ?? 0
+  const delivLiter = inputs.delivLiter ?? 0
+  const delivCoefPct = inputs.delivCoefPct ?? 100
+  const localizationIndex = inputs.localizationIndex ?? 1
+  const returnLogisticsRub = inputs.returnLogisticsRub ?? 50
+  const storageBasePerLiter = inputs.storageBasePerLiter ?? 0
+  const storageCoefPct = inputs.storageCoefPct ?? 100
+  const daysInStock = inputs.daysInStock ?? 0
+
+  const V = Math.round(Math.max(0, inputs.volumeLiters ?? 0) * 10) / 10
+  const pv = (inputs.buyoutPct ?? 100) / 100
+
+  const logTo =
+    (delivBase + delivLiter * Math.max(0, V - 1)) *
+    (delivCoefPct / 100) *
+    localizationIndex
+  const logEff = pv > 0 ? (logTo + (1 - pv) * returnLogisticsRub) / pv : logTo
+
+  const storage = storageBasePerLiter * V * (storageCoefPct / 100) * daysInStock
+
+  // Ядро — переиспользуем calculatePricing (golden-протестированное тело):
+  // комиссия заменяется на стандартную, доставка — на логистику эффективную.
+  const base = calculatePricing({
+    ...inputs,
+    commFbwPct: inputs.commStdPct ?? inputs.commFbwPct,
+    deliveryCostRub: logEff,
+  })
+
+  const profitStd = base.profit - storage
+  const costPrice = Math.max(0, inputs.costPrice)
+  const roiPctStd = costPrice > 0 ? (profitStd / costPrice) * 100 : 0
+  const returnOnSalesPctStd =
+    base.sellerPrice > 0 ? (profitStd / base.sellerPrice) * 100 : 0
+
+  return {
+    ...base,
+    profitStd,
+    roiPctStd,
+    returnOnSalesPctStd,
+    storageAmount: storage,
+    logisticsEffAmount: logEff,
+    logisticsToAmount: logTo,
   }
 }
