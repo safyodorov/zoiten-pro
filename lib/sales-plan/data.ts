@@ -135,7 +135,7 @@ export async function loadSalesPlanInputs(
   // ── 4. WbCard: stockQty + price (fallback для avgPrice) ────────────────
   const cards = await db.wbCard.findMany({
     where: { nmId: { in: allNmIds }, deletedAt: null },
-    select: { nmId: true, stockQty: true, price: true, buyoutPercent: true },
+    select: { nmId: true, stockQty: true, price: true, buyoutPercent: true, plannedSellerPrice: true },
   })
   const cardByNmId = new Map(cards.map((c) => [c.nmId, c]))
 
@@ -345,6 +345,9 @@ export async function loadSalesPlanInputs(
     let baseline = 0
     let cardPriceFallback = 0
     let cardPriceCount = 0
+    // Фаза A (2026-07-07): плановая цена как база плана продаж.
+    let plannedPriceFallback = 0
+    let plannedPriceCount = 0
     let cardBuyoutFallback = 0
     let cardBuyoutCount = 0
     // Weighted price per ords7
@@ -365,6 +368,11 @@ export async function loadSalesPlanInputs(
         if (card.price != null) {
           cardPriceFallback += card.price
           cardPriceCount++
+        }
+        const plannedOrCurrent = card.plannedSellerPrice ?? card.price
+        if (plannedOrCurrent != null) {
+          plannedPriceFallback += plannedOrCurrent
+          plannedPriceCount++
         }
         if (card.buyoutPercent != null) {
           cardBuyoutFallback += card.buyoutPercent
@@ -407,6 +415,15 @@ export async function loadSalesPlanInputs(
       avgPriceRub = priceWeightedNum / priceWeightedDen
     } else if (cardPriceCount > 0) {
       avgPriceRub = cardPriceFallback / cardPriceCount
+    }
+
+    // Фаза A: плановая цена как база плана продаж. plannedProductPrice = среднее
+    // (plannedSellerPrice ?? card.price) по картам товара. Пока плановая null → = card.price
+    // (текущая финальная цена). Осознанно смещает базу с funnel-avg на текущую/плановую — так задумано.
+    // Движок getPriceRub = ml.priceRub ?? product.avgPriceRub → итог ml.priceRub ?? plannedProductPrice ?? avgPriceRub.
+    const plannedProductPrice = plannedPriceCount > 0 ? plannedPriceFallback / plannedPriceCount : null
+    if (plannedProductPrice != null) {
+      avgPriceRub = plannedProductPrice
     }
 
     // buyoutPct — 4-уровневая цепочка (own → legacy → subcategory → global)
