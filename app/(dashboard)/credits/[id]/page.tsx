@@ -9,6 +9,7 @@ import {
   computeSchedule,
   computeLoanAggregates,
   computeStatus,
+  computeAccruedInterest,
 } from "@/lib/loan-math"
 import { LoanSummaryCards } from "@/components/credits/LoanSummaryCards"
 import { LoanBalanceChart } from "@/components/credits/LoanBalanceChart"
@@ -46,6 +47,7 @@ export default async function CreditDetailPage({ params }: Props) {
   // (без asOf Σprincipal == amount → остаток 0 → кредит ошибочно «погашен»)
   const agg = computeLoanAggregates(amount, payments, new Date())
   const status = computeStatus(agg.currentBalance)
+  const accruedInterest = computeAccruedInterest(amount, payments, new Date(), loan.issueDate ?? null)
 
   // D-07: effectiveIssueDate = issueDate ?? дата первого платежа
   const effectiveIssueDate: Date | null =
@@ -119,6 +121,7 @@ export default async function CreditDetailPage({ params }: Props) {
         status={status}
         lenderName={loan.lender.name}
         companyName={loan.company.name}
+        accruedInterest={accruedInterest}
       />
 
       {/* Line-chart остатка */}

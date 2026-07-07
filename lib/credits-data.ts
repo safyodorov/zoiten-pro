@@ -3,7 +3,13 @@
 // Загружает кредиты с агрегатами и именем кредитора (U-03: lender.name)
 
 import { prisma } from "@/lib/prisma"
-import { computeLoanAggregates, computeStatus, round2, type LoanStatus } from "@/lib/loan-math"
+import {
+  computeLoanAggregates,
+  computeStatus,
+  computeAccruedInterest,
+  round2,
+  type LoanStatus,
+} from "@/lib/loan-math"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +26,7 @@ export interface CreditRow {
   currentBalance: number
   totalPrincipalPaid: number
   totalInterestPaid: number
+  accruedInterest: number          // quick 260707-iax: начисленные, но не уплаченные проценты на сегодня
   status: LoanStatus
 }
 
@@ -63,6 +70,7 @@ export async function loadCredits(): Promise<CreditRow[]> {
     const status = computeStatus(agg.currentBalance)
     const effectiveIssueDate: Date | null =
       loan.issueDate ?? (loan.payments.length > 0 ? loan.payments[0].date : null)
+    const accruedInterest = computeAccruedInterest(amount, payments, asOf, loan.issueDate ?? null)
 
     return {
       id: loan.id,
@@ -77,6 +85,7 @@ export async function loadCredits(): Promise<CreditRow[]> {
       currentBalance: agg.currentBalance,
       totalPrincipalPaid: agg.totalPrincipalPaid,
       totalInterestPaid: agg.totalInterestPaid,
+      accruedInterest,
       status,
     }
   })
@@ -113,6 +122,8 @@ export interface CreditsDashboard {
   totalDebt: number
   /** Средневзвешенная годовая ставка, взвешенная по текущему остатку долга (%) */
   weightedRatePct: number
+  /** Σ начисленных, но не уплаченных процентов по кредитам с currentBalance > 0 (quick 260707-iax) */
+  totalAccruedInterest: number
   /** Текущий год (для лейбла «Осталось выплатить в N») */
   currentYear: number
   /**
@@ -140,6 +151,7 @@ export async function loadCreditsDashboard(): Promise<CreditsDashboard> {
 
   let totalDebt = 0
   let weightedNum = 0
+  let totalAccruedInterest = 0
   const yearMap = new Map<number, { principal: number; interest: number }>()
 
   for (const loan of loans) {
@@ -154,6 +166,7 @@ export async function loadCreditsDashboard(): Promise<CreditsDashboard> {
     if (currentBalance > 0) {
       totalDebt += currentBalance
       weightedNum += currentBalance * Number(loan.annualRatePct)
+      totalAccruedInterest += computeAccruedInterest(amount, payments, now, loan.issueDate ?? null)
     }
 
     // Будущие платежи (с сегодня и далее) по годам
@@ -177,6 +190,7 @@ export async function loadCreditsDashboard(): Promise<CreditsDashboard> {
   return {
     totalDebt: round2(totalDebt),
     weightedRatePct: totalDebt > 0 ? round2(weightedNum / totalDebt) : 0,
+    totalAccruedInterest: round2(totalAccruedInterest),
     currentYear,
     byYear,
   }

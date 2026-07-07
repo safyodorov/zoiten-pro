@@ -14,6 +14,8 @@ interface Props {
   status: LoanStatus
   lenderName: string
   companyName: string
+  /** Начисленные, но не уплаченные проценты на сегодня (quick 260707-iax) */
+  accruedInterest: number
 }
 
 /** Форматирование денег ru-RU + ₽ (D-19, паттерн SpendSummary). */
@@ -44,6 +46,7 @@ export function LoanSummaryCards({
   issueDateIsFallback,
   status,
   lenderName,
+  accruedInterest,
 }: Props) {
   const { totalPrincipalPaid, totalInterestPaid, currentBalance, overpayment } = agg
 
@@ -56,7 +59,7 @@ export function LoanSummaryCards({
       : "text-emerald-700 dark:text-emerald-300"
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-3">
       {/* 1: Сумма кредита */}
       <div className="rounded-md border bg-card p-3">
         <div className="text-xs text-muted-foreground">Сумма кредита</div>
@@ -81,6 +84,17 @@ export function LoanSummaryCards({
         <div className="text-xs text-muted-foreground">Уплачено процентов</div>
         <div className="text-2xl font-semibold tabular-nums mt-1">
           {formatRub(totalInterestPaid)}
+        </div>
+      </div>
+
+      {/* 3b: Начисленные проценты (quick 260707-iax) */}
+      <div className="rounded-md border bg-card p-3">
+        <div className="text-xs text-muted-foreground">Начисленные проценты</div>
+        <div className="text-2xl font-semibold tabular-nums mt-1 text-amber-600 dark:text-amber-400">
+          {formatRub(accruedInterest)}
+        </div>
+        <div className="text-xs text-muted-foreground mt-1">
+          неоплаченные, по графику
         </div>
       </div>
 

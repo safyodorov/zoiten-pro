@@ -27,6 +27,17 @@ export function CreditsDashboard({ data }: { data: CreditsDashboardData }) {
         <div className="text-[10px] text-muted-foreground">остаток осн. долга</div>
       </div>
 
+      {/* Начисленные проценты (quick 260707-iax) */}
+      <div className="rounded-md border bg-card px-2.5 py-1.5">
+        <div className="text-[11px] leading-tight text-muted-foreground">
+          Начисленные проценты
+        </div>
+        <div className="text-base font-semibold tabular-nums mt-0.5 text-amber-600 dark:text-amber-400">
+          {formatRub(data.totalAccruedInterest)}
+        </div>
+        <div className="text-[10px] text-muted-foreground">неоплаченные, по графику</div>
+      </div>
+
       {/* Средневзвешенная ставка */}
       <div className="rounded-md border bg-card px-2.5 py-1.5">
         <div className="text-[11px] leading-tight text-muted-foreground">

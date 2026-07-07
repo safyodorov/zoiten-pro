@@ -180,6 +180,9 @@ export function CreditsTable({ rows, lenders, companies, canManage }: CreditsTab
             <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
               Текущий остаток
             </th>
+            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-right text-xs font-semibold text-muted-foreground whitespace-nowrap">
+              Начислено, ₽
+            </th>
             <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-center text-xs font-semibold text-muted-foreground whitespace-nowrap">
               Статус
             </th>
@@ -252,6 +255,9 @@ export function CreditsTable({ rows, lenders, companies, canManage }: CreditsTab
                 </TableCell>
                 <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
                   {formatMoney(row.currentBalance)}
+                </TableCell>
+                <TableCell className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
+                  {formatMoney(row.accruedInterest)}
                 </TableCell>
                 <TableCell className="px-3 py-2 text-center">
                   <StatusBadge status={row.status} />
