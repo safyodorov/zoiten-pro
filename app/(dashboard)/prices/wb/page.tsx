@@ -623,6 +623,30 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         return sellerPrice / (1 - sellerDiscountPct / 100)
       }
 
+      // a2) Плановая цена — по умолчанию = Текущей; override из WbCard.plannedSellerPrice (ФИНАЛЬНАЯ цена).
+      const plannedSellerDiscountPct = card.plannedSellerDiscountPct ?? currentSellerDiscountPct
+      const plannedPriceBeforeDiscount =
+        card.plannedSellerPrice != null
+          ? deriveBefore(card.plannedSellerPrice, plannedSellerDiscountPct)
+          : currentPriceBeforeDiscount
+      const plannedInputs: PricingInputs = {
+        ...baseInputs,
+        priceBeforeDiscount: plannedPriceBeforeDiscount,
+        sellerDiscountPct: plannedSellerDiscountPct,
+      }
+      priceRows.push({
+        id: `${card.id}-planned`,
+        type: "planned",
+        label: "Плановая",
+        sellerPriceBeforeDiscount: plannedPriceBeforeDiscount,
+        sellerDiscountPct: plannedSellerDiscountPct,
+        ...baseRowFields,
+        computed: calculatePricing(plannedInputs),
+        inputs: plannedInputs,
+        context: rowContext,
+        globalValues,
+      })
+
       // b) Regular акции для этой nmId (DESC по финальной цене продавца).
       // Если фильтр «Без акций» активен — пропускаем оба блока (regular + auto).
       if (showPromos) {

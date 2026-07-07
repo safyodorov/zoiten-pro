@@ -53,7 +53,7 @@ import type { DayPoint } from "@/lib/wb-orders-chart"
 // Types (exported для использования в плане 07-08 + плане 07-09)
 // ──────────────────────────────────────────────────────────────────
 
-export type PriceRowType = "current" | "regular" | "auto" | "calculated"
+export type PriceRowType = "current" | "planned" | "regular" | "auto" | "calculated"
 
 /**
  * Одна ценовая строка таблицы. Все input-поля и computed-outputs,
@@ -997,13 +997,15 @@ export function PriceCalculatorTable({
                   productRowIdx++
 
                   const stripClass =
-                    row.type === "regular"
-                      ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-500/10"
-                      : row.type === "auto"
-                        ? "border-l-4 border-l-purple-500 bg-purple-50/30 dark:bg-purple-500/10"
-                        : row.type === "calculated"
-                          ? "border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-500/10"
-                          : ""
+                    row.type === "planned"
+                      ? "border-l-4 border-l-orange-500 bg-orange-100/50 dark:bg-orange-500/15"
+                      : row.type === "regular"
+                        ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-500/10"
+                        : row.type === "auto"
+                          ? "border-l-4 border-l-purple-500 bg-purple-50/30 dark:bg-purple-500/10"
+                          : row.type === "calculated"
+                            ? "border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-500/10"
+                            : ""
 
                   return (
                     <tr
@@ -1265,6 +1267,14 @@ export function PriceCalculatorTable({
                             className="bg-primary/10 text-primary border-primary/30"
                           >
                             Текущая
+                          </Badge>
+                        )}
+                        {row.type === "planned" && (
+                          <Badge
+                            variant="outline"
+                            className="bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-500/20 dark:text-orange-300 dark:border-orange-500/40"
+                          >
+                            Плановая
                           </Badge>
                         )}
                         {(row.type === "regular" || row.type === "auto") && (

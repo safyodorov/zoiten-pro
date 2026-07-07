@@ -324,6 +324,10 @@ model WbCard {
   priceBeforeDiscount Float? // цена продавца до скидки, руб
   sellerDiscount      Int? // скидка продавца, %
   price               Float? // цена продавца со скидкой, руб
+  // Фаза A (2026-07-07): плановые цены — база плана продаж. null → плановая = текущей.
+  // plannedSellerPrice = ФИНАЛЬНАЯ цена продавца (после скидки), единицы = price / CalculatedPrice.sellerPrice.
+  plannedSellerPrice       Float?
+  plannedSellerDiscountPct Int?
   discountWb          Float? // скидка WB (СПП), % — с точностью до 0.1%
   clubDiscount        Int? // скидка WB клуба, %
   stockQty            Int? // остаток товара, шт (физический, без in-way)
