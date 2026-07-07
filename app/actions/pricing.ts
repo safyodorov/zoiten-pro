@@ -494,6 +494,39 @@ export async function updateProductDelivery(
   }
 }
 
+/** Фаза A: сохранить плановую цену продавца (ФИНАЛЬНАЯ, после скидки) + скидку на WbCard.
+ *  null/null → сброс (плановая = текущей). */
+export async function savePlannedPrice(
+  wbCardId: string,
+  sellerPrice: number | null,
+  sellerDiscountPct: number | null,
+): Promise<ActionResult> {
+  try {
+    await requireSection("PRICES", "MANAGE")
+  } catch (e) {
+    const authErr = handleAuthError(e)
+    if (authErr) return authErr
+    return { ok: false, error: (e as Error).message }
+  }
+  if (!wbCardId || wbCardId.length === 0) return { ok: false, error: "wbCardId обязателен" }
+  if (sellerPrice != null && sellerPrice < 0) return { ok: false, error: "Цена не может быть отрицательной" }
+  if (sellerDiscountPct != null && (sellerDiscountPct < 0 || sellerDiscountPct > 100))
+    return { ok: false, error: "Скидка должна быть в диапазоне [0, 100]" }
+  try {
+    await prisma.wbCard.update({
+      where: { id: wbCardId },
+      data: {
+        plannedSellerPrice: sellerPrice,
+        plannedSellerDiscountPct: sellerDiscountPct != null ? Math.round(sellerDiscountPct) : null,
+      },
+    })
+    revalidatePath("/prices/wb")
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────
 // WbPromotion displayName — пользовательское название акции для UI.
 // Обновление глобально для всех строк этой акции. Не трогает name

@@ -40,7 +40,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { calculatePricing, type PricingInputs } from "@/lib/pricing-math"
-import { saveCalculatedPrice, saveRowEdits } from "@/app/actions/pricing"
+import { saveCalculatedPrice, saveRowEdits, savePlannedPrice } from "@/app/actions/pricing"
 import type { PriceRow } from "@/components/prices/PriceCalculatorTable"
 import type { EditableParamKey } from "@/lib/pricing-schemas"
 
@@ -180,6 +180,8 @@ export function PricingCalculatorDialog({
 
   // На non-calc строках нет слота → чекбоксы «только этот расчёт» скрываем
   const isCalcRow = row.type === "calculated"
+  // Плановая строка — отдельные кнопки сохранения/сброса (persist на WbCard).
+  const isPlannedRow = row.type === "planned"
 
   // Дефолты для 12 редактируемых параметров — из row.inputs (resolved values)
   const paramDefaults = EDITABLE_PARAMS.reduce(
@@ -348,6 +350,36 @@ export function PricingCalculatorDialog({
         router.refresh()
       } else {
         toast.error(result.error || "Не удалось сохранить расчёт")
+      }
+    })
+  }
+
+  // ── Submit: «Сохранить плановую цену» / «Сбросить плановую» (planned-строка) ─
+  const onSavePlanned = (values: FormValues) => {
+    startTransition(async () => {
+      const r = await savePlannedPrice(
+        card.id,
+        values.sellerPrice,
+        values.sellerDiscountPct,
+      )
+      if (r.ok) {
+        toast.success("Плановая цена сохранена")
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        toast.error(r.error || "Не удалось сохранить плановую цену")
+      }
+    })
+  }
+  const onResetPlanned = () => {
+    startTransition(async () => {
+      const r = await savePlannedPrice(card.id, null, null)
+      if (r.ok) {
+        toast.success("Плановая цена сброшена к текущей")
+        onOpenChange(false)
+        router.refresh()
+      } else {
+        toast.error(r.error || "Не удалось сбросить")
       }
     })
   }
@@ -582,6 +614,26 @@ export function PricingCalculatorDialog({
                 className="h-9 flex-1 min-w-[160px]"
                 {...form.register("calculatedName")}
               />
+              {isPlannedRow && (
+                <>
+                  <Button
+                    type="button"
+                    onClick={form.handleSubmit(onSavePlanned)}
+                    disabled={isPending}
+                    className="bg-orange-500 hover:bg-orange-600 text-white"
+                  >
+                    {isPending ? "Сохранение…" : "Сохранить плановую цену"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={onResetPlanned}
+                    disabled={isPending}
+                  >
+                    Сбросить плановую
+                  </Button>
+                </>
+              )}
               <Button
                 type="button"
                 variant="outline"
