@@ -33,6 +33,7 @@ import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
 import { WbAutoPromoUploadButton } from "@/components/prices/WbAutoPromoUploadButton"
+import { WbBoxTariffsSyncButton } from "@/components/prices/WbBoxTariffsSyncButton"
 import { PricesFilters } from "@/components/prices/PricesFilters"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Info } from "lucide-react"
@@ -55,6 +56,9 @@ const RATE_KEYS = [
   "wbOverheadPct",
   "wbTaxPct",
   "wbDefectRatePct",
+  // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
+  "wbReturnLogisticsRub",
+  "wbLocalizationIndex",
 ] as const
 
 type RateKey = (typeof RATE_KEYS)[number]
@@ -67,6 +71,8 @@ const DEFAULT_RATES: Record<RateKey, number> = {
   wbOverheadPct: 6.0,
   wbTaxPct: 8.0,
   wbDefectRatePct: 2.0,
+  wbReturnLogisticsRub: 50.0,
+  wbLocalizationIndex: 1.0,
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -997,6 +1003,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         <div className="ml-auto flex flex-wrap gap-2">
           <WbSyncButton />
           <WbSyncSppButton />
+          <WbBoxTariffsSyncButton />
           <WbPromotionsSyncButton />
           <WbAutoPromoUploadButton
             autoPromotions={promotions

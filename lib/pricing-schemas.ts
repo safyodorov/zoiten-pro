@@ -21,6 +21,9 @@ export const APP_SETTING_KEYS = [
   "wbOverheadPct",
   "wbTaxPct",
   "wbDefectRatePct",
+  // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
+  "wbReturnLogisticsRub",
+  "wbLocalizationIndex",
 ] as const
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[number]
@@ -35,6 +38,24 @@ export const APP_SETTING_DEFAULTS: Record<AppSettingKey, number> = {
   wbOverheadPct: 6.0,
   wbTaxPct: 8.0,
   wbDefectRatePct: 2.0,
+  wbReturnLogisticsRub: 50.0,
+  wbLocalizationIndex: 1.0,
+}
+
+/** Максимум допустимого значения per ключ. Все процентные ставки (Phase 7) остаются
+ *  в [0,100] — bond НЕ ослаблен. `wbReturnLogisticsRub` — рубли, реалистично может
+ *  превышать 100 для крупногабаритных товаров, потолок 1000₽. `wbLocalizationIndex` —
+ *  множитель ~1.0, [0,100] с запасом достаточен. */
+export const APP_SETTING_MAX: Record<AppSettingKey, number> = {
+  wbWalletPct: 100,
+  wbAcquiringPct: 100,
+  wbJemPct: 100,
+  wbCreditPct: 100,
+  wbOverheadPct: 100,
+  wbTaxPct: 100,
+  wbDefectRatePct: 100,
+  wbReturnLogisticsRub: 1000,
+  wbLocalizationIndex: 100,
 }
 
 /** Проверка валидности ключа AppSetting. Используется тестами и защитой action'ов. */
@@ -65,6 +86,26 @@ export const appSettingValueSchema = z
     const n = parseFloat(s)
     return !Number.isNaN(n) && n >= 0 && n <= 100
   }, "Значение должно быть в диапазоне [0, 100]")
+
+/** Zod схема для value глобальной ставки, привязанная к конкретному ключу.
+ *  Тот же формат-guard, что и `appSettingValueSchema`, но верхняя граница берётся
+ *  из `APP_SETTING_MAX[key]` — так `wbReturnLogisticsRub` (₽) может быть до 1000,
+ *  а все процентные ставки остаются в [0, 100] (bond НЕ ослаблен). */
+export function appSettingValueSchemaForKey(key: AppSettingKey) {
+  const max = APP_SETTING_MAX[key] ?? 100
+  return z
+    .string()
+    .min(1, "Значение не может быть пустым")
+    .refine((s) => s.trim().length > 0, "Значение не может быть пустым")
+    .refine(
+      (s) => /^-?\d+(\.\d+)?$/.test(s),
+      "Значение должно быть числом",
+    )
+    .refine((s) => {
+      const n = parseFloat(s)
+      return !Number.isNaN(n) && n >= 0 && n <= max
+    }, `Значение должно быть в диапазоне [0, ${max}]`)
+}
 
 /** Zod схема для slot (1|2|3). */
 export const slotSchema = z.number().int().min(1).max(3)

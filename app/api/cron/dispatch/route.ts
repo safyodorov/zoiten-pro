@@ -38,6 +38,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "financeBalanceSnapshotCronTime",
           "wbSalesDailyCronTime",
           "vpRollforwardCronTime",
+          "wbBoxTariffsCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "financeBalanceSnapshotLastRun",
           "wbSalesDailyLastRun",
           "vpRollforwardLastRun",
+          "wbBoxTariffsLastRun",
         ],
       },
     },
@@ -73,6 +75,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const salesLastRun = settings.wbSalesDailyLastRun ?? null
   const rollforwardTime = settings.vpRollforwardCronTime ?? "04:40"
   const rollforwardLastRun = settings.vpRollforwardLastRun ?? null
+  const boxTariffsTime = settings.wbBoxTariffsCronTime ?? "05:20"
+  const boxTariffsLastRun = settings.wbBoxTariffsLastRun ?? null
 
   const fired: string[] = []
 
@@ -208,6 +212,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] prices error:", e)
       fired.push("prices:error")
+    }
+  }
+
+  // Фаза B (2026-07-07): box-тарифы складов (/tariffs/box). По умолчанию 05:20 МСК —
+  // между wb-prices-daily (05:10) и wb-cards-refresh (05:30). Отдельный bucket "tariffs".
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: boxTariffsTime,
+      lastRunDate: boxTariffsLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: boxTariffsHandler } = await import("../wb-box-tariffs/route")
+      const res = await boxTariffsHandler(req)
+      fired.push(`box-tariffs:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] box-tariffs error:", e)
+      fired.push("box-tariffs:error")
     }
   }
 

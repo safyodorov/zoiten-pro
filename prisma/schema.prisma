@@ -365,6 +365,20 @@ model WbCard {
   @@index([deletedAt])
 }
 
+// Фаза B (2026-07-07): сырые box-тарифы складов WB из /tariffs/box.
+// Срез по стоку ОТЛОЖЕН — эффективные ставки хранятся флэтом в AppSetting.wbBoxTariffEffective.
+model WbBoxTariff {
+  warehouseName   String    @id            // ОКРУГ/ВРЦ (warehouseName из API)
+  deliveryBase    Float?                   // boxDeliveryBase, ₽ (первый литр)
+  deliveryLiter   Float?                   // boxDeliveryLiter, ₽ (каждый доп. литр)
+  deliveryCoefPct Float?                   // boxDeliveryCoefExpr, % (сейчас 100)
+  storageBase     Float?                   // boxStorageBase, ₽/л/сут
+  storageLiter    Float?                   // boxStorageLiter, ₽/л/сут (доп.)
+  storageCoefPct  Float?                   // boxStorageCoefExpr, % (сейчас 100)
+  dtTillMax       DateTime?                // response.data.dtTillMax
+  updatedAt       DateTime  @updatedAt
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Индивидуальные условия комиссий WB (загружаются из Excel)
 // ──────────────────────────────────────────────────────────────────

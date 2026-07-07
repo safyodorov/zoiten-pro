@@ -1,5 +1,6 @@
 // components/prices/GlobalRatesBar.tsx
-// Phase 7 (PRICES-06): Редактор 6 глобальных ставок.
+// Phase 7 (PRICES-06): Редактор глобальных ставок.
+// Фаза B (2026-07-07): += wbReturnLogisticsRub (₽, max 1000) и wbLocalizationIndex (×).
 // Debounced save (500ms) через updateAppSetting server action → toast через sonner.
 //
 // 6 ключей (из lib/pricing-schemas.ts): wbWalletPct, wbAcquiringPct, wbJemPct,
@@ -31,10 +32,16 @@ type RateKey =
   | "wbOverheadPct"
   | "wbDefectRatePct"
   | "wbTaxPct"
+  | "wbReturnLogisticsRub"
+  | "wbLocalizationIndex"
 
 interface RateSpec {
   key: RateKey
   label: string
+  /** Единица измерения — суффикс поля. Дефолт "%". */
+  unit?: string
+  /** Максимум инпута. Дефолт 100. */
+  max?: number
 }
 
 const RATES: readonly RateSpec[] = [
@@ -45,6 +52,8 @@ const RATES: readonly RateSpec[] = [
   { key: "wbOverheadPct", label: "Общие" },
   { key: "wbDefectRatePct", label: "Брак" },
   { key: "wbTaxPct", label: "Налог" },
+  { key: "wbReturnLogisticsRub", label: "Возврат-логистика", unit: "₽", max: 1000 },
+  { key: "wbLocalizationIndex", label: "Индекс локализации", unit: "×" },
 ] as const
 
 interface GlobalRatesBarProps {
@@ -105,7 +114,7 @@ export function GlobalRatesBar({ initialRates }: GlobalRatesBarProps) {
   return (
     <Card className="p-4 bg-muted/30 border">
       <div className="flex flex-wrap gap-4">
-        {RATES.map(({ key, label }) => (
+        {RATES.map(({ key, label, unit, max }) => (
           <div key={key} className="flex flex-col gap-1">
             <Label
               htmlFor={`rate-${key}`}
@@ -119,14 +128,14 @@ export function GlobalRatesBar({ initialRates }: GlobalRatesBarProps) {
                 type="number"
                 step="0.1"
                 min="0"
-                max="100"
+                max={max ?? 100}
                 inputMode="decimal"
                 className="h-8 w-20 text-sm"
                 value={values[key]}
                 onChange={(e) => handleChange(key, e.target.value)}
                 disabled={isPending}
               />
-              <span className="text-sm text-muted-foreground">%</span>
+              <span className="text-sm text-muted-foreground">{unit ?? "%"}</span>
             </div>
           </div>
         ))}

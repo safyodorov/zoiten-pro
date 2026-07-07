@@ -24,7 +24,7 @@ import {
   APP_SETTING_DEFAULTS,
   type AppSettingKey,
   isValidAppSettingKey,
-  appSettingValueSchema,
+  appSettingValueSchemaForKey,
   saveCalculatedPriceSchema,
   saveRowEditsSchema,
   resetParamOverrideSchema,
@@ -116,7 +116,7 @@ export async function updateAppSetting(
     return { ok: false, error: `Неизвестный ключ настройки: ${key}` }
   }
 
-  const parsed = appSettingValueSchema.safeParse(value)
+  const parsed = appSettingValueSchemaForKey(key).safeParse(value)
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0].message }
   }

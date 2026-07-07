@@ -547,6 +547,70 @@ export async function fetchStandardCommissions(): Promise<Map<number, { fbw: num
   return commMap
 }
 
+// ── Фаза B (2026-07-07): box-тарифы складов через Tariffs API ────
+
+/** Разобранная строка склада из /tariffs/box. */
+export interface WbBoxTariffWarehouse {
+  warehouseName: string
+  deliveryBase: number | null
+  deliveryLiter: number | null
+  deliveryCoefPct: number | null
+  storageBase: number | null
+  storageLiter: number | null
+  storageCoefPct: number | null
+}
+
+/** Парсинг числового поля /tariffs/box: строки с запятой, "-" = н/д. */
+function parseWbTariffNum(s: unknown): number | null {
+  if (s == null || String(s).trim() === "-") return null
+  const n = Number(String(s).replace(",", "."))
+  return Number.isNaN(n) ? null : n
+}
+
+/**
+ * Тянет box-тарифы складов WB (`GET /api/v1/tariffs/box?date=YYYY-MM-DD`).
+ * scope «Тарифы», лимит ~60/мин. Значения в ответе — строки через запятую
+ * (`"11,2"` → 11.2), `"-"` → н/д. Используется ТОЛЬКО по кнопке/крону —
+ * НЕ дёргать в билд/деплой-тайме (429-лимитер).
+ */
+export async function fetchBoxTariffs(
+  date: string,
+): Promise<{ warehouses: WbBoxTariffWarehouse[]; dtTillMax: Date | null }> {
+  const token = await getToken()
+
+  const res = await wbFetch(
+    "Tariffs API",
+    `https://common-api.wildberries.ru/api/v1/tariffs/box?date=${date}`,
+    { headers: { Authorization: token } },
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Tariffs API (box) ошибка ${res.status}: ${text}`)
+  }
+
+  const data = await res.json()
+  const rows = data?.response?.data?.warehouseList ?? []
+  const dtTillMaxRaw = data?.response?.data?.dtTillMax ?? null
+
+  const warehouses: WbBoxTariffWarehouse[] = rows.map(
+    (row: Record<string, unknown>) => ({
+      warehouseName: String(row.warehouseName ?? ""),
+      deliveryBase: parseWbTariffNum(row.boxDeliveryBase),
+      deliveryLiter: parseWbTariffNum(row.boxDeliveryLiter),
+      deliveryCoefPct: parseWbTariffNum(row.boxDeliveryCoefExpr),
+      storageBase: parseWbTariffNum(row.boxStorageBase),
+      storageLiter: parseWbTariffNum(row.boxStorageLiter),
+      storageCoefPct: parseWbTariffNum(row.boxStorageCoefExpr),
+    }),
+  )
+
+  return {
+    warehouses,
+    dtTillMax: dtTillMaxRaw ? new Date(dtTillMaxRaw) : null,
+  }
+}
+
 // ── Преобразование карточки API → данные для БД ─────────────────
 
 export function parseCard(card: WbCardRaw) {
