@@ -145,12 +145,13 @@ export default async function SalesPlanPage({
   const selectedVersionId = currentVersionId ?? activeVersionId
 
   const allVersions = await prisma.salesPlanVersion.findMany({
-    select: { id: true, label: true, createdAt: true },
+    select: { id: true, label: true, note: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   })
   const versionsForBar: PlanVersion[] = allVersions.map((v) => ({
     id: v.id,
     label: v.label,
+    note: v.note ?? null,
     createdAt: v.createdAt.toISOString(),
   }))
 

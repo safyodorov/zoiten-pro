@@ -1473,6 +1473,34 @@ export async function resetSeasonality(payload?: {
   }
 }
 
+const updateVersionMetaSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().min(1, "Название не может быть пустым").max(200),
+  note: z.string().max(2000).nullable(),
+})
+
+/** Редактировать название и комментарий сохранённой версии плана (метаданные, не снапшот дней). */
+export async function updateSalesPlanVersionMeta(payload: {
+  id: string
+  label: string
+  note: string | null
+}): Promise<ActionResult> {
+  await requireSection("SALES", "MANAGE")
+  const parsed = updateVersionMetaSchema.safeParse(payload)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Невалидные данные" }
+  try {
+    await prisma.salesPlanVersion.update({
+      where: { id: parsed.data.id },
+      data: { label: parsed.data.label, note: parsed.data.note || null },
+    })
+    revalidateSalesPlanPaths()
+    return { ok: true }
+  } catch (err) {
+    console.error("[updateSalesPlanVersionMeta]", err)
+    return { ok: false, error: "Не удалось сохранить" }
+  }
+}
+
 export async function fixSalesPlanVersion(payload: {
   label?: string
   note?: string

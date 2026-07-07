@@ -7,9 +7,10 @@
 import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useState, useTransition } from "react"
-import { Lock } from "lucide-react"
+import { Lock, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { FixPlanVersionDialog } from "./FixPlanVersionDialog"
+import { EditPlanVersionDialog } from "./EditPlanVersionDialog"
 import type { VersionDriftResult } from "@/lib/sales-plan/plan-fact"
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ import type { VersionDriftResult } from "@/lib/sales-plan/plan-fact"
 export interface PlanVersion {
   id: string
   label: string
+  note?: string | null
   createdAt: string // ISO-строка (Date сериализован до передачи из RSC)
 }
 
@@ -70,6 +72,7 @@ export function PlanVersionBar({
   const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<PlanVersion | null>(null)
 
   const isDraft = !currentVersionId
 
@@ -107,11 +110,24 @@ export function PlanVersionBar({
         >
           <option value="draft">Рабочий план (черновик)</option>
           {versions.map((v) => (
-            <option key={v.id} value={v.id}>
+            <option key={v.id} value={v.id} title={v.note ?? undefined}>
               {v.label} — {formatVersionDate(v.createdAt)}
             </option>
           ))}
         </select>
+
+        {/* «Изменить» — название и комментарий выбранной сохранённой версии */}
+        {canManage && currentVersion && (
+          <button
+            type="button"
+            onClick={() => setEditing(currentVersion)}
+            className="flex items-center gap-1.5 px-3 py-1 text-sm font-medium border rounded bg-background hover:bg-muted transition-colors"
+            title="Изменить название и комментарий плана"
+          >
+            <Pencil size={13} />
+            Изменить
+          </button>
+        )}
 
         {/* Кнопка «Зафиксировать план» — только canManage + черновик */}
         {canManage && isDraft && (
@@ -145,7 +161,14 @@ export function PlanVersionBar({
       {!isDraft && currentVersion && (
         <div className="flex items-center gap-2 px-3 py-2 rounded bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300">
           <span>
-            Просмотр версии «{currentVersion.label}». Редактирование недоступно.
+            Просмотр версии{" "}
+            <span
+              className={currentVersion.note ? "font-medium cursor-help underline decoration-dotted underline-offset-2" : "font-medium"}
+              title={currentVersion.note ?? undefined}
+            >
+              «{currentVersion.label}»
+            </span>
+            {currentVersion.note ? " 💬" : ""}. Редактирование плана недоступно.
           </span>
           <Link
             href={pathname.replace(/\?.*$/, "")}
@@ -164,6 +187,17 @@ export function PlanVersionBar({
         productCount={0}
         horizon="01.07.2026–31.12.2026"
       />
+
+      {/* Диалог редактирования метаданных версии */}
+      {editing && (
+        <EditPlanVersionDialog
+          key={editing.id}
+          versionId={editing.id}
+          initialLabel={editing.label}
+          initialNote={editing.note ?? null}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   )
 }
