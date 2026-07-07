@@ -121,6 +121,88 @@ export function computeLoanAggregates(
   return { totalPrincipalPaid, totalInterestPaid, currentBalance, overpayment }
 }
 
+// ── computeAccruedInterest ───────────────────────────────────────────────────
+
+/**
+ * Начисленные, но ещё не уплаченные проценты по кредиту на дату asOf
+ * (quick task 260707-iax). Пропорция «с последнего платежа» до следующего
+ * планового платежа графика.
+ *
+ * ЛОГИКА (LOCKED — см. план 260707-iax):
+ * 1. currentBalance = amount − Σ principal(date ≤ asOf). Если ≤ 0 → 0 (погашен).
+ * 2. prevDate = последний платёж (date ≤ asOf); если нет — issueDate (если задан),
+ *    иначе самый ранний платёж графика; если совсем нет платежей → 0.
+ * 3. nextPayment = самый ранний платёж с date > asOf; если нет → 0 (график закончился).
+ * 4. periodDays = дни(prevDate → nextPayment.date); если ≤ 0 → 0.
+ * 5. elapsedDays = clamp(дни(prevDate → asOf), 0, periodDays).
+ * 6. accrued = round2(nextPayment.interest × elapsedDays / periodDays).
+ *
+ * Все даты — UTC calendar dates (mirror computeLoanAggregates/computeSchedule).
+ * НЕ предполагает отсортированный payments[] — сортирует копию (mirror computeSchedule).
+ */
+export function computeAccruedInterest(
+  amount: number,
+  payments: PaymentInput[],
+  asOf: Date,
+  issueDate?: Date | null
+): number {
+  if (payments.length === 0) return 0
+
+  const asOfMs = Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate())
+  const sorted = [...payments].sort((a, b) => toDate(a.date).getTime() - toDate(b.date).getTime())
+
+  // 1. currentBalance = amount − Σ principal(date ≤ asOf)
+  let principalPaid = 0
+  for (const p of sorted) {
+    const d = toDate(p.date)
+    const dMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    if (dMs <= asOfMs) principalPaid += p.principal
+  }
+  const currentBalance = round2(amount - principalPaid)
+  if (currentBalance <= 0) return 0
+
+  // 2. prevDate = последний платёж (date ≤ asOf); fallback issueDate → earliest payment
+  let prevMs: number | null = null
+  for (const p of sorted) {
+    const d = toDate(p.date)
+    const dMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    if (dMs <= asOfMs && (prevMs === null || dMs > prevMs)) prevMs = dMs
+  }
+  if (prevMs === null) {
+    if (issueDate != null) {
+      const d = toDate(issueDate)
+      prevMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    } else {
+      const d = toDate(sorted[0].date)
+      prevMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    }
+  }
+
+  // 3. nextPayment = самый ранний платёж с date > asOf
+  let nextPayment: PaymentInput | null = null
+  let nextMs: number | null = null
+  for (const p of sorted) {
+    const d = toDate(p.date)
+    const dMs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+    if (dMs > asOfMs && (nextMs === null || dMs < nextMs)) {
+      nextMs = dMs
+      nextPayment = p
+    }
+  }
+  if (nextPayment === null || nextMs === null) return 0
+
+  // 4. periodDays
+  const periodDays = (nextMs - prevMs) / 86400000
+  if (periodDays <= 0) return 0
+
+  // 5. elapsedDays (clamp)
+  const elapsedRaw = (asOfMs - prevMs) / 86400000
+  const elapsedDays = Math.min(Math.max(elapsedRaw, 0), periodDays)
+
+  // 6. accrued
+  return round2((nextPayment.interest * elapsedDays) / periodDays)
+}
+
 // ── computeStatus ────────────────────────────────────────────────────────────
 
 /**
