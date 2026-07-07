@@ -13,6 +13,7 @@ import { requireSection } from "@/lib/rbac"
 import { compareProductsByHierarchy } from "@/lib/product-order"
 import {
   calculatePricing,
+  calculatePricingStandard,
   resolveDrrPct,
   resolveDefectRatePct,
   resolveDeliveryCostRub,
@@ -170,9 +171,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     allSubcategories,
     allDirections,
   ] = await Promise.all([
-    // 6 глобальных ставок
+    // Глобальные ставки + Фаза B: эффективные box-тарифы складов (JSON, флэт).
     prisma.appSetting.findMany({
-      where: { key: { in: [...RATE_KEYS] } },
+      where: { key: { in: [...RATE_KEYS, "wbBoxTariffEffective"] } },
     }),
     // Активные акции (endDateTime >= now) + номенклатуры
     prisma.wbPromotion.findMany({
@@ -244,6 +245,34 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       if (!Number.isNaN(parsed)) {
         rates[setting.key as RateKey] = parsed
       }
+    }
+  }
+
+  // ── 3.1 Фаза B (2026-07-07): эффективные box-тарифы складов ─────
+  // Флэт (срез по стоку отложен, спека §5) — одна запись на все товары.
+  // Фоллбэк-дефолты используются, пока «Тарифы складов» ни разу не нажималась.
+  const BOX_TARIFF_FALLBACK = {
+    delivBase: 46,
+    delivLiter: 14,
+    delivCoefPct: 100,
+    storageBasePerLiter: 0.07,
+    storageCoefPct: 100,
+  }
+  let boxTariff = { ...BOX_TARIFF_FALLBACK }
+  const boxTariffSetting = appSettings.find((s) => s.key === "wbBoxTariffEffective")
+  if (boxTariffSetting) {
+    try {
+      const parsed = JSON.parse(boxTariffSetting.value)
+      boxTariff = {
+        delivBase: parsed.delivBase ?? BOX_TARIFF_FALLBACK.delivBase,
+        delivLiter: parsed.delivLiter ?? BOX_TARIFF_FALLBACK.delivLiter,
+        delivCoefPct: parsed.delivCoefPct ?? BOX_TARIFF_FALLBACK.delivCoefPct,
+        storageBasePerLiter:
+          parsed.storageBasePerLiter ?? BOX_TARIFF_FALLBACK.storageBasePerLiter,
+        storageCoefPct: parsed.storageCoefPct ?? BOX_TARIFF_FALLBACK.storageCoefPct,
+      }
+    } catch {
+      // Некорректный JSON → используем фоллбэк-дефолты
     }
   }
 
@@ -576,6 +605,34 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         categoryId: product.categoryId ?? null,
       }
 
+      // ── Фаза B (2026-07-07): std-параметры для второго фин-реза ─────
+      // commStdPct: per-product override (общий commissionOverridePct, тот же
+      // что и в ИУ-блоке) → card.commFbwStd (стандартная комиссия из Tariffs API).
+      const commStdPct = product.commissionOverridePct ?? card.commFbwStd ?? 0
+      // Литраж из габаритов Product (0, если габариты не заполнены).
+      const volumeLiters =
+        ((product.heightCm ?? 0) * (product.widthCm ?? 0) * (product.depthCm ?? 0)) /
+        1000
+      // avgSalesSpeed7d в WbCard уже per-day (см. totalAvgSalesSpeed выше в этом
+      // файле — используется напрямую БЕЗ доп. деления на 7, «шт./д.»).
+      const salesPerDay = card.avgSalesSpeed7d ?? 0
+      const daysInStock =
+        salesPerDay > 0 && (card.stockQty ?? 0) > 0
+          ? (card.stockQty as number) / salesPerDay
+          : 60
+      const stdParams = {
+        commStdPct,
+        volumeLiters,
+        delivBase: boxTariff.delivBase,
+        delivLiter: boxTariff.delivLiter,
+        delivCoefPct: boxTariff.delivCoefPct,
+        storageBasePerLiter: boxTariff.storageBasePerLiter,
+        storageCoefPct: boxTariff.storageCoefPct,
+        localizationIndex: rates.wbLocalizationIndex,
+        returnLogisticsRub: rates.wbReturnLogisticsRub,
+        daysInStock,
+      }
+
       // «Глобальные» значения каждого параметра — fallback-цепочка БЕЗ учёта
       // Product.XOverride и CalculatedPrice.X. Используются модалкой при «↻».
       const globalValues = {
@@ -613,9 +670,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         sellerDiscountPct: currentSellerDiscountPct,
         ...baseRowFields,
         computed: calculatePricing(currentInputs),
+        computedStd: calculatePricingStandard({ ...currentInputs, ...stdParams }),
         inputs: currentInputs,
         context: rowContext,
         globalValues,
+        stdContext: stdParams,
       })
 
       // Хелпер: из финальной цены продавца и скидки % восстанавливаем
@@ -648,9 +707,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         sellerDiscountPct: plannedSellerDiscountPct,
         ...baseRowFields,
         computed: calculatePricing(plannedInputs),
+        computedStd: calculatePricingStandard({ ...plannedInputs, ...stdParams }),
         inputs: plannedInputs,
         context: rowContext,
         globalValues,
+        stdContext: stdParams,
       })
 
       // b) Regular акции для этой nmId (DESC по финальной цене продавца).
@@ -691,9 +752,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           promotionStartDateTime: promo.startDateTime.toISOString(),
           promotionEndDateTime: promo.endDateTime.toISOString(),
           computed: calculatePricing(regularInputs),
+          computedStd: calculatePricingStandard({ ...regularInputs, ...stdParams }),
           inputs: regularInputs,
           context: rowContext,
           globalValues,
+          stdContext: stdParams,
         })
       }
       // Сортировка по ФИНАЛЬНОЙ цене продавца (то что видит покупатель) DESC
@@ -737,9 +800,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           promotionStartDateTime: promo.startDateTime.toISOString(),
           promotionEndDateTime: promo.endDateTime.toISOString(),
           computed: calculatePricing(autoInputs),
+          computedStd: calculatePricingStandard({ ...autoInputs, ...stdParams }),
           inputs: autoInputs,
           context: rowContext,
           globalValues,
+          stdContext: stdParams,
         })
       }
       autoRows.sort(
@@ -821,9 +886,11 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
           calculatedSlot: cp.slot as 1 | 2 | 3,
           calculatedPriceId: cp.id,
           computed: calculatePricing(calcInputs),
+          computedStd: calculatePricingStandard({ ...calcInputs, ...stdParams }),
           inputs: calcInputs,
           context: rowContext,
           globalValues,
+          stdContext: stdParams,
         })
       }
       } // end if (showCalculated)

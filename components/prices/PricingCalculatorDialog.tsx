@@ -39,7 +39,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { calculatePricing, type PricingInputs } from "@/lib/pricing-math"
+import {
+  calculatePricing,
+  calculatePricingStandard,
+  type PricingInputs,
+} from "@/lib/pricing-math"
 import { saveCalculatedPrice, saveRowEdits, savePlannedPrice } from "@/app/actions/pricing"
 import type { PriceRow } from "@/components/prices/PriceCalculatorTable"
 import type { EditableParamKey } from "@/lib/pricing-schemas"
@@ -211,7 +215,8 @@ export function PricingCalculatorDialog({
   // Следим за всеми полями для realtime пересчёта
   const watchedValues = useWatch({ control: form.control })
 
-  const liveOutputs = useMemo(() => {
+  // Общие live-inputs (переиспользуются и первым блоком, и std-блоком Фазы B).
+  const liveInputs = useMemo((): PricingInputs => {
     const sellerPriceNum = Number(watchedValues.sellerPrice) || 0
     const sellerDiscountNum = Number(watchedValues.sellerDiscountPct) || 0
     const priceBeforeDiscount =
@@ -219,7 +224,7 @@ export function PricingCalculatorDialog({
         ? sellerPriceNum
         : sellerPriceNum / (1 - sellerDiscountNum / 100)
 
-    const inputs: PricingInputs = {
+    return {
       ...row.inputs,
       priceBeforeDiscount,
       sellerDiscountPct: sellerDiscountNum,
@@ -237,8 +242,23 @@ export function PricingCalculatorDialog({
       taxPct: Number(watchedValues.taxPct) || 0,
       deliveryCostRub: Number(watchedValues.deliveryCostRub) || 0,
     }
-    return calculatePricing(inputs)
   }, [watchedValues, row.inputs])
+
+  const liveOutputs = useMemo(
+    () => calculatePricing(liveInputs),
+    [liveInputs],
+  )
+
+  // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» — realtime,
+  // те же watch-поля (через liveInputs) + row.stdContext (box-тарифы/ставки,
+  // не редактируются в модалке — правятся через GlobalRatesBar/кнопку тарифов).
+  const liveOutputsStd = useMemo(
+    () =>
+      row.stdContext
+        ? calculatePricingStandard({ ...liveInputs, ...row.stdContext })
+        : null,
+    [liveInputs, row.stdContext],
+  )
 
   // Derived: Цена для установки
   const derivedPriceBeforeDiscount = useMemo(() => {
@@ -586,6 +606,61 @@ export function PricingCalculatorDialog({
                   )}
                 />
               </div>
+
+              {/* Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
+                  Скрыт, если row.stdContext не резолвился (не должно случаться в проде —
+                  page.tsx всегда прокидывает stdParams). */}
+              {liveOutputsStd && (
+                <div className="mt-3 bg-orange-50/60 dark:bg-orange-500/10 border border-orange-200/60 dark:border-orange-500/20 p-3 rounded-md space-y-2">
+                  <h3 className="text-xs font-medium text-orange-700 dark:text-orange-300 uppercase tracking-wide">
+                    Стандартные условия
+                  </h3>
+                  <dl className="space-y-1 text-xs tabular-nums">
+                    <OutputRow
+                      label="Логистика туда"
+                      value={fmtMoney(liveOutputsStd.logisticsToAmount ?? 0)}
+                    />
+                    <OutputRow
+                      label="Логистика эфф."
+                      value={fmtMoney(liveOutputsStd.logisticsEffAmount ?? 0)}
+                    />
+                    <OutputRow
+                      label="Хранение"
+                      value={fmtMoney(liveOutputsStd.storageAmount ?? 0)}
+                    />
+                  </dl>
+                  <OutputRow
+                    label="Прибыль-std"
+                    value={`${fmtMoney(liveOutputsStd.profitStd ?? 0)} ₽`}
+                    className={cn(
+                      "text-sm font-medium",
+                      (liveOutputsStd.profitStd ?? 0) >= 0
+                        ? "text-green-600 dark:text-green-500"
+                        : "text-red-600 dark:text-red-500",
+                    )}
+                  />
+                  <OutputRow
+                    label="Re продаж-std"
+                    value={fmtPct(liveOutputsStd.returnOnSalesPctStd ?? 0)}
+                    className={cn(
+                      "text-sm font-medium",
+                      (liveOutputsStd.returnOnSalesPctStd ?? 0) >= 0
+                        ? "text-green-600 dark:text-green-500"
+                        : "text-red-600 dark:text-red-500",
+                    )}
+                  />
+                  <OutputRow
+                    label="ROI-std"
+                    value={fmtPct(liveOutputsStd.roiPctStd ?? 0)}
+                    className={cn(
+                      "text-sm font-medium",
+                      (liveOutputsStd.roiPctStd ?? 0) >= 0
+                        ? "text-green-600 dark:text-green-500"
+                        : "text-red-600 dark:text-red-500",
+                    )}
+                  />
+                </div>
+              )}
             </div>
           </div>
 

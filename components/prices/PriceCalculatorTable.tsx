@@ -112,10 +112,31 @@ export interface PriceRow {
   /** Готовый расчёт юнит-экономики — 18 числовых полей. */
   computed: PricingOutputs
 
+  /** Фаза B (2026-07-07): расчёт «на стандартных условиях» (второй фин-рез) —
+   *  profitStd/roiPctStd/returnOnSalesPctStd + storageAmount/logisticsEffAmount/
+   *  logisticsToAmount. Опционально — отсутствует, если std-параметры не резолвились
+   *  (не должно случаться в проде, page.tsx всегда прокидывает stdParams). */
+  computedStd?: PricingOutputs
+
   /** Полный набор inputs, использованных при серверном расчёте.
    *  Позволяет модалке (план 07-09) начать с этих значений без повторного
    *  запроса БД. */
   inputs: PricingInputs
+
+  /** Фаза B (2026-07-07): std-контекст (box-тарифы + ставки) для realtime
+   *  пересчёта второго фин-реза в модалке при правке цены. */
+  stdContext?: {
+    commStdPct: number
+    volumeLiters: number
+    delivBase: number
+    delivLiter: number
+    delivCoefPct: number
+    storageBasePerLiter: number
+    storageCoefPct: number
+    localizationIndex: number
+    returnLogisticsRub: number
+    daysInStock: number
+  }
 
   /** Дополнительный контекст для модалки (план 07-09) — нужен для server
    *  actions updateProductOverride / updateSubcategoryDefault /
@@ -278,6 +299,10 @@ const COLUMN_KEYS = [
   "profit",
   "returnOnSalesPct",
   "roiPct",
+  // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» — 3 новых столбца.
+  "profitStd",
+  "roiPctStd",
+  "returnOnSalesPctStd",
 ] as const
 
 type ColumnKey = (typeof COLUMN_KEYS)[number]
@@ -316,6 +341,9 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   profit: 100,
   returnOnSalesPct: 90,
   roiPct: 80,
+  profitStd: 100,
+  roiPctStd: 90,
+  returnOnSalesPctStd: 90,
 }
 
 // quick 260513-phu: resize-механика вынесена в lib/use-resizable-columns.ts.
@@ -352,6 +380,9 @@ const HIDEABLE_COLUMN_KEYS: ColumnKey[] = [
   "profit",
   "returnOnSalesPct",
   "roiPct",
+  "profitStd",
+  "roiPctStd",
+  "returnOnSalesPctStd",
 ]
 
 /** 26 скроллируемых колонок: ключ + label для рендера thead.
@@ -384,6 +415,9 @@ const SCROLL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "profit", label: "Прибыль, руб." },
   { key: "returnOnSalesPct", label: "Re продаж, %" },
   { key: "roiPct", label: "ROI, %" },
+  { key: "profitStd", label: "Прибыль-std, руб." },
+  { key: "roiPctStd", label: "ROI-std, %" },
+  { key: "returnOnSalesPctStd", label: "Re-std, %" },
 ]
 
 // ──────────────────────────────────────────────────────────────────
@@ -1349,6 +1383,12 @@ export function PriceCalculatorTable({
                         ["profit", fmtMoneyInt(row.computed.profit), profitClass(row.computed.profit)],
                         ["returnOnSalesPct", fmtPct(row.computed.returnOnSalesPct, true), profitClass(row.computed.returnOnSalesPct)],
                         ["roiPct", fmtPct(row.computed.roiPct, true), profitClass(row.computed.roiPct)],
+                        // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
+                        // row.computedStd опционален по типу (defensive) — на практике
+                        // page.tsx всегда его заполняет; fallback ?? 0 на случай отсутствия.
+                        ["profitStd", fmtMoneyInt(row.computedStd?.profitStd ?? 0), profitClass(row.computedStd?.profitStd ?? 0)],
+                        ["roiPctStd", fmtPct(row.computedStd?.roiPctStd ?? 0, true), profitClass(row.computedStd?.roiPctStd ?? 0)],
+                        ["returnOnSalesPctStd", fmtPct(row.computedStd?.returnOnSalesPctStd ?? 0, true), profitClass(row.computedStd?.returnOnSalesPctStd ?? 0)],
                       ] as [ColumnKey, string, string?][])
                         .filter(([k]) => !hiddenColumns.has(k))
                         .map(([k, content, extraClass]) => (
