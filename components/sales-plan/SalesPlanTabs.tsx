@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 const TABS = [
@@ -16,6 +16,10 @@ interface SalesPlanTabsProps {
 
 export function SalesPlanTabs({ urgentCount }: SalesPlanTabsProps) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // Сохраняем выбранную версию плана при переключении вкладок
+  const version = searchParams.get("version")
+  const suffix = version ? `?version=${version}` : ""
 
   return (
     <div className="flex gap-1 border-b">
@@ -28,7 +32,7 @@ export function SalesPlanTabs({ urgentCount }: SalesPlanTabsProps) {
         return (
           <Link
             key={tab.href}
-            href={tab.href}
+            href={tab.href + suffix}
             prefetch={false}
             className={cn(
               "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",

@@ -52,10 +52,12 @@ export function ProductPlanCell({
     if (editing) inputRef.current?.focus()
   }, [editing])
 
-  // При сбросе извне обновляем inputValue
+  // Синхронизируем inputValue с value ТОЛЬКО когда НЕ редактируем.
+  // Иначе value (производный от черновика, который ты и печатаешь) перебивает
+  // ввод на каждой клавише — каретка прыгает, число «сбрасывается» (фикс 260707).
   useEffect(() => {
-    setInputValue(value != null ? String(value) : "")
-  }, [value])
+    if (!editing) setInputValue(value != null ? String(value) : "")
+  }, [value, editing])
 
   const effectiveRate = value ?? baseline
   const days = daysInMonth(month)
