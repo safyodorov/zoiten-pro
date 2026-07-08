@@ -1,13 +1,15 @@
 // lib/wb-box-tariffs.ts
-// Фаза B (2026-07-07): синхронизация box-тарифов складов WB.
+// Фаза B (2026-07-07) + Фаза B v2 (2026-07-08): синхронизация box-тарифов складов WB.
 //
 // syncBoxTariffs(db) — DI на PrismaClient (без импортов next-auth), тестируемо:
-//   1) fetchBoxTariffs(сегодня) → парсинг /tariffs/box
-//   2) upsert каждого склада в WbBoxTariff
-//   3) computeEffective — срез по стоку ОТЛОЖЕН (спека §5): просто среднее
-//      не-null значение по всем складам per поле (округа сейчас идентичны,
-//      коэффициенты все 100%) → флэт-запись на все товары.
-//   4) upsert AppSetting.wbBoxTariffEffective (JSON)
+//   1) fetchBoxTariffs(сегодня) → парсинг /tariffs/box → upsert WbBoxTariff
+//   2) computeEffectiveBoxTariff — флэт-среднее по всем складам (v1, теперь
+//      используется как fallback для среза §5) → upsert AppSetting.wbBoxTariffEffective
+//   3) fetchAcceptanceCoefficients() (короб, boxTypeID=2) → upsert WbAcceptanceCoef
+//   4) fetchReturnTariffs() → upsert AppSetting.wbReturnToSellerRub
+//   5) срез §5: computeEffCoefForDirection взвешивает эфф-ставки логистики/хранения
+//      по НАШЕМУ стоку ОТДЕЛЬНО для бытовой техники / одежды (product.brand.direction.hasSizes)
+//      → upsert AppSetting.wbEffCoef.appliances / wbEffCoef.clothing
 
 import type { PrismaClient } from "@prisma/client"
 import {
@@ -17,6 +19,12 @@ import {
   type WbBoxTariffWarehouse,
 } from "@/lib/wb-api"
 import { getMskTodayString } from "@/lib/wb-cron-schedule"
+import {
+  computeEffCoefForDirection,
+  normalizeWarehouseName,
+  type EffCoefRates,
+  type EffCoefResult,
+} from "@/lib/wb-eff-coef"
 
 /** Эффективные (усреднённые по складам) box-ставки — флэт на все товары. */
 export interface WbBoxTariffEffective {
@@ -54,8 +62,11 @@ export function computeEffectiveBoxTariff(
 
 /**
  * Полный цикл: тянет /tariffs/box → upsert WbBoxTariff (сырые данные per склад)
- * → считает эффективные ставки (флэт, без взвешивания по стоку — отложено)
- * → upsert AppSetting.wbBoxTariffEffective.
+ * → считает эффективные ставки (флэт, v1 fallback) → upsert AppSetting.wbBoxTariffEffective
+ * → тянет acceptance/coefficients (короб) + return → upsert WbAcceptanceCoef +
+ * AppSetting.wbReturnToSellerRub → срез §5 (Фаза B v2): взвешивает эфф-ставки
+ * логистики/хранения по нашему стоку ОТДЕЛЬНО для бытовой техники / одежды →
+ * upsert AppSetting.wbEffCoef.appliances/clothing.
  *
  * `db` инъецируется (DI) — без прямых импортов next-auth/prisma singleton,
  * чтобы функция была тестируема через prismaMock.
@@ -67,6 +78,7 @@ export async function syncBoxTariffs(
   effective: WbBoxTariffEffective
   acceptanceWarehouses: number
   returnToSellerRub: number | null
+  effCoef: { appliances: EffCoefResult; clothing: EffCoefResult }
 }> {
   const { warehouses, dtTillMax } = await fetchBoxTariffs(getMskTodayString())
 
@@ -145,10 +157,125 @@ export async function syncBoxTariffs(
     })
   }
 
+  // ── Фаза B v2 (2026-07-08): срез §5 — эфф-ставки, взвешенные по нашему
+  // стоку ОТДЕЛЬНО для бытовой техники / одежды (product.brand.direction.hasSizes).
+  const products = await db.product.findMany({
+    where: {
+      deletedAt: null,
+      articles: { some: { marketplace: { name: { in: ["WB", "wb", "Wildberries"] } } } },
+    },
+    include: {
+      brand: { include: { direction: true } },
+      articles: { include: { marketplace: true } },
+    },
+  })
+
+  const clothingNmIds: number[] = []
+  const appliancesNmIds: number[] = []
+  for (const p of products) {
+    const isClothing = p.brand?.direction?.hasSizes ?? false
+    for (const a of p.articles) {
+      if (!a.marketplace.name.toLowerCase().includes("wb") && a.marketplace.name.toLowerCase() !== "wildberries") continue
+      const nmId = parseInt(a.article, 10)
+      if (Number.isNaN(nmId)) continue
+      ;(isClothing ? clothingNmIds : appliancesNmIds).push(nmId)
+    }
+  }
+
+  const wbWarehouses = await db.wbWarehouse.findMany({ select: { id: true, name: true } })
+  const warehouseNameById = new Map(wbWarehouses.map((w) => [w.id, w.name]))
+
+  async function buildStockMap(nmIds: number[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>()
+    if (nmIds.length === 0) return map
+    const grouped = await db.wbCardWarehouseStock.groupBy({
+      by: ["warehouseId"],
+      _sum: { quantity: true },
+      where: { wbCard: { nmId: { in: nmIds }, deletedAt: null } },
+    })
+    for (const g of grouped) {
+      const name = warehouseNameById.get(g.warehouseId)
+      if (!name) continue
+      const key = normalizeWarehouseName(name)
+      const qty = g._sum.quantity ?? 0
+      map.set(key, (map.get(key) ?? 0) + qty)
+    }
+    return map
+  }
+
+  const acceptanceByName = new Map<string, EffCoefRates>()
+  for (const r of boxRows) {
+    acceptanceByName.set(normalizeWarehouseName(r.warehouseName), {
+      delivBaseLiter: r.deliveryBaseLiter,
+      delivAddLiter: r.deliveryAdditionalLiter,
+      storageBaseLiter: r.storageBaseLiter,
+      storageAddLiter: r.storageAdditionalLiter,
+    })
+  }
+
+  // v1-box fallback (коэф был 100% → базовые ставки ≈ применённые, годятся как fallback).
+  const effCoefFallback: EffCoefRates = {
+    delivBaseLiter: effective.delivBase,
+    delivAddLiter: effective.delivLiter,
+    storageBaseLiter: effective.storageBasePerLiter,
+    storageAddLiter: effective.storageLiterPerDay,
+  }
+
+  const [appliancesStockMap, clothingStockMap] = await Promise.all([
+    buildStockMap(appliancesNmIds),
+    buildStockMap(clothingNmIds),
+  ])
+
+  const appliancesEff: EffCoefResult = computeEffCoefForDirection(
+    appliancesStockMap,
+    acceptanceByName,
+    effCoefFallback,
+  )
+  const clothingEff: EffCoefResult = computeEffCoefForDirection(
+    clothingStockMap,
+    acceptanceByName,
+    effCoefFallback,
+  )
+
+  console.warn(
+    "[wb-eff-coef] appliances unmatched:",
+    appliancesEff.unmatched,
+    "coverage:",
+    appliancesEff.coveragePct,
+  )
+  console.warn(
+    "[wb-eff-coef] clothing unmatched:",
+    clothingEff.unmatched,
+    "coverage:",
+    clothingEff.coveragePct,
+  )
+
+  await db.appSetting.upsert({
+    where: { key: "wbEffCoef.appliances" },
+    create: {
+      key: "wbEffCoef.appliances",
+      value: JSON.stringify({ ...appliancesEff, updatedAt: new Date().toISOString() }),
+    },
+    update: {
+      value: JSON.stringify({ ...appliancesEff, updatedAt: new Date().toISOString() }),
+    },
+  })
+  await db.appSetting.upsert({
+    where: { key: "wbEffCoef.clothing" },
+    create: {
+      key: "wbEffCoef.clothing",
+      value: JSON.stringify({ ...clothingEff, updatedAt: new Date().toISOString() }),
+    },
+    update: {
+      value: JSON.stringify({ ...clothingEff, updatedAt: new Date().toISOString() }),
+    },
+  })
+
   return {
     warehouses: warehouses.length,
     effective,
     acceptanceWarehouses: boxRows.length,
     returnToSellerRub: ret.returnToSellerRub,
+    effCoef: { appliances: appliancesEff, clothing: clothingEff },
   }
 }
