@@ -3,14 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed 28-cashflow-28-03-PLAN.md
-last_updated: "2026-07-05T20:01:54.870Z"
+stopped_at: Completed 260708-lhb quick task — std-юнитка /prices/wb v3 (обратная логистика volume-based + ИРП, убран возврат-продавцу)
+last_updated: "2026-07-08T13:02:42.348Z"
 progress:
-  total_phases: 6
-  completed_phases: 7
-  total_plans: 22
-  completed_plans: 22
-  percent: 117
+  total_phases: 13
+  completed_phases: 13
+  total_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -25,6 +24,7 @@ See: .planning/PROJECT.md (updated 2026-04-21)
 ## Current Position
 
 Phase: 28 — ПДДС (/finance/cashflow) — ✅ ЗАВЕРШЕНА И ЗАДЕПЛОЕНА 2026-07-06 (prod HEAD bd14cf2)
+
 - 3 плана исполнены, verification passed 21/21; код-ревью 18/18 находок закрыто (2 волны фиксов, вкл. critical CR-01 — двойной счёт первого дня в факт-линии); auth-смок /finance/cashflow = 200, journalctl чист; сид AppSetting finance.cashflow.* применён (payout 55% / лаг 1 нед / опекс 0 / порог 0).
 - Эмпирика: выплаты WB приходят от ООО «РВБ» по понедельникам с лагом ~1 нед; net-to-bank ≈ 55% от выкупов (forPay 66% − реклама ~12%) — первое приближение, v2 = per-товар из юнит-экономики (движок принимает PayoutFn(date, buyoutsRub, byProduct?)).
 - Ограничение v1 (в методологии): выплаты за довгоризонтные (июньские) выкупы не моделируются → притоки первых ~2 недель занижены, ранний «разрыв» может быть ложным.
@@ -424,6 +424,7 @@ None yet.
 | 260708-f23 | Фаза B v2 — реальные per-склад ставки acceptance/coefficients (короб) + срез §5 по стоку бытовая/одежда + возврат-продавцу в /prices/wb: WbAcceptanceCoef + fetchAcceptanceCoefficients/fetchReturnTariffs (parseWbNumLoose) + syncBoxTariffs расширен (upsert коробов + wbReturnToSellerRub + срез); lib/wb-eff-coef.ts:computeEffCoefForDirection (pure взвешивание Σ(qty×ставка)/Σqty per направление, coveragePct/unmatched, 6 unit-тестов) → AppSetting.wbEffCoef.appliances/clothing; calculatePricingStandard v2 (Л_туда/Хранение из base+доп-литр эфф-ставок, коэф склада УЖЕ вшит — без ×delivCoefPct/storageCoefPct как в v1, +строка Возврат продавцу); std-golden v2 nmId 800750522 пересчитан (profitStd≈894.24₽/ROI≈40.57%/Re≈11.54%), golden первого блока не тронут; page.tsx резолвит эфф-ставки по направлению (brand.direction.hasSizes), v2-хардкод fallback (94.3/28.7/0.16/0.16, НЕ устаревшие v1 46/14/0.07 — фикс потенциального занижения вдвое). tsc чисто, 952/994 тестов (те же 42 пред-существующих чужих падения), задеплоено (миграция 20260708_wb_acceptance_coef применена) | 2026-07-08 | a860291, 85ac197, 7e77a8e |  | [260708-f23-b-v2-acceptance-api](./quick/260708-f23-b-v2-acceptance-api/) |
 | 260708-h9l | 3 std-компонентные колонки в /prices/wb: Логистика МП-std / Хранение-std / Возврат прод.-std, вставлены между ROI, % и Прибыль-std, руб. (нейтральные amount-ячейки, читают row.computedStd?.logisticsEffAmount/storageAmount/returnToSellerAmount ?? 0). Единственный файл components/prices/PriceCalculatorTable.tsx, 5 точечных правок. tsc чисто, 140/140 pricing-math+sales-plan тестов зелёные, задеплоено | 2026-07-08 | dbe9379 | Verified | [260708-h9l-std-prices-wb](./quick/260708-h9l-std-prices-wb/) |
 | 260708-iec | Реальный rolling-30d % выкупа в /prices/wb вместо пустого WbCard.buyoutPercent (0/256 в БД → фолбэк 100% у всех карточек). Переиспользован существующий резолвер loadBuyoutPctRolling30dMap (тот же, что /ads/wb и легенда): resolvedBuyout и globalValues.buyoutPct теперь читают buyoutResolver.resolve(nmId, todayKey), окно [todayMsk−30д, todayMsk) (from=today дал бы пустой per-nmId output из-за T+3 lag WB). Л_эфф в calculatePricingStandard оживает для карточек с выкупом < 100%; ИУ-блок и golden не тронуты. Единственный файл app/(dashboard)/prices/wb/page.tsx. tsc чисто, golden pricing-math 54/54, полный прогон 917/994 идентичен baseline (77 пред-существующих чужих падений), задеплоено | 2026-07-08 | 0edde49 | Verified | [260708-iec-prices-wb-rolling-30d](./quick/260708-iec-prices-wb-rolling-30d/) |
+| 260708-lhb | std-юнитка v3 в /prices/wb: обратная логистика невыкупа — volume-based по офиц. формуле ВБ (reverseLogisticsForVolume, бэнды ≤1л 23/26/29/30/32₽ + база+доп-литр V>1 default 46+14) вместо плоской ставки 50₽; ИРП-надбавка на Л_туда (+ sellerPriceForIrp×ИРП%, цена до СПП); статья «Возврат продавцу» убрана из profitStd (дублировала расход). std-golden v3 пересчитан (nmId 800750522): Л_туда≈352.9994/Л_обратно=102/Л_эфф≈403.5549/profitStd≈733.5708/roiPctStd≈33.28%/Re-std≈9.47%, golden первого блока (567.68) не тронут. 3 новых AppSetting (wbReverseLogBaseRub=46/wbReverseLogPerLiterRub=14/wbIrpPct=1.56) + wbLocalizationIndex→1.11 (ручные значения пользователя), GlobalRatesBar/page.tsx RateKey union синхронны. Колонка reverseLogStd в таблице, «Обратная логистика»+ИЛ/ИРП в модалке. tsc чисто, pricing-math+sales-plan 149/149, задеплоено (миграция 20260708_wb_std_v3_reverse_logistics_irp применена, AppSetting проверен на проде) | 2026-07-08 | 3aee5ee, 451f006, 5404e7e | Verified | [260708-lhb-volume-based-prices-wb-std](./quick/260708-lhb-volume-based-prices-wb-std/) |
 
 ### Blockers/Concerns
 
@@ -439,6 +440,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-05T20:01:54.862Z
-Stopped at: Completed 24-finance-balance-24-01-PLAN.md
+Last session: 2026-07-08T13:02:42.328Z
+Stopped at: Completed 260708-lhb quick task — std-юнитка /prices/wb v3 (обратная логистика volume-based + ИРП, убран возврат-продавцу)
 Resume file: None
