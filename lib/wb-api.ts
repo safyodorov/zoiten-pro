@@ -611,6 +611,108 @@ export async function fetchBoxTariffs(
   }
 }
 
+// ── Фаза B v2 (2026-07-08): acceptance/coefficients (короб) + return ────
+
+/**
+ * Loose-парсер числовых полей acceptance/return API: строки с запятой И
+ * пробелами-разделителями тысяч (`"1 050"` → 1050), `"-"`/`"не принимает"`/
+ * пустая строка → null. Отличие от `parseWbTariffNum` (v1 /tariffs/box,
+ * там пробелов в числах не было).
+ */
+function parseWbNumLoose(s: unknown): number | null {
+  if (s == null) return null
+  const t = String(s).trim()
+  if (t === "" || t === "-" || t === "не принимает") return null
+  const n = Number(t.replace(/\s/g, "").replace(",", "."))
+  return Number.isNaN(n) ? null : n
+}
+
+/** Разобранная строка склада из /api/tariffs/v1/acceptance/coefficients (все boxTypeID). */
+export interface WbAcceptanceCoefRow {
+  warehouseID: number
+  warehouseName: string
+  boxTypeID: number
+  coefficient: number | null
+  deliveryCoef: number | null
+  storageCoef: number | null
+  deliveryBaseLiter: number | null
+  deliveryAdditionalLiter: number | null
+  storageBaseLiter: number | null
+  storageAdditionalLiter: number | null
+}
+
+/**
+ * Тянет per-склад приёмочные коэффициенты WB
+ * (`GET /api/tariffs/v1/acceptance/coefficients`). scope «Тарифы», лимит ~6/мин.
+ * Возвращает ВСЕ boxTypeID — фильтрацию короба (boxTypeID=2) делает caller
+ * (syncBoxTariffs), чтобы модель хранила и upsert-ила только короб.
+ * НЕ вызывать в билд/деплой-тайме — только из синка (кнопка/крон).
+ */
+export async function fetchAcceptanceCoefficients(): Promise<WbAcceptanceCoefRow[]> {
+  const token = await getToken()
+
+  const res = await wbFetch(
+    "Tariffs API",
+    "https://common-api.wildberries.ru/api/tariffs/v1/acceptance/coefficients",
+    { headers: { Authorization: token } },
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Tariffs API (acceptance/coefficients) ошибка ${res.status}: ${text}`)
+  }
+
+  const raw = await res.json()
+  const arr: Record<string, unknown>[] = Array.isArray(raw)
+    ? raw
+    : (raw?.response?.data ?? raw?.data ?? raw?.response ?? [])
+
+  return arr.map((row) => ({
+    warehouseID: Number(row.warehouseID),
+    warehouseName: String(row.warehouseName ?? ""),
+    boxTypeID: Number(row.boxTypeID),
+    coefficient: parseWbNumLoose(row.coefficient),
+    deliveryCoef: parseWbNumLoose(row.deliveryCoef),
+    storageCoef: parseWbNumLoose(row.storageCoef),
+    deliveryBaseLiter: parseWbNumLoose(row.deliveryBaseLiter),
+    deliveryAdditionalLiter: parseWbNumLoose(row.deliveryAdditionalLiter),
+    storageBaseLiter: parseWbNumLoose(row.storageBaseLiter),
+    storageAdditionalLiter: parseWbNumLoose(row.storageAdditionalLiter),
+  }))
+}
+
+/**
+ * Тянет базовый тариф возврата продавцу (`GET /api/v1/tariffs/return?date=`).
+ * scope «Тарифы». Берёт строку `warehouseName === "Базовые тарифы"`
+ * (fallback — первый элемент), поле `deliveryDumpSupReturnExpr` (₽, обычный
+ * товар — НЕ КГТ). НЕ вызывать в билд/деплой-тайме.
+ */
+export async function fetchReturnTariffs(
+  date: string,
+): Promise<{ returnToSellerRub: number | null }> {
+  const token = await getToken()
+
+  const res = await wbFetch(
+    "Tariffs API",
+    `https://common-api.wildberries.ru/api/v1/tariffs/return?date=${date}`,
+    { headers: { Authorization: token } },
+  )
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Tariffs API (tariffs/return) ошибка ${res.status}: ${text}`)
+  }
+
+  const data = await res.json()
+  const list: Record<string, unknown>[] = data?.response?.data?.warehouseList ?? []
+  const base =
+    list.find((w) => String(w.warehouseName ?? "").trim() === "Базовые тарифы") ?? list[0]
+
+  return {
+    returnToSellerRub: base ? parseWbNumLoose(base.deliveryDumpSupReturnExpr) : null,
+  }
+}
+
 // ── Преобразование карточки API → данные для БД ─────────────────
 
 export function parseCard(card: WbCardRaw) {

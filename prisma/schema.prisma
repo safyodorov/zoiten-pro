@@ -379,6 +379,25 @@ model WbBoxTariff {
   updatedAt       DateTime  @updatedAt
 }
 
+// Фаза B v2 (2026-07-08): per-склад приёмочные коэффициенты WB из /api/tariffs/v1/acceptance/coefficients.
+// Храним ТОЛЬКО короб (boxTypeID=2). Ставки *BaseLiter/*AdditionalLiter — УЖЕ применённые (коэф вшит).
+// Источник эфф-ставок для среза по стоку (взвешивание в lib/wb-eff-coef.ts).
+model WbAcceptanceCoef {
+  warehouseID             Int
+  warehouseName           String    // ключ джойна к WbWarehouse.name (по имени)
+  boxTypeID               Int        // 2 = короб
+  coefficient             Float?     // -1/0/1 приёмка
+  deliveryCoef            Float?     // % (справочно)
+  storageCoef             Float?     // % (справочно)
+  deliveryBaseLiter       Float?     // ₽ первый литр (УЖЕ ×коэф)
+  deliveryAdditionalLiter Float?     // ₽ доп. литр (УЖЕ ×коэф)
+  storageBaseLiter        Float?     // ₽/л/сут первый литр (УЖЕ ×коэф)
+  storageAdditionalLiter  Float?     // ₽/л/сут доп.
+  updatedAt               DateTime  @updatedAt
+
+  @@id([warehouseID, boxTypeID])
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Индивидуальные условия комиссий WB (загружаются из Excel)
 // ──────────────────────────────────────────────────────────────────

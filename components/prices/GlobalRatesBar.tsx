@@ -34,6 +34,7 @@ type RateKey =
   | "wbTaxPct"
   | "wbReturnLogisticsRub"
   | "wbLocalizationIndex"
+  | "wbReturnToSellerRub"
 
 interface RateSpec {
   key: RateKey
@@ -54,6 +55,7 @@ const RATES: readonly RateSpec[] = [
   { key: "wbTaxPct", label: "Налог" },
   { key: "wbReturnLogisticsRub", label: "Возврат-логистика", unit: "₽", max: 1000 },
   { key: "wbLocalizationIndex", label: "Индекс локализации", unit: "×" },
+  { key: "wbReturnToSellerRub", label: "Возврат продавцу", unit: "₽", max: 2000 },
 ] as const
 
 interface GlobalRatesBarProps {

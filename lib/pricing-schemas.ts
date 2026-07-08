@@ -24,6 +24,8 @@ export const APP_SETTING_KEYS = [
   // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
   "wbReturnLogisticsRub",
   "wbLocalizationIndex",
+  // Фаза B v2 (2026-07-08): возврат продавцу (брак).
+  "wbReturnToSellerRub",
 ] as const
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[number]
@@ -40,6 +42,7 @@ export const APP_SETTING_DEFAULTS: Record<AppSettingKey, number> = {
   wbDefectRatePct: 2.0,
   wbReturnLogisticsRub: 50.0,
   wbLocalizationIndex: 1.0,
+  wbReturnToSellerRub: 250.0,
 }
 
 /** Максимум допустимого значения per ключ. Все процентные ставки (Phase 7) остаются
@@ -56,6 +59,7 @@ export const APP_SETTING_MAX: Record<AppSettingKey, number> = {
   wbDefectRatePct: 100,
   wbReturnLogisticsRub: 1000,
   wbLocalizationIndex: 100,
+  wbReturnToSellerRub: 2000,
 }
 
 /** Проверка валидности ключа AppSetting. Используется тестами и защитой action'ов. */

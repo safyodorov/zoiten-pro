@@ -10,7 +10,12 @@
 //   4) upsert AppSetting.wbBoxTariffEffective (JSON)
 
 import type { PrismaClient } from "@prisma/client"
-import { fetchBoxTariffs, type WbBoxTariffWarehouse } from "@/lib/wb-api"
+import {
+  fetchBoxTariffs,
+  fetchAcceptanceCoefficients,
+  fetchReturnTariffs,
+  type WbBoxTariffWarehouse,
+} from "@/lib/wb-api"
 import { getMskTodayString } from "@/lib/wb-cron-schedule"
 
 /** Эффективные (усреднённые по складам) box-ставки — флэт на все товары. */
@@ -57,7 +62,12 @@ export function computeEffectiveBoxTariff(
  */
 export async function syncBoxTariffs(
   db: PrismaClient,
-): Promise<{ warehouses: number; effective: WbBoxTariffEffective }> {
+): Promise<{
+  warehouses: number
+  effective: WbBoxTariffEffective
+  acceptanceWarehouses: number
+  returnToSellerRub: number | null
+}> {
   const { warehouses, dtTillMax } = await fetchBoxTariffs(getMskTodayString())
 
   for (const w of warehouses) {
@@ -94,5 +104,51 @@ export async function syncBoxTariffs(
     update: { value: JSON.stringify(effective) },
   })
 
-  return { warehouses: warehouses.length, effective }
+  // ── Фаза B v2 (2026-07-08): acceptance/coefficients (короб) + return ────
+  const accRows = await fetchAcceptanceCoefficients()
+  const boxRows = accRows.filter((r) => r.boxTypeID === 2)
+
+  for (const r of boxRows) {
+    await db.wbAcceptanceCoef.upsert({
+      where: { warehouseID_boxTypeID: { warehouseID: r.warehouseID, boxTypeID: r.boxTypeID } },
+      create: {
+        warehouseID: r.warehouseID,
+        warehouseName: r.warehouseName,
+        boxTypeID: r.boxTypeID,
+        coefficient: r.coefficient,
+        deliveryCoef: r.deliveryCoef,
+        storageCoef: r.storageCoef,
+        deliveryBaseLiter: r.deliveryBaseLiter,
+        deliveryAdditionalLiter: r.deliveryAdditionalLiter,
+        storageBaseLiter: r.storageBaseLiter,
+        storageAdditionalLiter: r.storageAdditionalLiter,
+      },
+      update: {
+        warehouseName: r.warehouseName,
+        coefficient: r.coefficient,
+        deliveryCoef: r.deliveryCoef,
+        storageCoef: r.storageCoef,
+        deliveryBaseLiter: r.deliveryBaseLiter,
+        deliveryAdditionalLiter: r.deliveryAdditionalLiter,
+        storageBaseLiter: r.storageBaseLiter,
+        storageAdditionalLiter: r.storageAdditionalLiter,
+      },
+    })
+  }
+
+  const ret = await fetchReturnTariffs(getMskTodayString())
+  if (ret.returnToSellerRub != null) {
+    await db.appSetting.upsert({
+      where: { key: "wbReturnToSellerRub" },
+      create: { key: "wbReturnToSellerRub", value: String(ret.returnToSellerRub) },
+      update: { value: String(ret.returnToSellerRub) },
+    })
+  }
+
+  return {
+    warehouses: warehouses.length,
+    effective,
+    acceptanceWarehouses: boxRows.length,
+    returnToSellerRub: ret.returnToSellerRub,
+  }
 }

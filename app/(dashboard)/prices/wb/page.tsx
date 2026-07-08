@@ -60,6 +60,8 @@ const RATE_KEYS = [
   // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
   "wbReturnLogisticsRub",
   "wbLocalizationIndex",
+  // Фаза B v2 (2026-07-08): возврат продавцу (брак).
+  "wbReturnToSellerRub",
 ] as const
 
 type RateKey = (typeof RATE_KEYS)[number]
@@ -74,6 +76,7 @@ const DEFAULT_RATES: Record<RateKey, number> = {
   wbDefectRatePct: 2.0,
   wbReturnLogisticsRub: 50.0,
   wbLocalizationIndex: 1.0,
+  wbReturnToSellerRub: 250.0,
 }
 
 // ──────────────────────────────────────────────────────────────────
