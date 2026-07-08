@@ -437,7 +437,7 @@ const SCROLL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "roiPct", label: "ROI, %" },
   { key: "logisticsEffStd", label: "Логистика МП-std, руб." },
   { key: "storageStd", label: "Хранение-std, руб." },
-  { key: "reverseLogStd", label: "Обратная лог.-std, руб." },
+  { key: "reverseLogStd", label: "Обратная лог.-std (на ед.), руб." },
   { key: "profitStd", label: "Прибыль-std, руб." },
   { key: "roiPctStd", label: "ROI-std, %" },
   { key: "returnOnSalesPctStd", label: "Re-std, %" },
@@ -1413,7 +1413,7 @@ export function PriceCalculatorTable({
                         // page.tsx всегда его заполняет; fallback ?? 0 на случай отсутствия.
                         ["logisticsEffStd", fmtMoneyInt(row.computedStd?.logisticsEffAmount ?? 0)],
                         ["storageStd", fmtMoneyInt(row.computedStd?.storageAmount ?? 0)],
-                        ["reverseLogStd", fmtMoneyInt(row.computedStd?.reverseLogisticsAmount ?? 0)],
+                        ["reverseLogStd", fmtMoneyInt(row.computedStd?.reverseLogPerUnitAmount ?? 0)],
                         ["profitStd", fmtMoneyInt(row.computedStd?.profitStd ?? 0), profitClass(row.computedStd?.profitStd ?? 0)],
                         ["roiPctStd", fmtPct(row.computedStd?.roiPctStd ?? 0, true), profitClass(row.computedStd?.roiPctStd ?? 0)],
                         ["returnOnSalesPctStd", fmtPct(row.computedStd?.returnOnSalesPctStd ?? 0, true), profitClass(row.computedStd?.returnOnSalesPctStd ?? 0)],

@@ -621,21 +621,32 @@ export function PricingCalculatorDialog({
                       label="Комиссия (оферта)"
                       value={`${fmtPct(row.stdContext?.commStdPct ?? 0)} · ${fmtMoney(liveOutputsStd.commissionAmount)}`}
                     />
+                    <OutputRow label="Выкуп" value={`${liveInputs.buyoutPct}%`} />
                     <OutputRow
-                      label="Логистика туда"
+                      label="Логистика туда (за доставку)"
                       value={fmtMoney(liveOutputsStd.logisticsToAmount ?? 0)}
                     />
                     <OutputRow
-                      label="Логистика эфф."
+                      label="Обратная логистика (за возврат)"
+                      value={fmtMoney(liveOutputsStd.reverseLogisticsAmount ?? 0)}
+                    />
+                    <OutputRow
+                      label="Обратная на ед. (× невыкуп)"
+                      value={fmtMoney(liveOutputsStd.reverseLogPerUnitAmount ?? 0)}
+                    />
+                    <p className="text-[11px] text-muted-foreground pl-0">
+                      тариф × (100−ПВ)% ÷ ПВ%
+                    </p>
+                    <OutputRow
+                      label="Логистика эфф. (на проданную ед.)"
                       value={fmtMoney(liveOutputsStd.logisticsEffAmount ?? 0)}
                     />
+                    <p className="text-[11px] text-muted-foreground">
+                      На проданную ед.: туда ÷ выкуп + обратка × невыкуп ÷ выкуп = Логистика эфф.
+                    </p>
                     <OutputRow
                       label="Хранение"
                       value={fmtMoney(liveOutputsStd.storageAmount ?? 0)}
-                    />
-                    <OutputRow
-                      label="Обратная логистика"
-                      value={fmtMoney(liveOutputsStd.reverseLogisticsAmount ?? 0)}
                     />
                   </dl>
                   {row.stdContext && (
