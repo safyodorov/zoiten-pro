@@ -30,6 +30,7 @@ import { getUserPreference } from "@/app/actions/user-preferences"
 import { getMskTodayDate, fillTimeSeries, type DayPoint } from "@/lib/wb-orders-chart"
 import { mergeOrdersAndFunnel } from "@/lib/wb-funnel-merge"
 import { loadLegendMetrics } from "@/lib/wb-legend-metrics"
+import { loadBuyoutPctRolling30dMap } from "@/lib/wb-advert-spend-data"
 import { WbSyncButton } from "@/components/cards/WbSyncButton"
 import { WbSyncSppButton } from "@/components/cards/WbSyncSppButton"
 import { WbPromotionsSyncButton } from "@/components/prices/WbPromotionsSyncButton"
@@ -419,6 +420,30 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     todayMsk,
   )
 
+  // ── 6.5.2. Rolling-30d % выкупа per nmId (quick 260708-iec) ──────────
+  // Заменяет пустой WbCard.buyoutPercent (0/256 → фолбэк 100%) реальным
+  // взвешенным выкупом. Тот же резолвер, что /ads/wb и легенда: scope-независим
+  // на per-nmId/subcat уровнях, hard-fallback внутри (finalGlobal ?? 90) → всегда число.
+  //
+  // Окно [todayMsk-30d, todayMsk): output-строки резолвера покрывают последние
+  // ЗАКРЫТЫЕ funnel-дни (сегодня всегда NULL из-за T+3 лага WB). resolve(nmId,
+  // todayKey) через встроенный fallback «latest per-nmId ≤ key» отдаёт свежайшее
+  // закрытое rolling-30d значение каждого nmId.
+  //
+  // ⚠ ВАЖНО про окно: from=todayMsk (без -30д) дал бы ПУСТОЙ per-nmId output —
+  // резолвер фильтрует output `WHERE date >= from`, а сегодняшний funnel NULL →
+  // все карточки схлопнулись бы в один глобальный fallback (одинаковое число у
+  // всех). Поэтому from сдвинут на -30д, зеркалит lib/wb-legend-metrics.ts
+  // (тот же резолвер, from=sevenDaysAgo/thirtyDaysAgo, to=todayMsk).
+  const buyoutFrom = new Date(todayMsk.getTime() - 30 * 24 * 3600_000)
+  const buyoutResolver = await loadBuyoutPctRolling30dMap(
+    buyoutFrom,
+    todayMsk,
+    linkedNmIds,
+  )
+  // dateKey формат = как приватный dateKey() в wb-advert-spend-data: toISOString().slice(0,10)
+  const todayBuyoutKey = todayMsk.toISOString().slice(0, 10)
+
   // ── 6.6. Загрузить последние отзывы per nmId (для ленты в expand-панели) ──
   // quick 260518-gg3: SupportTicket channel=FEEDBACK, rating IS NOT NULL,
   // top-10 desc per nmId. Текст отзыва — из первого INBOUND SupportMessage;
@@ -563,8 +588,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       )
 
       // Per-product override → card source → default для buyout / clubDiscount / commission
+      // quick 260708-iec: реальный rolling-30d выкуп вместо пустого card.buyoutPercent.
       const resolvedBuyout =
-        product.buyoutOverridePct ?? card.buyoutPercent ?? 100
+        product.buyoutOverridePct ?? buyoutResolver.resolve(card.nmId, todayBuyoutKey)
       const resolvedClubDiscount =
         product.clubDiscountOverridePct ?? card.clubDiscount ?? 0
       const resolvedCommission =
@@ -664,7 +690,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
       // «Глобальные» значения каждого параметра — fallback-цепочка БЕЗ учёта
       // Product.XOverride и CalculatedPrice.X. Используются модалкой при «↻».
       const globalValues = {
-        buyoutPct: card.buyoutPercent ?? 100,
+        buyoutPct: buyoutResolver.resolve(card.nmId, todayBuyoutKey),
         clubDiscountPct: card.clubDiscount ?? 0,
         walletPct: rates.wbWalletPct,
         acquiringPct: rates.wbAcquiringPct,
