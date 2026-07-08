@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed 260708-lhb quick task — std-юнитка /prices/wb v3 (обратная логистика volume-based + ИРП, убран возврат-продавцу)
-last_updated: "2026-07-08T13:02:42.348Z"
+stopped_at: Completed 260708-mdd quick task — обе комиссии (ИУ + оферта) в /prices/wb
+last_updated: "2026-07-08T13:16:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
   total_plans: 51
-  completed_plans: 52
+  completed_plans: 53
 ---
 
 # Project State
@@ -425,6 +425,7 @@ None yet.
 | 260708-h9l | 3 std-компонентные колонки в /prices/wb: Логистика МП-std / Хранение-std / Возврат прод.-std, вставлены между ROI, % и Прибыль-std, руб. (нейтральные amount-ячейки, читают row.computedStd?.logisticsEffAmount/storageAmount/returnToSellerAmount ?? 0). Единственный файл components/prices/PriceCalculatorTable.tsx, 5 точечных правок. tsc чисто, 140/140 pricing-math+sales-plan тестов зелёные, задеплоено | 2026-07-08 | dbe9379 | Verified | [260708-h9l-std-prices-wb](./quick/260708-h9l-std-prices-wb/) |
 | 260708-iec | Реальный rolling-30d % выкупа в /prices/wb вместо пустого WbCard.buyoutPercent (0/256 в БД → фолбэк 100% у всех карточек). Переиспользован существующий резолвер loadBuyoutPctRolling30dMap (тот же, что /ads/wb и легенда): resolvedBuyout и globalValues.buyoutPct теперь читают buyoutResolver.resolve(nmId, todayKey), окно [todayMsk−30д, todayMsk) (from=today дал бы пустой per-nmId output из-за T+3 lag WB). Л_эфф в calculatePricingStandard оживает для карточек с выкупом < 100%; ИУ-блок и golden не тронуты. Единственный файл app/(dashboard)/prices/wb/page.tsx. tsc чисто, golden pricing-math 54/54, полный прогон 917/994 идентичен baseline (77 пред-существующих чужих падений), задеплоено | 2026-07-08 | 0edde49 | Verified | [260708-iec-prices-wb-rolling-30d](./quick/260708-iec-prices-wb-rolling-30d/) |
 | 260708-lhb | std-юнитка v3 в /prices/wb: обратная логистика невыкупа — volume-based по офиц. формуле ВБ (reverseLogisticsForVolume, бэнды ≤1л 23/26/29/30/32₽ + база+доп-литр V>1 default 46+14) вместо плоской ставки 50₽; ИРП-надбавка на Л_туда (+ sellerPriceForIrp×ИРП%, цена до СПП); статья «Возврат продавцу» убрана из profitStd (дублировала расход). std-golden v3 пересчитан (nmId 800750522): Л_туда≈352.9994/Л_обратно=102/Л_эфф≈403.5549/profitStd≈733.5708/roiPctStd≈33.28%/Re-std≈9.47%, golden первого блока (567.68) не тронут. 3 новых AppSetting (wbReverseLogBaseRub=46/wbReverseLogPerLiterRub=14/wbIrpPct=1.56) + wbLocalizationIndex→1.11 (ручные значения пользователя), GlobalRatesBar/page.tsx RateKey union синхронны. Колонка reverseLogStd в таблице, «Обратная логистика»+ИЛ/ИРП в модалке. tsc чисто, pricing-math+sales-plan 149/149, задеплоено (миграция 20260708_wb_std_v3_reverse_logistics_irp применена, AppSetting проверен на проде) | 2026-07-08 | 3aee5ee, 451f006, 5404e7e | Verified | [260708-lhb-volume-based-prices-wb-std](./quick/260708-lhb-volume-based-prices-wb-std/) |
+| 260708-mdd | Обе комиссии (ИУ + оферта) рядом в /prices/wb: таблица — переименованы «Комиссия, %/руб.» → «Комиссия ИУ, %/руб.» (ключи commFbwPct/commissionAmount не тронуты), 2 новые нейтральные std-колонки commStdPct/commStdAmount сразу после (fmtPctSimple(row.stdContext?.commStdPct ?? 0) / fmtMoneyInt(row.computedStd?.commissionAmount ?? 0)); модалка — input/строка «Комиссия» → «Комиссия ИУ»/«Комиссия (ИУ)», первой строкой std-блока добавлена «Комиссия (оферта)» = fmtPct(commStdPct) · fmtMoney(commissionAmount). Только отображение — данные уже были прокинуты std-юниткой v3, lib/pricing-math.ts и page.tsx-резолвинг не тронуты. tsc чисто, pricing-math+sales-plan 167/167 (42 пред-существующих чужих падения в support-sync/wb-sync-route/wb-token-validate подтверждены не связанными через git stash), задеплоено | 2026-07-08 | 8ccd111 | Verified | [260708-mdd-prices-wb](./quick/260708-mdd-prices-wb/) |
 
 ### Blockers/Concerns
 
@@ -440,6 +441,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-08T13:02:42.328Z
-Stopped at: Completed 260708-lhb quick task — std-юнитка /prices/wb v3 (обратная логистика volume-based + ИРП, убран возврат-продавцу)
+Last session: 2026-07-08T13:16:00.000Z
+Stopped at: Completed 260708-mdd quick task — обе комиссии (ИУ + оферта) в /prices/wb
 Resume file: None
