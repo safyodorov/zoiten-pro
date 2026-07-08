@@ -174,9 +174,14 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     allSubcategories,
     allDirections,
   ] = await Promise.all([
-    // Глобальные ставки + Фаза B: эффективные box-тарифы складов (JSON, флэт).
+    // Глобальные ставки + Фаза B: эффективные box-тарифы складов (JSON, флэт, v1 fallback)
+    // + Фаза B v2: эфф-ставки per направление (взвешены по стоку).
     prisma.appSetting.findMany({
-      where: { key: { in: [...RATE_KEYS, "wbBoxTariffEffective"] } },
+      where: {
+        key: {
+          in: [...RATE_KEYS, "wbBoxTariffEffective", "wbEffCoef.appliances", "wbEffCoef.clothing"],
+        },
+      },
     }),
     // Активные акции (endDateTime >= now) + номенклатуры
     prisma.wbPromotion.findMany({
@@ -210,7 +215,7 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
                 id: true,
                 name: true,
                 sortOrder: true,
-                direction: { select: { id: true, name: true, sortOrder: true } },
+                direction: { select: { id: true, name: true, sortOrder: true, hasSizes: true } },
               },
             },
           },
@@ -251,33 +256,48 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
     }
   }
 
-  // ── 3.1 Фаза B (2026-07-07): эффективные box-тарифы складов ─────
-  // Флэт (срез по стоку отложен, спека §5) — одна запись на все товары.
-  // Фоллбэк-дефолты используются, пока «Тарифы складов» ни разу не нажималась.
-  const BOX_TARIFF_FALLBACK = {
-    delivBase: 46,
-    delivLiter: 14,
-    delivCoefPct: 100,
-    storageBasePerLiter: 0.07,
-    storageCoefPct: 100,
+  // ── 3.1 Фаза B v2 (2026-07-08): эфф-ставки логистики/хранения per направление ──
+  // Источник — AppSetting.wbEffCoef.appliances/clothing (взвешены по стоку из
+  // acceptance/coefficients через syncBoxTariffs → lib/wb-eff-coef.ts).
+  // Коэффициент склада УЖЕ вшит в эти ставки (v2) — в отличие от v1 здесь
+  // НЕТ отдельного умножения на delivCoefPct/storageCoefPct (убрано «старое ×coef»).
+  //
+  // EFF_FALLBACK — используется, пока «Тарифы складов» ни разу не нажималась
+  // (или AppSetting.wbEffCoef.<направление> отсутствует/повреждён). Намеренно
+  // НЕ переиспользует устаревшие v1-дефолты (46/14/0.07) — те были рассчитаны
+  // под другую формулу (с отдельным умножением на delivCoefPct), из-за чего
+  // подстановка «как есть» в v2-формулу занизила бы ставку логистики почти
+  // вдвое. v2-хардкод (94.3/28.7/0.16/0.16) — реальные типовые applied-ставки
+  // короба (recon 2026-07-08, см. PLAN interfaces).
+  interface EffCoefParsed {
+    delivBaseLiter: number
+    delivAddLiter: number
+    storageBaseLiter: number
+    storageAddLiter: number
   }
-  let boxTariff = { ...BOX_TARIFF_FALLBACK }
-  const boxTariffSetting = appSettings.find((s) => s.key === "wbBoxTariffEffective")
-  if (boxTariffSetting) {
+  const EFF_FALLBACK: EffCoefParsed = {
+    delivBaseLiter: 94.3,
+    delivAddLiter: 28.7,
+    storageBaseLiter: 0.16,
+    storageAddLiter: 0.16,
+  }
+  function parseEff(key: string): EffCoefParsed {
+    const setting = appSettings.find((s) => s.key === key)
+    if (!setting) return EFF_FALLBACK
     try {
-      const parsed = JSON.parse(boxTariffSetting.value)
-      boxTariff = {
-        delivBase: parsed.delivBase ?? BOX_TARIFF_FALLBACK.delivBase,
-        delivLiter: parsed.delivLiter ?? BOX_TARIFF_FALLBACK.delivLiter,
-        delivCoefPct: parsed.delivCoefPct ?? BOX_TARIFF_FALLBACK.delivCoefPct,
-        storageBasePerLiter:
-          parsed.storageBasePerLiter ?? BOX_TARIFF_FALLBACK.storageBasePerLiter,
-        storageCoefPct: parsed.storageCoefPct ?? BOX_TARIFF_FALLBACK.storageCoefPct,
+      const parsed = JSON.parse(setting.value)
+      return {
+        delivBaseLiter: parsed.delivBaseLiter ?? EFF_FALLBACK.delivBaseLiter,
+        delivAddLiter: parsed.delivAddLiter ?? EFF_FALLBACK.delivAddLiter,
+        storageBaseLiter: parsed.storageBaseLiter ?? EFF_FALLBACK.storageBaseLiter,
+        storageAddLiter: parsed.storageAddLiter ?? EFF_FALLBACK.storageAddLiter,
       }
     } catch {
-      // Некорректный JSON → используем фоллбэк-дефолты
+      return EFF_FALLBACK
     }
   }
+  const appliancesEff = parseEff("wbEffCoef.appliances")
+  const clothingEff = parseEff("wbEffCoef.clothing")
 
   // ── 4. Собрать nmId → Product map ───────────────────────────────
   type LinkedProduct = (typeof linkedArticles)[number]["product"]
@@ -608,7 +628,8 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         categoryId: product.categoryId ?? null,
       }
 
-      // ── Фаза B (2026-07-07): std-параметры для второго фин-реза ─────
+      // ── Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): std-параметры для
+      // второго фин-реза ──────────────────────────────────────────────
       // commStdPct: per-product override (общий commissionOverridePct, тот же
       // что и в ИУ-блоке) → card.commFbwStd (стандартная комиссия из Tariffs API).
       const commStdPct = product.commissionOverridePct ?? card.commFbwStd ?? 0
@@ -623,16 +644,20 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         salesPerDay > 0 && (card.stockQty ?? 0) > 0
           ? (card.stockQty as number) / salesPerDay
           : 60
+      // v2: эфф-ставки логистики/хранения выбираются per направление товара
+      // (product.brand.direction.hasSizes=true → одежда, иначе → бытовая техника).
+      const isClothing = product.brand?.direction?.hasSizes ?? false
+      const effCoef = isClothing ? clothingEff : appliancesEff
       const stdParams = {
         commStdPct,
         volumeLiters,
-        delivBase: boxTariff.delivBase,
-        delivLiter: boxTariff.delivLiter,
-        delivCoefPct: boxTariff.delivCoefPct,
-        storageBasePerLiter: boxTariff.storageBasePerLiter,
-        storageCoefPct: boxTariff.storageCoefPct,
+        delivBaseLiter: effCoef.delivBaseLiter,
+        delivAddLiter: effCoef.delivAddLiter,
+        storageBaseLiter: effCoef.storageBaseLiter,
+        storageAddLiter: effCoef.storageAddLiter,
         localizationIndex: rates.wbLocalizationIndex,
         returnLogisticsRub: rates.wbReturnLogisticsRub,
+        returnToSellerRub: rates.wbReturnToSellerRub,
         daysInStock,
       }
 

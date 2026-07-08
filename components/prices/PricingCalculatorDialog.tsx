@@ -628,7 +628,19 @@ export function PricingCalculatorDialog({
                       label="Хранение"
                       value={fmtMoney(liveOutputsStd.storageAmount ?? 0)}
                     />
+                    <OutputRow
+                      label="Возврат продавцу"
+                      value={fmtMoney(liveOutputsStd.returnToSellerAmount ?? 0)}
+                    />
                   </dl>
+                  {row.stdContext && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Ставки (лог/хран, ₽/л): {row.stdContext.delivBaseLiter.toFixed(1)}+
+                      {row.stdContext.delivAddLiter.toFixed(1)} /{" "}
+                      {row.stdContext.storageBaseLiter.toFixed(2)}+
+                      {row.stdContext.storageAddLiter.toFixed(2)}
+                    </p>
+                  )}
                   <OutputRow
                     label="Прибыль-std"
                     value={`${fmtMoney(liveOutputsStd.profitStd ?? 0)} ₽`}

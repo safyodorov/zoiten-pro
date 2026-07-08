@@ -2,8 +2,10 @@
 
 **Дата:** 2026-07-07
 **Раздел:** Управление ценами WB (`/prices/wb`)
-**Статус:** Фаза A задеплоена (quick 260707-k9g); **Фаза B v1 реализована** (quick 260707-m5v,
-срез §5 ОТЛОЖЕН — эффективные ставки флэт, без взвешивания по стоку)
+**Статус:** Фаза A задеплоена (quick 260707-k9g); Фаза B v1 реализована (quick 260707-m5v);
+**Фаза B v2 реализована** (quick 260708-f23 — срез §5 РЕАЛИЗОВАН: эфф-ставки логистики/хранения
+взвешены по нашему стоку per направление, источник = `/api/tariffs/v1/acceptance/coefficients`,
++ строка «Возврат продавцу»)
 
 ---
 
@@ -73,9 +75,20 @@ ROI-std, Re-std — считаются из Прибыль-std по тем же 
 
 **Статусы достоверности:** база хранения 0,08₽/л/сут, механика Л_эфф и множителя ИЛ, применение ИЛ только к логистике (не к хранению) — **подтверждены**. Точная ставка обратной логистики и национальные базовые ставки доставки — берём в AppSetting как редактируемые дефолты (уточняются из ЛК).
 
+**v2 (2026-07-08) — уточнение формул (`calculatePricingStandard` в `lib/pricing-math.ts`):**
+- `delivBaseLiter`/`delivAddLiter`/`storageBaseLiter`/`storageAddLiter` — эфф-ставки
+  acceptance/coefficients, взвешенные по стоку per направление (§5). Коэффициент склада
+  **уже вшит** в эти значения → `Л_туда = (delivBaseLiter + delivAddLiter × max(0,V−1)) × ИЛ`
+  (БЕЗ отдельного умножения на `delivCoefPct`, в отличие от v1/`/tariffs/box`).
+- Хранение теперь считается по той же схеме база+доп-литр, что и логистика:
+  `Хранение = (storageBaseLiter + storageAddLiter × max(0,V−1)) × дни_на_складе`
+  (v1 использовал только `storageBasePerLiter × V`, без доп-литра).
+- Добавлена строка «Возврат продавцу» = `wbReturnToSellerRub × (defectRatePct/100)`, источник
+  `/api/v1/tariffs/return` (`deliveryDumpSupReturnExpr` базовых тарифов).
+
 ---
 
-## 5. Вывод эффективных коэффициентов
+## 5. Вывод эффективных коэффициентов — ✅ РЕАЛИЗОВАН (Фаза B v2, quick 260708-f23)
 
 ```
 К_эфф(направление, вид_коэф) =
@@ -88,6 +101,15 @@ ROI-std, Re-std — считаются из Прибыль-std по тем же 
 - Два направления: `hasSizes=true` → одежда, иначе → бытовая техника.
 - Считается 4 коэффициента × 2 направления: `К_лог_эфф`, `К_хран_эфф` для каждого. Хранятся в AppSetting (напр. `wbEffCoef.appliances`, `wbEffCoef.clothing`).
 - Бакет «Прочие»/`needsClusterReview` — учитывать qty, но пометить (может искажать; логировать долю).
+
+**Реализация (2026-07-08):** источник `К(склад, вид_коэф)` — не `/tariffs/box` (v1), а
+**`/api/tariffs/v1/acceptance/coefficients`** (короб, `boxTypeID=2`) — `deliveryBaseLiter`/
+`deliveryAdditionalLiter`/`storageBaseLiter`/`storageAdditionalLiter`. Эти поля **уже включают**
+применённый коэффициент склада (`deliveryCoef`/`storageCoef`, %) — поэтому формула §4 v2
+**не умножает повторно** на `delivCoefPct/storageCoefPct` (в отличие от `/tariffs/box`, где
+коэффициент был отдельным множителем). Джойн направление→склад — по имени (`WbWarehouse.name`,
+trim/lowercase). Pure-реализация: `lib/wb-eff-coef.ts:computeEffCoefForDirection` (взвешивание +
+`coveragePct` + `unmatched`), вызывается из `lib/wb-box-tariffs.ts:syncBoxTariffs`.
 
 ---
 
@@ -136,16 +158,21 @@ ROI-std, Re-std — считаются из Прибыль-std по тем же 
 - Строка `planned` + жёлто-оранжевая плашка + бейдж + сохранение.
 - **Интеграция с планом продаж:** плановая цена становится базой цены для sales-plan. ⚠ Проверить резолвинг цены в `lib/sales-plan/data.ts` / baseline — где план берёт цену сейчас, и переключить на `plannedSellerPrice ?? current`.
 
-**Фаза B — Второй фин-рез (стандартные условия): ✅ v1 реализована (quick 260707-m5v)**
+**Фаза B — Второй фин-рез (стандартные условия): ✅ v1 реализована (quick 260707-m5v);
+✅ v2 (реальные per-склад ставки acceptance, срез по стоку бытовая/одежда, возврат-продавцу)
+(quick 260708-f23)**
 - `WbBoxTariff` + `fetchBoxTariffs` + sync-эндпоинт + cron + кнопка. ✅
-- Вывод эффективных ставок: ✅ **v1 флэт-среднее по складам** (срез по стоку/направлению
-  из §5 ОТЛОЖЕН — округа сейчас идентичны, коэффициенты 100%, взвешивание по
-  `WbCardWarehouseStock` не даёт эффекта пока WB не дифференцирует округа) + AppSetting-ставки
-  (`wbReturnLogisticsRub`, `wbLocalizationIndex`) + `GlobalRatesBar`. ✅
-- `pricing-math` (`calculatePricingStandard` + опц. outputs, golden первого блока сохранён,
-  std-golden nmId 800750522 запинен). ✅
+- v1: флэт-среднее по складам (срез по стоку/направлению из §5 отложен). ✅ (2026-07-07)
+- **v2 (2026-07-08):** `WbAcceptanceCoef` (`/api/tariffs/v1/acceptance/coefficients`, короб) +
+  `fetchReturnTariffs` (`/api/v1/tariffs/return`) + срез §5 РЕАЛИЗОВАН —
+  `lib/wb-eff-coef.ts:computeEffCoefForDirection` взвешивает эфф-ставки логистики/хранения
+  по нашему стоку ОТДЕЛЬНО для бытовой техники / одежды, fallback на v2-хардкод до первого
+  синка → `AppSetting.wbEffCoef.appliances/clothing` + `wbReturnToSellerRub` +
+  `GlobalRatesBar`. ✅
+- `pricing-math` (`calculatePricingStandard` v2 — база+доп-литр, коэф уже в ставке, +
+  возврат-продавцу; golden первого блока сохранён, std-golden v2 nmId 800750522 запинен). ✅
 - 3 столбца (Прибыль-std/ROI-std/Re-std) + второй блок в модалке (Логистика туда/эфф,
-  Хранение, Прибыль-std/ROI-std/Re-std). ✅
+  Хранение, Возврат продавцу, эфф-ставки направления, Прибыль-std/ROI-std/Re-std). ✅
 
 Каждая фаза — отдельный цикл GSD (`/gsd:quick --full` или планируемая фаза) с гейтами `tsc` + `npm run test` (golden pricing-math зелёный) + делегированным detached-деплоем и **миграцией на проде**.
 

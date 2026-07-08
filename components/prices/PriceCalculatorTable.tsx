@@ -123,18 +123,19 @@ export interface PriceRow {
    *  запроса БД. */
   inputs: PricingInputs
 
-  /** Фаза B (2026-07-07): std-контекст (box-тарифы + ставки) для realtime
-   *  пересчёта второго фин-реза в модалке при правке цены. */
+  /** Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): std-контекст (эфф-ставки
+   *  направления + ставки) для realtime пересчёта второго фин-реза в модалке
+   *  при правке цены. */
   stdContext?: {
     commStdPct: number
     volumeLiters: number
-    delivBase: number
-    delivLiter: number
-    delivCoefPct: number
-    storageBasePerLiter: number
-    storageCoefPct: number
+    delivBaseLiter: number
+    delivAddLiter: number
+    storageBaseLiter: number
+    storageAddLiter: number
     localizationIndex: number
     returnLogisticsRub: number
+    returnToSellerRub: number
     daysInStock: number
   }
 

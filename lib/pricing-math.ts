@@ -69,29 +69,36 @@ export interface PricingInputs {
   /** Налог, % */
   taxPct: number
 
-  // ── Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» ──
-  // Все поля опциональны — существующий golden test (без std-входов)
-  // не затрагивается, calculatePricingStandard не вызывается implicitly.
+  // ── Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): второй фин-рез
+  // «на стандартных условиях». Все поля опциональны — существующий golden
+  // test (без std-входов) не затрагивается, calculatePricingStandard не
+  // вызывается implicitly.
   /** Стандартная комиссия (не ИУ), % — обычно card.commFbwStd. */
   commStdPct?: number
   /** Объём товара, литры (Д×Ш×В/1000), округляется до 0,1 л внутри функции. */
   volumeLiters?: number
-  /** Базовая ставка логистики (первый литр), ₽ — WbBoxTariffEffective.delivBase. */
-  delivBase?: number
-  /** Ставка логистики за доп. литр, ₽ — WbBoxTariffEffective.delivLiter. */
-  delivLiter?: number
-  /** Коэффициент логистики склада, % (обычно 100) — WbBoxTariffEffective.delivCoefPct. */
-  delivCoefPct?: number
+  /** Эфф-ставка логистики (первый литр), ₽ — УЖЕ с вшитым коэффициентом склада
+   *  (acceptance/coefficients deliveryBaseLiter, взвешено по стоку per направление) —
+   *  AppSetting.wbEffCoef.<направление>.delivBaseLiter. */
+  delivBaseLiter?: number
+  /** Эфф-ставка логистики за доп. литр, ₽ — УЖЕ с вшитым коэффициентом —
+   *  AppSetting.wbEffCoef.<направление>.delivAddLiter. */
+  delivAddLiter?: number
   /** Индекс локализации (множитель, ~1.0) — AppSetting.wbLocalizationIndex. */
   localizationIndex?: number
   /** Стоимость обратной логистики при невыкупе, ₽ — AppSetting.wbReturnLogisticsRub. */
   returnLogisticsRub?: number
-  /** Базовая ставка хранения, ₽/л/сутки — WbBoxTariffEffective.storageBasePerLiter. */
-  storageBasePerLiter?: number
-  /** Коэффициент хранения склада, % (обычно 100) — WbBoxTariffEffective.storageCoefPct. */
-  storageCoefPct?: number
+  /** Эфф-ставка хранения (первый литр), ₽/л/сутки — УЖЕ с вшитым коэффициентом —
+   *  AppSetting.wbEffCoef.<направление>.storageBaseLiter. */
+  storageBaseLiter?: number
+  /** Эфф-ставка хранения за доп. литр, ₽/л/сутки — УЖЕ с вшитым коэффициентом —
+   *  AppSetting.wbEffCoef.<направление>.storageAddLiter. */
+  storageAddLiter?: number
   /** Дней на складе (оборачиваемость) — остаток / продажи в день, fallback 60. */
   daysInStock?: number
+  /** Ставка возврата продавцу брака, ₽ — AppSetting.wbReturnToSellerRub
+   *  (Фаза B v2, `/api/v1/tariffs/return` deliveryDumpSupReturnExpr). */
+  returnToSellerRub?: number
 }
 
 /** Результат расчёта — все вычисляемые значения 31 колонок формы «Управление ценами». */
@@ -155,6 +162,8 @@ export interface PricingOutputs {
   logisticsEffAmount?: number
   /** Логистика «туда» (без учёта выкупа/возврата), ₽. */
   logisticsToAmount?: number
+  /** Возврат продавцу брака, ₽ = returnToSellerRub × defectRatePct/100 (Фаза B v2). */
+  returnToSellerAmount?: number
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -446,59 +455,70 @@ export function calculatePricing(inputs: PricingInputs): PricingOutputs {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Фаза B (2026-07-07): второй фин-рез «на стандартных условиях»
+// Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): второй фин-рез
+// «на стандартных условиях»
 // ──────────────────────────────────────────────────────────────────
 
 /**
  * Рассчитать юнит-экономику «на стандартных условиях» — параллельно основному
  * расчёту по ИУ (calculatePricing), но со стандартной комиссией, полной моделью
- * логистики к клиенту (с учётом выкупа и амортизацией возврата при невыкупе)
- * и хранением (на проданную единицу через оборачиваемость).
+ * логистики к клиенту (с учётом выкупа и амортизацией возврата при невыкупе),
+ * хранением (база+доп-литр × дни на складе) и возвратом продавцу брака.
  *
  * **Pure function**, переиспользует calculatePricing как ядро (комиссия = std,
- * доставка = логистика эффективная), затем вычитает Хранение сверху.
+ * доставка = логистика эффективная), затем вычитает Хранение и Возврат продавцу сверху.
  *
- * Формулы (спека `docs/superpowers/specs/2026-07-07-...-design.md` §4):
+ * **v2 (2026-07-08):** входные ставки логистики/хранения (`delivBaseLiter`,
+ * `delivAddLiter`, `storageBaseLiter`, `storageAddLiter`) — эфф-ставки WB
+ * acceptance/coefficients, взвешенные по нашему стоку per направление
+ * (`lib/wb-eff-coef.ts`). Коэффициент склада УЖЕ вшит в эти ставки —
+ * в отличие от v1 здесь НЕТ отдельного умножения на `delivCoefPct/storageCoefPct`.
+ * Хранение теперь считается по той же схеме база+доп-литр, что и логистика
+ * (раньше — `storageBasePerLiter × V`, без доп-литра).
+ *
+ * Формулы (спека `docs/superpowers/specs/2026-07-07-...-design.md` §4, v2):
  * ```
  *  V       = round(max(0, volumeLiters) × 10) / 10       (округл. до 0,1 л)
  *  ПВ      = buyoutPct / 100
- *  Л_туда  = (delivBase + delivLiter × max(0, V−1)) × (delivCoefPct/100) × ИЛ
- *  Л_эфф   = ПВ > 0 ? [Л_туда + (1−ПВ) × returnLogisticsRub] / ПВ : Л_туда
- *  Хранение = storageBasePerLiter × V × (storageCoefPct/100) × daysInStock
+ *  Л_туда   = (delivBaseLiter + delivAddLiter × max(0, V−1)) × ИЛ
+ *  Л_эфф    = ПВ > 0 ? [Л_туда + (1−ПВ) × returnLogisticsRub] / ПВ : Л_туда
+ *  Хранение = (storageBaseLiter + storageAddLiter × max(0, V−1)) × daysInStock
+ *  Возврат-продавцу = returnToSellerRub × (defectRatePct/100)
  *
  *  profitStd = calculatePricing({ commFbwPct: commStdPct, deliveryCostRub: Л_эфф }).profit
- *              − Хранение
+ *              − Хранение − Возврат-продавцу
  *  roiPctStd           = costPrice > 0  ? profitStd / costPrice × 100  : 0
  *  returnOnSalesPctStd = sellerPrice > 0 ? profitStd / sellerPrice × 100 : 0
  * ```
  *
- * std-golden (детерминированный, на базе goldenInputs nmId 800750522 +
- * { commStdPct:25, volumeLiters:5, buyoutPct:90, delivBase:46, delivLiter:14,
- *   delivCoefPct:100, localizationIndex:1.0, returnLogisticsRub:50,
- *   storageBasePerLiter:0.07, storageCoefPct:100, daysInStock:60 }):
- *   Л_туда=102, Л_эфф≈118.8889, Хранение=21, profitStd≈1045.24 ₽,
- *   roiPctStd≈47.42%, returnOnSalesPctStd≈13.48% (см. tests/pricing-math.test.ts).
+ * std-golden v2 (детерминированный, на базе goldenInputs nmId 800750522 +
+ * { commStdPct:25, volumeLiters:5, buyoutPct:90, delivBaseLiter:94.3, delivAddLiter:28.7,
+ *   storageBaseLiter:0.16, storageAddLiter:0.16, localizationIndex:1.0, returnLogisticsRub:50,
+ *   returnToSellerRub:250, daysInStock:60 }):
+ *   Л_туда=209.1, Л_эфф≈237.8889, Хранение=48, Возврат-продавцу=5,
+ *   profitStd≈894.24 ₽, roiPctStd≈40.57%, returnOnSalesPctStd≈11.54%
+ *   (см. tests/pricing-math.test.ts).
  */
 export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs {
-  const delivBase = inputs.delivBase ?? 0
-  const delivLiter = inputs.delivLiter ?? 0
-  const delivCoefPct = inputs.delivCoefPct ?? 100
+  const delivBaseLiter = inputs.delivBaseLiter ?? 0
+  const delivAddLiter = inputs.delivAddLiter ?? 0
+  const storageBaseLiter = inputs.storageBaseLiter ?? 0
+  const storageAddLiter = inputs.storageAddLiter ?? 0
+  const returnToSellerRub = inputs.returnToSellerRub ?? 0
   const localizationIndex = inputs.localizationIndex ?? 1
   const returnLogisticsRub = inputs.returnLogisticsRub ?? 50
-  const storageBasePerLiter = inputs.storageBasePerLiter ?? 0
-  const storageCoefPct = inputs.storageCoefPct ?? 100
   const daysInStock = inputs.daysInStock ?? 0
 
   const V = Math.round(Math.max(0, inputs.volumeLiters ?? 0) * 10) / 10
   const pv = (inputs.buyoutPct ?? 100) / 100
 
-  const logTo =
-    (delivBase + delivLiter * Math.max(0, V - 1)) *
-    (delivCoefPct / 100) *
-    localizationIndex
+  // Коэф УЖЕ в ставке (acceptance/coefficients) → НЕ умножаем на delivCoefPct/storageCoefPct.
+  const logTo = (delivBaseLiter + delivAddLiter * Math.max(0, V - 1)) * localizationIndex
   const logEff = pv > 0 ? (logTo + (1 - pv) * returnLogisticsRub) / pv : logTo
 
-  const storage = storageBasePerLiter * V * (storageCoefPct / 100) * daysInStock
+  const storage = (storageBaseLiter + storageAddLiter * Math.max(0, V - 1)) * daysInStock
+
+  const returnToSeller = returnToSellerRub * ((inputs.defectRatePct ?? 0) / 100)
 
   // Ядро — переиспользуем calculatePricing (golden-протестированное тело):
   // комиссия заменяется на стандартную, доставка — на логистику эффективную.
@@ -508,7 +528,7 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
     deliveryCostRub: logEff,
   })
 
-  const profitStd = base.profit - storage
+  const profitStd = base.profit - storage - returnToSeller
   const costPrice = Math.max(0, inputs.costPrice)
   const roiPctStd = costPrice > 0 ? (profitStd / costPrice) * 100 : 0
   const returnOnSalesPctStd =
@@ -522,5 +542,6 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
     storageAmount: storage,
     logisticsEffAmount: logEff,
     logisticsToAmount: logTo,
+    returnToSellerAmount: returnToSeller,
   }
 }
