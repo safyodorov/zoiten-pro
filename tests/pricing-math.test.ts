@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   calculatePricing,
   calculatePricingStandard,
+  reverseLogisticsForVolume,
   COLUMN_ORDER,
   type PricingInputs,
 } from "@/lib/pricing-math"
@@ -185,22 +186,61 @@ describe("COLUMN_ORDER", () => {
 })
 
 // ──────────────────────────────────────────────────────────────────
-// calculatePricingStandard — std-golden test v2 (Фаза B v2, 2026-07-08)
+// reverseLogisticsForVolume — бэнды объёма (Фаза B v3, 2026-07-08)
 // ──────────────────────────────────────────────────────────────────
 //
-// Source: docs/superpowers/specs/2026-07-07-wb-planned-prices-standard-finres-design.md §4 (v2).
-// Использует goldenInputs (nmId 800750522) + std-параметры v2 ниже (реальные
-// per-склад эфф-ставки acceptance/coefficients вместо v1 флэт-box; коэффициент
-// склада УЖЕ вшит в ставку → НЕ умножается повторно; хранение теперь база+доп-литр).
-// Точный пересчёт вручную из формул §4 v2:
-//   Л_туда = (94.3 + 28.7×max(0,5−1)) × 1.0 = 94.3 + 114.8 = 209.1 ₽
-//   Л_эфф  = [209.1 + (1−0.9)×50] / 0.9 = 214.1/0.9 = 237.888888… ₽
+// Официальная формула ВБ: бэнды ≤1л фиксированы (23/26/29/30/32 ₽, верхняя
+// граница включительно), V>1 = baseRub + perLiterRub×(V−1). baseRub=46, perLiterRub=14.
+
+describe("reverseLogisticsForVolume — бэнды объёма", () => {
+  it("V=0 → 0", () => {
+    expect(reverseLogisticsForVolume(0, 46, 14)).toBe(0)
+  })
+  it("V=0.1 → 23", () => {
+    expect(reverseLogisticsForVolume(0.1, 46, 14)).toBe(23)
+  })
+  it("V=0.3 → 26", () => {
+    expect(reverseLogisticsForVolume(0.3, 46, 14)).toBe(26)
+  })
+  it("V=0.5 → 29", () => {
+    expect(reverseLogisticsForVolume(0.5, 46, 14)).toBe(29)
+  })
+  it("V=0.7 → 30", () => {
+    expect(reverseLogisticsForVolume(0.7, 46, 14)).toBe(30)
+  })
+  it("V=0.9 → 32", () => {
+    expect(reverseLogisticsForVolume(0.9, 46, 14)).toBe(32)
+  })
+  it("V=1.0 → 32", () => {
+    expect(reverseLogisticsForVolume(1.0, 46, 14)).toBe(32)
+  })
+  it("V=2 → 60 (46+14)", () => {
+    expect(reverseLogisticsForVolume(2, 46, 14)).toBe(60)
+  })
+  it("V=5 → 102 (46+56)", () => {
+    expect(reverseLogisticsForVolume(5, 46, 14)).toBe(102)
+  })
+})
+
+// ──────────────────────────────────────────────────────────────────
+// calculatePricingStandard — std-golden test v3 (Фаза B v3, 2026-07-08)
+// ──────────────────────────────────────────────────────────────────
+//
+// Source: docs/superpowers/specs/2026-07-07-wb-planned-prices-standard-finres-design.md §4 (v3).
+// Использует goldenInputs (nmId 800750522) + std-параметры v3 ниже (обратная
+// логистика невыкупа — volume-based вместо плоской ставки; ИРП-надбавка на
+// Л_туда; статья «Возврат продавцу» убрана из profitStd).
+// Точный пересчёт вручную из формул §4 v3:
+//   sellerPriceForIrp = 25833 × (1−0.7) = 7749.9 ₽
+//   Л_туда = (94.3 + 28.7×max(0,5−1)) × 1.11 + 7749.9×(1.56/100)
+//          = 209.1×1.11 + 120.89844 = 232.101 + 120.89844 = 352.99944 ₽
+//   Л_обратно = reverseLogisticsForVolume(5, 46, 14) = 46 + 14×4 = 102 ₽
+//   Л_эфф  = [352.99944 + (1−0.9)×102] / 0.9 = 363.19944/0.9 ≈ 403.5549 ₽
 //   Хранение = (0.16 + 0.16×max(0,5−1)) × 60 = 0.8 × 60 = 48 ₽
-//   Возврат-продавцу = 250 × (2/100) = 5 ₽
-//   base.profit (commFbwPct=25 std, deliveryCostRub=Л_эфф) ≈ 947.236811 ₽
-//   profitStd = base.profit − 48 − 5 ≈ 894.236811 ₽
-//   roiPctStd = profitStd / 2204 × 100 ≈ 40.5734 %
-//   returnOnSalesPctStd = profitStd / 7749.9 × 100 ≈ 11.5387 %
+//   base.profit (commFbwPct=25 std, deliveryCostRub=Л_эфф) ≈ 781.5708 ₽
+//   profitStd = base.profit − 48 ≈ 733.5708 ₽  (БЕЗ вычета возврата-продавцу)
+//   roiPctStd = profitStd / 2204 × 100 ≈ 33.2814 %
+//   returnOnSalesPctStd = profitStd / 7749.9 × 100 ≈ 9.4654 %
 
 const stdParams = {
   commStdPct: 25,
@@ -210,41 +250,42 @@ const stdParams = {
   delivAddLiter: 28.7,
   storageBaseLiter: 0.16,
   storageAddLiter: 0.16,
-  localizationIndex: 1.0,
-  returnLogisticsRub: 50,
-  returnToSellerRub: 250,
+  localizationIndex: 1.11,
+  irpPct: 1.56,
+  reverseLogBaseRub: 46,
+  reverseLogPerLiterRub: 14,
   daysInStock: 60,
 }
 
-describe("calculatePricingStandard — std-golden test v2 nmId 800750522", () => {
+describe("calculatePricingStandard — std-golden test v3 nmId 800750522", () => {
   const out = calculatePricingStandard({ ...goldenInputs, ...stdParams })
 
-  it("logisticsToAmount (Л_туда) = 209.1 ₽", () => {
-    expect(out.logisticsToAmount).toBeCloseTo(209.1, 2)
+  it("logisticsToAmount (Л_туда) ≈ 352.9994 ₽ (с ИРП-надбавкой)", () => {
+    expect(out.logisticsToAmount).toBeCloseTo(352.99944, 3)
   })
 
-  it("logisticsEffAmount (Л_эфф) ≈ 237.8889 ₽", () => {
-    expect(out.logisticsEffAmount).toBeCloseTo(237.8889, 3)
+  it("reverseLogisticsAmount (Л_обратно) = 102 ₽ (volume-based)", () => {
+    expect(out.reverseLogisticsAmount).toBeCloseTo(102, 2)
+  })
+
+  it("logisticsEffAmount (Л_эфф) ≈ 403.5549 ₽", () => {
+    expect(out.logisticsEffAmount).toBeCloseTo(403.5549, 3)
   })
 
   it("storageAmount (Хранение) = 48 ₽", () => {
     expect(out.storageAmount).toBeCloseTo(48, 2)
   })
 
-  it("returnToSellerAmount (Возврат продавцу) = 5 ₽", () => {
-    expect(out.returnToSellerAmount).toBeCloseTo(5, 2)
+  it("profitStd ≈ 733.57 ₽ (std-golden v3, БЕЗ возврата-продавцу)", () => {
+    expect(out.profitStd).toBeCloseTo(733.5708, 2)
   })
 
-  it("profitStd ≈ 894.24 ₽ (std-golden v2)", () => {
-    expect(out.profitStd).toBeCloseTo(894.2368, 2)
+  it("roiPctStd ≈ 33.28 %", () => {
+    expect(out.roiPctStd).toBeCloseTo(33.2814, 1)
   })
 
-  it("roiPctStd ≈ 40.57 %", () => {
-    expect(out.roiPctStd).toBeCloseTo(40.5734, 1)
-  })
-
-  it("returnOnSalesPctStd ≈ 11.54 %", () => {
-    expect(out.returnOnSalesPctStd).toBeCloseTo(11.5387, 1)
+  it("returnOnSalesPctStd ≈ 9.47 %", () => {
+    expect(out.returnOnSalesPctStd).toBeCloseTo(9.4654, 1)
   })
 
   it("возвращает конечный base.profit (не золотой — комиссия/доставка переопределены на std)", () => {
@@ -252,7 +293,7 @@ describe("calculatePricingStandard — std-golden test v2 nmId 800750522", () =>
     // а НЕ golden 567.683 (тот считается отдельно через calculatePricing(goldenInputs)
     // без std-переопределений — см. следующий describe).
     expect(Number.isFinite(out.profit)).toBe(true)
-    expect(out.profit).toBeCloseTo(947.2368, 2)
+    expect(out.profit).toBeCloseTo(781.5708, 2)
   })
 })
 
@@ -306,8 +347,8 @@ describe("calculatePricingStandard — zero guards", () => {
     expect(Number.isFinite(out.profitStd)).toBe(true)
     expect(Number.isFinite(out.storageAmount)).toBe(true)
     expect(out.storageAmount).toBe(0) // storageBaseLiter default 0 → без габаритов хранение = 0
-    // returnToSellerRub default 0 → возврат-продавцу конечен и равен 0
-    expect(Number.isFinite(out.returnToSellerAmount)).toBe(true)
-    expect(out.returnToSellerAmount).toBe(0)
+    // без volumeLiters → V=0 → reverseLogisticsForVolume(0,...) = 0
+    expect(Number.isFinite(out.reverseLogisticsAmount)).toBe(true)
+    expect(out.reverseLogisticsAmount).toBe(0)
   })
 })

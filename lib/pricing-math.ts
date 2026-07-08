@@ -84,10 +84,8 @@ export interface PricingInputs {
   /** Эфф-ставка логистики за доп. литр, ₽ — УЖЕ с вшитым коэффициентом —
    *  AppSetting.wbEffCoef.<направление>.delivAddLiter. */
   delivAddLiter?: number
-  /** Индекс локализации (множитель, ~1.0) — AppSetting.wbLocalizationIndex. */
+  /** Индекс локализации (множитель, ~1.11) — AppSetting.wbLocalizationIndex. */
   localizationIndex?: number
-  /** Стоимость обратной логистики при невыкупе, ₽ — AppSetting.wbReturnLogisticsRub. */
-  returnLogisticsRub?: number
   /** Эфф-ставка хранения (первый литр), ₽/л/сутки — УЖЕ с вшитым коэффициентом —
    *  AppSetting.wbEffCoef.<направление>.storageBaseLiter. */
   storageBaseLiter?: number
@@ -96,9 +94,15 @@ export interface PricingInputs {
   storageAddLiter?: number
   /** Дней на складе (оборачиваемость) — остаток / продажи в день, fallback 60. */
   daysInStock?: number
-  /** Ставка возврата продавцу брака, ₽ — AppSetting.wbReturnToSellerRub
-   *  (Фаза B v2, `/api/v1/tariffs/return` deliveryDumpSupReturnExpr). */
-  returnToSellerRub?: number
+  /** ИРП (индекс распределения продаж), % — цено-зависимая надбавка на Л_туда
+   *  (`+ sellerPriceForIrp × ИРП%`) — AppSetting.wbIrpPct (Фаза B v3). */
+  irpPct?: number
+  /** База обратной логистики невыкупа для V>1, ₽ — AppSetting.wbReverseLogBaseRub,
+   *  default 46 (Фаза B v3, `reverseLogisticsForVolume`). */
+  reverseLogBaseRub?: number
+  /** Доп-литр обратной логистики невыкупа для V>1, ₽ — AppSetting.wbReverseLogPerLiterRub,
+   *  default 14 (Фаза B v3, `reverseLogisticsForVolume`). */
+  reverseLogPerLiterRub?: number
 }
 
 /** Результат расчёта — все вычисляемые значения 31 колонок формы «Управление ценами». */
@@ -162,8 +166,8 @@ export interface PricingOutputs {
   logisticsEffAmount?: number
   /** Логистика «туда» (без учёта выкупа/возврата), ₽. */
   logisticsToAmount?: number
-  /** Возврат продавцу брака, ₽ = returnToSellerRub × defectRatePct/100 (Фаза B v2). */
-  returnToSellerAmount?: number
+  /** Обратная логистика невыкупа, ₽ — volume-based (Фаза B v3, `reverseLogisticsForVolume`). */
+  reverseLogisticsAmount?: number
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -455,18 +459,38 @@ export function calculatePricing(inputs: PricingInputs): PricingOutputs {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): второй фин-рез
-// «на стандартных условиях»
+// Фаза B (2026-07-07) / Фаза B v2 (2026-07-08) / Фаза B v3 (2026-07-08):
+// второй фин-рез «на стандартных условиях»
 // ──────────────────────────────────────────────────────────────────
+
+/**
+ * Обратная логистика невыкупа — ТОЛЬКО объём (офиц. формула ВБ).
+ * Бэнды ≤1л фиксированы (23/26/29/30/32 ₽, верхняя граница включительно);
+ * V>1 = baseRub + perLiterRub×(V−1) (default baseRub=46, perLiterRub=14).
+ * Выкуп в тариф НЕ входит — входит через частоту в calculatePricingStandard (Л_эфф).
+ */
+export function reverseLogisticsForVolume(
+  V: number,
+  baseRub: number,
+  perLiterRub: number,
+): number {
+  if (V <= 0) return 0
+  if (V <= 0.2) return 23
+  if (V <= 0.4) return 26
+  if (V <= 0.6) return 29
+  if (V <= 0.8) return 30
+  if (V <= 1.0) return 32
+  return baseRub + perLiterRub * (V - 1)
+}
 
 /**
  * Рассчитать юнит-экономику «на стандартных условиях» — параллельно основному
  * расчёту по ИУ (calculatePricing), но со стандартной комиссией, полной моделью
- * логистики к клиенту (с учётом выкупа и амортизацией возврата при невыкупе),
- * хранением (база+доп-литр × дни на складе) и возвратом продавцу брака.
+ * логистики к клиенту (с учётом выкупа и объёмной обратной логистики невыкупа)
+ * и хранением (база+доп-литр × дни на складе).
  *
  * **Pure function**, переиспользует calculatePricing как ядро (комиссия = std,
- * доставка = логистика эффективная), затем вычитает Хранение и Возврат продавцу сверху.
+ * доставка = логистика эффективная), затем вычитает Хранение сверху.
  *
  * **v2 (2026-07-08):** входные ставки логистики/хранения (`delivBaseLiter`,
  * `delivAddLiter`, `storageBaseLiter`, `storageAddLiter`) — эфф-ставки WB
@@ -476,27 +500,37 @@ export function calculatePricing(inputs: PricingInputs): PricingOutputs {
  * Хранение теперь считается по той же схеме база+доп-литр, что и логистика
  * (раньше — `storageBasePerLiter × V`, без доп-литра).
  *
- * Формулы (спека `docs/superpowers/specs/2026-07-07-...-design.md` §4, v2):
+ * **v3 (2026-07-08):** обратная логистика невыкупа заменена с плоской ставки
+ * (`returnLogisticsRub`) на объёмную по официальной формуле ВБ
+ * (`reverseLogisticsForVolume`, бэнды ≤1л + база+доп-литр для V>1). Добавлена
+ * ИРП-надбавка (индекс распределения продаж) на Л_туда — цено-зависимая
+ * `+ sellerPriceForIrp × ИРП%` (допущение: цена продавца до СПП). Статья
+ * «Возврат продавцу» (`returnToSellerRub × defectRatePct/100`) УБРАНА из
+ * profitStd — она дублировала расход обратной логистики и искажала прибыль.
+ *
+ * Формулы (спека `docs/superpowers/specs/2026-07-07-...-design.md` §4, v3):
  * ```
  *  V       = round(max(0, volumeLiters) × 10) / 10       (округл. до 0,1 л)
  *  ПВ      = buyoutPct / 100
+ *  sellerPriceForIrp = max(0, priceBeforeDiscount) × (1 − sellerDiscountPct/100)
  *  Л_туда   = (delivBaseLiter + delivAddLiter × max(0, V−1)) × ИЛ
- *  Л_эфф    = ПВ > 0 ? [Л_туда + (1−ПВ) × returnLogisticsRub] / ПВ : Л_туда
+ *             + sellerPriceForIrp × (ИРП%/100)
+ *  Л_обратно = reverseLogisticsForVolume(V, reverseLogBaseRub, reverseLogPerLiterRub)
+ *  Л_эфф    = ПВ > 0 ? [Л_туда + (1−ПВ) × Л_обратно] / ПВ : Л_туда
  *  Хранение = (storageBaseLiter + storageAddLiter × max(0, V−1)) × daysInStock
- *  Возврат-продавцу = returnToSellerRub × (defectRatePct/100)
  *
  *  profitStd = calculatePricing({ commFbwPct: commStdPct, deliveryCostRub: Л_эфф }).profit
- *              − Хранение − Возврат-продавцу
+ *              − Хранение                                    (БЕЗ возврата-продавцу)
  *  roiPctStd           = costPrice > 0  ? profitStd / costPrice × 100  : 0
  *  returnOnSalesPctStd = sellerPrice > 0 ? profitStd / sellerPrice × 100 : 0
  * ```
  *
- * std-golden v2 (детерминированный, на базе goldenInputs nmId 800750522 +
+ * std-golden v3 (детерминированный, на базе goldenInputs nmId 800750522 +
  * { commStdPct:25, volumeLiters:5, buyoutPct:90, delivBaseLiter:94.3, delivAddLiter:28.7,
- *   storageBaseLiter:0.16, storageAddLiter:0.16, localizationIndex:1.0, returnLogisticsRub:50,
- *   returnToSellerRub:250, daysInStock:60 }):
- *   Л_туда=209.1, Л_эфф≈237.8889, Хранение=48, Возврат-продавцу=5,
- *   profitStd≈894.24 ₽, roiPctStd≈40.57%, returnOnSalesPctStd≈11.54%
+ *   storageBaseLiter:0.16, storageAddLiter:0.16, localizationIndex:1.11, irpPct:1.56,
+ *   reverseLogBaseRub:46, reverseLogPerLiterRub:14, daysInStock:60 }):
+ *   Л_туда≈352.99944, Л_обратно=102, Л_эфф≈403.5549, Хранение=48,
+ *   profitStd≈733.5708 ₽, roiPctStd≈33.28%, returnOnSalesPctStd≈9.47%
  *   (см. tests/pricing-math.test.ts).
  */
 export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs {
@@ -504,21 +538,32 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
   const delivAddLiter = inputs.delivAddLiter ?? 0
   const storageBaseLiter = inputs.storageBaseLiter ?? 0
   const storageAddLiter = inputs.storageAddLiter ?? 0
-  const returnToSellerRub = inputs.returnToSellerRub ?? 0
   const localizationIndex = inputs.localizationIndex ?? 1
-  const returnLogisticsRub = inputs.returnLogisticsRub ?? 50
   const daysInStock = inputs.daysInStock ?? 0
+  const irpPct = inputs.irpPct ?? 0
+  const reverseLogBaseRub = inputs.reverseLogBaseRub ?? 46
+  const reverseLogPerLiterRub = inputs.reverseLogPerLiterRub ?? 14
 
   const V = Math.round(Math.max(0, inputs.volumeLiters ?? 0) * 10) / 10
   const pv = (inputs.buyoutPct ?? 100) / 100
 
+  // sellerPriceForIrp — цена продавца ДО СПП (допущение), вычислена ДО base
+  // (нет циркулярности — не зависит от commission/deliveryCostRub).
+  const sellerPriceForIrp =
+    Math.max(0, inputs.priceBeforeDiscount) * (1 - inputs.sellerDiscountPct / 100)
+
   // Коэф УЖЕ в ставке (acceptance/coefficients) → НЕ умножаем на delivCoefPct/storageCoefPct.
-  const logTo = (delivBaseLiter + delivAddLiter * Math.max(0, V - 1)) * localizationIndex
-  const logEff = pv > 0 ? (logTo + (1 - pv) * returnLogisticsRub) / pv : logTo
+  const logTo =
+    (delivBaseLiter + delivAddLiter * Math.max(0, V - 1)) * localizationIndex +
+    sellerPriceForIrp * (irpPct / 100)
+
+  // Обратная логистика невыкупа — volume-based (без коэф/ИЛ/ИРП/цены/выкупа).
+  const revLog = reverseLogisticsForVolume(V, reverseLogBaseRub, reverseLogPerLiterRub)
+
+  // Выкуп входит через частоту: Л_эфф = [Л_туда + (1−ПВ)×Л_обратно] / ПВ.
+  const logEff = pv > 0 ? (logTo + (1 - pv) * revLog) / pv : logTo
 
   const storage = (storageBaseLiter + storageAddLiter * Math.max(0, V - 1)) * daysInStock
-
-  const returnToSeller = returnToSellerRub * ((inputs.defectRatePct ?? 0) / 100)
 
   // Ядро — переиспользуем calculatePricing (golden-протестированное тело):
   // комиссия заменяется на стандартную, доставка — на логистику эффективную.
@@ -528,7 +573,7 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
     deliveryCostRub: logEff,
   })
 
-  const profitStd = base.profit - storage - returnToSeller
+  const profitStd = base.profit - storage
   const costPrice = Math.max(0, inputs.costPrice)
   const roiPctStd = costPrice > 0 ? (profitStd / costPrice) * 100 : 0
   const returnOnSalesPctStd =
@@ -542,6 +587,6 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
     storageAmount: storage,
     logisticsEffAmount: logEff,
     logisticsToAmount: logTo,
-    returnToSellerAmount: returnToSeller,
+    reverseLogisticsAmount: revLog,
   }
 }
