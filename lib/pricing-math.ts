@@ -168,6 +168,10 @@ export interface PricingOutputs {
   logisticsToAmount?: number
   /** Обратная логистика невыкупа, ₽ — volume-based (Фаза B v3, `reverseLogisticsForVolume`). */
   reverseLogisticsAmount?: number
+  /** Обратная логистика невыкупа на ПРОДАННУЮ единицу, ₽ = (1−ПВ)/ПВ × сырой тариф. Амортизация возвратов через частоту невыкупа. */
+  reverseLogPerUnitAmount?: number
+  /** Логистика туда на проданную единицу, ₽ = Л_туда / ПВ. Вклад доставки к клиенту с учётом невыкупов. */
+  logisticsToPerUnitAmount?: number
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -563,6 +567,11 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
   // Выкуп входит через частоту: Л_эфф = [Л_туда + (1−ПВ)×Л_обратно] / ПВ.
   const logEff = pv > 0 ? (logTo + (1 - pv) * revLog) / pv : logTo
 
+  // На проданную единицу (амортизация невыкупов через частоту ПВ).
+  // Тождество: logisticsToPerUnitAmount + reverseLogPerUnitAmount === logEff.
+  const reverseLogPerUnitAmount = pv > 0 ? ((1 - pv) / pv) * revLog : 0
+  const logisticsToPerUnitAmount = pv > 0 ? logTo / pv : logTo
+
   const storage = (storageBaseLiter + storageAddLiter * Math.max(0, V - 1)) * daysInStock
 
   // Ядро — переиспользуем calculatePricing (golden-протестированное тело):
@@ -588,5 +597,7 @@ export function calculatePricingStandard(inputs: PricingInputs): PricingOutputs 
     logisticsEffAmount: logEff,
     logisticsToAmount: logTo,
     reverseLogisticsAmount: revLog,
+    reverseLogPerUnitAmount,
+    logisticsToPerUnitAmount,
   }
 }

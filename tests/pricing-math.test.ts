@@ -268,6 +268,20 @@ describe("calculatePricingStandard — std-golden test v3 nmId 800750522", () =>
     expect(out.reverseLogisticsAmount).toBeCloseTo(102, 2)
   })
 
+  it("reverseLogPerUnitAmount (обратная на проданную ед.) ≈ 11.3333 ₽", () => {
+    expect(out.reverseLogPerUnitAmount).toBeCloseTo(11.3333, 3)
+  })
+
+  it("logisticsToPerUnitAmount (туда на проданную ед.) ≈ 392.2216 ₽", () => {
+    expect(out.logisticsToPerUnitAmount).toBeCloseTo(392.2216, 3)
+  })
+
+  it("тождество: туда_на_ед + обратка_на_ед = Л_эфф", () => {
+    expect(
+      (out.logisticsToPerUnitAmount ?? 0) + (out.reverseLogPerUnitAmount ?? 0),
+    ).toBeCloseTo(out.logisticsEffAmount ?? 0, 3)
+  })
+
   it("logisticsEffAmount (Л_эфф) ≈ 403.5549 ₽", () => {
     expect(out.logisticsEffAmount).toBeCloseTo(403.5549, 3)
   })
@@ -319,6 +333,8 @@ describe("calculatePricingStandard — zero guards", () => {
     expect(Number.isFinite(out.logisticsEffAmount)).toBe(true)
     expect(Number.isFinite(out.profitStd)).toBe(true)
     expect(Number.isNaN(out.profitStd)).toBe(false)
+    expect(out.reverseLogPerUnitAmount).toBe(0)
+    expect(out.logisticsToPerUnitAmount).toBe(out.logisticsToAmount)
   })
 
   it("costPrice=0 → roiPctStd=0 (без NaN)", () => {
