@@ -67,7 +67,7 @@ const EDITABLE_PARAMS: ParamDef[] = [
   { key: "clubDiscountPct", label: "WB Клуб", unit: "%", max: 100, step: "0.1" },
   { key: "walletPct", label: "Кошелёк", unit: "%", max: 100, step: "0.1" },
   { key: "acquiringPct", label: "Эквайринг", unit: "%", max: 100, step: "0.1" },
-  { key: "commissionPct", label: "Комиссия", unit: "%", max: 100, step: "0.01" },
+  { key: "commissionPct", label: "Комиссия ИУ", unit: "%", max: 100, step: "0.01" },
   { key: "jemPct", label: "Тариф Джем", unit: "%", max: 100, step: "0.1" },
   { key: "drrPct", label: "ДРР", unit: "%", max: 100, step: "0.1" },
   { key: "defectRatePct", label: "Брак", unit: "%", max: 100, step: "0.1" },
@@ -549,7 +549,7 @@ export function PricingCalculatorDialog({
                   value={fmtMoney(liveOutputs.acquiringAmount)}
                 />
                 <OutputRow
-                  label="Комиссия"
+                  label="Комиссия (ИУ)"
                   value={fmtMoney(liveOutputs.commissionAmount)}
                 />
                 <OutputRow label="ДРР" value={fmtMoney(liveOutputs.drrAmount)} />
@@ -617,6 +617,10 @@ export function PricingCalculatorDialog({
                     Стандартные условия
                   </h3>
                   <dl className="space-y-1 text-xs tabular-nums">
+                    <OutputRow
+                      label="Комиссия (оферта)"
+                      value={`${fmtPct(row.stdContext?.commStdPct ?? 0)} · ${fmtMoney(liveOutputsStd.commissionAmount)}`}
+                    />
                     <OutputRow
                       label="Логистика туда"
                       value={fmtMoney(liveOutputsStd.logisticsToAmount ?? 0)}
