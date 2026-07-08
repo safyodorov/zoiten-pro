@@ -301,6 +301,10 @@ const COLUMN_KEYS = [
   "returnOnSalesPct",
   "roiPct",
   // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях» — 3 новых столбца.
+  // quick 260708-h9l: компоненты std-расчёта (расходные статьи) перед итогами.
+  "logisticsEffStd",
+  "storageStd",
+  "returnToSellerStd",
   "profitStd",
   "roiPctStd",
   "returnOnSalesPctStd",
@@ -342,6 +346,9 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   profit: 100,
   returnOnSalesPct: 90,
   roiPct: 80,
+  logisticsEffStd: 120,
+  storageStd: 110,
+  returnToSellerStd: 130,
   profitStd: 100,
   roiPctStd: 90,
   returnOnSalesPctStd: 90,
@@ -381,6 +388,9 @@ const HIDEABLE_COLUMN_KEYS: ColumnKey[] = [
   "profit",
   "returnOnSalesPct",
   "roiPct",
+  "logisticsEffStd",
+  "storageStd",
+  "returnToSellerStd",
   "profitStd",
   "roiPctStd",
   "returnOnSalesPctStd",
@@ -416,6 +426,9 @@ const SCROLL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "profit", label: "Прибыль, руб." },
   { key: "returnOnSalesPct", label: "Re продаж, %" },
   { key: "roiPct", label: "ROI, %" },
+  { key: "logisticsEffStd", label: "Логистика МП-std, руб." },
+  { key: "storageStd", label: "Хранение-std, руб." },
+  { key: "returnToSellerStd", label: "Возврат прод.-std, руб." },
   { key: "profitStd", label: "Прибыль-std, руб." },
   { key: "roiPctStd", label: "ROI-std, %" },
   { key: "returnOnSalesPctStd", label: "Re-std, %" },
@@ -1387,6 +1400,9 @@ export function PriceCalculatorTable({
                         // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
                         // row.computedStd опционален по типу (defensive) — на практике
                         // page.tsx всегда его заполняет; fallback ?? 0 на случай отсутствия.
+                        ["logisticsEffStd", fmtMoneyInt(row.computedStd?.logisticsEffAmount ?? 0)],
+                        ["storageStd", fmtMoneyInt(row.computedStd?.storageAmount ?? 0)],
+                        ["returnToSellerStd", fmtMoneyInt(row.computedStd?.returnToSellerAmount ?? 0)],
                         ["profitStd", fmtMoneyInt(row.computedStd?.profitStd ?? 0), profitClass(row.computedStd?.profitStd ?? 0)],
                         ["roiPctStd", fmtPct(row.computedStd?.roiPctStd ?? 0, true), profitClass(row.computedStd?.roiPctStd ?? 0)],
                         ["returnOnSalesPctStd", fmtPct(row.computedStd?.returnOnSalesPctStd ?? 0, true), profitClass(row.computedStd?.returnOnSalesPctStd ?? 0)],
