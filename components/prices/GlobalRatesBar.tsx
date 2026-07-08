@@ -1,6 +1,10 @@
 // components/prices/GlobalRatesBar.tsx
 // Phase 7 (PRICES-06): Редактор глобальных ставок.
-// Фаза B (2026-07-07): += wbReturnLogisticsRub (₽, max 1000) и wbLocalizationIndex (×).
+// Фаза B (2026-07-07): += wbLocalizationIndex (×).
+// Фаза B v3 (2026-07-08): volume-based обр.логистика (wbReverseLogBaseRub/
+// wbReverseLogPerLiterRub) + ИРП (wbIrpPct). Убраны редакторы плоских ставок
+// «Возврат-логистика»/«Возврат продавцу» (заменены объёмной формулой в
+// calculatePricingStandard — плоские ставки больше не используются в stdParams).
 // Debounced save (500ms) через updateAppSetting server action → toast через sonner.
 //
 // 6 ключей (из lib/pricing-schemas.ts): wbWalletPct, wbAcquiringPct, wbJemPct,
@@ -32,9 +36,10 @@ type RateKey =
   | "wbOverheadPct"
   | "wbDefectRatePct"
   | "wbTaxPct"
-  | "wbReturnLogisticsRub"
   | "wbLocalizationIndex"
-  | "wbReturnToSellerRub"
+  | "wbReverseLogBaseRub"
+  | "wbReverseLogPerLiterRub"
+  | "wbIrpPct"
 
 interface RateSpec {
   key: RateKey
@@ -53,9 +58,10 @@ const RATES: readonly RateSpec[] = [
   { key: "wbOverheadPct", label: "Общие" },
   { key: "wbDefectRatePct", label: "Брак" },
   { key: "wbTaxPct", label: "Налог" },
-  { key: "wbReturnLogisticsRub", label: "Возврат-логистика", unit: "₽", max: 1000 },
   { key: "wbLocalizationIndex", label: "Индекс локализации", unit: "×" },
-  { key: "wbReturnToSellerRub", label: "Возврат продавцу", unit: "₽", max: 2000 },
+  { key: "wbReverseLogBaseRub", label: "Обр.логистика база", unit: "₽", max: 1000 },
+  { key: "wbReverseLogPerLiterRub", label: "Обр.логистика доп/л", unit: "₽", max: 1000 },
+  { key: "wbIrpPct", label: "ИРП", unit: "%" },
 ] as const
 
 interface GlobalRatesBarProps {

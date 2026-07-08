@@ -58,11 +58,13 @@ const RATE_KEYS = [
   "wbOverheadPct",
   "wbTaxPct",
   "wbDefectRatePct",
-  // Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
-  "wbReturnLogisticsRub",
   "wbLocalizationIndex",
-  // Фаза B v2 (2026-07-08): возврат продавцу (брак).
-  "wbReturnToSellerRub",
+  // Фаза B v3 (2026-07-08): обратная логистика volume-based + ИРП.
+  // wbReturnLogisticsRub/wbReturnToSellerRub убраны из stdParams (см. ниже),
+  // но остаются в APP_SETTING_KEYS whitelist — их пишет sync wb-box-tariffs.ts.
+  "wbReverseLogBaseRub",
+  "wbReverseLogPerLiterRub",
+  "wbIrpPct",
 ] as const
 
 type RateKey = (typeof RATE_KEYS)[number]
@@ -75,9 +77,10 @@ const DEFAULT_RATES: Record<RateKey, number> = {
   wbOverheadPct: 6.0,
   wbTaxPct: 8.0,
   wbDefectRatePct: 2.0,
-  wbReturnLogisticsRub: 50.0,
-  wbLocalizationIndex: 1.0,
-  wbReturnToSellerRub: 250.0,
+  wbLocalizationIndex: 1.11,
+  wbReverseLogBaseRub: 46.0,
+  wbReverseLogPerLiterRub: 14.0,
+  wbIrpPct: 1.56,
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -682,8 +685,9 @@ export default async function PricesWbPage({ searchParams }: PricesWbPageProps) 
         storageBaseLiter: effCoef.storageBaseLiter,
         storageAddLiter: effCoef.storageAddLiter,
         localizationIndex: rates.wbLocalizationIndex,
-        returnLogisticsRub: rates.wbReturnLogisticsRub,
-        returnToSellerRub: rates.wbReturnToSellerRub,
+        irpPct: rates.wbIrpPct,
+        reverseLogBaseRub: rates.wbReverseLogBaseRub,
+        reverseLogPerLiterRub: rates.wbReverseLogPerLiterRub,
         daysInStock,
       }
 

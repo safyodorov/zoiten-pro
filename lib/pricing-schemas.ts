@@ -26,6 +26,12 @@ export const APP_SETTING_KEYS = [
   "wbLocalizationIndex",
   // Фаза B v2 (2026-07-08): возврат продавцу (брак).
   "wbReturnToSellerRub",
+  // Фаза B v3 (2026-07-08): обратная логистика volume-based + ИРП.
+  // wbReturnLogisticsRub/wbReturnToSellerRub остаются в whitelist — их всё ещё
+  // пишет sync lib/wb-box-tariffs.ts сырым upsert (UI-редакторы убраны).
+  "wbReverseLogBaseRub",
+  "wbReverseLogPerLiterRub",
+  "wbIrpPct",
 ] as const
 
 export type AppSettingKey = (typeof APP_SETTING_KEYS)[number]
@@ -41,8 +47,11 @@ export const APP_SETTING_DEFAULTS: Record<AppSettingKey, number> = {
   wbTaxPct: 8.0,
   wbDefectRatePct: 2.0,
   wbReturnLogisticsRub: 50.0,
-  wbLocalizationIndex: 1.0,
+  wbLocalizationIndex: 1.11,
   wbReturnToSellerRub: 250.0,
+  wbReverseLogBaseRub: 46.0,
+  wbReverseLogPerLiterRub: 14.0,
+  wbIrpPct: 1.56,
 }
 
 /** Максимум допустимого значения per ключ. Все процентные ставки (Phase 7) остаются
@@ -60,6 +69,9 @@ export const APP_SETTING_MAX: Record<AppSettingKey, number> = {
   wbReturnLogisticsRub: 1000,
   wbLocalizationIndex: 100,
   wbReturnToSellerRub: 2000,
+  wbReverseLogBaseRub: 1000,
+  wbReverseLogPerLiterRub: 1000,
+  wbIrpPct: 100,
 }
 
 /** Проверка валидности ключа AppSetting. Используется тестами и защитой action'ов. */
