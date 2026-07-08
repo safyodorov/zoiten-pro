@@ -607,7 +607,8 @@ export function PricingCalculatorDialog({
                 />
               </div>
 
-              {/* Фаза B (2026-07-07): второй фин-рез «на стандартных условиях».
+              {/* Фаза B (2026-07-07) / Фаза B v3 (2026-07-08): второй фин-рез
+                  «на стандартных условиях» — обратная логистика volume-based + ИРП.
                   Скрыт, если row.stdContext не резолвился (не должно случаться в проде —
                   page.tsx всегда прокидывает stdParams). */}
               {liveOutputsStd && (
@@ -629,16 +630,18 @@ export function PricingCalculatorDialog({
                       value={fmtMoney(liveOutputsStd.storageAmount ?? 0)}
                     />
                     <OutputRow
-                      label="Возврат продавцу"
-                      value={fmtMoney(liveOutputsStd.returnToSellerAmount ?? 0)}
+                      label="Обратная логистика"
+                      value={fmtMoney(liveOutputsStd.reverseLogisticsAmount ?? 0)}
                     />
                   </dl>
                   {row.stdContext && (
                     <p className="text-[11px] text-muted-foreground">
-                      Ставки (лог/хран, ₽/л): {row.stdContext.delivBaseLiter.toFixed(1)}+
-                      {row.stdContext.delivAddLiter.toFixed(1)} /{" "}
+                      Ставки: лог {row.stdContext.delivBaseLiter.toFixed(1)}+
+                      {row.stdContext.delivAddLiter.toFixed(1)} / хран{" "}
                       {row.stdContext.storageBaseLiter.toFixed(2)}+
-                      {row.stdContext.storageAddLiter.toFixed(2)}
+                      {row.stdContext.storageAddLiter.toFixed(2)} ₽/л · ИЛ{" "}
+                      {row.stdContext.localizationIndex.toFixed(2)} · ИРП{" "}
+                      {row.stdContext.irpPct.toFixed(2)}%
                     </p>
                   )}
                   <OutputRow

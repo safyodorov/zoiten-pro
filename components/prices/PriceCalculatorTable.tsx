@@ -123,9 +123,9 @@ export interface PriceRow {
    *  запроса БД. */
   inputs: PricingInputs
 
-  /** Фаза B (2026-07-07) / Фаза B v2 (2026-07-08): std-контекст (эфф-ставки
-   *  направления + ставки) для realtime пересчёта второго фин-реза в модалке
-   *  при правке цены. */
+  /** Фаза B (2026-07-07) / Фаза B v2 (2026-07-08) / Фаза B v3 (2026-07-08):
+   *  std-контекст (эфф-ставки направления + ставки) для realtime пересчёта
+   *  второго фин-реза в модалке при правке цены. */
   stdContext?: {
     commStdPct: number
     volumeLiters: number
@@ -134,8 +134,9 @@ export interface PriceRow {
     storageBaseLiter: number
     storageAddLiter: number
     localizationIndex: number
-    returnLogisticsRub: number
-    returnToSellerRub: number
+    irpPct: number
+    reverseLogBaseRub: number
+    reverseLogPerLiterRub: number
     daysInStock: number
   }
 
@@ -304,7 +305,7 @@ const COLUMN_KEYS = [
   // quick 260708-h9l: компоненты std-расчёта (расходные статьи) перед итогами.
   "logisticsEffStd",
   "storageStd",
-  "returnToSellerStd",
+  "reverseLogStd",
   "profitStd",
   "roiPctStd",
   "returnOnSalesPctStd",
@@ -348,7 +349,7 @@ const DEFAULT_WIDTHS: Record<ColumnKey, number> = {
   roiPct: 80,
   logisticsEffStd: 120,
   storageStd: 110,
-  returnToSellerStd: 130,
+  reverseLogStd: 130,
   profitStd: 100,
   roiPctStd: 90,
   returnOnSalesPctStd: 90,
@@ -390,7 +391,7 @@ const HIDEABLE_COLUMN_KEYS: ColumnKey[] = [
   "roiPct",
   "logisticsEffStd",
   "storageStd",
-  "returnToSellerStd",
+  "reverseLogStd",
   "profitStd",
   "roiPctStd",
   "returnOnSalesPctStd",
@@ -428,7 +429,7 @@ const SCROLL_COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: "roiPct", label: "ROI, %" },
   { key: "logisticsEffStd", label: "Логистика МП-std, руб." },
   { key: "storageStd", label: "Хранение-std, руб." },
-  { key: "returnToSellerStd", label: "Возврат прод.-std, руб." },
+  { key: "reverseLogStd", label: "Обратная лог.-std, руб." },
   { key: "profitStd", label: "Прибыль-std, руб." },
   { key: "roiPctStd", label: "ROI-std, %" },
   { key: "returnOnSalesPctStd", label: "Re-std, %" },
@@ -1402,7 +1403,7 @@ export function PriceCalculatorTable({
                         // page.tsx всегда его заполняет; fallback ?? 0 на случай отсутствия.
                         ["logisticsEffStd", fmtMoneyInt(row.computedStd?.logisticsEffAmount ?? 0)],
                         ["storageStd", fmtMoneyInt(row.computedStd?.storageAmount ?? 0)],
-                        ["returnToSellerStd", fmtMoneyInt(row.computedStd?.returnToSellerAmount ?? 0)],
+                        ["reverseLogStd", fmtMoneyInt(row.computedStd?.reverseLogisticsAmount ?? 0)],
                         ["profitStd", fmtMoneyInt(row.computedStd?.profitStd ?? 0), profitClass(row.computedStd?.profitStd ?? 0)],
                         ["roiPctStd", fmtPct(row.computedStd?.roiPctStd ?? 0, true), profitClass(row.computedStd?.roiPctStd ?? 0)],
                         ["returnOnSalesPctStd", fmtPct(row.computedStd?.returnOnSalesPctStd ?? 0, true), profitClass(row.computedStd?.returnOnSalesPctStd ?? 0)],
