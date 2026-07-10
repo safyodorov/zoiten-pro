@@ -6,11 +6,18 @@
 // Неделя живёт в URL ?week=YYYY-MM-DD (нормализуется до ISO-понедельника).
 // Native <input>/<button> (CLAUDE.md: НЕ base-ui). Образец: PlanFactControls.tsx.
 // Phase quick-260710-evz (W2a, 2026-07-10)
+// Quick 260710-mih (W3c): фиксация недели — кнопка «Зафиксировать неделю»,
+// бейдж «Зафиксирована … · кем», «Перефиксировать»/«Снять фиксацию»;
+// в снапшот-режиме пулы-редактор скрыт (значения заморожены в пейлоаде).
 
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
-import { saveWeeklyPools } from "@/app/actions/finance-weekly"
+import {
+  saveWeeklyPools,
+  fixWeeklyReport,
+  unfixWeeklyReport,
+} from "@/app/actions/finance-weekly"
 import type { ManualPools } from "@/lib/finance-weekly/data"
 
 // ── Helpers (UTC ISO-неделя) ────────────────────────────────────────────────────
@@ -96,6 +103,10 @@ interface Props {
   clothingOverheadFixedRub: number
   /** W3a: источник гибрид-пулов delivery / overheadAppl. */
   bankPoolSources: Record<BankHybridKey, "manual" | "bank" | "none">
+  /** W3c: снапшот-режим — бейдж + Перефиксировать/Снять; пулы-редактор скрыт. */
+  snapshot?: { fixedAtLabel: string; fixedByName: string | null } | null
+  /** W3c: снапшот есть, но version не совпал → live-fallback + warning. */
+  snapshotStale?: boolean
 }
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
@@ -109,10 +120,13 @@ export function WeeklyFinReportControls({
   bankAutos,
   clothingOverheadFixedRub,
   bankPoolSources,
+  snapshot = null,
+  snapshotStale = false,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isSyncPending, startSyncTransition] = useTransition()
+  const [isFixPending, startFixTransition] = useTransition()
   const [pools, setPools] = useState<ManualPools>(manualPools)
   // W3a: фикс-часть общих расходов одежды — глобальная константа (не per неделя)
   const [fixedCloth, setFixedCloth] = useState(clothingOverheadFixedRub)
@@ -147,6 +161,33 @@ export function WeeklyFinReportControls({
         router.refresh()
       } else {
         toast.error(res.error || "Не удалось сохранить пулы")
+      }
+    })
+  }
+
+  // W3c: фиксация недели — серверный пересбор пейлоада + upsert снапшота.
+  // Та же кнопка обслуживает «Перефиксировать» (clean-replace) и stale-режим.
+  const handleFix = () => {
+    startFixTransition(async () => {
+      const res = await fixWeeklyReport(weekStartISO)
+      if (res.ok) {
+        toast.success("Неделя зафиксирована")
+        router.refresh()
+      } else {
+        toast.error(res.error || "Не удалось зафиксировать неделю")
+      }
+    })
+  }
+
+  // W3c: снятие фиксации — удаление снапшота, возврат в live-режим.
+  const handleUnfix = () => {
+    startFixTransition(async () => {
+      const res = await unfixWeeklyReport(weekStartISO)
+      if (res.ok) {
+        toast.success("Фиксация снята")
+        router.refresh()
+      } else {
+        toast.error(res.error || "Не удалось снять фиксацию")
       }
     })
   }
@@ -215,6 +256,9 @@ export function WeeklyFinReportControls({
         >
           Тек. неделя
         </button>
+        {/* W3c: «Реализация WB» видима во ВСЕХ режимах (и при снапшоте) —
+            импорт данных не влияет на отрисовку снапшота; полезна перед
+            перефиксацией (свежая реализация попадёт в новый пейлоад). */}
         {canManage && (
           <button
             type="button"
@@ -225,13 +269,76 @@ export function WeeklyFinReportControls({
             {isSyncPending ? "Импорт…" : "Реализация WB"}
           </button>
         )}
+        {/* W3c: live-режим (нет снапшота, version актуальна) → «Зафиксировать неделю» */}
+        {!snapshot && !snapshotStale && canManage && (
+          <button
+            type="button"
+            onClick={handleFix}
+            disabled={isFixPending}
+            className="px-2 py-1 text-xs text-muted-foreground border rounded hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+          >
+            {isFixPending ? "Фиксация…" : "Зафиксировать неделю"}
+          </button>
+        )}
+        {/* W3c: снапшот-режим → бейдж + Перефиксировать / Снять фиксацию */}
+        {snapshot && (
+          <>
+            <span className="rounded border border-emerald-600/40 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+              Зафиксирована {snapshot.fixedAtLabel}
+              {snapshot.fixedByName ? ` · ${snapshot.fixedByName}` : ""}
+            </span>
+            {canManage && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleFix}
+                  disabled={isFixPending}
+                  className="px-2 py-1 text-xs text-muted-foreground border rounded hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                  title="Перезаписать снапшот свежим серверным расчётом"
+                >
+                  {isFixPending ? "Фиксация…" : "Перефиксировать"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnfix}
+                  disabled={isFixPending}
+                  className="px-2 py-1 text-xs text-muted-foreground border rounded hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                  title="Удалить снапшот и вернуться к live-расчёту"
+                >
+                  Снять фиксацию
+                </button>
+              </>
+            )}
+          </>
+        )}
+        {/* W3c: снапшот с чужой version → live-fallback + warning */}
+        {snapshotStale && (
+          <>
+            <span className="rounded border border-amber-600/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-400 whitespace-nowrap">
+              Снапшот устарел — перефиксируйте
+            </span>
+            {canManage && (
+              <button
+                type="button"
+                onClick={handleFix}
+                disabled={isFixPending}
+                className="px-2 py-1 text-xs text-muted-foreground border rounded hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+                title="Создать снапшот актуальной версии пейлоада"
+              >
+                {isFixPending ? "Фиксация…" : "Перефиксировать"}
+              </button>
+            )}
+          </>
+        )}
         <span className="text-muted-foreground whitespace-nowrap">
           {weekStartISO} — {weekEndISO}
         </span>
       </div>
 
-      {/* Редактор ручных пулов — только MANAGE */}
-      {canManage && (
+      {/* Редактор ручных пулов — только MANAGE. W3c: в снапшот-режиме СКРЫТ
+          (значения заморожены в пейлоаде, редактировать нечего); при
+          live-fallback stale-снапшота редактор доступен как обычно. */}
+      {canManage && !snapshot && (
         <div className="rounded-md border bg-card p-3">
           <div className="mb-2 text-sm font-semibold">
             Ручные пулы затрат за неделю, ₽
