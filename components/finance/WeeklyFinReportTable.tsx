@@ -7,6 +7,8 @@
 // сплошной bg-background/bg-muted на КАЖДОЙ sticky-ячейке (НЕ /NN alpha — баг).
 // Образец: components/finance/CashflowMatrix.tsx.
 // Phase quick-260710-evz (W2a, 2026-07-10)
+// Quick 260710-gem (W2c, 2026-07-10): колонки «План (нед), ₽» / «% вып. (нед)»
+// + KPI-блок план-факт недели и месяца-to-date (optional prop planFact).
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -53,11 +55,21 @@ function profitColor(n: number): string {
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
+interface PlanFactProps {
+  /** План недели per nmId (Record, НЕ Map — RSC→client boundary, Phase 09-03). */
+  planWeekByNmId: Record<number, number>
+  kpi: { planWeek: number; factWeek: number; planMonth: number; factMonthMtd: number }
+  /** ISO weekEnd — для подписи «Месяц (по dd.MM)». */
+  weekEndISO: string
+}
+
 interface Props {
   articles: ArticleResult[]
   rollup: WeeklyRollup
   waterfall: WeeklyWaterfall
   meta: Record<number, { brandName: string | null; productName: string }>
+  /** null/undefined → активной версии плана нет: KPI скрыт, колонки «—». */
+  planFact?: PlanFactProps | null
 }
 
 // ── Классы ячеек ────────────────────────────────────────────────────────────────
@@ -81,6 +93,9 @@ interface Row {
   reIu?: number
   profitStd?: number
   reStd?: number
+  // План-факт (W2c): null → «—» (нет активной версии / нет плана у товара)
+  planWeek?: number | null
+  fulfillPct?: number | null
 }
 
 /** Собирает плоский список строк Вселенная → Бренд → Артикул + подытоги + итого. */
@@ -88,14 +103,22 @@ function buildRows(
   articles: ArticleResult[],
   rollup: WeeklyRollup,
   meta: Props["meta"],
+  planFact: PlanFactProps | null | undefined,
 ): Row[] {
   const rows: Row[] = []
+
+  // План-факт суммируется локально по article-строкам (роллап движка план не знает)
+  let grandPlanSum = 0
+  let grandRevSum = 0
 
   for (const universe of UNIVERSE_ORDER) {
     const uniArticles = articles.filter((a) => a.universe === universe)
     if (uniArticles.length === 0) continue
 
     rows.push({ kind: "universe", label: UNIVERSE_LABEL[universe] })
+
+    let uniPlanSum = 0
+    let uniRevSum = 0
 
     // Группировка по бренду
     const byBrand = new Map<string, ArticleResult[]>()
@@ -113,20 +136,29 @@ function buildRows(
         .slice()
         .sort((x, y) => x.nmId - y.nmId)
       for (const a of brandArticles) {
+        const revenue = a.iu.revenue // iu.revenue === std.revenue (K·H)
+        const planWeek = planFact ? (planFact.planWeekByNmId[a.nmId] ?? null) : null
+        uniRevSum += revenue
+        uniPlanSum += planWeek ?? 0
         rows.push({
           kind: "article",
           label: meta[a.nmId]?.productName ?? String(a.nmId),
           nmId: a.nmId,
-          revenue: a.iu.revenue, // iu.revenue === std.revenue (K·H)
+          revenue,
           profitIu: a.iu.profit,
           reIu: a.iu.rePct,
           profitStd: a.std.profit,
           reStd: a.std.rePct,
+          planWeek,
+          fulfillPct: planWeek != null && planWeek > 0 ? revenue / planWeek : null,
         })
       }
     }
 
-    // Подытог вселенной из роллапа
+    grandPlanSum += uniPlanSum
+    grandRevSum += uniRevSum
+
+    // Подытог вселенной из роллапа (план-факт — локальная Σ по article-строкам)
     const uni = rollup.byUniverse.find((u) => u.universe === universe)
     if (uni) {
       rows.push({
@@ -137,6 +169,8 @@ function buildRows(
         reIu: uni.iu.rePct,
         profitStd: uni.std.profit,
         reStd: uni.std.rePct,
+        planWeek: planFact ? uniPlanSum : null,
+        fulfillPct: planFact && uniPlanSum > 0 ? uniRevSum / uniPlanSum : null,
       })
     }
   }
@@ -150,9 +184,73 @@ function buildRows(
     reIu: rollup.grand.iu.rePct,
     profitStd: rollup.grand.std.profit,
     reStd: rollup.grand.std.rePct,
+    planWeek: planFact ? grandPlanSum : null,
+    fulfillPct: planFact && grandPlanSum > 0 ? grandRevSum / grandPlanSum : null,
   })
 
   return rows
+}
+
+// ── KPI-блок план-факта (W2c) ───────────────────────────────────────────────────
+
+function fulfillColor(pct: number | null): string {
+  return pct != null && pct >= 1 ? "text-emerald-600 dark:text-emerald-500" : ""
+}
+
+function PlanFactKpiCard({
+  title,
+  plan,
+  fact,
+  pctLabel,
+}: {
+  title: string
+  plan: number
+  fact: number
+  pctLabel: string
+}) {
+  const pct = plan > 0 ? fact / plan : null
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <div className="text-xs text-muted-foreground font-medium">{title}</div>
+      <div className="mt-1.5 flex flex-wrap items-baseline gap-x-6 gap-y-1">
+        <div>
+          <span className="text-xs text-muted-foreground">План </span>
+          <span className="text-sm font-semibold tabular-nums">{fmtRub(plan)} ₽</span>
+        </div>
+        <div>
+          <span className="text-xs text-muted-foreground">Факт </span>
+          <span className="text-sm font-semibold tabular-nums">{fmtRub(fact)} ₽</span>
+        </div>
+        <div>
+          <span className="text-xs text-muted-foreground">{pctLabel} </span>
+          <span className={cn("text-sm font-semibold tabular-nums", fulfillColor(pct))}>
+            {pct != null ? fmtPct(pct) : "—"}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PlanFactKpiBlock({ planFact }: { planFact: PlanFactProps }) {
+  const { kpi, weekEndISO } = planFact
+  const ddMM = `${weekEndISO.slice(8, 10)}.${weekEndISO.slice(5, 7)}`
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <PlanFactKpiCard
+        title="Неделя"
+        plan={kpi.planWeek}
+        fact={kpi.factWeek}
+        pctLabel="% вып."
+      />
+      <PlanFactKpiCard
+        title={`Месяц (по ${ddMM})`}
+        plan={kpi.planMonth}
+        fact={kpi.factMonthMtd}
+        pctLabel="% вып. МТД"
+      />
+    </div>
+  )
 }
 
 // ── Водопад затрат ──────────────────────────────────────────────────────────────
@@ -179,7 +277,13 @@ function sumWaterfall(w: CostWaterfall): number {
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
 
-export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Props) {
+export function WeeklyFinReportTable({
+  articles,
+  rollup,
+  waterfall,
+  meta,
+  planFact,
+}: Props) {
   // ⚠ Хуки объявлены ПЕРВЫМИ — выше early-return для пустой недели. Иначе
   // число хуков меняется при empty↔non-empty (rules-of-hooks violation).
   const [open, setOpen] = useState(false)
@@ -193,19 +297,26 @@ export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Prop
       : (meta[selectedNmId] ?? { brandName: null, productName: String(selectedNmId) })
 
   if (articles.length === 0) {
+    // KPI-блок рендерится и на пустой неделе — план месяца/недели виден всегда
     return (
-      <div className="rounded-md border bg-card p-4">
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          Нет данных за выбранную неделю
+      <div className="flex flex-col gap-4">
+        {planFact != null && <PlanFactKpiBlock planFact={planFact} />}
+        <div className="rounded-md border bg-card p-4">
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            Нет данных за выбранную неделю
+          </div>
         </div>
       </div>
     )
   }
 
-  const rows = buildRows(articles, rollup, meta)
+  const rows = buildRows(articles, rollup, meta, planFact)
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ── KPI план-факт (W2c): скрыт без активной версии плана ── */}
+      {planFact != null && <PlanFactKpiBlock planFact={planFact} />}
+
       {/* ── Роллап-таблица ── */}
       <div className="rounded-md border bg-card overflow-hidden">
         <div className="overflow-auto max-h-[70vh]">
@@ -218,7 +329,15 @@ export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Prop
                 >
                   Вселенная / Бренд / Артикул
                 </th>
-                {["Выручка", "Прибыль ИУ", "Re ИУ", "Прибыль Оферта", "Re Оферта"].map(
+                {[
+                  "Выручка",
+                  "План (нед), ₽",
+                  "% вып. (нед)",
+                  "Прибыль ИУ",
+                  "Re ИУ",
+                  "Прибыль Оферта",
+                  "Re Оферта",
+                ].map(
                   (h) => (
                     <th
                       key={h}
@@ -277,11 +396,32 @@ export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Prop
 
                     {row.revenue === undefined ? (
                       // Заголовочные строки (вселенная / бренд) — пустые числовые ячейки
-                      <td className={cn(NUM_CELL, solidBg)} colSpan={5} />
+                      <td className={cn(NUM_CELL, solidBg)} colSpan={7} />
                     ) : (
                       <>
                         <td className={cn(NUM_CELL, solidBg, heavy && "font-semibold")}>
                           {fmtRub(row.revenue)}
+                        </td>
+                        <td className={cn(NUM_CELL, solidBg, heavy && "font-semibold")}>
+                          {row.planWeek != null ? (
+                            fmtRub(row.planWeek)
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td
+                          className={cn(
+                            NUM_CELL,
+                            solidBg,
+                            heavy && "font-semibold",
+                            fulfillColor(row.fulfillPct ?? null),
+                          )}
+                        >
+                          {row.fulfillPct != null ? (
+                            fmtPct(row.fulfillPct)
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td
                           className={cn(
