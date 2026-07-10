@@ -16,9 +16,12 @@
 //                    ЗОЙТЕН (W2d, Фикс 4; только бытовая техника)
 //   N_std          — модель calculatePricingStandard (объёмная логистика / ед)
 //
-// Ручные пулы (доставка до МП / общие / приёмка / хранение) — placeholder до W3
-// (банк-классификатор). Хранятся в AppSetting financeWeekly.pools.<weekISO>,
-// редактируются MANAGE-пользователем через WeeklyFinReportControls.
+// Ручные пулы (доставка до МП / общие / приёмка / хранение) хранятся в
+// AppSetting financeWeekly.pools.<weekISO>, редактируются MANAGE-пользователем
+// через WeeklyFinReportControls. W3a (quick 260710-lmb): delivery / overheadAppl
+// — гибрид с банком (manual > 0 → manual, иначе Σ|amount| DEBIT-операций недели
+// с тегом DELIVERY_MP / OPEX); clothing.overhead = глобальный AppSetting-фикс
+// + недельная переменная (НЕ из банка, §2.2). CAPEX никуда не суммируется.
 //
 // Мир затрат (universe): brand.direction.hasSizes=true → одежда (clothing),
 // иначе → бытовая техника (appliances). Кредит несёт ТОЛЬКО appliances (§2.2).
@@ -53,6 +56,12 @@ import {
   type ResolvedRealizationPools,
 } from "@/lib/finance-weekly/realization"
 import { compareProductsByHierarchy } from "@/lib/product-order"
+import {
+  resolveHybridPool,
+  sumBankPoolAutos,
+  type BankPoolAutos,
+  type HybridPoolSource,
+} from "@/lib/finance-weekly/bank-pools"
 
 // ── Ручные пулы (placeholder до W3 банк-классификатора) ───────────────────────
 
@@ -87,6 +96,10 @@ export const DEFAULT_MANUAL_POOLS: ManualPools = {
 export function financeWeeklyPoolsKey(weekStartISO: string): string {
   return `financeWeekly.pools.${weekStartISO}`
 }
+
+/** W3a (quick 260710-lmb): глобальный AppSetting-ключ фикс-части общих расходов
+ *  одежды (НЕ per неделя). Пул одежды = фикс + manualPools.overheadCloth. */
+export const CLOTHING_OVERHEAD_FIXED_KEY = "financeWeekly.clothingOverheadFixedRub"
 
 // ── Дефолты ставок (mirror /prices/wb DEFAULT_RATES / EFF_FALLBACK) ────────────
 
@@ -142,6 +155,12 @@ export interface WeeklyFinReportPageData {
   hasRealization: boolean
   /** Quick 260710-kvf: источник каждого пула (per-бакет бейдж в Controls). */
   poolSources: ResolvedRealizationPools["sources"]
+  /** W3a (quick 260710-lmb): авто-суммы пулов из банка — подписи «банк: N ₽». */
+  bankAutos: BankPoolAutos
+  /** W3a: фикс-часть общих расходов одежды (глобальный AppSetting). */
+  clothingOverheadFixedRub: number
+  /** W3a: источник гибрид-пулов delivery / overheadAppl (бейдж в Controls). */
+  bankPoolSources: { delivery: HybridPoolSource; overheadAppl: HybridPoolSource }
 }
 
 /** Все 4 пула из manual — для early-return'ов без данных недели. */
@@ -232,6 +251,9 @@ export async function loadWeeklyFinReportInputs(
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
+      bankAutos: { opexRub: 0, deliveryMpRub: 0 },
+      clothingOverheadFixedRub: 0,
+      bankPoolSources: { delivery: "none", overheadAppl: "none" },
     }
   }
 
@@ -279,6 +301,9 @@ export async function loadWeeklyFinReportInputs(
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
+      bankAutos: { opexRub: 0, deliveryMpRub: 0 },
+      clothingOverheadFixedRub: 0,
+      bankPoolSources: { delivery: "none", overheadAppl: "none" },
     }
   }
 
@@ -301,9 +326,12 @@ export async function loadWeeklyFinReportInputs(
     fullstatsAgg,
     loans,
     realizationRows,
+    bankTxRows,
   ] = await Promise.all([
     prisma.wbCard.findMany({ where: { nmId: { in: linkedNmIds }, deletedAt: null } }),
-    prisma.appSetting.findMany({ where: { key: { in: [...RATE_KEYS, poolsKey] } } }),
+    prisma.appSetting.findMany({
+      where: { key: { in: [...RATE_KEYS, poolsKey, CLOTHING_OVERHEAD_FIXED_KEY] } },
+    }),
     prisma.wbCardFunnelDaily.groupBy({
       by: ["nmId"],
       where: { nmId: { in: linkedNmIds }, date: { gte: weekStart, lte: weekEnd } },
@@ -349,6 +377,17 @@ export async function loadWeeklyFinReportInputs(
     // W1 (quick 260710-jgs): недельные агрегаты отчёта реализации WB (ИУ-факт).
     // БЕЗ фильтра nmId — нужны и account-level строки (nmId=0), и непривязанные.
     prisma.wbRealizationWeekly.findMany({ where: { weekStart } }),
+    // W3a (quick 260710-lmb): тегированные DEBIT-операции недели [Пн..Вс] —
+    // авто-суммы пулов OPEX → общие (бытовая) / DELIVERY_MP → доставка до МП.
+    // CAPEX сознательно не запрашивается — ни в один пул не идёт.
+    prisma.bankTransaction.findMany({
+      where: {
+        direction: "DEBIT",
+        weeklyCostTag: { in: ["OPEX", "DELIVERY_MP"] },
+        date: { gte: weekStart, lte: weekEnd }, // @db.Date, [Пн..Вс] — как funnelRows
+      },
+      select: { direction: true, amount: true, weeklyCostTag: true },
+    }),
   ])
 
   const cardByNmId = new Map<number, (typeof wbCards)[number]>()
@@ -573,6 +612,18 @@ export async function loadWeeklyFinReportInputs(
   // 11. Ручные пулы
   const manualPools = parseManualPools(settingsMap.get(poolsKey))
 
+  // 11-bis. W3a (quick 260710-lmb): авто-суммы из банка + фикс одежды.
+  const bankAutos = sumBankPoolAutos(
+    bankTxRows.map((t) => ({
+      direction: t.direction,
+      amountRub: Number(t.amount), // Decimal → number
+      weeklyCostTag: t.weeklyCostTag,
+    })),
+  )
+  const fixedParsed = parseFloat(settingsMap.get(CLOTHING_OVERHEAD_FIXED_KEY) ?? "")
+  const clothingOverheadFixedRub =
+    Number.isFinite(fixedParsed) && fixedParsed >= 0 ? fixedParsed : 0
+
   // 11a. W1: пулы хранения/приёмки из реализации.
   // universeByNmId — из ВСЕХ привязанных артикулов (productByNmId), НЕ из
   // candidates: товары без продаж на неделе (qty<=0) всё равно несут
@@ -607,12 +658,17 @@ export async function loadWeeklyFinReportInputs(
   })
 
   // 12. Пулы per universe (§2.2): доставка общая, кредит только appliances.
-  // W1: storage/acceptance — факт реализации per бакет (fallback manual);
-  // поля delivery/overhead* остаются ручными — их нет в отчёте реализации.
+  // W1: storage/acceptance — факт реализации per бакет (fallback manual).
+  // W3a (quick 260710-lmb): delivery / overheadAppl — гибрид (manual > 0 →
+  // manual, иначе банк-авто > 0 → банк, иначе 0); clothing.overhead = фикс
+  // (глобальный AppSetting) + недельная переменная — НЕ из банка (§2.2).
+  const deliveryResolved = resolveHybridPool(manualPools.delivery, bankAutos.deliveryMpRub)
+  const overheadApplResolved = resolveHybridPool(manualPools.overheadAppl, bankAutos.opexRub)
+
   const appliancesPools: UniversePools = {
-    deliveryToMp: { total: manualPools.delivery, baseRevenue: combinedBase },
+    deliveryToMp: { total: deliveryResolved.total, baseRevenue: combinedBase },
     creditInterest: { total: zoitenWeekInterest, baseRevenue: applBase },
-    overhead: { total: manualPools.overheadAppl, baseRevenue: applBase },
+    overhead: { total: overheadApplResolved.total, baseRevenue: applBase },
     acceptance: {
       total: resolvedPools.totals.acceptanceAppl,
       baseRevenue: applBase,
@@ -623,9 +679,12 @@ export async function loadWeeklyFinReportInputs(
     },
   }
   const clothingPools: UniversePools = {
-    deliveryToMp: { total: manualPools.delivery, baseRevenue: combinedBase }, // SHARED
+    deliveryToMp: { total: deliveryResolved.total, baseRevenue: combinedBase }, // SHARED
     creditInterest: { total: 0, baseRevenue: 0 }, // одежда кредит не несёт
-    overhead: { total: manualPools.overheadCloth, baseRevenue: clothBase },
+    overhead: {
+      total: clothingOverheadFixedRub + manualPools.overheadCloth,
+      baseRevenue: clothBase,
+    },
     acceptance: {
       total: resolvedPools.totals.acceptanceCloth,
       baseRevenue: clothBase,
@@ -647,5 +706,11 @@ export async function loadWeeklyFinReportInputs(
     manualPools,
     hasRealization,
     poolSources: resolvedPools.sources,
+    bankAutos,
+    clothingOverheadFixedRub,
+    bankPoolSources: {
+      delivery: deliveryResolved.source,
+      overheadAppl: overheadApplResolved.source,
+    },
   }
 }
