@@ -102,7 +102,7 @@ export interface WeeklyFinReportPageData {
   weekStart: string
   weekEnd: string
   articles: WeeklyArticleInput[]
-  meta: Record<number, { brandName: string | null; productName: string }>
+  meta: Record<number, { brandName: string | null; productName: string; productId: string }>
   pools: { appliances: UniversePools; clothing: UniversePools }
   constants: WeeklyConstants
   manualPools: ManualPools
@@ -281,7 +281,10 @@ export async function loadWeeklyFinReportInputs(
 
   // 9. Сборка articles + meta
   const articles: WeeklyArticleInput[] = []
-  const meta: Record<number, { brandName: string | null; productName: string }> = {}
+  const meta: Record<
+    number,
+    { brandName: string | null; productName: string; productId: string }
+  > = {}
 
   for (const [nmId, funnel] of funnelByNmId) {
     const H = funnel.H
@@ -356,7 +359,11 @@ export async function loadWeeklyFinReportInputs(
       logisticsStdPerUnit,
       // storagePerUnit НЕ задаём → движок берёт из пула хранения
     })
-    meta[nmId] = { brandName: product.brand?.name ?? null, productName: product.name }
+    meta[nmId] = {
+      brandName: product.brand?.name ?? null,
+      productName: product.name,
+      productId: product.id,
+    }
   }
 
   // 10. Базы распределения пулов
