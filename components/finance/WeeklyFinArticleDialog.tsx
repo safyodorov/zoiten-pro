@@ -59,6 +59,11 @@ function profitColor(n: number): string {
       : ""
 }
 
+/** W2d: базис qtyOrders — clothing по выкупам gross, appliances по заказам. */
+function basisLabel(universe: ArticleResult["universe"]): string {
+  return universe === "clothing" ? "выкупы" : "заказы"
+}
+
 // ── Конфиг строк разбивки (порядок = Excel «Показатели») ─────────────────────
 
 const HIGHLIGHT = "bg-amber-50 dark:bg-amber-500/10"
@@ -102,8 +107,9 @@ export function WeeklyFinArticleDialog({ open, onOpenChange, article, meta }: Pr
             <DialogHeader>
               <DialogTitle>{meta.productName || String(article.nmId)}</DialogTitle>
               <DialogDescription>
-                Артикул: {article.nmId} · Бренд: {meta.brandName ?? "—"} · Заказов:{" "}
-                {article.qtyOrders} · Цена: {fmtRub2(article.iu.breakdown.pricePerUnit)} ₽
+                Артикул: {article.nmId} · Бренд: {meta.brandName ?? "—"} · Кол-во, шт:{" "}
+                {article.qtyOrders} ({basisLabel(article.universe)}) · Цена:{" "}
+                {fmtRub2(article.iu.breakdown.pricePerUnit)} ₽
               </DialogDescription>
             </DialogHeader>
 
@@ -137,7 +143,8 @@ export function WeeklyFinArticleDialog({ open, onOpenChange, article, meta }: Pr
               </table>
             </div>
             <p className="-mt-2 text-xs text-muted-foreground">
-              × {article.qtyOrders} заказов = валовая сумма за неделю
+              × {article.qtyOrders} шт ({basisLabel(article.universe)}) = валовая сумма
+              за неделю
             </p>
 
             {/* ── Итоги обоих сценариев ── */}

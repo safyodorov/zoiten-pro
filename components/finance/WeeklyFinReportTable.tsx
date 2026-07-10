@@ -1,14 +1,19 @@
 "use client"
 
 // components/finance/WeeklyFinReportTable.tsx
-// Sticky-роллап понедельного WB фин-отчёта: Вселенная → Бренд → Артикул
-// с дуальными сценариями ИУ / Оферта + подытоги + итого + «Водопад затрат».
+// Sticky-роллап понедельного WB фин-отчёта: полная иерархия товаров проекта
+// Направление → Бренд → Категория → Подкатегория → Артикул (W2d) с дуальными
+// сценариями ИУ / Оферта + подытоги per Направление + итого + «Водопад затрат».
+// articles приходят УЖЕ отсортированными (compareProductsByHierarchy в data.ts) —
+// группировка = проход по порядку с эмиссией заголовка на смене уровня.
+// Пустые уровни (нет категории/подкатегории) пропускаются без заголовка.
 // CLAUDE.md sticky-паттерн: прямой <table border-separate>, <thead bg-background>,
 // сплошной bg-background/bg-muted на КАЖДОЙ sticky-ячейке (НЕ /NN alpha — баг).
 // Образец: components/finance/CashflowMatrix.tsx.
 // Phase quick-260710-evz (W2a, 2026-07-10)
 // Quick 260710-gem (W2c, 2026-07-10): колонки «План (нед), ₽» / «% вып. (нед)»
 // + KPI-блок план-факт недели и месяца-to-date (optional prop planFact).
+// Quick 260710-hkj (W2d, 2026-07-10): иерархия групп + бейджи базиса вселенных.
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
@@ -20,16 +25,18 @@ import type {
   WeeklyRollup,
   WeeklyWaterfall,
 } from "@/lib/finance-weekly/types"
+import type { WeeklyArticleMeta } from "@/lib/finance-weekly/data"
 
 // ── Константы ──────────────────────────────────────────────────────────────────
 
 const LABEL_WIDTH = 340
 
-const UNIVERSE_LABEL: Record<Universe, string> = {
-  appliances: "Бытовая техника",
-  clothing: "Одежда",
+// W2d: бейдж базиса вселенной — universe направления (hasSizes) определяет,
+// по чему считаются его строки: заказы (appliances) или выкупы gross (clothing).
+const UNIVERSE_BASIS: Record<Universe, string> = {
+  appliances: "по заказам",
+  clothing: "по выкупам",
 }
-const UNIVERSE_ORDER: Universe[] = ["appliances", "clothing"]
 
 // ── Форматирование ─────────────────────────────────────────────────────────────
 
@@ -67,7 +74,8 @@ interface Props {
   articles: ArticleResult[]
   rollup: WeeklyRollup
   waterfall: WeeklyWaterfall
-  meta: Record<number, { brandName: string | null; productName: string }>
+  /** W2d: полная иерархия товара per nmId (direction/category/subcategory для групп). */
+  meta: Record<number, WeeklyArticleMeta>
   /** null/undefined → активной версии плана нет: KPI скрыт, колонки «—». */
   planFact?: PlanFactProps | null
 }
@@ -81,7 +89,15 @@ const NUM_CELL =
 
 // ── Строки роллапа ──────────────────────────────────────────────────────────────
 
-type RowKind = "universe" | "brand" | "article" | "subtotal" | "grand"
+// W2d: 4 уровня group-заголовков + артикул + подытог Направления + итого
+type RowKind =
+  | "direction"
+  | "brand"
+  | "category"
+  | "subcategory"
+  | "article"
+  | "subtotal"
+  | "grand"
 
 interface Row {
   kind: RowKind
@@ -98,7 +114,25 @@ interface Row {
   fulfillPct?: number | null
 }
 
-/** Собирает плоский список строк Вселенная → Бренд → Артикул + подытоги + итого. */
+// Аккумулятор подытога текущего Направления
+interface DirAcc {
+  label: string
+  revenue: number
+  profitIu: number
+  profitStd: number
+  planSum: number
+}
+
+/**
+ * Собирает плоский список строк: Направление → Бренд → Категория → Подкатегория
+ * → Артикул, + подытог per Направление + итого (W2d).
+ *
+ * articles УЖЕ отсортированы иерархией (data.ts, compareProductsByHierarchy) —
+ * заголовок эмитится на смене значения уровня; nullable уровни (категория /
+ * подкатегория) пропускаются без заголовка. Подытоги Направлений считаются
+ * локальной Σ по article-строкам (роллап движка Направлений не знает);
+ * грандтотал — из rollup.grand (движок).
+ */
 function buildRows(
   articles: ArticleResult[],
   rollup: WeeklyRollup,
@@ -111,71 +145,84 @@ function buildRows(
   let grandPlanSum = 0
   let grandRevSum = 0
 
-  for (const universe of UNIVERSE_ORDER) {
-    const uniArticles = articles.filter((a) => a.universe === universe)
-    if (uniArticles.length === 0) continue
+  let dir: DirAcc | null = null
+  let prevBrand: string | null = null
+  let prevCategory: string | null = null
+  let prevSubcategory: string | null = null
 
-    rows.push({ kind: "universe", label: UNIVERSE_LABEL[universe] })
-
-    let uniPlanSum = 0
-    let uniRevSum = 0
-
-    // Группировка по бренду
-    const byBrand = new Map<string, ArticleResult[]>()
-    for (const a of uniArticles) {
-      const brand = meta[a.nmId]?.brandName ?? "—"
-      const list = byBrand.get(brand) ?? []
-      list.push(a)
-      byBrand.set(brand, list)
-    }
-    const brandNames = Array.from(byBrand.keys()).sort((x, y) => x.localeCompare(y, "ru"))
-
-    for (const brand of brandNames) {
-      rows.push({ kind: "brand", label: brand })
-      const brandArticles = (byBrand.get(brand) ?? [])
-        .slice()
-        .sort((x, y) => x.nmId - y.nmId)
-      for (const a of brandArticles) {
-        const revenue = a.iu.revenue // iu.revenue === std.revenue (K·H)
-        const planWeek = planFact ? (planFact.planWeekByNmId[a.nmId] ?? null) : null
-        uniRevSum += revenue
-        uniPlanSum += planWeek ?? 0
-        rows.push({
-          kind: "article",
-          label: meta[a.nmId]?.productName ?? String(a.nmId),
-          nmId: a.nmId,
-          revenue,
-          profitIu: a.iu.profit,
-          reIu: a.iu.rePct,
-          profitStd: a.std.profit,
-          reStd: a.std.rePct,
-          planWeek,
-          fulfillPct: planWeek != null && planWeek > 0 ? revenue / planWeek : null,
-        })
-      }
-    }
-
-    grandPlanSum += uniPlanSum
-    grandRevSum += uniRevSum
-
-    // Подытог вселенной из роллапа (план-факт — локальная Σ по article-строкам)
-    const uni = rollup.byUniverse.find((u) => u.universe === universe)
-    if (uni) {
-      rows.push({
-        kind: "subtotal",
-        label: `Итого — ${UNIVERSE_LABEL[universe]}`,
-        revenue: uni.iu.revenue,
-        profitIu: uni.iu.profit,
-        reIu: uni.iu.rePct,
-        profitStd: uni.std.profit,
-        reStd: uni.std.rePct,
-        planWeek: planFact ? uniPlanSum : null,
-        fulfillPct: planFact && uniPlanSum > 0 ? uniRevSum / uniPlanSum : null,
-      })
-    }
+  const flushDirection = () => {
+    if (!dir) return
+    rows.push({
+      kind: "subtotal",
+      label: `Итого — ${dir.label}`,
+      revenue: dir.revenue,
+      profitIu: dir.profitIu,
+      reIu: dir.revenue > 0 ? dir.profitIu / dir.revenue : 0,
+      profitStd: dir.profitStd,
+      reStd: dir.revenue > 0 ? dir.profitStd / dir.revenue : 0,
+      planWeek: planFact ? dir.planSum : null,
+      fulfillPct: planFact && dir.planSum > 0 ? dir.revenue / dir.planSum : null,
+    })
+    dir = null
   }
 
-  // Grand total
+  for (const a of articles) {
+    const m = meta[a.nmId]
+    const dirLabel = m?.directionName ?? "Без направления"
+    const brandLabel = m?.brandName ?? "—"
+    const categoryName = m?.categoryName ?? null
+    const subcategoryName = m?.subcategoryName ?? null
+
+    if (!dir || dir.label !== dirLabel) {
+      flushDirection()
+      // Бейдж базиса: universe направления (все артикулы Направления делят universe)
+      rows.push({ kind: "direction", label: `${dirLabel} · ${UNIVERSE_BASIS[a.universe]}` })
+      dir = { label: dirLabel, revenue: 0, profitIu: 0, profitStd: 0, planSum: 0 }
+      prevBrand = null
+      prevCategory = null
+      prevSubcategory = null
+    }
+    if (brandLabel !== prevBrand) {
+      rows.push({ kind: "brand", label: brandLabel })
+      prevBrand = brandLabel
+      prevCategory = null
+      prevSubcategory = null
+    }
+    if (categoryName !== prevCategory) {
+      // Пустой уровень (null) — заголовок не рисуем, но контекст сбрасываем
+      if (categoryName != null) rows.push({ kind: "category", label: categoryName })
+      prevCategory = categoryName
+      prevSubcategory = null
+    }
+    if (subcategoryName !== prevSubcategory) {
+      if (subcategoryName != null) rows.push({ kind: "subcategory", label: subcategoryName })
+      prevSubcategory = subcategoryName
+    }
+
+    const revenue = a.iu.revenue // iu.revenue === std.revenue (K·H)
+    const planWeek = planFact ? (planFact.planWeekByNmId[a.nmId] ?? null) : null
+    dir.revenue += revenue
+    dir.profitIu += a.iu.profit
+    dir.profitStd += a.std.profit
+    dir.planSum += planWeek ?? 0
+    grandRevSum += revenue
+    grandPlanSum += planWeek ?? 0
+    rows.push({
+      kind: "article",
+      label: m?.productName ?? String(a.nmId),
+      nmId: a.nmId,
+      revenue,
+      profitIu: a.iu.profit,
+      reIu: a.iu.rePct,
+      profitStd: a.std.profit,
+      reStd: a.std.rePct,
+      planWeek,
+      fulfillPct: planWeek != null && planWeek > 0 ? revenue / planWeek : null,
+    })
+  }
+  flushDirection()
+
+  // Grand total — из роллапа движка (план-факт — локальная Σ)
   rows.push({
     kind: "grand",
     label: "Итого",
@@ -236,19 +283,25 @@ function PlanFactKpiBlock({ planFact }: { planFact: PlanFactProps }) {
   const { kpi, weekEndISO } = planFact
   const ddMM = `${weekEndISO.slice(8, 10)}.${weekEndISO.slice(5, 7)}`
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <PlanFactKpiCard
-        title="Неделя"
-        plan={kpi.planWeek}
-        fact={kpi.factWeek}
-        pctLabel="% вып."
-      />
-      <PlanFactKpiCard
-        title={`Месяц (по ${ddMM})`}
-        plan={kpi.planMonth}
-        fact={kpi.factMonthMtd}
-        pctLabel="% вып. МТД"
-      />
+    <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <PlanFactKpiCard
+          title="Неделя"
+          plan={kpi.planWeek}
+          fact={kpi.factWeek}
+          pctLabel="% вып."
+        />
+        <PlanFactKpiCard
+          title={`Месяц (по ${ddMM})`}
+          plan={kpi.planMonth}
+          fact={kpi.factMonthMtd}
+          pctLabel="% вып. МТД"
+        />
+      </div>
+      {/* W2d: базисы вселенных — план и факт каждой строки считаются в её базисе */}
+      <p className="text-xs text-muted-foreground">
+        база: бытовая — заказы, одежда — выкупы
+      </p>
     </div>
   )
 }
@@ -327,7 +380,7 @@ export function WeeklyFinReportTable({
                   className="sticky left-0 top-0 z-30 bg-background border-b border-r text-xs px-3 h-8 align-middle font-semibold whitespace-nowrap text-left"
                   style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
                 >
-                  Вселенная / Бренд / Артикул
+                  Направление / Бренд / Категория / Подкатегория
                 </th>
                 {[
                   "Выручка",
@@ -352,30 +405,34 @@ export function WeeklyFinReportTable({
 
             <tbody>
               {rows.map((row, i) => {
-                const isUniverse = row.kind === "universe"
-                const isBrand = row.kind === "brand"
+                const isDirection = row.kind === "direction"
+                const isMidHeader =
+                  row.kind === "brand" ||
+                  row.kind === "category" ||
+                  row.kind === "subcategory"
                 const isSubtotal = row.kind === "subtotal"
                 const isGrand = row.kind === "grand"
                 const heavy = isSubtotal || isGrand
 
-                // Фон строки: подытоги/итого/вселенная — сплошной bg-muted
+                // Фон строки: подытоги/итого/направление — сплошной bg-muted
+                // (sticky-паттерн: БЕЗ /NN alpha на sticky-ячейках)
                 const solidBg =
-                  isSubtotal || isGrand || isUniverse ? "bg-muted" : "bg-background"
+                  isSubtotal || isGrand || isDirection ? "bg-muted" : "bg-background"
                 const labelWeight = isGrand
                   ? "font-bold"
-                  : isUniverse || isSubtotal
+                  : isDirection || isSubtotal
                     ? "font-semibold"
-                    : isBrand
+                    : isMidHeader
                       ? "font-medium text-muted-foreground"
                       : ""
-                const labelIndent = isArticleIndent(row.kind)
+                const labelIndent = rowIndent(row.kind)
                 const isClickable = row.kind === "article" && row.nmId != null
 
                 return (
                   <tr
                     key={`${row.kind}-${row.label}-${i}`}
                     className={cn(
-                      heavy || isUniverse ? "" : "hover:bg-muted/20 transition-colors",
+                      heavy || isDirection ? "" : "hover:bg-muted/20 transition-colors",
                       isClickable && "cursor-pointer",
                     )}
                     onClick={
@@ -520,9 +577,19 @@ export function WeeklyFinReportTable({
   )
 }
 
-// Отступ метки для артикульных строк (2 уровня вложенности под бренд).
-function isArticleIndent(kind: RowKind): string {
-  if (kind === "article") return "pl-8"
-  if (kind === "brand") return "pl-5"
-  return ""
+// Отступ метки per уровень иерархии (W2d: Направление → Бренд → Категория →
+// Подкатегория → Артикул). Артикул — глубже всех заголовков.
+function rowIndent(kind: RowKind): string {
+  switch (kind) {
+    case "brand":
+      return "pl-5"
+    case "category":
+      return "pl-7"
+    case "subcategory":
+      return "pl-9"
+    case "article":
+      return "pl-11"
+    default:
+      return "" // direction / subtotal / grand — без отступа
+  }
 }
