@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260710-gem — W2c план-факт /finance/weekly (колонки План(нед)/% вып. + KPI-блок из SalesPlanVersionDay активной версии; движок/схема не тронуты)
-last_updated: "2026-07-10T09:13:11.240Z"
+stopped_at: Completed quick 260710-hkj — W2d четыре фикса /finance/weekly (базис одежды=выкупы, история комиссий, реклама upd, кредит accrual) + иерархия таблицы
+last_updated: "2026-07-10T10:41:19.410Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -447,6 +447,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T09:13:11.150Z
-Stopped at: Completed quick 260710-gem — W2c план-факт /finance/weekly (колонки План(нед)/% вып. + KPI-блок из SalesPlanVersionDay активной версии; движок/схема не тронуты)
+Last session: 2026-07-10T10:41:19.389Z
+Stopped at: Completed quick 260710-hkj — W2d четыре фикса /finance/weekly (базис одежды=выкупы, история комиссий, реклама upd, кредит accrual) + иерархия таблицы
 Resume file: None
