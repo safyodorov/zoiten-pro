@@ -8,7 +8,9 @@
 // Образец: components/finance/CashflowMatrix.tsx.
 // Phase quick-260710-evz (W2a, 2026-07-10)
 
+import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { WeeklyFinArticleDialog } from "@/components/finance/WeeklyFinArticleDialog"
 import type {
   ArticleResult,
   CostWaterfall,
@@ -72,6 +74,7 @@ type RowKind = "universe" | "brand" | "article" | "subtotal" | "grand"
 interface Row {
   kind: RowKind
   label: string
+  nmId?: number // только у строк kind==="article" (для клика → drill-down модалка)
   // Числовые колонки (undefined → пустая ячейка для заголовочных строк)
   revenue?: number
   profitIu?: number
@@ -113,6 +116,7 @@ function buildRows(
         rows.push({
           kind: "article",
           label: meta[a.nmId]?.productName ?? String(a.nmId),
+          nmId: a.nmId,
           revenue: a.iu.revenue, // iu.revenue === std.revenue (K·H)
           profitIu: a.iu.profit,
           reIu: a.iu.rePct,
@@ -176,6 +180,18 @@ function sumWaterfall(w: CostWaterfall): number {
 // ── Компонент ───────────────────────────────────────────────────────────────────
 
 export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Props) {
+  // ⚠ Хуки объявлены ПЕРВЫМИ — выше early-return для пустой недели. Иначе
+  // число хуков меняется при empty↔non-empty (rules-of-hooks violation).
+  const [open, setOpen] = useState(false)
+  const [selectedNmId, setSelectedNmId] = useState<number | null>(null)
+
+  const selectedArticle =
+    selectedNmId == null ? null : (articles.find((a) => a.nmId === selectedNmId) ?? null)
+  const selectedMeta =
+    selectedNmId == null
+      ? { brandName: null, productName: "" }
+      : (meta[selectedNmId] ?? { brandName: null, productName: String(selectedNmId) })
+
   if (articles.length === 0) {
     return (
       <div className="rounded-md border bg-card p-4">
@@ -234,11 +250,23 @@ export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Prop
                       ? "font-medium text-muted-foreground"
                       : ""
                 const labelIndent = isArticleIndent(row.kind)
+                const isClickable = row.kind === "article" && row.nmId != null
 
                 return (
                   <tr
                     key={`${row.kind}-${row.label}-${i}`}
-                    className={heavy || isUniverse ? "" : "hover:bg-muted/20 transition-colors"}
+                    className={cn(
+                      heavy || isUniverse ? "" : "hover:bg-muted/20 transition-colors",
+                      isClickable && "cursor-pointer",
+                    )}
+                    onClick={
+                      isClickable
+                        ? () => {
+                            setSelectedNmId(row.nmId!)
+                            setOpen(true)
+                          }
+                        : undefined
+                    }
                   >
                     <td
                       className={cn(LABEL_STICKY, solidBg, labelWeight, labelIndent)}
@@ -340,6 +368,14 @@ export function WeeklyFinReportTable({ articles, rollup, waterfall, meta }: Prop
           </table>
         </div>
       </div>
+
+      {/* ── Drill-down модалка per-article (открывается кликом по строке артикула) ── */}
+      <WeeklyFinArticleDialog
+        open={open}
+        onOpenChange={setOpen}
+        article={selectedArticle}
+        meta={selectedMeta}
+      />
     </div>
   )
 }
