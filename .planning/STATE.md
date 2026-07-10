@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: "Completed quick 260710-jgs — W1 импорт отчёта реализации WB (WbRealizationWeekly + клиент sales-reports + крон вт 05:50 + ИУ-факт в /finance/weekly); первый синк — после деплоя оркестратором"
-last_updated: "2026-07-10T11:41:16.696Z"
+stopped_at: Completed quick 260710-kvf — фикс классификатора реализации WB (explode мульти-поле + per-бакет fallback пулов)
+last_updated: "2026-07-10T12:18:02.316Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -452,6 +452,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T11:41:16.690Z
-Stopped at: Completed quick 260710-jgs — W1 импорт отчёта реализации WB (WbRealizationWeekly + клиент sales-reports + крон вт 05:50 + ИУ-факт в /finance/weekly); первый синк — после деплоя оркестратором
+Last session: 2026-07-10T12:18:02.309Z
+Stopped at: Completed quick 260710-kvf — фикс классификатора реализации WB (explode мульти-поле + per-бакет fallback пулов)
 Resume file: None
