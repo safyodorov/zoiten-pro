@@ -20,6 +20,7 @@
 import {
   DEFAULT_WEEKLY_CONSTANTS,
   type ArticleResult,
+  type CostBreakdown,
   type CostWaterfall,
   type ScenarioResult,
   type ScenarioRollup,
@@ -73,6 +74,7 @@ function emptyWaterfall(): CostWaterfall {
 // (delivery/credit/overhead/acceptance/storage) от сценария не зависят.
 interface ScenarioBreakdown {
   cutPricePerUnit: number  // I
+  commissionPct: number    // J — комиссия % (различается ИУ/Оферта)
   logisticsPerUnit: number // N
   costPerUnit: number      // O
   adPerUnit: number        // L/H
@@ -181,6 +183,7 @@ function computeScenario(
 
   return {
     cutPricePerUnit,
+    commissionPct: commPct,
     logisticsPerUnit,
     ...common,
     profitPerUnit,
@@ -193,6 +196,27 @@ function toScenarioResult(article: WeeklyArticleInput, b: ScenarioBreakdown): Sc
   const revenue = K * H
   const profit = b.profitPerUnit * H
   const costTotal = O * H
+
+  // Пооперационная per-unit разбивка — все значения УЖЕ посчитаны в b (additive).
+  const breakdown: CostBreakdown = {
+    pricePerUnit: K,
+    commissionPct: b.commissionPct,
+    netOfCommissionPerUnit: b.cutPricePerUnit,
+    costPerUnit: b.costPerUnit,
+    adPerUnit: b.adPerUnit,
+    reviewPerUnit: b.reviewPerUnit,
+    logisticsPerUnit: b.logisticsPerUnit,
+    deliveryPerUnit: b.deliveryPerUnit,
+    creditPerUnit: b.creditPerUnit,
+    overheadPerUnit: b.overheadPerUnit,
+    acceptancePerUnit: b.acceptancePerUnit,
+    storagePerUnit: b.storagePerUnit,
+    defectPerUnit: b.defectPerUnit,
+    jemPerUnit: b.jemPerUnit,
+    taxPerUnit: b.taxPerUnit,
+    acquiringPerUnit: b.acquiringPerUnit,
+  }
+
   return {
     cutPricePerUnit: b.cutPricePerUnit,
     profitPerUnit: b.profitPerUnit,
@@ -200,6 +224,7 @@ function toScenarioResult(article: WeeklyArticleInput, b: ScenarioBreakdown): Sc
     profit,
     rePct: revenue > 0 ? profit / revenue : 0,
     roi: costTotal > 0 ? profit / costTotal : 0,
+    breakdown,
   }
 }
 
@@ -258,7 +283,7 @@ export function computeWeeklyFinReport(
     const iu = toScenarioResult(article, iuBreakdown)
     const std = toScenarioResult(article, stdBreakdown)
 
-    articles.push({ nmId: article.nmId, universe, iu, std })
+    articles.push({ nmId: article.nmId, universe, qtyOrders: article.qtyOrders, iu, std })
 
     // Роллап
     seenUniverse[universe] = true

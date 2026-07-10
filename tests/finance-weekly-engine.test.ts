@@ -109,6 +109,29 @@ describe("computeWeeklyFinReport — golden nmId 165967746 (дуал ИУ/Офе
     expect(art.std.revenue).toBeCloseTo(46995.2, 2)
   })
 
+  // ── Пооперационная per-unit разбивка (breakdown, для drill-down модалки) ──
+  it("ИУ: breakdown.netOfCommissionPerUnit ≈ 8047.93", () => {
+    expect(Math.abs(art.iu.breakdown.netOfCommissionPerUnit - 8047.93)).toBeLessThan(0.5)
+  })
+
+  it("ИУ: breakdown.taxPerUnit ≈ 939.9 и acquiringPerUnit ≈ 337.19", () => {
+    expect(art.iu.breakdown.taxPerUnit).toBeCloseTo(939.9, 1)
+    expect(art.iu.breakdown.acquiringPerUnit).toBeCloseTo(337.19, 1)
+  })
+
+  it("Оферта: breakdown.logisticsPerUnit ≈ 1380 (N_std)", () => {
+    expect(art.std.breakdown.logisticsPerUnit).toBeCloseTo(1380, 6)
+  })
+
+  it("ArticleResult несёт qtyOrders=4 (H)", () => {
+    expect(art.qtyOrders).toBe(4)
+  })
+
+  it("breakdown.commissionPct различается ИУ (31.5) vs Оферта (25.5)", () => {
+    expect(art.iu.breakdown.commissionPct).toBe(31.5)
+    expect(art.std.breakdown.commissionPct).toBe(25.5)
+  })
+
   // ── Роллап + водопад ──
   it("роллап appliances iu.profit совпадает с per-article", () => {
     expect(out.rollup.byUniverse).toHaveLength(1)

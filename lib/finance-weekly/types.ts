@@ -85,6 +85,31 @@ export interface WeeklyFinReportInputs {
   constants?: Partial<WeeklyConstants>
 }
 
+// ── Пооперационная per-unit разбивка одного сценария ──────────────────────────
+
+// Пооперационная per-unit разбивка одного сценария (строка Excel «Показатели»).
+// Все поля — ₽/ед, кроме commissionPct (%). Различаются ИУ vs Оферта только
+// commissionPct (J), netOfCommissionPerUnit (I) и logisticsPerUnit (N);
+// остальные (пулы + брак/джем/налог/эквайринг/закупка) идентичны в обоих сценариях.
+export interface CostBreakdown {
+  pricePerUnit: number           // K — цена продажи / ед
+  commissionPct: number          // J — комиссия % (различается ИУ/Оферта)
+  netOfCommissionPerUnit: number // I = K×(100−J)/100 — цена минус комиссия / ед
+  costPerUnit: number            // O — закупка / ед
+  adPerUnit: number              // реклама / ед (L/H)
+  reviewPerUnit: number          // списание за отзыв / ед (M/H)
+  logisticsPerUnit: number       // N — логистика / ед (различается ИУ/Оферта)
+  deliveryPerUnit: number        // доставка до МП / ед (пул P)
+  creditPerUnit: number          // проценты по кредиту / ед (пул U, 0 для clothing)
+  overheadPerUnit: number        // общие расходы / ед (пул W)
+  acceptancePerUnit: number      // платная приёмка / штрафы / ед (пул Y)
+  storagePerUnit: number         // хранение / ед (пул Z или override)
+  defectPerUnit: number          // брак / ед (O×defectPct)
+  jemPerUnit: number             // джем / ед (K×jemPct)
+  taxPerUnit: number             // налог / ед (K×taxPct)
+  acquiringPerUnit: number       // эквайринг / ед (K×acquiringPct)
+}
+
 // ── Результат per сценарий / per артикул ──────────────────────────────────────
 
 export interface ScenarioResult {
@@ -94,11 +119,13 @@ export interface ScenarioResult {
   profit: number           // AF — AA×H
   rePct: number            // AC — Re продаж (profit/revenue), доля 0..1
   roi: number              // AD — ROI (profit/(O×H)), доля 0..1
+  breakdown: CostBreakdown // пооперационная per-unit разбивка (для drill-down модалки)
 }
 
 export interface ArticleResult {
   nmId: number
   universe: Universe
+  qtyOrders: number  // H — кол-во заказов за неделю (для gross = perUnit×H в модалке)
   iu: ScenarioResult
   std: ScenarioResult
 }
