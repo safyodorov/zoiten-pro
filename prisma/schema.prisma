@@ -116,6 +116,8 @@ model User {
   wbTokensUpdated         WbApiToken[]          @relation("WbTokenUpdater") // Quick 260512-jxh
   // Phase 25: Plan prodazh v2 back-relation
   salesPlanVersions       SalesPlanVersion[]
+  // W3c (quick 260710-mih): кто зафиксировал недели понедельного фин-отчёта
+  weeklyFinReportSnapshots WeeklyFinReportSnapshot[]
   isActive                Boolean               @default(true)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -1244,6 +1246,19 @@ model WbRealizationWeekly {
 
   @@unique([weekStart, nmId])
   @@index([weekStart])
+}
+
+// W3c (quick 260710-mih): immutable-снапшот недели понедельного фин-отчёта.
+// ОДНА строка на неделю, весь рендер-пейлоад одним Json (~300КБ) — НЕ дробим
+// на дочерние таблицы (в отличие от SalesPlanVersionDay: там дни×товары,
+// здесь один снимок). Clean-replace через upsert («Перефиксировать»).
+model WeeklyFinReportSnapshot {
+  id          String   @id @default(cuid())
+  weekStart   DateTime @db.Date @unique // ISO-понедельник UTC
+  fixedAt     DateTime @default(now())
+  fixedById   String?
+  fixedBy     User?    @relation(fields: [fixedById], references: [id], onDelete: SetNull)
+  payloadJson Json // WeeklyFinReportSnapshotPayload v1 (lib/finance-weekly/snapshot.ts)
 }
 
 // ──────────────────────────────────────────────────────────────────
