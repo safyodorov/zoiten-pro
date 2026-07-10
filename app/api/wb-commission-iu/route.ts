@@ -5,6 +5,10 @@ export const runtime = "nodejs"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { snapshotCommissionChanges } from "@/lib/wb-commission-history"
+import {
+  parseWbCommissionIuRows,
+  type WbCommissionIuRecord,
+} from "@/lib/wb-commission-iu-parser"
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 
@@ -30,43 +34,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(await file.arrayBuffer())
     const workbook = XLSX.read(buffer, { type: "buffer" })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1 })
+    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
 
     if (rows.length < 2) {
       return NextResponse.json({ error: "Файл пустой или без данных" }, { status: 400 })
     }
 
-    // Пропускаем заголовок (строка 0)
-    // Формат: Категория, Предмет, Склад WB %, Склад продавца %, DBS %, Экспресс %, Самовывоз, Бронирование
-    const records: Array<{
-      parentName: string
-      subjectName: string
-      fbw: number
-      fbs: number
-      dbs: number
-      express: number
-      pickup: number
-      booking: number
-    }> = []
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i]
-      if (!row || !row[0] || !row[1]) continue
-
-      const parentName = String(row[0]).trim()
-      const subjectName = String(row[1]).trim()
-      if (!subjectName) continue
-
-      records.push({
-        parentName,
-        subjectName,
-        fbw: parseFloat(String(row[2])) || 0,       // Склад WB
-        fbs: parseFloat(String(row[4])) || 0,       // Склад продавца — везу до клиента (DBS, ближайшее к FBS)
-        dbs: parseFloat(String(row[4])) || 0,       // Склад продавца — везу самостоятельно до клиента
-        express: parseFloat(String(row[5])) || 0,   // Экспресс
-        pickup: parseFloat(String(row[6])) || 0,    // Самовывоз
-        booking: parseFloat(String(row[7])) || 0,   // Бронирование
-      })
+    // Колонки определяются по заголовкам — WB сменил порядок с ~07.07.2026
+    // (легаси-формат поддержан). См. lib/wb-commission-iu-parser.ts.
+    let records: WbCommissionIuRecord[]
+    try {
+      records = parseWbCommissionIuRows(rows)
+    } catch (e) {
+      // Нераспознанная шапка — проблема файла (400), не сервера
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 })
     }
 
     if (records.length === 0) {
