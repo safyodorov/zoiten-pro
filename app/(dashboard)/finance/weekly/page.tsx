@@ -64,11 +64,15 @@ export default async function FinanceWeeklyPage({
     constants: data.constants,
   })
 
-  // План-факт (W2c): план из SalesPlanVersionDay активной версии, факт МТД
-  // из WbCardFunnelDaily. Loader'у нужны articleNmIds из data → await после.
+  // План-факт (W2c): план из SalesPlanVersionDay активной версии; факт —
+  // по базису universe (W2d: appliances → заказы, clothing → выкупы gross).
+  // Loader'у нужны articleNmIds из data → await после.
   const articleNmIds = data.articles.map((a) => a.nmId)
   const nmIdToProductId = new Map(
     articleNmIds.map((n) => [n, data.meta[n].productId] as const),
+  )
+  const universeByNmId = new Map(
+    data.articles.map((a) => [a.nmId, a.universe] as const),
   )
   const weekEndDate = new Date(data.weekEnd + "T00:00:00Z")
   const planFactRaw = await loadWeeklyPlanFact(
@@ -76,6 +80,7 @@ export default async function FinanceWeeklyPage({
     weekEndDate,
     articleNmIds,
     nmIdToProductId,
+    universeByNmId,
   )
 
   // RSC→client boundary: Record, не Map (Phase 09-03)

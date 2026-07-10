@@ -22,7 +22,9 @@ export type Universe = "appliances" | "clothing"
 export interface WeeklyArticleInput {
   nmId: number
   universe: Universe
-  qtyOrders: number            // H — кол-во заказов за неделю (нормированное)
+  // H — кол-во единиц за неделю. С W2d базис зависит от universe:
+  // appliances → заказы (WbCardFunnelDaily), clothing → выкупы gross (WbSalesDaily).
+  qtyOrders: number
   grossPricePerUnit: number    // K — восстановленная цена продажи / ед
   commIuPct: number            // J для сценария ИУ (% комиссии)
   commStdPct: number           // J для сценария Оферта (% комиссии)
