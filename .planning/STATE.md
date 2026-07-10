@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260710-e7h — pure движок понедельного WB фин-отчёта lib/finance-weekly/ + golden-тест
-last_updated: "2026-07-10T07:27:18.467Z"
+stopped_at: Completed quick 260710-fr1 — W2b drill-down модалка /finance/weekly (per-unit CostBreakdown из движка + WeeklyFinArticleDialog + кликабельные строки артикулов)
+last_updated: "2026-07-10T08:37:56.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
