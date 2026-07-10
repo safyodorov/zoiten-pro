@@ -8,6 +8,7 @@ import {
   splitRealizationRows,
   distributeByRevenue,
   buildRealizationPools,
+  resolvePoolTotals,
   reviewWriteoffFor,
   logisticsIuPerUnit,
   type RealizationBuckets,
@@ -136,6 +137,55 @@ describe("buildRealizationPools", () => {
     expect(pools.storageAppl).toBe(100)
     expect(pools.storageCloth).toBe(0)
     expect(Number.isFinite(pools.acceptanceAppl)).toBe(true)
+  })
+})
+
+// ── resolvePoolTotals ──────────────────────────────────────────────────────────
+
+describe("resolvePoolTotals", () => {
+  it("per-бакет независимость в ОДНОМ вызове: storage=0 в реализации → manual (не затирается нулём), acceptance>0 → реализация", () => {
+    // Кейс ИУ (ground truth первого синка 2026-07-10): paidStorage=0 в отчёте
+    // реализации НЕ должен затирать ручное значение хранения.
+    const { totals, sources } = resolvePoolTotals(
+      { storageAppl: 0, acceptanceAppl: 135.5, storageCloth: 0, acceptanceCloth: 20 },
+      { storageAppl: 500, acceptanceAppl: 300, storageCloth: 400, acceptanceCloth: 200 },
+    )
+    expect(totals.storageAppl).toBe(500)
+    expect(sources.storageAppl).toBe("manual")
+    expect(totals.acceptanceAppl).toBe(135.5)
+    expect(sources.acceptanceAppl).toBe("realization")
+    expect(totals.storageCloth).toBe(400)
+    expect(sources.storageCloth).toBe("manual")
+    expect(totals.acceptanceCloth).toBe(20)
+    expect(sources.acceptanceCloth).toBe("realization")
+  })
+
+  it("realization=null (нет синка недели) → все totals из manual, все sources='manual'", () => {
+    const manual = {
+      storageAppl: 100,
+      acceptanceAppl: 200,
+      storageCloth: 300,
+      acceptanceCloth: 400,
+    }
+    const { totals, sources } = resolvePoolTotals(null, manual)
+    expect(totals).toEqual(manual)
+    expect(sources).toEqual({
+      storageAppl: "manual",
+      acceptanceAppl: "manual",
+      storageCloth: "manual",
+      acceptanceCloth: "manual",
+    })
+  })
+
+  it("отрицательный бакет реализации → manual (условие строго > 0)", () => {
+    const { totals, sources } = resolvePoolTotals(
+      { storageAppl: 10, acceptanceAppl: -5, storageCloth: 0, acceptanceCloth: 0 },
+      { storageAppl: 1, acceptanceAppl: 2, storageCloth: 3, acceptanceCloth: 4 },
+    )
+    expect(totals.acceptanceAppl).toBe(2)
+    expect(sources.acceptanceAppl).toBe("manual")
+    expect(totals.storageAppl).toBe(10)
+    expect(sources.storageAppl).toBe("realization")
   })
 })
 
