@@ -136,11 +136,24 @@ export type RealizationBucket =
  * rebillLogisticCost (возмещение издержек по перевозке/складским операциям) →
  * deductionOther: в расчёт ИУ-факта НЕ идёт, только хранится (диагностический
  * бакет для сверки).
+ *
+ * nmIdOverride: строки «Списание за отзыв» приходят account-level (nmId=0),
+ * но WB зашивает артикул в текст bonusTypeName («…, товар 848830964») —
+ * извлекаем его регекспом для точной атрибуции вместо распределения по выручке.
  */
+export interface RealizationContribution {
+  bucket: RealizationBucket
+  amountRub: number
+  /** Переопределяет nmId строки при аккумуляции (точная атрибуция отзывов). */
+  nmIdOverride?: number
+}
+
+const REVIEW_NMID_RE = /товар\s+(\d+)/i
+
 export function explodeRealizationRow(
   row: NormalizedRealizationRow,
-): Array<{ bucket: RealizationBucket; amountRub: number }> {
-  const contributions: Array<{ bucket: RealizationBucket; amountRub: number }> = []
+): RealizationContribution[] {
+  const contributions: RealizationContribution[] = []
 
   if (row.forPay !== 0) contributions.push({ bucket: "forPay", amountRub: row.forPay })
   if (row.deliveryRub !== 0) {
@@ -157,12 +170,21 @@ export function explodeRealizationRow(
   }
   if (row.deductionRub !== 0) {
     const bonus = row.bonusTypeName.toLowerCase()
-    const bucket: RealizationBucket = bonus.includes("списание за отзыв")
-      ? "reviewPoints"
-      : bonus.includes("продвижение")
-        ? "promotion"
-        : "deductionOther"
-    contributions.push({ bucket, amountRub: row.deductionRub })
+    if (bonus.includes("списание за отзыв")) {
+      // Точная атрибуция: nmId из текста «…, товар <nmId>» (строка сама nmId=0).
+      const m = REVIEW_NMID_RE.exec(row.bonusTypeName)
+      const parsed = m ? Number(m[1]) : NaN
+      contributions.push({
+        bucket: "reviewPoints",
+        amountRub: row.deductionRub,
+        ...(Number.isFinite(parsed) && parsed > 0 ? { nmIdOverride: parsed } : {}),
+      })
+    } else {
+      contributions.push({
+        bucket: bonus.includes("продвижение") ? "promotion" : "deductionOther",
+        amountRub: row.deductionRub,
+      })
+    }
   }
   if (row.rebillLogisticCost !== 0) {
     contributions.push({ bucket: "deductionOther", amountRub: row.rebillLogisticCost })
@@ -196,14 +218,19 @@ export function accumulateRealizationRows(
   rows: NormalizedRealizationRow[],
 ): Map<number, RealizationBucketTotals> {
   const acc = new Map<number, RealizationBucketTotals>()
-  for (const row of rows) {
-    let totals = acc.get(row.nmId)
+  const bucketFor = (nmId: number): RealizationBucketTotals => {
+    let totals = acc.get(nmId)
     if (!totals) {
       totals = emptyRealizationBuckets()
-      acc.set(row.nmId, totals)
+      acc.set(nmId, totals)
     }
-    for (const { bucket, amountRub } of explodeRealizationRow(row)) {
-      totals[bucket] += amountRub
+    return totals
+  }
+  for (const row of rows) {
+    // Запись для nmId строки создаётся всегда (даже без вкладов) — поведение прежнее.
+    bucketFor(row.nmId)
+    for (const { bucket, amountRub, nmIdOverride } of explodeRealizationRow(row)) {
+      bucketFor(nmIdOverride ?? row.nmId)[bucket] += amountRub
     }
   }
   return acc

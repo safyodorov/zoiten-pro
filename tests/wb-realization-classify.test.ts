@@ -61,7 +61,9 @@ describe("explodeRealizationRow", () => {
         deductionRub: 71.2,
       }),
     )
-    expect(contributions).toEqual([{ bucket: "reviewPoints", amountRub: 71.2 }])
+    expect(contributions).toEqual([
+      { bucket: "reviewPoints", amountRub: 71.2, nmIdOverride: 999 },
+    ])
   })
 
   it("(в) deduction с bonus «Оказание услуг «WB Продвижение», документ №42» → promotion", () => {
@@ -240,7 +242,34 @@ describe("accumulateRealizationRows", () => {
     expect(acc.get(1)?.delivery).toBe(30)
     expect(acc.get(1)?.penalty).toBe(0)
     expect(acc.get(2)?.penalty).toBe(500)
-    expect(acc.get(0)?.reviewPoints).toBe(300)
+    // nmIdOverride: отзыв атрибуцирован на «товар 2» из текста, не на nmId=0 строки
+    expect(acc.get(2)?.reviewPoints).toBe(300)
+    expect(acc.get(0)?.reviewPoints).toBe(0)
+  })
+
+  it("(з) nmIdOverride: account-level отзыв (nmId=0) атрибуцируется на артикул из текста bonusTypeName", () => {
+    const raw: unknown[] = [
+      {
+        sellerOperName: "Удержание",
+        bonusTypeName: "Списание за отзыв xyz: акция №1940696, товар 848830964",
+        deduction: 1464,
+      },
+    ]
+    const acc = accumulateRealizationRows(raw.map(normalizeRealizationRow))
+    expect(acc.get(848830964)?.reviewPoints).toBe(1464)
+    expect(acc.get(0)?.reviewPoints).toBe(0)
+  })
+
+  it("(и) отзыв БЕЗ «товар N» в тексте остаётся на nmId строки (fallback)", () => {
+    const raw: unknown[] = [
+      {
+        sellerOperName: "Удержание",
+        bonusTypeName: "Списание за отзыв без указания артикула",
+        deduction: 100,
+      },
+    ]
+    const acc = accumulateRealizationRows(raw.map(normalizeRealizationRow))
+    expect(acc.get(0)?.reviewPoints).toBe(100)
   })
 
   it("(ж) golden: сырые строки API (sellerOperName, camelCase, деньги-строками) → normalize → accumulate", () => {
@@ -292,9 +321,10 @@ describe("accumulateRealizationRows", () => {
       storage: 0,
       acceptance: 0,
       penalty: 0,
-      reviewPoints: 71.2,
+      reviewPoints: 0, // отзыв уехал на «товар 999» через nmIdOverride
       promotion: 1306.1,
       deductionOther: 0,
     })
+    expect(acc.get(999)?.reviewPoints).toBe(71.2)
   })
 })
