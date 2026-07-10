@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 const TABS = [
   { href: "/finance/balance", label: "Баланс" },
   { href: "/finance/cashflow", label: "ОДДС" },
+  { href: "/finance/weekly", label: "Понедельный" },
   { href: "/finance/pnl", label: "ОПиУ" },
 ]
 

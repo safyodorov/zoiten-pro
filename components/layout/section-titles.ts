@@ -39,6 +39,7 @@ const SECTION_TITLES: Array<{ match: RegExp; title: string }> = [
   { match: /^\/cash/, title: "Наличные расчёты" },
   { match: /^\/finance\/balance/, title: "Финансы — Баланс" },
   { match: /^\/finance\/cashflow/, title: "Финансы — ОДДС" },
+  { match: /^\/finance\/weekly/, title: "Финансы — Понедельный" },
   { match: /^\/finance\/pnl/, title: "Финансы — ОПиУ" },
   { match: /^\/finance-models/, title: "Финансовые модели" },
   { match: /^\/support\/stats/, title: "Статистика службы поддержки" },
