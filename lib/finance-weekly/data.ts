@@ -47,8 +47,10 @@ import {
   buildRealizationPools,
   distributeByRevenue,
   logisticsIuPerUnit,
+  resolvePoolTotals,
   reviewWriteoffFor,
   splitRealizationRows,
+  type ResolvedRealizationPools,
 } from "@/lib/finance-weekly/realization"
 import { compareProductsByHierarchy } from "@/lib/product-order"
 
@@ -138,6 +140,16 @@ export interface WeeklyFinReportPageData {
   manualPools: ManualPools
   /** W1: есть ли строки WbRealizationWeekly за неделю (ИУ-факт из реализации). */
   hasRealization: boolean
+  /** Quick 260710-kvf: источник каждого пула (per-бакет бейдж в Controls). */
+  poolSources: ResolvedRealizationPools["sources"]
+}
+
+/** Все 4 пула из manual — для early-return'ов без данных недели. */
+const ALL_MANUAL_POOL_SOURCES: ResolvedRealizationPools["sources"] = {
+  storageAppl: "manual",
+  storageCloth: "manual",
+  acceptanceAppl: "manual",
+  acceptanceCloth: "manual",
 }
 
 // ── Хелперы ────────────────────────────────────────────────────────────────────
@@ -219,6 +231,7 @@ export async function loadWeeklyFinReportInputs(
       constants: DEFAULT_WEEKLY_CONSTANTS,
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
+      poolSources: ALL_MANUAL_POOL_SOURCES,
     }
   }
 
@@ -265,6 +278,7 @@ export async function loadWeeklyFinReportInputs(
       constants: DEFAULT_WEEKLY_CONSTANTS,
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
+      poolSources: ALL_MANUAL_POOL_SOURCES,
     }
   }
 
@@ -559,8 +573,7 @@ export async function loadWeeklyFinReportInputs(
   // 11. Ручные пулы
   const manualPools = parseManualPools(settingsMap.get(poolsKey))
 
-  // 11a. W1: пулы хранения/приёмки из реализации (замещают manual при наличии
-  // строк недели; manual остаётся fallback при hasRealization=false).
+  // 11a. W1: пулы хранения/приёмки из реализации.
   // universeByNmId — из ВСЕХ привязанных артикулов (productByNmId), НЕ из
   // candidates: товары без продаж на неделе (qty<=0) всё равно несут
   // хранение/приёмку и обязаны попасть в пул своей вселенной. Бакеты nmId вне
@@ -583,19 +596,29 @@ export async function loadWeeklyFinReportInputs(
     )
   }
 
+  // 11b. Quick 260710-kvf: per-БАКЕТ выбор источника (реализация > 0 → факт,
+  // иначе manual). На ИУ paidStorage=0 / paidAcceptance=0 — нулевой бакет
+  // реализации НЕ должен затирать ручные значения хранения/приёмки.
+  const resolvedPools = resolvePoolTotals(realizationPools, {
+    storageAppl: manualPools.storageAppl,
+    storageCloth: manualPools.storageCloth,
+    acceptanceAppl: manualPools.acceptanceAppl,
+    acceptanceCloth: manualPools.acceptanceCloth,
+  })
+
   // 12. Пулы per universe (§2.2): доставка общая, кредит только appliances.
-  // W1: storage/acceptance — факт реализации (fallback manual); поля
-  // delivery/overhead* остаются ручными — их нет в отчёте реализации.
+  // W1: storage/acceptance — факт реализации per бакет (fallback manual);
+  // поля delivery/overhead* остаются ручными — их нет в отчёте реализации.
   const appliancesPools: UniversePools = {
     deliveryToMp: { total: manualPools.delivery, baseRevenue: combinedBase },
     creditInterest: { total: zoitenWeekInterest, baseRevenue: applBase },
     overhead: { total: manualPools.overheadAppl, baseRevenue: applBase },
     acceptance: {
-      total: realizationPools ? realizationPools.acceptanceAppl : manualPools.acceptanceAppl,
+      total: resolvedPools.totals.acceptanceAppl,
       baseRevenue: applBase,
     },
     storage: {
-      total: realizationPools ? realizationPools.storageAppl : manualPools.storageAppl,
+      total: resolvedPools.totals.storageAppl,
       baseRevenue: applBase,
     },
   }
@@ -604,11 +627,11 @@ export async function loadWeeklyFinReportInputs(
     creditInterest: { total: 0, baseRevenue: 0 }, // одежда кредит не несёт
     overhead: { total: manualPools.overheadCloth, baseRevenue: clothBase },
     acceptance: {
-      total: realizationPools ? realizationPools.acceptanceCloth : manualPools.acceptanceCloth,
+      total: resolvedPools.totals.acceptanceCloth,
       baseRevenue: clothBase,
     },
     storage: {
-      total: realizationPools ? realizationPools.storageCloth : manualPools.storageCloth,
+      total: resolvedPools.totals.storageCloth,
       baseRevenue: clothBase,
     },
   }
@@ -623,5 +646,6 @@ export async function loadWeeklyFinReportInputs(
     constants: DEFAULT_WEEKLY_CONSTANTS,
     manualPools,
     hasRealization,
+    poolSources: resolvedPools.sources,
   }
 }

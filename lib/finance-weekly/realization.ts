@@ -173,6 +173,49 @@ export function buildRealizationPools(
   }
 }
 
+// ── Per-бакет выбор источника пулов (quick 260710-kvf) ─────────────────────────
+
+export type PoolSource = "realization" | "manual"
+
+export interface ResolvedRealizationPools {
+  totals: RealizationPoolTotals
+  sources: Record<keyof RealizationPoolTotals, PoolSource>
+}
+
+const POOL_KEYS = [
+  "storageAppl",
+  "storageCloth",
+  "acceptanceAppl",
+  "acceptanceCloth",
+] as const
+
+/**
+ * Per-бакет выбор источника пула: реализация (если бакет строго > 0), иначе
+ * manual. Кейс ИУ (ground truth первого синка 2026-07-10): paidStorage=0 в
+ * отчёте реализации НЕ должен затирать ручное значение хранения — раньше
+ * наличие ЛЮБЫХ строк реализации замещало ВСЕ 4 пула целиком, и первый же
+ * синк обнулял хранение/приёмку, введённые вручную.
+ *
+ * sources — для per-пул бейджа «из реализации / вручную» в Controls.
+ */
+export function resolvePoolTotals(
+  realization: RealizationPoolTotals | null,
+  manual: RealizationPoolTotals,
+): ResolvedRealizationPools {
+  const totals = {} as RealizationPoolTotals
+  const sources = {} as Record<keyof RealizationPoolTotals, PoolSource>
+  for (const key of POOL_KEYS) {
+    if (realization !== null && realization[key] > 0) {
+      totals[key] = realization[key]
+      sources[key] = "realization"
+    } else {
+      totals[key] = manual[key]
+      sources[key] = "manual"
+    }
+  }
+  return { totals, sources }
+}
+
 /**
  * Списание за баллы-за-отзывы per nmId: собственные reviewPointsRub строки
  * + доля account-level reviewPoints (accountShareByNmId — результат
