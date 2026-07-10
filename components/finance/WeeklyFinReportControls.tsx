@@ -42,7 +42,7 @@ const POOL_FIELDS: { key: keyof ManualPools; label: string; group: string }[] = 
   { key: "overheadAppl", label: "Общие расходы", group: "Бытовая техника" },
   { key: "acceptanceAppl", label: "Приёмка / штрафы", group: "Бытовая техника" },
   { key: "storageAppl", label: "Хранение", group: "Бытовая техника" },
-  { key: "overheadCloth", label: "Общие расходы", group: "Одежда" },
+  { key: "overheadCloth", label: "Общие расходы (переменная)", group: "Одежда" },
   { key: "acceptanceCloth", label: "Приёмка / штрафы", group: "Одежда" },
   { key: "storageCloth", label: "Хранение", group: "Одежда" },
 ]
@@ -65,6 +65,22 @@ function isRealizationPoolKey(k: keyof ManualPools): k is RealizationPoolKey {
   return (REALIZATION_POOL_KEYS as readonly string[]).includes(k)
 }
 
+// Quick 260710-lmb (W3a): гибрид-пулы из банка — manual > 0 → manual, иначе
+// Σ|amount| DEBIT-операций недели с тегом (DELIVERY_MP / OPEX), иначе 0.
+const BANK_HYBRID_KEYS = ["delivery", "overheadAppl"] as const
+
+type BankHybridKey = (typeof BANK_HYBRID_KEYS)[number]
+
+function isBankHybridKey(k: keyof ManualPools): k is BankHybridKey {
+  return (BANK_HYBRID_KEYS as readonly string[]).includes(k)
+}
+
+const BANK_SOURCE_LABELS: Record<"manual" | "bank" | "none", string> = {
+  manual: "вручную",
+  bank: "из банка",
+  none: "—",
+}
+
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -74,6 +90,12 @@ interface Props {
   canManage: boolean
   /** Quick 260710-kvf: источник значения КАЖДОГО пула (per-пул бейдж). */
   poolSources: Record<RealizationPoolKey, "realization" | "manual">
+  /** W3a (quick 260710-lmb): авто-суммы из банка — подписи «банк: N ₽». */
+  bankAutos: { opexRub: number; deliveryMpRub: number }
+  /** W3a: фикс-часть общих расходов одежды (глобальный AppSetting). */
+  clothingOverheadFixedRub: number
+  /** W3a: источник гибрид-пулов delivery / overheadAppl. */
+  bankPoolSources: Record<BankHybridKey, "manual" | "bank" | "none">
 }
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
@@ -84,11 +106,22 @@ export function WeeklyFinReportControls({
   manualPools,
   canManage,
   poolSources,
+  bankAutos,
+  clothingOverheadFixedRub,
+  bankPoolSources,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [isSyncPending, startSyncTransition] = useTransition()
   const [pools, setPools] = useState<ManualPools>(manualPools)
+  // W3a: фикс-часть общих расходов одежды — глобальная константа (не per неделя)
+  const [fixedCloth, setFixedCloth] = useState(clothingOverheadFixedRub)
+
+  // W3a: авто-сумма из банка per гибрид-пул
+  const bankAutoByKey: Record<BankHybridKey, number> = {
+    delivery: bankAutos.deliveryMpRub,
+    overheadAppl: bankAutos.opexRub,
+  }
 
   function goToWeek(mondayISO: string) {
     router.push(`/finance/weekly?week=${mondayISO}`)
@@ -106,7 +139,9 @@ export function WeeklyFinReportControls({
 
   const handleSave = () => {
     startTransition(async () => {
-      const res = await saveWeeklyPools(weekStartISO, pools)
+      const res = await saveWeeklyPools(weekStartISO, pools, {
+        clothingOverheadFixedRub: fixedCloth,
+      })
       if (res.ok) {
         toast.success("Пулы затрат сохранены")
         router.refresh()
@@ -205,34 +240,82 @@ export function WeeklyFinReportControls({
             {GROUP_ORDER.map((group) => (
               <div key={group} className="flex flex-col gap-1.5">
                 <div className="text-xs font-medium text-muted-foreground">{group}</div>
+                {/* W3a: фикс-часть общих расходов одежды — НЕ поле ManualPools
+                    (глобальная константа, не недельная) — рендерится ПЕРЕД полями группы */}
+                {group === "Одежда" && (
+                  <div className="flex flex-col gap-0.5">
+                    <label className="flex items-center gap-2 text-xs">
+                      <span className="w-40 whitespace-nowrap text-muted-foreground">
+                        Общие расходы (фикс.)
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={Number.isFinite(fixedCloth) ? fixedCloth : 0}
+                        onChange={(e) => {
+                          const n = Number(e.target.value)
+                          setFixedCloth(Number.isFinite(n) ? n : 0)
+                        }}
+                        className="w-28 rounded border bg-background px-2 py-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </label>
+                    <div className="text-[10px] text-muted-foreground">
+                      глобальная константа (не per неделя)
+                    </div>
+                  </div>
+                )}
                 {POOL_FIELDS.filter((f) => f.group === group).map((f) => (
-                  <label key={f.key} className="flex items-center gap-2 text-xs">
-                    <span className="w-40 whitespace-nowrap text-muted-foreground">
-                      {f.label}
-                      {isRealizationPoolKey(f.key) && (
-                        <span
-                          className="ml-1 text-[10px] text-muted-foreground"
-                          title={
-                            poolSources[f.key] === "realization"
-                              ? "Значение пула взято из отчёта реализации WB; ручное поле — fallback"
-                              : undefined
-                          }
-                        >
-                          {poolSources[f.key] === "realization"
-                            ? "из реализации"
-                            : "вручную"}
-                        </span>
-                      )}
-                    </span>
-                    <input
-                      type="number"
-                      step="any"
-                      value={Number.isFinite(pools[f.key]) ? pools[f.key] : 0}
-                      onChange={(e) => handlePoolChange(f.key, e.target.value)}
-                      className="w-28 rounded border bg-background px-2 py-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                  </label>
+                  <div key={f.key} className="flex flex-col gap-0.5">
+                    <label className="flex items-center gap-2 text-xs">
+                      <span className="w-40 whitespace-nowrap text-muted-foreground">
+                        {f.label}
+                        {isRealizationPoolKey(f.key) && (
+                          <span
+                            className="ml-1 text-[10px] text-muted-foreground"
+                            title={
+                              poolSources[f.key] === "realization"
+                                ? "Значение пула взято из отчёта реализации WB; ручное поле — fallback"
+                                : undefined
+                            }
+                          >
+                            {poolSources[f.key] === "realization"
+                              ? "из реализации"
+                              : "вручную"}
+                          </span>
+                        )}
+                        {isBankHybridKey(f.key) && (
+                          <span
+                            className="ml-1 text-[10px] text-muted-foreground"
+                            title="0 = не задано → берётся авто-сумма помеченных операций банка за неделю"
+                          >
+                            {BANK_SOURCE_LABELS[bankPoolSources[f.key]]}
+                          </span>
+                        )}
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={Number.isFinite(pools[f.key]) ? pools[f.key] : 0}
+                        onChange={(e) => handlePoolChange(f.key, e.target.value)}
+                        className="w-28 rounded border bg-background px-2 py-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </label>
+                    {/* W3a: авто-сумма из банка показывается ВСЕГДА (даже при manual) */}
+                    {isBankHybridKey(f.key) && (
+                      <div className="text-[10px] text-muted-foreground tabular-nums">
+                        банк: {bankAutoByKey[f.key].toLocaleString("ru-RU")} ₽
+                      </div>
+                    )}
+                  </div>
                 ))}
+                {/* W3a: состав пула общих расходов одежды = фикс + переменная */}
+                {group === "Одежда" && (
+                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                    пул одежды = фикс {(Number.isFinite(fixedCloth) ? fixedCloth : 0).toLocaleString("ru-RU")}{" "}
+                    + переменная {pools.overheadCloth.toLocaleString("ru-RU")} ={" "}
+                    {((Number.isFinite(fixedCloth) ? fixedCloth : 0) + pools.overheadCloth).toLocaleString("ru-RU")} ₽
+                  </div>
+                )}
               </div>
             ))}
           </div>

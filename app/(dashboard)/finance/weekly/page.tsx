@@ -102,6 +102,9 @@ export default async function FinanceWeeklyPage({
         manualPools={data.manualPools}
         canManage={canManage}
         poolSources={data.poolSources}
+        bankAutos={data.bankAutos}
+        clothingOverheadFixedRub={data.clothingOverheadFixedRub}
+        bankPoolSources={data.bankPoolSources}
       />
 
       <WeeklyFinReportTable
