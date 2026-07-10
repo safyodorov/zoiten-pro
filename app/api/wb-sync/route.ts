@@ -21,6 +21,7 @@ import {
   type WarehouseStockItem,
   WbRateLimitError,
 } from "@/lib/wb-api"
+import { snapshotCommissionChanges } from "@/lib/wb-commission-history"
 
 /**
  * Информация о каждом упавшем external-API во время sync.
@@ -645,6 +646,17 @@ export async function POST(): Promise<NextResponse> {
     } catch (e) {
       console.error("[wb-sync] product photo resolve failed:", e)
       errors.push(`product-photo-resolve: ${(e as Error).message}`)
+    }
+
+    // ── W2d (quick 260710-hkj): снапшот истории комиссий ──
+    // После того как upsert-цикл записал свежие ставки в WbCard. Ошибка
+    // снапшота НЕ валит синк (паттерн product-photo-resolve выше).
+    try {
+      const snapshotted = await snapshotCommissionChanges()
+      if (snapshotted > 0) console.log(`[wb-sync] commission snapshots: ${snapshotted}`)
+    } catch (e) {
+      console.error("[wb-sync] commission snapshot failed:", e)
+      errors.push(`commission-snapshot: ${(e as Error).message}`)
     }
 
     return NextResponse.json({

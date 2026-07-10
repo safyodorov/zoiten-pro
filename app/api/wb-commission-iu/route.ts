@@ -4,6 +4,7 @@ export const runtime = "nodejs"
 
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { snapshotCommissionChanges } from "@/lib/wb-commission-history"
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 
@@ -77,6 +78,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       prisma.wbCommissionIu.deleteMany(),
       prisma.wbCommissionIu.createMany({ data: records }),
     ])
+
+    // W2d (quick 260710-hkj): снапшот истории комиссий. Route пишет только
+    // WbCommissionIu — WbCard обновит следующий /api/wb-sync (join по category),
+    // поэтому вызов здесь обычно no-op. Но он захватывает изменения, если
+    // WbCard правили вручную/SQL между синками (решение пользователя 2026-07-10).
+    try {
+      const snapshotted = await snapshotCommissionChanges()
+      if (snapshotted > 0) console.log(`[wb-commission-iu] commission snapshots: ${snapshotted}`)
+    } catch (e) {
+      console.error("[wb-commission-iu] commission snapshot failed:", e)
+    }
 
     return NextResponse.json({
       imported: records.length,

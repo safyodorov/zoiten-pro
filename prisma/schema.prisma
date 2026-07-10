@@ -414,6 +414,22 @@ model WbCommissionIu {
   booking     Float // Бронирование, %
 }
 
+// W2d (quick 260710-hkj): история комиссий per nmId. Прошлые недели /finance/weekly
+// считаются по ставкам, действовавшим на weekEnd (validFrom <= weekEnd, последняя запись).
+model WbCommissionSnapshot {
+  id         String   @id @default(cuid())
+  validFrom  DateTime @db.Date // дата начала действия ставок (МСК-дата, UTC-полночь)
+  nmId       Int
+  commFbwIu  Float?
+  commFbwStd Float?
+  commFbsIu  Float?
+  commFbsStd Float?
+  createdAt  DateTime @default(now())
+
+  @@unique([validFrom, nmId])
+  @@index([nmId, validFrom])
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Product
 // ──────────────────────────────────────────────────────────────────
