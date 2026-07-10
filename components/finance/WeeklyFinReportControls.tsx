@@ -68,6 +68,7 @@ export function WeeklyFinReportControls({
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  const [isSyncPending, startSyncTransition] = useTransition()
   const [pools, setPools] = useState<ManualPools>(manualPools)
 
   function goToWeek(mondayISO: string) {
@@ -92,6 +93,38 @@ export function WeeklyFinReportControls({
         router.refresh()
       } else {
         toast.error(res.error || "Не удалось сохранить пулы")
+      }
+    })
+  }
+
+  // W1 (quick 260710-jgs): импорт отчёта реализации WB выбранной недели.
+  // Rate limit sales-reports 1 req/мин → импорт занимает минуты (loading toast).
+  const handleRealizationSync = () => {
+    startSyncTransition(async () => {
+      const toastId = toast.loading(
+        "Импорт отчёта реализации… (до 2-3 мин, rate limit WB)",
+      )
+      try {
+        const res = await fetch("/api/wb-realization-sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ week: weekStartISO }),
+        })
+        const data = (await res.json()) as {
+          ok?: boolean
+          written?: number
+          error?: string
+        }
+        toast.dismiss(toastId)
+        if (res.ok && data.ok) {
+          toast.success(`Реализация: ${data.written ?? 0} строк за неделю`)
+          router.refresh()
+        } else {
+          toast.error(data.error || "Не удалось импортировать отчёт реализации")
+        }
+      } catch {
+        toast.dismiss(toastId)
+        toast.error("Не удалось импортировать отчёт реализации")
       }
     })
   }
@@ -128,6 +161,16 @@ export function WeeklyFinReportControls({
         >
           Тек. неделя
         </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={handleRealizationSync}
+            disabled={isSyncPending}
+            className="px-2 py-1 text-xs text-muted-foreground border rounded hover:text-foreground hover:bg-muted/40 transition-colors disabled:opacity-50"
+          >
+            {isSyncPending ? "Импорт…" : "Реализация WB"}
+          </button>
+        )}
         <span className="text-muted-foreground whitespace-nowrap">
           {weekStartISO} — {weekEndISO}
         </span>

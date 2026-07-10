@@ -39,6 +39,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbSalesDailyCronTime",
           "vpRollforwardCronTime",
           "wbBoxTariffsCronTime",
+          "wbRealizationWeeklyCronTime",
           "wbOrdersDailyLastRun",
           "wbPricesDailyLastRun",
           "wbFunnelDailyLastRun",
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           "wbSalesDailyLastRun",
           "vpRollforwardLastRun",
           "wbBoxTariffsLastRun",
+          "wbRealizationWeeklyLastRun",
         ],
       },
     },
@@ -77,6 +79,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const rollforwardLastRun = settings.vpRollforwardLastRun ?? null
   const boxTariffsTime = settings.wbBoxTariffsCronTime ?? "05:20"
   const boxTariffsLastRun = settings.wbBoxTariffsLastRun ?? null
+  const realizationTime = settings.wbRealizationWeeklyCronTime ?? "05:50"
+  const realizationLastRun = settings.wbRealizationWeeklyLastRun ?? null
 
   const fired: string[] = []
 
@@ -232,6 +236,29 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } catch (e) {
       console.error("[dispatch] box-tariffs error:", e)
       fired.push("box-tariffs:error")
+    }
+  }
+
+  // W1 (quick 260710-jgs): отчёт реализации WB за ПРОШЛУЮ ISO-неделю. По умолчанию
+  // 05:50 МСК — после ночных синков (box-tariffs 05:20, cards-refresh 05:30).
+  // Dispatcher дёргает ЕЖЕДНЕВНО; Tuesday-guard внутри endpoint'а — в прочие дни
+  // ответ skipped БЕЗ обновления lastRun (отчёт закрытой недели появляется у WB
+  // в понедельник, вторник = буфер на формирование).
+  if (
+    shouldFireCron({
+      currentHHMM,
+      storedTime: realizationTime,
+      lastRunDate: realizationLastRun,
+      today,
+    })
+  ) {
+    try {
+      const { GET: realizationHandler } = await import("../wb-realization-weekly/route")
+      const res = await realizationHandler(req)
+      fired.push(`realization:${res.status}`)
+    } catch (e) {
+      console.error("[dispatch] realization error:", e)
+      fired.push("realization:error")
     }
   }
 
