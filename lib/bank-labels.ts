@@ -22,3 +22,16 @@ export const DIRECTION_LABELS: Record<string, string> = {
   DEBIT: "Расход",
   CREDIT: "Приход",
 }
+
+// Quick 260710-lmb (W3a): тег недельного фин-отчёта (BankTransaction.weeklyCostTag).
+// Ортогонален TxCategory — независимая разметка для авто-пулов /finance/weekly.
+export const WEEKLY_COST_TAG_LABELS: Record<string, string> = {
+  OPEX: "ОПЕКС (общие)",
+  CAPEX: "КАПЕКС",
+  DELIVERY_MP: "Доставка до МП",
+}
+
+export const WEEKLY_COST_TAG_OPTIONS = [
+  { value: "", label: "—" },
+  ...Object.entries(WEEKLY_COST_TAG_LABELS).map(([value, label]) => ({ value, label })),
+]

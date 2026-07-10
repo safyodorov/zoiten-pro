@@ -10,8 +10,14 @@
 import { useState, useTransition } from "react"
 import { toast } from "sonner"
 import { TableBody, TableRow, TableCell } from "@/components/ui/table"
-import { categorizeTx, updateTxComment } from "@/app/actions/bank"
-import { CATEGORY_LABELS, CATEGORY_OPTIONS, DIRECTION_LABELS } from "@/lib/bank-labels"
+import { categorizeTx, setWeeklyCostTag, updateTxComment } from "@/app/actions/bank"
+import {
+  CATEGORY_LABELS,
+  CATEGORY_OPTIONS,
+  DIRECTION_LABELS,
+  WEEKLY_COST_TAG_LABELS,
+  WEEKLY_COST_TAG_OPTIONS,
+} from "@/lib/bank-labels"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +35,7 @@ export interface BankTxRow {
   counterpartyName: string | null
   counterpartyInn: string | null
   category: string      // TxCategory value
+  weeklyCostTag: string | null // WeeklyCostTag value (Quick 260710-lmb, W3a)
   comment: string | null // ручной комментарий (управленческий учёт)
   companyName: string
   accountNumber: string
@@ -76,6 +83,59 @@ function CategoryCell({
       className="h-7 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {CATEGORY_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+// ── WeeklyTagCell ──────────────────────────────────────────────────────────
+// Quick 260710-lmb (W3a): тег недельного фин-отчёта. Редактируется только на
+// РАСХОДНЫХ (DEBIT) операциях при MANAGE; приход и не-MANAGE — read-only текст.
+
+function WeeklyTagCell({
+  txId,
+  current,
+  direction,
+  canManage,
+}: {
+  txId: string
+  current: string | null
+  direction: string
+  canManage: boolean
+}) {
+  const [value, setValue] = useState(current ?? "")
+  const [, startTransition] = useTransition()
+
+  if (direction !== "DEBIT" || !canManage) {
+    const label = current ? WEEKLY_COST_TAG_LABELS[current] : null
+    return label ? (
+      <span className="text-xs">{label}</span>
+    ) : (
+      <span className="text-xs text-muted-foreground">—</span>
+    )
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        const next = e.target.value
+        const prev = value
+        setValue(next)
+        startTransition(async () => {
+          const result = await setWeeklyCostTag(txId, next)
+          if (!result.ok) {
+            toast.error(result.error)
+            setValue(prev) // откат при ошибке
+          }
+        })
+      }}
+      className="h-7 rounded border border-input bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      {WEEKLY_COST_TAG_OPTIONS.map((opt) => (
         <option key={opt.value} value={opt.value}>
           {opt.label}
         </option>
@@ -192,6 +252,9 @@ export function BankTransactionsTable({ rows, canManage }: BankTransactionsTable
               Категория
             </th>
             <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
+              Тег фин-отчёта
+            </th>
+            <th className="sticky top-0 z-20 bg-background border-b px-3 py-2 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
               Комментарий
             </th>
           </tr>
@@ -279,6 +342,16 @@ export function BankTransactionsTable({ rows, canManage }: BankTransactionsTable
               {/* Категория — inline-select (canManage) или текст */}
               <TableCell className="px-3 py-2 whitespace-nowrap">
                 <CategoryCell txId={row.id} current={row.category} canManage={canManage} />
+              </TableCell>
+
+              {/* Тег фин-отчёта — inline-select только DEBIT+MANAGE (W3a) */}
+              <TableCell className="px-3 py-2 whitespace-nowrap">
+                <WeeklyTagCell
+                  txId={row.id}
+                  current={row.weeklyCostTag}
+                  direction={row.direction}
+                  canManage={canManage}
+                />
               </TableCell>
 
               {/* Комментарий — редактируемый текст (управленческий учёт) */}

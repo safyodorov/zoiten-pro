@@ -314,6 +314,7 @@ export default async function BankPage({
     counterpartyName: t.counterpartyName,
     counterpartyInn: t.counterpartyInn,
     category: t.category ?? "UNCATEGORIZED",
+    weeklyCostTag: t.weeklyCostTag ?? null,
     comment: t.comment,
     companyName: t.account.company.name,
     accountNumber: t.account.number,

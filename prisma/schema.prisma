@@ -59,6 +59,15 @@ enum TxCategory {
   OTHER
 }
 
+// Quick 260710-lmb (W3a): тег недельного фин-отчёта на банковских операциях.
+// OPEX → пул «Общие расходы (бытовая)»; DELIVERY_MP → пул «Доставка до МП»;
+// CAPEX — только маркировка/исключение, в пулы НЕ идёт.
+enum WeeklyCostTag {
+  OPEX
+  CAPEX
+  DELIVERY_MP
+}
+
 // Phase 23: Наличные расчёты — направление операции
 enum CashDirection {
   INCOME  // приход
@@ -1842,6 +1851,8 @@ model BankTransaction {
   counterpartyAccount String?
   category            TxCategory?   @default(UNCATEGORIZED) // базовая разметка под ДДС
   comment             String?       @db.Text // ручной комментарий для управленческого учёта
+  // Quick 260710-lmb (W3a): тег недельного фин-отчёта (ортогонален category)
+  weeklyCostTag       WeeklyCostTag?
   // Дедуп + провенанс
   fingerprint         String        @unique // SHA-256 от (account|date|direction|amount|docNumber|counterpartyInn|purpose)
   importBatchId       String?
@@ -1853,6 +1864,7 @@ model BankTransaction {
   @@index([category])
   @@index([counterpartyId])
   @@index([importBatchId])
+  @@index([weeklyCostTag, date])
 }
 
 // Результат одного сеанса импорта Excel-выписки. Хранит метаданные загрузки.
