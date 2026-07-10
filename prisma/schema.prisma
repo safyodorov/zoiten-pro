@@ -1208,6 +1208,36 @@ model WbSalesDaily {
 }
 
 // ──────────────────────────────────────────────────────────────────
+// W1 (quick 260710-jgs): Недельный агрегат отчёта РЕАЛИЗАЦИИ WB.
+// Источник — Finance API /api/finance/v1/sales-reports (list → detailed),
+// строки классифицируются по бакетам (lib/wb-realization-api.ts) и
+// суммируются per nmId. nmId=0 = account-level строки без nm_id
+// (удержания уровня кабинета). nmId БЕЗ FK (паттерн WbSalesDaily).
+// ИУ-факт для /finance/weekly: reviewPoints/delivery/storage/acceptance/penalty.
+// promotionRub и forPayRub — ТОЛЬКО хранение/сверка, в расчёт не идут.
+// ──────────────────────────────────────────────────────────────────
+
+model WbRealizationWeekly {
+  id                String   @id @default(cuid())
+  weekStart         DateTime @db.Date // ISO-понедельник недели отчёта
+  nmId              Int // 0 = account-level строки без nm_id
+  forPayRub         Float    @default(0) // к перечислению (справочно)
+  deliveryRub       Float    @default(0) // логистика ИУ-факт: возвраты/брак
+  storageRub        Float    @default(0)
+  acceptanceRub     Float    @default(0)
+  penaltyRub        Float    @default(0)
+  reviewPointsRub   Float    @default(0) // баллы за отзывы
+  promotionRub      Float    @default(0) // ВБ.Продвижение — ТОЛЬКО сверка, в расчёт НЕ идёт
+  deductionOtherRub Float    @default(0)
+  reportIds         String[] // id обработанных отчётов WB (string — BigInt guard)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([weekStart, nmId])
+  @@index([weekStart])
+}
+
+// ──────────────────────────────────────────────────────────────────
 // Phase 19: Управление рекламой WB. Источник данных — WB Advert API
 // (advert-api.wildberries.ru). Связь с нашими товарами через nmId БЕЗ FK
 // (паттерн проекта — WbCard может быть soft-delete, исторические данные выживают).

@@ -33,6 +33,7 @@ export const WB_COOLDOWN_BUCKETS = [
   "questions",
   "advert", // Phase 19 — WB Advert API (advert-api.wildberries.ru, WB_ADS_TOKEN scope bit 30)
   "finance", // Phase 24 — WB Finance API (finance-api.wildberries.ru, WB_FINANCE_TOKEN scope bit 13)
+  "finance-reports", // W1 (quick 260710-jgs) — sales-reports (1 req/мин), ОТДЕЛЬНЫЙ bucket от 'finance' balance
 ] as const
 export type WbCooldownBucket = (typeof WB_COOLDOWN_BUCKETS)[number]
 
@@ -79,7 +80,12 @@ export function resolveBucketFromUrl(url: string): WbCooldownBucket | null {
   // Все /adv/v1/* и /adv/v3/* (promotion/count, fullstats, balance) попадают сюда.
   if (url.includes("advert-api.wildberries.ru")) return "advert"
   // Phase 24 (D-14) — WB Finance API (Balance), изолированный bucket от statistics-sales.
-  if (url.includes("finance-api.wildberries.ru")) return "finance"
+  // W1 (quick 260710-jgs) — sales-reports (отчёт реализации, 1 req/мин) живёт в
+  // СВОЁМ bucket'е, чтобы 429 отчётов не запирал balance-снапшоты (и наоборот).
+  if (url.includes("finance-api.wildberries.ru")) {
+    if (url.includes("/api/finance/v1/sales-reports")) return "finance-reports"
+    return "finance"
+  }
   // returns-api, buyer-chat-api, dp-calendar-api → не наш bus, отдельные токены
   return null
 }

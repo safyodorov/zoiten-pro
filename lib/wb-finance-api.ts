@@ -12,9 +12,8 @@
 //
 // Дебиторка на дату = balance.current + weeklyTail.
 //
-// Deferred (слой 3, будущая фаза — точная сверка): finance-api.wildberries.ru
-// /api/finance/v1/sales-reports/list|detailed — деньги там СТРОКИ (не числа!),
-// paymentSchedule тоже строка, daily reportId требует BigInt. НЕ используется в v1.
+// Слой 3 (sales-reports) больше НЕ deferred — реализован в lib/wb-realization-api.ts
+// (W1, quick 260710-jgs): list|detailed, деньги-строки → parseMoney, BigInt guard reportId.
 //
 // ⚠ Deprecated v5 supplier report endpoint (удаляется 15.07.2026, см. CONTEXT D-14) —
 // НЕ используется здесь и не должен использоваться впредь.
