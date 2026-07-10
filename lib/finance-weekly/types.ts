@@ -30,9 +30,13 @@ export interface WeeklyArticleInput {
   commStdPct: number           // J для сценария Оферта (% комиссии)
   costPerUnit: number          // O — закупка / ед
   adSpendTotal: number         // L — реклама за неделю (тотал по nmId)
-  reviewWriteoffTotal: number  // M — списание за баллы-за-отзывы за неделю (тотал)
-  logisticsIuPerUnit: number   // N для ИУ (обычно 0 — логистика зашита в комиссию)
-  logisticsStdPerUnit: number  // N для Оферты (полная объёмная логистика / ед)
+  // M — списание за баллы-за-отзывы за неделю (тотал).
+  // W1: факт из WbRealizationWeekly (свои строки nmId + доля account-level по выручке).
+  reviewWriteoffTotal: number
+  // N для ИУ. W1: факт из WbRealizationWeekly — возвратная логистика (брак/возвраты),
+  // deliveryRub/qty; без строк реализации = 0 (логистика зашита в ИУ-комиссию).
+  logisticsIuPerUnit: number
+  logisticsStdPerUnit: number  // N для Оферты (полная объёмная логистика / ед) — МОДЕЛЬ, не факт
   // Опциональный per-article override хранения / ед. Если не задан — берётся
   // из пула хранения (poolPerUnit по базе распределения).
   storagePerUnit?: number

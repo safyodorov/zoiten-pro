@@ -43,6 +43,13 @@ import { calculatePricingStandard, type PricingInputs } from "@/lib/pricing-math
 import { loadCommissionsForDate } from "@/lib/wb-commission-history"
 import { attributeSpendByShares } from "@/lib/finance-weekly/attribution"
 import { weeklyAccruedInterest } from "@/lib/finance-weekly/credit-accrual"
+import {
+  buildRealizationPools,
+  distributeByRevenue,
+  logisticsIuPerUnit,
+  reviewWriteoffFor,
+  splitRealizationRows,
+} from "@/lib/finance-weekly/realization"
 import { compareProductsByHierarchy } from "@/lib/product-order"
 
 // ── Ручные пулы (placeholder до W3 банк-классификатора) ───────────────────────
@@ -129,6 +136,8 @@ export interface WeeklyFinReportPageData {
   pools: { appliances: UniversePools; clothing: UniversePools }
   constants: WeeklyConstants
   manualPools: ManualPools
+  /** W1: есть ли строки WbRealizationWeekly за неделю (ИУ-факт из реализации). */
+  hasRealization: boolean
 }
 
 // ── Хелперы ────────────────────────────────────────────────────────────────────
@@ -209,6 +218,7 @@ export async function loadWeeklyFinReportInputs(
       pools: { appliances: emptyPools(), clothing: emptyPools() },
       constants: DEFAULT_WEEKLY_CONSTANTS,
       manualPools: DEFAULT_MANUAL_POOLS,
+      hasRealization: false,
     }
   }
 
@@ -254,6 +264,7 @@ export async function loadWeeklyFinReportInputs(
       pools: { appliances: emptyPools(), clothing: emptyPools() },
       constants: DEFAULT_WEEKLY_CONSTANTS,
       manualPools: DEFAULT_MANUAL_POOLS,
+      hasRealization: false,
     }
   }
 
@@ -275,6 +286,7 @@ export async function loadWeeklyFinReportInputs(
     updAgg,
     fullstatsAgg,
     loans,
+    realizationRows,
   ] = await Promise.all([
     prisma.wbCard.findMany({ where: { nmId: { in: linkedNmIds }, deletedAt: null } }),
     prisma.appSetting.findMany({ where: { key: { in: [...RATE_KEYS, poolsKey] } } }),
@@ -320,12 +332,23 @@ export async function loadWeeklyFinReportInputs(
         payments: { select: { date: true, principal: true } },
       },
     }),
+    // W1 (quick 260710-jgs): недельные агрегаты отчёта реализации WB (ИУ-факт).
+    // БЕЗ фильтра nmId — нужны и account-level строки (nmId=0), и непривязанные.
+    prisma.wbRealizationWeekly.findMany({ where: { weekStart } }),
   ])
 
   const cardByNmId = new Map<number, (typeof wbCards)[number]>()
   for (const c of wbCards) cardByNmId.set(c.nmId, c)
 
   const settingsMap = new Map(appSettings.map((s) => [s.key, s.value]))
+
+  // W1: ИУ-факт из отчёта реализации. nmId=0 → account-level (распределяется
+  // пропорционально). forPayRub / promotionRub / deductionOtherRub НИКУДА не
+  // идут — только хранение/сверка (D-scope 2026-07-10: продвижение уже покрыто
+  // рекламой /adv/v1/upd, forPay — справочно для Баланса/ПДДС).
+  const hasRealization = realizationRows.length > 0
+  const { byNmId: realizationByNmId, accountLevel: realizationAccountLevel } =
+    splitRealizationRows(realizationRows)
 
   // 5. Ставки (fallback → RATE_DEFAULTS)
   const rates = { ...RATE_DEFAULTS }
@@ -416,6 +439,14 @@ export async function loadWeeklyFinReportInputs(
     (a, b) => compareProductsByHierarchy(a.product, b.product) || a.nmId - b.nmId,
   )
 
+  // W1: выручка недели per nmId (двухпроходно: candidates уже собраны) — база
+  // распределения account-level reviewPoints по строкам отчёта.
+  const revenueByNmId = new Map<number, number>()
+  for (const c of candidates) revenueByNmId.set(c.nmId, c.rub)
+  const reviewAccountShare = hasRealization
+    ? distributeByRevenue(realizationAccountLevel.reviewPointsRub, revenueByNmId)
+    : new Map<number, number>()
+
   for (const { nmId, product, universe, qty, rub } of candidates) {
     const card = cardByNmId.get(nmId)
     const K = rub / qty
@@ -437,7 +468,9 @@ export async function loadWeeklyFinReportInputs(
     const adSpendTotal = adByNmId.get(nmId) ?? 0
 
     // N_std — модель объёмной логистики / ед (calculatePricingStandard).
-    // TODO(W1): заменить modeled N_std на фактический delivery_rub из WbRealizationWeekly.
+    // std остаётся МОДЕЛЬЮ НАВСЕГДА (решение 2026-07-10, D-scope): мы работаем на ИУ,
+    // в отчёте реализации НЕТ std-логистики/хранения сценария «Оферта». Фактический
+    // delivery_rub из WbRealizationWeekly идёт в logisticsIuPerUnit (ИУ-сценарий).
     const volumeLiters =
       ((product.heightCm ?? 0) * (product.widthCm ?? 0) * (product.depthCm ?? 0)) / 1000
     let logisticsStdPerUnit = 0
@@ -490,8 +523,16 @@ export async function loadWeeklyFinReportInputs(
       commStdPct,
       costPerUnit,
       adSpendTotal,
-      reviewWriteoffTotal: 0, // W1 later
-      logisticsIuPerUnit: 0, // логистика зашита в ИУ-комиссию
+      // W1: факт из WbRealizationWeekly — баллы за отзывы (свои строки nmId +
+      // доля account-level по выручке); без реализации = 0.
+      reviewWriteoffTotal: hasRealization
+        ? reviewWriteoffFor(nmId, realizationByNmId, reviewAccountShare)
+        : 0,
+      // W1 ИУ-факт: возвратная логистика (брак/возвраты) из WbRealizationWeekly,
+      // deliveryRub/qty (guard qty>0); без реализации = 0 (зашита в комиссию).
+      logisticsIuPerUnit: hasRealization
+        ? logisticsIuPerUnit(realizationByNmId.get(nmId)?.deliveryRub ?? 0, qty)
+        : 0,
       logisticsStdPerUnit,
       // storagePerUnit НЕ задаём → движок берёт из пула хранения
     })
@@ -518,20 +559,58 @@ export async function loadWeeklyFinReportInputs(
   // 11. Ручные пулы
   const manualPools = parseManualPools(settingsMap.get(poolsKey))
 
-  // 12. Пулы per universe (§2.2): доставка общая, кредит только appliances
+  // 11a. W1: пулы хранения/приёмки из реализации (замещают manual при наличии
+  // строк недели; manual остаётся fallback при hasRealization=false).
+  // universeByNmId — из ВСЕХ привязанных артикулов (productByNmId), НЕ из
+  // candidates: товары без продаж на неделе (qty<=0) всё равно несут
+  // хранение/приёмку и обязаны попасть в пул своей вселенной. Бакеты nmId вне
+  // universeByNmId (непривязанные) уходят в account-level распределение.
+  let realizationPools: ReturnType<typeof buildRealizationPools> | null = null
+  if (hasRealization) {
+    const universeByNmIdAll = new Map<number, Universe>()
+    for (const [nmId, product] of productByNmId) {
+      universeByNmIdAll.set(
+        nmId,
+        product.brand?.direction?.hasSizes ? "clothing" : "appliances",
+      )
+    }
+    realizationPools = buildRealizationPools(
+      realizationByNmId,
+      realizationAccountLevel,
+      universeByNmIdAll,
+      applBase,
+      clothBase,
+    )
+  }
+
+  // 12. Пулы per universe (§2.2): доставка общая, кредит только appliances.
+  // W1: storage/acceptance — факт реализации (fallback manual); поля
+  // delivery/overhead* остаются ручными — их нет в отчёте реализации.
   const appliancesPools: UniversePools = {
     deliveryToMp: { total: manualPools.delivery, baseRevenue: combinedBase },
     creditInterest: { total: zoitenWeekInterest, baseRevenue: applBase },
     overhead: { total: manualPools.overheadAppl, baseRevenue: applBase },
-    acceptance: { total: manualPools.acceptanceAppl, baseRevenue: applBase },
-    storage: { total: manualPools.storageAppl, baseRevenue: applBase },
+    acceptance: {
+      total: realizationPools ? realizationPools.acceptanceAppl : manualPools.acceptanceAppl,
+      baseRevenue: applBase,
+    },
+    storage: {
+      total: realizationPools ? realizationPools.storageAppl : manualPools.storageAppl,
+      baseRevenue: applBase,
+    },
   }
   const clothingPools: UniversePools = {
     deliveryToMp: { total: manualPools.delivery, baseRevenue: combinedBase }, // SHARED
     creditInterest: { total: 0, baseRevenue: 0 }, // одежда кредит не несёт
     overhead: { total: manualPools.overheadCloth, baseRevenue: clothBase },
-    acceptance: { total: manualPools.acceptanceCloth, baseRevenue: clothBase },
-    storage: { total: manualPools.storageCloth, baseRevenue: clothBase },
+    acceptance: {
+      total: realizationPools ? realizationPools.acceptanceCloth : manualPools.acceptanceCloth,
+      baseRevenue: clothBase,
+    },
+    storage: {
+      total: realizationPools ? realizationPools.storageCloth : manualPools.storageCloth,
+      baseRevenue: clothBase,
+    },
   }
 
   // 13. Результат
@@ -543,5 +622,6 @@ export async function loadWeeklyFinReportInputs(
     pools: { appliances: appliancesPools, clothing: clothingPools },
     constants: DEFAULT_WEEKLY_CONSTANTS,
     manualPools,
+    hasRealization,
   }
 }

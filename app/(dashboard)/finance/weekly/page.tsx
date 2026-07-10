@@ -101,6 +101,7 @@ export default async function FinanceWeeklyPage({
         weekEndISO={data.weekEnd}
         manualPools={data.manualPools}
         canManage={canManage}
+        hasRealization={data.hasRealization}
       />
 
       <WeeklyFinReportTable

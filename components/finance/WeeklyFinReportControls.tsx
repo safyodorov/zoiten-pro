@@ -49,6 +49,15 @@ const POOL_FIELDS: { key: keyof ManualPools; label: string; group: string }[] = 
 
 const GROUP_ORDER = ["Общее", "Бытовая техника", "Одежда"]
 
+// W1 (quick 260710-jgs): пулы, которые при наличии строк реализации берутся из
+// WbRealizationWeekly (manual-поле остаётся редактируемым fallback'ом).
+const REALIZATION_POOL_KEYS: readonly (keyof ManualPools)[] = [
+  "acceptanceAppl",
+  "storageAppl",
+  "acceptanceCloth",
+  "storageCloth",
+]
+
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -56,6 +65,8 @@ interface Props {
   weekEndISO: string
   manualPools: ManualPools
   canManage: boolean
+  /** W1: есть ли строки WbRealizationWeekly за неделю (бейдж источника пулов). */
+  hasRealization: boolean
 }
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
@@ -65,6 +76,7 @@ export function WeeklyFinReportControls({
   weekEndISO,
   manualPools,
   canManage,
+  hasRealization,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -190,6 +202,18 @@ export function WeeklyFinReportControls({
                   <label key={f.key} className="flex items-center gap-2 text-xs">
                     <span className="w-40 whitespace-nowrap text-muted-foreground">
                       {f.label}
+                      {REALIZATION_POOL_KEYS.includes(f.key) && (
+                        <span
+                          className="ml-1 text-[10px] text-muted-foreground"
+                          title={
+                            hasRealization
+                              ? "Значение пула взято из отчёта реализации WB; ручное поле — fallback"
+                              : undefined
+                          }
+                        >
+                          {hasRealization ? "из реализации" : "вручную"}
+                        </span>
+                      )}
                     </span>
                     <input
                       type="number"
