@@ -670,6 +670,42 @@ WB лимиты per-endpoint: **Tariffs 100/час**, **Statistics 5/мин**, *
 DELETE FROM "AppSetting" WHERE key IN ('salesPlan.baselineOverrides','salesPlan.priceOverrides','salesPlan.leadTimes');
 ```
 
+## Понедельный фин-отчёт — /finance/weekly (2026-07-10)
+
+Воспроизводит недельный Excel-финотчёт экономиста («Финансовый отчёт 3»): юнит-экономика per nmId × ISO-неделя в ДВУХ сценариях комиссии (ИУ / Оферта) + распределение недельных пулов затрат пропорционально выручке. Спека: `docs/superpowers/specs/2026-07-08-weekly-finreport-design.md`; сверка с Excel: `...2026-07-10-weekly-finreport-reconcile-report.md`.
+
+### Архитектура
+
+- `lib/finance-weekly/engine.ts` — PURE `computeWeeklyFinReport` (golden nmId 165967746: ИУ +523.6 / Оферта −2176.7). НЕ импортирует pricing-math/prisma. Менять контракт только аддитивно.
+- `lib/finance-weekly/data.ts` — `loadWeeklyFinReportInputs(weekStart)`: сборка входов из живых данных.
+- Прочие модули: `plan-fact.ts` (план из SalesPlanVersionDay + распределение product→nmId), `realization.ts` (пулы из отчёта реализации, per-бакет >0), `bank-pools.ts` (гибрид банк/manual), `attribution.ts` (реклама upd×доли), `credit-accrual.ts` (кредит остаток×ставка×7/365).
+- UI: `WeeklyFinReportTable` (иерархия Направление→Бренд→Категория→Подкатегория→Артикул, sticky-паттерн), `WeeklyFinArticleDialog` (drill-down 16 статей), `WeeklyFinReportControls` (неделя, пулы с бейджами источника, кнопка «Реализация WB»).
+
+### ДВА МИРА ЗАТРАТ (критично)
+
+Бытовая (appliances) и Одежда (clothing, по `direction.hasSizes`) НЕ пересекаются: кредитный пул — ТОЛЬКО appliances; общие расходы одежды = AppSetting-фикс + недельная переменная (не из банка); доставка до МП — общий пул на combinedBase.
+
+### Базисы (решение пользователя «как у экономиста»)
+
+Appliances — по ЗАКАЗАМ (WbCardFunnelDaily); clothing — по ВЫКУПАМ gross (WbSalesDaily, buyoutsCount/buyoutsRub; план из planBuyoutsRub). Бейджи базиса на заголовках направлений.
+
+### История комиссий
+
+`WbCommissionSnapshot` (validFrom × nmId): комиссии недели = `loadCommissionsForDate(weekEnd)` (fallback WbCard). Снапшот пишется хуками в конце `/api/wb-sync` и `/api/wb-commission-iu` при изменении ставок. Backfill validFrom 2026-06-01 = ставки ДО роста оферты 07.07.2026 → прошлые недели не пересчитываются новыми ставками.
+
+### Отчёт реализации WB (finance/v1/sales-reports)
+
+`lib/wb-realization-api.ts` + `WbRealizationWeekly` (weekStart×nmId, nmId=0 = account-level). ⚠ Реальный detailed: все поля camelCase, оператор `sellerOperName` (supplier_oper_name НЕТ), деньги ПОЛЯМИ на строках (часть строками с запятой) → мульти-поле `explodeRealizationRow` (вклады `!== 0`); отзывы = deduction с bonusTypeName «Списание за отзыв …, товар <nmId>» — артикул из ТЕКСТА регекспом → nmIdOverride; промо «WB Продвижение» хранится, в расчёт НЕ идёт (реклама из /adv/v1/upd); rebillLogisticCost → deductionOther. Токен WB_FINANCE_TOKEN (Персональный, scope Финансы), лимит 1 req/мин (cooldown bucket `finance-reports`), reportId BigInt→string. Крон вт 05:50 (dispatcher), backfill `?week=`. Сверка недели 29.06: delivery 84 970, penalty 11 564 (=Excel), reviews 71 224 (=Excel, 28 артикулов), promo 1 306 179 — точно.
+⚠ На ИУ std-логистики/хранения в отчёте НЕТ — сценарий Оферты остаётся моделью из `calculatePricingStandard` (решение пользователя).
+
+### Пулы затрат (источники, per-бакет)
+
+storage/acceptance: реализация (>0) → manual. overhead(быт)/deliveryToMp: manual (>0) → банк-теги → 0. Банк: `BankTransaction.weeklyCostTag` (OPEX/CAPEX/DELIVERY_MP; CAPEX не суммируется), select в /bank (DEBIT, BANK MANAGE). Manual: AppSetting `financeWeekly.pools.<weekStartISO>`; фикс одежды `financeWeekly.clothingOverheadFixedRub`.
+
+### RBAC / гейты
+
+Read `requireSection("FINANCE")`, write MANAGE. Гейты правок: tsc + vitest (finance-weekly-* + pricing-math) + diff-guard engine.ts. Реклама per nmId: НЕ raw fullstats (недосчёт ~30%) — upd-тотал × fullstats-доли.
+
 ## GSD Workflow Enforcement
 
 Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
