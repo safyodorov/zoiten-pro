@@ -5,7 +5,8 @@
 // /api/cron/wb-realization-weekly (вторник 05:50 МСК, прошлая неделя).
 //
 // Поток: list → фильтр отчётов недели → detailed (пагинация) → normalize →
-// classify → accumulate per nmId → clean-replace недели в WbRealizationWeekly.
+// explode (мульти-поле разнос) → accumulate per nmId → clean-replace недели
+// в WbRealizationWeekly.
 //
 // Rate limit sales-reports = 1 req/мин → sleep(FINANCE_REPORTS_SLEEP_MS) перед
 // каждым detailed-вызовом (пагинацию внутри detailed клиент спит сам).
@@ -36,8 +37,10 @@ function isoDate(d: Date): string {
  * с list-агрегатами отчётов (deliveryServiceSum / paidStorageSum / penaltySum
  * и т.п.). console.warn при относительном расхождении > 1% — сигнал, что
  * классификатор недоучитывает какой-то тип операций (диагностика первого
- * реального синка). Сверка приблизительная: deduction-fallback'и в classify
- * могут смещать бакеты, list-агрегаты могут не покрывать все строки.
+ * реального синка). Сверка приблизительная: list-агрегаты могут не покрывать
+ * все строки; rebillLogisticCost идёт в deductionOther, но НЕ входит в
+ * deductionSum → пара «reviewPoints+promotion+deductionOther vs deductionSum»
+ * может давать warning — это ожидаемо (диагностика, не ошибка).
  */
 function reconcileWithListAggregates(
   acc: Map<number, RealizationBucketTotals>,

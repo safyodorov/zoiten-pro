@@ -15,9 +15,14 @@
 // ОТДЕЛЬНЫЙ от 'finance' (balance), чтобы не запирать снапшоты баланса.
 // Дисциплина 429 (памятка): ровно ОДИН повтор по Retry-After — blind-retry запрещён.
 //
-// Pure-хелперы (parseMoney / normalizeRealizationRow / classifyRealizationRow /
+// Pure-хелперы (parseMoney / normalizeRealizationRow / explodeRealizationRow /
 // accumulateRealizationRows) — без side-effects, тестируются без сети
 // (tests/wb-realization-classify.test.ts).
+//
+// Классификация — МУЛЬТИ-ПОЛЕ разнос (explode, quick 260710-kvf): WB кладёт
+// деньги ПОЛЯМИ на каждой строке (forPay + deliveryService + penalty +
+// deduction + … одновременно) — одна строка даёт вклад в НЕСКОЛЬКО бакетов.
+// Ground truth: зонд detailed 772161985, 29 014 строк, 2026-07-10.
 //
 // ⚠ reportDetailByPeriod (v5 supplier report) умирает 15.07.2026 — НЕ использовать.
 
@@ -64,6 +69,8 @@ export interface NormalizedRealizationRow {
   penaltyRub: number
   acceptanceRub: number
   deductionRub: number
+  /** Возмещение издержек по перевозке/складским операциям (диагностика). */
+  rebillLogisticCost: number
   quantity: number
 }
 
@@ -77,13 +84,18 @@ function asString(v: unknown): string {
  * Нормализует сырую строку detailed-отчёта: читает и snake_case, и camelCase
  * варианты полей (WB исторически менял нейминг между версиями API),
  * деньги — через parseMoney. Отсутствие nm_id → nmId=0 (account-level).
+ *
+ * ⚠ Реальный API отдаёт оператора полем `sellerOperName` (ground truth зонда
+ * 2026-07-10) — алиас ОБЯЗАТЕЛЕН, без него все операции пустые.
  */
 export function normalizeRealizationRow(raw: unknown): NormalizedRealizationRow {
   const r = (raw ?? {}) as Record<string, unknown>
   const nmIdNum = Number(r.nm_id ?? r.nmId ?? 0)
   return {
     nmId: Number.isFinite(nmIdNum) ? Math.trunc(nmIdNum) : 0,
-    supplierOperName: asString(r.supplier_oper_name ?? r.supplierOperName),
+    supplierOperName: asString(
+      r.supplier_oper_name ?? r.supplierOperName ?? r.sellerOperName,
+    ),
     docTypeName: asString(r.doc_type_name ?? r.docTypeName),
     bonusTypeName: asString(r.bonus_type_name ?? r.bonusTypeName),
     forPay: parseMoney(r.ppvz_for_pay ?? r.forPay),
@@ -92,6 +104,7 @@ export function normalizeRealizationRow(raw: unknown): NormalizedRealizationRow 
     penaltyRub: parseMoney(r.penalty),
     acceptanceRub: parseMoney(r.paid_acceptance ?? r.paidAcceptance),
     deductionRub: parseMoney(r.deduction),
+    rebillLogisticCost: parseMoney(r.rebill_logistic_cost ?? r.rebillLogisticCost),
     quantity: Number.isFinite(Number(r.quantity)) ? Number(r.quantity) : 0,
   }
 }
@@ -107,66 +120,55 @@ export type RealizationBucket =
   | "deductionOther"
 
 /**
- * Классификация строки отчёта по бакету ИУ-факта. Порядок проверок важен:
- * бонус-дискриминаторы (отзывы/продвижение) идут ПЕРЕД операционными —
- * многие удержания приходят с supplier_oper_name «Удержание» и различаются
- * только bonus_type_name (спека 2026-07-10-weekly-finreport-reconcile-report.md).
+ * МУЛЬТИ-ПОЛЕ разнос строки отчёта по бакетам (explode, quick 260710-kvf).
+ * WB кладёт деньги ПОЛЯМИ на каждой строке — «Продажа» одновременно несёт
+ * forPay + deliveryService + penalty и т.д. Каждое ненулевое денежное поле →
+ * отдельный вклад в свой бакет.
  *
- * «Возврат» → forPay с отрицательным вкладом (знак как отдаёт WB, не инвертируем).
+ * Условие вклада — `!== 0`, НЕ `> 0`: «Возврат» несёт ОТРИЦАТЕЛЬНЫЙ forPay,
+ * знак как отдаёт WB, не инвертируем.
+ *
+ * deduction суб-классифицируется по bonusTypeName (ground truth зонда 2026-07-10):
+ *   «Списание за отзыв <id>: акция №…, товар <nmId>» → reviewPoints;
+ *   «Оказание услуг «WB Продвижение» / «ВБ.Продвижение»…» → promotion;
+ *   прочее → deductionOther.
+ *
+ * rebillLogisticCost (возмещение издержек по перевозке/складским операциям) →
+ * deductionOther: в расчёт ИУ-факта НЕ идёт, только хранится (диагностический
+ * бакет для сверки).
  */
-export function classifyRealizationRow(row: NormalizedRealizationRow): {
-  bucket: RealizationBucket
-  amountRub: number
-} {
-  const oper = row.supplierOperName.toLowerCase()
-  const bonus = row.bonusTypeName.toLowerCase()
-  const doc = row.docTypeName.toLowerCase()
+export function explodeRealizationRow(
+  row: NormalizedRealizationRow,
+): Array<{ bucket: RealizationBucket; amountRub: number }> {
+  const contributions: Array<{ bucket: RealizationBucket; amountRub: number }> = []
 
-  if (bonus.includes("баллы за отзывы")) {
-    return { bucket: "reviewPoints", amountRub: row.deductionRub }
+  if (row.forPay !== 0) contributions.push({ bucket: "forPay", amountRub: row.forPay })
+  if (row.deliveryRub !== 0) {
+    contributions.push({ bucket: "delivery", amountRub: row.deliveryRub })
   }
-  if (oper.includes("продвижение") || bonus.includes("продвижение")) {
-    return { bucket: "promotion", amountRub: row.deductionRub }
+  if (row.penaltyRub !== 0) {
+    contributions.push({ bucket: "penalty", amountRub: row.penaltyRub })
   }
-  if (oper.includes("логистик")) {
-    return {
-      bucket: "delivery",
-      amountRub: row.deliveryRub !== 0 ? row.deliveryRub : row.deductionRub,
-    }
+  if (row.storageRub !== 0) {
+    contributions.push({ bucket: "storage", amountRub: row.storageRub })
   }
-  if (oper.includes("хранен")) {
-    return {
-      bucket: "storage",
-      amountRub: row.storageRub !== 0 ? row.storageRub : row.deductionRub,
-    }
+  if (row.acceptanceRub !== 0) {
+    contributions.push({ bucket: "acceptance", amountRub: row.acceptanceRub })
   }
-  if (oper.includes("приемк") || oper.includes("приёмк")) {
-    return {
-      bucket: "acceptance",
-      amountRub: row.acceptanceRub !== 0 ? row.acceptanceRub : row.deductionRub,
-    }
+  if (row.deductionRub !== 0) {
+    const bonus = row.bonusTypeName.toLowerCase()
+    const bucket: RealizationBucket = bonus.includes("списание за отзыв")
+      ? "reviewPoints"
+      : bonus.includes("продвижение")
+        ? "promotion"
+        : "deductionOther"
+    contributions.push({ bucket, amountRub: row.deductionRub })
   }
-  if (oper.includes("штраф")) {
-    return {
-      bucket: "penalty",
-      amountRub: row.penaltyRub !== 0 ? row.penaltyRub : row.deductionRub,
-    }
+  if (row.rebillLogisticCost !== 0) {
+    contributions.push({ bucket: "deductionOther", amountRub: row.rebillLogisticCost })
   }
-  if (
-    oper.includes("продажа") ||
-    oper.includes("возврат") ||
-    oper.includes("корректн") ||
-    doc.includes("продажа") ||
-    doc.includes("возврат")
-  ) {
-    return { bucket: "forPay", amountRub: row.forPay }
-  }
-  // Неизвестная операция → deductionOther (диагностический бакет).
-  const fallback =
-    row.deductionRub !== 0
-      ? row.deductionRub
-      : row.penaltyRub + row.storageRub + row.acceptanceRub
-  return { bucket: "deductionOther", amountRub: fallback }
+
+  return contributions
 }
 
 export type RealizationBucketTotals = Record<RealizationBucket, number>
@@ -185,21 +187,24 @@ export function emptyRealizationBuckets(): RealizationBucketTotals {
 }
 
 /**
- * Классифицирует и суммирует строки по nmId (nmId=0 — account-level).
- * Возвращает Map<nmId, суммы по 8 бакетам>.
+ * Разносит строки по бакетам (explode) и суммирует по nmId (nmId=0 —
+ * account-level). Возвращает Map<nmId, суммы по 8 бакетам>. Запись в Map
+ * создаётся для КАЖДОЙ строки, даже если explode вернул 0 вкладов
+ * (строка без денег всё равно фиксирует nmId нулями — поведение прежнее).
  */
 export function accumulateRealizationRows(
   rows: NormalizedRealizationRow[],
 ): Map<number, RealizationBucketTotals> {
   const acc = new Map<number, RealizationBucketTotals>()
   for (const row of rows) {
-    const { bucket, amountRub } = classifyRealizationRow(row)
     let totals = acc.get(row.nmId)
     if (!totals) {
       totals = emptyRealizationBuckets()
       acc.set(row.nmId, totals)
     }
-    totals[bucket] += amountRub
+    for (const { bucket, amountRub } of explodeRealizationRow(row)) {
+      totals[bucket] += amountRub
+    }
   }
   return acc
 }
