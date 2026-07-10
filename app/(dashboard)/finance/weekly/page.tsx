@@ -4,12 +4,15 @@
 // computeWeeklyFinReport → рендер (табы + тулбар + роллап-таблица + водопад).
 // force-dynamic: неделя из ?week + допущения из AppSetting.
 // Phase quick-260710-evz (W2a, 2026-07-10)
+// Quick 260710-gem (W2c): + loadWeeklyPlanFact → prop planFact (план-факт
+// недели/МТД из SalesPlanVersionDay активной версии плана продаж).
 
 import { requireSection, getSectionRole } from "@/lib/rbac"
 import { FinanceTabs } from "@/components/finance/FinanceTabs"
 import { WeeklyFinReportControls } from "@/components/finance/WeeklyFinReportControls"
 import { WeeklyFinReportTable } from "@/components/finance/WeeklyFinReportTable"
 import { loadWeeklyFinReportInputs } from "@/lib/finance-weekly/data"
+import { loadWeeklyPlanFact } from "@/lib/finance-weekly/plan-fact"
 import { computeWeeklyFinReport } from "@/lib/finance-weekly/engine"
 
 export const metadata = { title: "Финансы — Понедельный — Zoiten ERP" }
@@ -61,6 +64,29 @@ export default async function FinanceWeeklyPage({
     constants: data.constants,
   })
 
+  // План-факт (W2c): план из SalesPlanVersionDay активной версии, факт МТД
+  // из WbCardFunnelDaily. Loader'у нужны articleNmIds из data → await после.
+  const articleNmIds = data.articles.map((a) => a.nmId)
+  const nmIdToProductId = new Map(
+    articleNmIds.map((n) => [n, data.meta[n].productId] as const),
+  )
+  const weekEndDate = new Date(data.weekEnd + "T00:00:00Z")
+  const planFactRaw = await loadWeeklyPlanFact(
+    weekStart,
+    weekEndDate,
+    articleNmIds,
+    nmIdToProductId,
+  )
+
+  // RSC→client boundary: Record, не Map (Phase 09-03)
+  const planFact = planFactRaw.hasActivePlan
+    ? {
+        planWeekByNmId: Object.fromEntries(planFactRaw.planWeekByNmId),
+        kpi: planFactRaw.totals,
+        weekEndISO: data.weekEnd,
+      }
+    : null
+
   return (
     <div className="h-full flex flex-col gap-4">
       <FinanceTabs />
@@ -77,6 +103,7 @@ export default async function FinanceWeeklyPage({
         rollup={result.rollup}
         waterfall={result.waterfall}
         meta={data.meta}
+        planFact={planFact}
       />
     </div>
   )
