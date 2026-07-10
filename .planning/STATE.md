@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260710-fr1 — W2b drill-down модалка /finance/weekly (per-unit CostBreakdown из движка + WeeklyFinArticleDialog + кликабельные строки артикулов)
-last_updated: "2026-07-10T08:37:56.000Z"
+stopped_at: Completed quick 260710-gem — W2c план-факт /finance/weekly (колонки План(нед)/% вып. + KPI-блок из SalesPlanVersionDay активной версии; движок/схема не тронуты)
+last_updated: "2026-07-10T09:13:11.240Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -135,6 +135,7 @@ Next: по итогам UAT — хотфиксы; затем Phase 29 (канд�
 | Phase 28-cashflow P28-01 | 324s | 3 tasks | 5 files |
 | Phase 28 P28-02 | 364s | 3 tasks | 4 files |
 | Phase 28 P28-03 | 402s | 3 tasks | 6 files |
+| Phase quick-260710-gem P01 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -445,6 +446,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-10T07:27:18.460Z
-Stopped at: Completed quick 260710-e7h — pure движок понедельного WB фин-отчёта lib/finance-weekly/ + golden-тест
+Last session: 2026-07-10T09:13:11.150Z
+Stopped at: Completed quick 260710-gem — W2c план-факт /finance/weekly (колонки План(нед)/% вып. + KPI-блок из SalesPlanVersionDay активной версии; движок/схема не тронуты)
 Resume file: None
