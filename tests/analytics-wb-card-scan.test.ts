@@ -57,13 +57,14 @@ describe("cardJsonUrl — построение URL + анти-SSRF (T-30-02)", (
 describe("scanCardMedia — фото листинга + характеристики (ANL-04)", () => {
   it("на реальной фикстуре → 5 фото + непустые характеристики", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(cardFixture))
-    const { listingPhotos, characteristics } = await scanCardMedia(NM, MAIN_PHOTO, fetchImpl)
+    const { listingPhotos, characteristics, seller } = await scanCardMedia(NM, MAIN_PHOTO, fetchImpl)
     expect(listingPhotos).toHaveLength(5) // photo_count=18 → лимит 5
     expect(listingPhotos[0]).toBe(
       `https://basket-39.wbbasket.ru/vol8993/part899301/${NM}/images/c516x688/1.webp`,
     )
     expect(characteristics.length).toBeGreaterThan(0)
     expect(characteristics).toContainEqual({ name: "Высота упаковки", value: "24 см" })
+    expect(seller).toBe("114151") // selling.supplier_id из card.json
   })
 
   it("404 на ожидаемом host → пробует соседний host (fallback, T-30-10)", async () => {

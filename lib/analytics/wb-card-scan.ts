@@ -81,6 +81,7 @@ function photoBase(nmId: number, host: string): string {
 /** Сырой card.json (только используемые поля). */
 interface CardJsonRaw {
   media?: { photo_count?: number }
+  selling?: { supplier_id?: number }
   options?: Array<{ name?: string; value?: string }>
   grouped_options?: Array<{ group_name?: string; options?: Array<{ name?: string; value?: string }> }>
 }
@@ -107,7 +108,7 @@ export async function scanCardMedia(
   nmId: number,
   mainPhoto?: string,
   fetchImpl: FetchImpl = fetch,
-): Promise<{ listingPhotos: string[]; characteristics: Characteristic[] }> {
+): Promise<{ listingPhotos: string[]; characteristics: Characteristic[]; seller: string }> {
   assertValidNmId(nmId)
   const candidates = hostCandidates(nmId, mainPhoto)
   const tried: string[] = []
@@ -138,7 +139,10 @@ export async function scanCardMedia(
       .filter((o) => o.name && o.value != null)
       .map((o) => ({ name: String(o.name), value: String(o.value) }))
 
-    return { listingPhotos, characteristics }
+    // Продавец — supplier_id (card.json selling; Wave 0 §2). Числовой ID; человекочит. имя — отдельный резолв (отложено).
+    const seller = card.selling?.supplier_id != null ? String(card.selling.supplier_id) : ""
+
+    return { listingPhotos, characteristics, seller }
   }
 
   throw new Error(`card.json недоступен для nmID ${nmId} (проверены хосты: ${tried.join(", ")})`)
