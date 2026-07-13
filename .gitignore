@@ -45,3 +45,8 @@ scripts/seed-suppliers.cjs
 
 # Claude Code personal settings (this machine)
 .claude/settings.local.json
+
+# Phase 30 analytics — local secrets/samples (never commit)
+mpstats-token.txt
+.mpstats-token.txt
+/кофе*.docx
