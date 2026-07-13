@@ -34,6 +34,7 @@ enum ERP_SECTION {
   BANK
   CASH
   FINANCE
+  ANALYTICS
 }
 
 enum AbcStatus {
@@ -118,6 +119,8 @@ model User {
   salesPlanVersions       SalesPlanVersion[]
   // W3c (quick 260710-mih): кто зафиксировал недели понедельного фин-отчёта
   weeklyFinReportSnapshots WeeklyFinReportSnapshot[]
+  // Phase 30 (analytics): прогоны анализа ниши, созданные пользователем
+  nicheRuns                NicheRun[]
   isActive                Boolean               @default(true)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
@@ -1259,6 +1262,38 @@ model WeeklyFinReportSnapshot {
   fixedById   String?
   fixedBy     User?    @relation(fields: [fixedById], references: [id], onDelete: SetNull)
   payloadJson Json // WeeklyFinReportSnapshotPayload v1 (lib/finance-weekly/snapshot.ts)
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Phase 30 (analytics): дашборд «Топ-30 SKU в нише».
+// Immutable-снапшот прогона: индекс-метаданные + весь рендер-пейлоад одним
+// payloadJson (NicheRunPayload, lib/analytics/types.ts). Повторный прогон =
+// новая строка (история ниш, ANL-05). Статус-машина для фонового сбора (after()).
+// ──────────────────────────────────────────────────────────────────
+enum NicheRunStatus {
+  PENDING
+  COLLECTING
+  READY
+  PARTIAL
+  FAILED
+}
+
+model NicheRun {
+  id             String         @id @default(cuid())
+  createdAt      DateTime       @default(now())
+  createdById    String?
+  createdBy      User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  dateFrom       DateTime       @db.Date // начало окна (период byDay файлов)
+  dateTo         DateTime       @db.Date // конец окна (= период MPSTATS, единая ось)
+  status         NicheRunStatus @default(PENDING)
+  skuCount       Int            @default(0)
+  progressNote   String? // «MPSTATS 12/30» — polling-прогресс
+  incompleteSkus Json? // [{nmId, reason}] для PARTIAL (ANL-07)
+  errorMessage   String? // причина FAILED
+  payloadJson    Json? // NicheRunPayload — null пока статус не READY/PARTIAL
+  updatedAt      DateTime       @updatedAt
+
+  @@index([status])
 }
 
 // ──────────────────────────────────────────────────────────────────
