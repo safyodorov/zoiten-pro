@@ -714,4 +714,19 @@ Plans:
   5. Позиции из MPSTATS разделены на органические и рекламные (CPM/тип размещения/позиция буста); дни отсутствия в выдаче — прочерк, в среднюю позицию не входят.
   6. Раздел полноэкранный; графики и тепловые карты крупные; доступ гейтится `ANALYTICS` RBAC.
 
-**Plans:** TBD (spec-phase → discuss-phase → plan-phase; execute — отдельно, по сигналу пользователя).
+**Plans:** 13 планов, 7 волн (0–6). Execute — отдельно, по сигналу пользователя (в этом цикле НЕ деплоится).
+
+Plans:
+- [ ] 30-01-PLAN.md — Wave 0: спайк MPSTATS-эндпоинтов + card.json/basket-host + фикстуры (autonomous: false)
+- [ ] 30-02-PLAN.md — Wave 0: [BLOCKING] рукописная миграция — enum ANALYTICS + модель NicheRun + prisma generate
+- [ ] 30-03-PLAN.md — Wave 1: types.ts (контракты) + движок (aggregateFunnel/sortSkus/completeness/avgPosition) + golden-тесты
+- [ ] 30-04-PLAN.md — Wave 2: data.ts — парсер 6 detail-JSON → топ-30 (дедуп/период) + тесты
+- [ ] 30-05-PLAN.md — Wave 2: mpstats.ts — клиент позиций organic/ad + запросы >500 + лимит-обработка
+- [ ] 30-06-PLAN.md — Wave 2: wb-card-scan.ts — 5 фото + характеристики (card.json) + реюз lib/wb-api.ts
+- [ ] 30-10-PLAN.md — Wave 2: вкладки CardStats (графики) + QueryStats (тепловая карта)
+- [ ] 30-07-PLAN.md — Wave 3: snapshot.ts + collector.ts (сбор 30 SKU + правило полноты + статус-машина)
+- [ ] 30-08-PLAN.md — Wave 4: upload-route + startNicheRun (after()) + saveMpstatsToken + status-route
+- [ ] 30-11-PLAN.md — Wave 4: RSC-дашборд runs/[id] + SortToggle + вкладки Общая/Листинг/Характеристики
+- [ ] 30-12-PLAN.md — Wave 4: pdf.ts (сводная таблица + по-SKU блоки, графики в pdfkit) + pdf-route
+- [ ] 30-09-PLAN.md — Wave 5: список прогонов + upload-UI + AnalyticsTokenBar (password) + status-poller
+- [ ] 30-13-PLAN.md — Wave 6: RBAC-регистрация /analytics (sections/nav/labels) + аудит requireSection
