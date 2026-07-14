@@ -58,6 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "SUPPORT", href: "/support/templates", label: "Шаблоны ответов", icon: "FileText" },
   { section: "SUPPORT", href: "/support/auto-reply", label: "Автоответ", icon: "Bot" },
   { section: "SUPPORT", href: "/support/stats", label: "Статистика", icon: "BarChart3" },
+  { section: "ANALYTICS", href: "/analytics", label: "Аналитика", icon: "BarChart3" },
   { section: "EMPLOYEES", href: "/employees", label: "Сотрудники", icon: "UserCheck" },
   { section: "USER_MANAGEMENT", href: "/admin/users", label: "Пользователи", icon: "Users" },
   { section: "USER_MANAGEMENT", href: "/admin/settings", label: "Настройки", icon: "Settings" },

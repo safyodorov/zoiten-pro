@@ -21,6 +21,7 @@ export const SECTION_PATHS = {
   "/cash": "CASH",
   // Трейлинг-слэш ОБЯЗАТЕЛЕН: без него startsWith перехватит публичный /finance-models
   "/finance/": "FINANCE",
+  "/analytics": "ANALYTICS",
 } as const satisfies Record<string, string>
 
 export type SectionPath = keyof typeof SECTION_PATHS

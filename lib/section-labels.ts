@@ -23,5 +23,6 @@ export const SECTION_OPTIONS: SectionOption[] = [
   { value: "FINANCE",         label: "Финансовая отчётность" },
   { value: "SUPPORT",         label: "Служба поддержки" },
   { value: "EMPLOYEES",       label: "Сотрудники" },
+  { value: "ANALYTICS",       label: "Аналитика" },
   { value: "USER_MANAGEMENT", label: "Управление пользователями" },
 ]
