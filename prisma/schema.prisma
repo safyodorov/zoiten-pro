@@ -1457,6 +1457,8 @@ model Loan {
   annualRatePct  Decimal       @db.Decimal(6, 3) // годовая ставка %, напр. 28.000
   termMonths     Int? // срок в месяцах, nullable
   issueDate      DateTime? // дата выдачи — ручное поле, nullable (D-07)
+  monthlyCommissionRub Decimal? @db.Decimal(12, 2) // амортизация единовременной комиссии JetLend (вкл. перенесённые с досрочно погашенных траншей), ₽/мес — кредитный пул /finance/weekly (quick 260714-ij9)
+  monthlyNdflRub       Decimal? @db.Decimal(12, 2) // НДФЛ инвесторам к уплате, усреднённый на срок, ₽/мес — кредитный пул /finance/weekly (quick 260714-ij9)
   notes          String?       @db.Text
   payments       LoanPayment[]
   deletedAt      DateTime?
