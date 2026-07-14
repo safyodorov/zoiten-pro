@@ -6,7 +6,8 @@
 //
 // Источники (все LIVE, без WB API-вызовов):
 //   заказы/выручка (appliances) — WbCardFunnelDaily (Σ недели по nmId)
-//   выкупы/выручка (clothing)   — WbSalesDaily gross buyouts (W2d, Фикс 1)
+//   выкупы/выручка (clothing)   — WbSalesDaily нетто (выкупы − возвраты),
+//                    quick 260714-gt7 (было gross, W2d Фикс 1)
 //   реклама        — тотал WbAdvertSpendRow.updSum (/adv/v1/upd, ground truth),
 //                    распределённый по nmId долями WbAdvertStatDaily (W2d, Фикс 3)
 //   закупка        — ProductCost.costPrice
@@ -25,7 +26,8 @@
 //
 // Мир затрат (universe): brand.direction.hasSizes=true → одежда (clothing),
 // иначе → бытовая техника (appliances). Кредит несёт ТОЛЬКО appliances (§2.2).
-// W2d: universe определяет и БАЗИС строки — clothing по выкупам, appliances по заказам.
+// W2d: universe определяет и БАЗИС строки — clothing по нетто-выкупам (− возвраты,
+// quick 260714-gt7), appliances по заказам.
 //
 // Порядок articles — глобальная иерархия товаров проекта (compareProductsByHierarchy):
 // Направление → Бренд → Категория → Подкатегория → name. Таблица группирует
@@ -43,6 +45,7 @@ import {
   type WeeklyConstants,
 } from "@/lib/finance-weekly/types"
 import { calculatePricingStandard, type PricingInputs } from "@/lib/pricing-math"
+import { netClothingSales } from "@/lib/finance-weekly/clothing-net"
 import { loadCommissionsForDate } from "@/lib/wb-commission-history"
 import { attributeSpendByShares } from "@/lib/finance-weekly/attribution"
 import { weeklyAccruedInterest } from "@/lib/finance-weekly/credit-accrual"
@@ -351,13 +354,14 @@ export async function loadWeeklyFinReportInputs(
       where: { nmId: { in: linkedNmIds }, date: { gte: weekStart, lte: weekEnd } },
       _sum: { ordersCount: true, ordersSumRub: true },
     }),
-    // W2d Фикс 1: базис clothing — GROSS выкупы из WbSalesDaily (БЕЗ вычета returns;
-    // сверка 2026-07-10: Excel F=37 по одежде = gross buyouts точно). Даты РЕАЛИЗАЦИИ,
-    // settled ~2 дня → для текущей незавершённой недели данные частичные (как и заказы).
+    // Quick 260714-gt7: базис clothing — НЕТТО выкупы из WbSalesDaily (выкупы −
+    // возвраты; сверка 06.07-12.07: 848714305 выкупы 12 − возвраты 4 = 8 = Excel,
+    // опровергло прежнее gross-решение W2d Фикс 1 без возвратов на неделе). Даты
+    // РЕАЛИЗАЦИИ, settled ~2 дня → для текущей незавершённой недели данные частичные.
     prisma.wbSalesDaily.groupBy({
       by: ["nmId"],
       where: { nmId: { in: linkedNmIds }, date: { gte: weekStart, lte: weekEnd } },
-      _sum: { buyoutsCount: true, buyoutsRub: true },
+      _sum: { buyoutsCount: true, buyoutsRub: true, returnsCount: true, returnsRub: true },
     }),
     // Числители долей рекламы (fullstats spend per nmId отчёта)
     prisma.wbAdvertStatDaily.groupBy({
@@ -436,10 +440,15 @@ export async function loadWeeklyFinReportInputs(
   }
   const salesByNmId = new Map<number, { qty: number; rub: number }>()
   for (const r of salesRows) {
-    salesByNmId.set(r.nmId, {
-      qty: r._sum.buyoutsCount ?? 0,
-      rub: r._sum.buyoutsRub ?? 0,
-    })
+    salesByNmId.set(
+      r.nmId,
+      netClothingSales({
+        buyoutsCount: r._sum.buyoutsCount ?? 0,
+        buyoutsRub: r._sum.buyoutsRub ?? 0,
+        returnsCount: r._sum.returnsCount ?? 0,
+        returnsRub: r._sum.returnsRub ?? 0,
+      }),
+    )
   }
 
   // 7a. Реклама (W2d Фикс 3): тотал upd × fullstats-доли. Знаменатель — по ВСЕМ
@@ -464,8 +473,9 @@ export async function loadWeeklyFinReportInputs(
   const zoitenWeekInterest = weeklyAccruedInterest(zoitenLoans, weekStart)
 
   // 9. Сборка articles + meta.
-  // W2d Фикс 1: итерируем union nmIds обоих базисов; qty/rub per universe:
-  //   appliances → заказы (WbCardFunnelDaily), clothing → gross выкупы (WbSalesDaily).
+  // Итерируем union nmIds обоих базисов; qty/rub per universe:
+  //   appliances → заказы (WbCardFunnelDaily), clothing → нетто-выкупы (WbSalesDaily,
+  //   выкупы − возвраты, quick 260714-gt7).
   // Кандидаты сортируются глобальной иерархией товаров (Направление → Бренд →
   // Категория → Подкатегория → name) — таблица группирует без пересортировки.
   const articles: WeeklyArticleInput[] = []
@@ -491,7 +501,7 @@ export async function loadWeeklyFinReportInputs(
     if (universe === "clothing") {
       const sales = salesByNmId.get(nmId)
       qty = sales?.qty ?? 0
-      rub = sales?.rub ?? 0 // gross до СПП, БЕЗ вычета returns
+      rub = sales?.rub ?? 0 // нетто до СПП (выкупы + returnsRub<0), quick 260714-gt7
     } else {
       const funnel = funnelByNmId.get(nmId)
       qty = funnel?.H ?? 0
@@ -582,7 +592,7 @@ export async function loadWeeklyFinReportInputs(
     articles.push({
       nmId,
       universe,
-      // W2d: qty выбранного базиса — заказы (appliances) / выкупы gross (clothing).
+      // qty выбранного базиса — заказы (appliances) / нетто-выкупы (clothing).
       // Контракт движка не меняется — для него это «кол-во единиц недели».
       qtyOrders: qty,
       grossPricePerUnit: K,
