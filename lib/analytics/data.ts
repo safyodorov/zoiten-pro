@@ -252,3 +252,48 @@ export function extractTop30(rawFiles: unknown[]): Top30Result {
 
   return { skus, byDayByNmId, monthlyTotalsByNmId, commonParamsByNmId, dateFrom: from, dateTo: to }
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Wire-формат (upload-route → клиент → startNicheRun). Map'ы не сериализуются
+// в JSON → плоский byDay + record'ы. Провалидированные nmID (T-30-02) переносятся
+// как есть; startNicheRun повторно валидирует диапазон перед сбором.
+// ──────────────────────────────────────────────────────────────────
+
+export interface NicheRunWireData {
+  skus: number[]
+  byDay: FunnelDayRaw[] // плоский; каждая строка несёт nmId
+  monthly: Record<string, FunnelMonthTotals>
+  commonParams: Record<string, CommonParamNormalized>
+  dateFrom: string
+  dateTo: string
+}
+
+/** Top30Result → JSON-safe wire (Map → плоские массивы/record'ы). */
+export function serializeTop30(r: Top30Result): NicheRunWireData {
+  const byDay: FunnelDayRaw[] = []
+  for (const rows of r.byDayByNmId.values()) byDay.push(...rows)
+  const monthly: Record<string, FunnelMonthTotals> = {}
+  for (const [nm, t] of r.monthlyTotalsByNmId) monthly[String(nm)] = t
+  const commonParams: Record<string, CommonParamNormalized> = {}
+  for (const [nm, c] of r.commonParamsByNmId) commonParams[String(nm)] = c
+  return { skus: r.skus, byDay, monthly, commonParams, dateFrom: r.dateFrom, dateTo: r.dateTo }
+}
+
+/** Wire → Map'ы для коллектора (30-07). */
+export function deserializeWireData(w: NicheRunWireData): {
+  byDayByNmId: Map<number, FunnelDayRaw[]>
+  monthlyTotalsByNmId: Map<number, FunnelMonthTotals>
+  commonParamsByNmId: Map<number, CommonParamNormalized>
+} {
+  const byDayByNmId = new Map<number, FunnelDayRaw[]>()
+  for (const d of w.byDay) {
+    const arr = byDayByNmId.get(d.nmId) ?? []
+    arr.push(d)
+    byDayByNmId.set(d.nmId, arr)
+  }
+  const monthlyTotalsByNmId = new Map<number, FunnelMonthTotals>()
+  for (const k of Object.keys(w.monthly)) monthlyTotalsByNmId.set(Number(k), w.monthly[k])
+  const commonParamsByNmId = new Map<number, CommonParamNormalized>()
+  for (const k of Object.keys(w.commonParams)) commonParamsByNmId.set(Number(k), w.commonParams[k])
+  return { byDayByNmId, monthlyTotalsByNmId, commonParamsByNmId }
+}
