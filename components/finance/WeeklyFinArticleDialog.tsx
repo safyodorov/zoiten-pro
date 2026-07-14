@@ -97,7 +97,13 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   article: ArticleResult | null
-  meta: { brandName: string | null; productName: string }
+  meta: {
+    brandName: string | null
+    productName: string
+    // Quick 260714-or9: транзит из data.ts meta для строк «базис количества».
+    rawQtyOrders?: number
+    appliedBuyoutPct?: number | null
+  }
 }
 
 // ── Компонент ──────────────────────────────────────────────────────────────────
@@ -116,6 +122,30 @@ export function WeeklyFinArticleDialog({ open, onOpenChange, article, meta }: Pr
                 {fmtRub2(article.iu.breakdown.pricePerUnit)} ₽
               </DialogDescription>
             </DialogHeader>
+
+            {/* Quick 260714-or9: базис количества — сырые заказы, применённый % выкупа,
+                скорректированное кол-во. Только бытовая (у одежды корректировка не применяется).
+                Значения могут быть undefined на старых снапшотах → «—». */}
+            {article.universe === "appliances" && (
+              <div className="flex flex-col gap-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Процент выкупа (применённый)</span>
+                  <span className="tabular-nums">
+                    {meta.appliedBuyoutPct != null ? fmtPctRaw(meta.appliedBuyoutPct) : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Заказы за период (без корректировки)</span>
+                  <span className="tabular-nums">
+                    {meta.rawQtyOrders != null ? qtyFmt.format(meta.rawQtyOrders) : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Кол-во с корректировкой</span>
+                  <span className="tabular-nums">{qtyFmt.format(article.qtyOrders)}</span>
+                </div>
+              </div>
+            )}
 
             {/* ── Пооперационная разбивка (₽/ед) ── */}
             <div className="overflow-x-auto rounded-md border">
