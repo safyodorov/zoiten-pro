@@ -69,6 +69,11 @@ export interface WeeklyConstants {
   jemPct: number        // тариф Джем (% от K)
   defectPct: number     // брак (% от закупки O)
   acquiringPct: number  // эквайринг (% от K)
+  // Quick 260714-gff: Опция Джем — надбавка к КОМИССИИ WB (п.п.), применяется
+  // аддитивно к обоим сценариям (ИУ и Оферта). ДРУГАЯ сущность, чем jemPct
+  // (тариф Джем — per-unit статья % от K, НЕ трогать). Опционально: движок
+  // default = 0 через coalesce (см. engine.ts) — golden-тест не меняется.
+  jemOptionPct?: number
 }
 
 // Excel-значение эквайринга 2.87% (НЕ 2.7% из /prices/wb — §7 п.4).

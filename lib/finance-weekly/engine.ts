@@ -277,8 +277,21 @@ export function computeWeeklyFinReport(
     const pools = inputs.pools[universe]
     const common = resolveCommon(article, pools, c)
 
-    const iuBreakdown = computeScenario(article, common, article.commIuPct, article.logisticsIuPerUnit)
-    const stdBreakdown = computeScenario(article, common, article.commStdPct, article.logisticsStdPerUnit)
+    // Опция Джем — аддитивная надбавка к комиссии ОБОИХ сценариев (совпадение
+    // с Excel J экономиста, quick 260714-gff). Default 0 → golden неизменен.
+    const jemOpt = c.jemOptionPct ?? 0
+    const iuBreakdown = computeScenario(
+      article,
+      common,
+      article.commIuPct + jemOpt,
+      article.logisticsIuPerUnit,
+    )
+    const stdBreakdown = computeScenario(
+      article,
+      common,
+      article.commStdPct + jemOpt,
+      article.logisticsStdPerUnit,
+    )
 
     const iu = toScenarioResult(article, iuBreakdown)
     const std = toScenarioResult(article, stdBreakdown)

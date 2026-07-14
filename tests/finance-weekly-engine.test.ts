@@ -221,3 +221,51 @@ describe("computeWeeklyFinReport — clothing НЕ несёт кредит (guar
     expect(wf.std.credit).toBe(0)
   })
 })
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260714-gff: Опция Джема — аддитивная надбавка к комиссии обоих
+// сценариев (K×0.75/100 = 88.116 ₽ падения cutPricePerUnit в ОБОИХ сценариях).
+// Golden БЕЗ constants.jemOptionPct (default 0 через coalesce) — 523.6 / −2176.7
+// НЕ меняются.
+// ──────────────────────────────────────────────────────────────────
+
+describe("computeWeeklyFinReport — Опция Джема (jemOptionPct) аддитивна к комиссии", () => {
+  const withJemInputs: WeeklyFinReportInputs = {
+    ...goldenInputs,
+    constants: { jemOptionPct: 0.75 },
+  }
+  const withJem = computeWeeklyFinReport(withJemInputs)
+  const withoutJem = computeWeeklyFinReport(goldenInputs)
+  const artWithJem = withJem.articles[0]
+  const artWithoutJem = withoutJem.articles[0]
+
+  it("commissionPct вырастает на 0.75 п.п. в ОБОИХ сценариях (ИУ 31.5→32.25, Оферта 25.5→26.25)", () => {
+    expect(artWithJem.iu.breakdown.commissionPct).toBeCloseTo(32.25, 6)
+    expect(artWithJem.std.breakdown.commissionPct).toBeCloseTo(26.25, 6)
+  })
+
+  it("cutPricePerUnit падает ровно на K×0.75/100 = 88.116 ₽ в ОБОИХ сценариях", () => {
+    const expectedDrop = (goldenArticle.grossPricePerUnit * 0.75) / 100 // 88.116
+    expect(expectedDrop).toBeCloseTo(88.116, 3)
+    expect(artWithoutJem.iu.cutPricePerUnit - artWithJem.iu.cutPricePerUnit).toBeCloseTo(
+      expectedDrop,
+      6,
+    )
+    expect(artWithoutJem.std.cutPricePerUnit - artWithJem.std.cutPricePerUnit).toBeCloseTo(
+      expectedDrop,
+      6,
+    )
+  })
+
+  it("profit соответственно падает (та же дельта × H) в обоих сценариях", () => {
+    const expectedDropPerUnit = (goldenArticle.grossPricePerUnit * 0.75) / 100
+    const expectedDropTotal = expectedDropPerUnit * goldenArticle.qtyOrders
+    expect(artWithoutJem.iu.profit - artWithJem.iu.profit).toBeCloseTo(expectedDropTotal, 4)
+    expect(artWithoutJem.std.profit - artWithJem.std.profit).toBeCloseTo(expectedDropTotal, 4)
+  })
+
+  it("golden БЕЗ constants (jemOptionPct отсутствует) — прежние значения (523.6 / −2176.7) НЕ меняются", () => {
+    expect(artWithoutJem.iu.profit).toBeCloseTo(523.6, 0)
+    expect(artWithoutJem.std.profit).toBeCloseTo(-2176.7, 0)
+  })
+})
