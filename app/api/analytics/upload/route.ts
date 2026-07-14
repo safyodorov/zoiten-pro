@@ -49,9 +49,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawFiles: unknown[] = []
   for (const f of files) {
     try {
-      rawFiles.push(JSON.parse(await f.text()))
+      // strip UTF-8 BOM (Блокнот) + trim — иначе JSON.parse падает на валидном по сути JSON
+      const text = (await f.text()).replace(/^﻿/, "").trim()
+      rawFiles.push(JSON.parse(text))
     } catch {
-      return NextResponse.json({ error: `Файл «${f.name}» — не валидный JSON` }, { status: 400 })
+      return NextResponse.json(
+        { error: `Файл «${f.name}» — не валидный JSON (если сохраняли в Word — используйте DevTools «Save response» или Блокнот .txt)` },
+        { status: 400 },
+      )
     }
   }
 
