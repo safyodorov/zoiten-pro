@@ -23,8 +23,11 @@ export interface WeeklyLiveBundle {
  * Полный live-расчёт недели: входы из БД → движок → план-факт.
  * @param weekStart UTC-понедельник 00:00:00Z (как в page.tsx)
  */
-export async function loadWeeklyLiveBundle(weekStart: Date): Promise<WeeklyLiveBundle> {
-  const data = await loadWeeklyFinReportInputs(weekStart)
+export async function loadWeeklyLiveBundle(
+  weekStart: Date,
+  options?: { skipAppliancesBuyoutDiscount?: boolean },
+): Promise<WeeklyLiveBundle> {
+  const data = await loadWeeklyFinReportInputs(weekStart, options)
   const result = computeWeeklyFinReport({
     articles: data.articles,
     pools: data.pools,

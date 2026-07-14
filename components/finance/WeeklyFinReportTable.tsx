@@ -80,6 +80,8 @@ interface Props {
   meta: Record<number, WeeklyArticleMeta>
   /** null/undefined → активной версии плана нет: KPI скрыт, колонки «—». */
   planFact?: PlanFactProps | null
+  /** Quick 260714-or9: тумблер «Без учёта % выкупа (бытовая)» — влияет на бейдж базиса. */
+  skipAppliancesBuyoutDiscount?: boolean
 }
 
 // ── Классы ячеек ────────────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ function buildRows(
   rollup: WeeklyRollup,
   meta: Props["meta"],
   planFact: PlanFactProps | null | undefined,
+  skipBuyout: boolean,
 ): Row[] {
   const rows: Row[] = []
 
@@ -178,7 +181,12 @@ function buildRows(
     if (!dir || dir.label !== dirLabel) {
       flushDirection()
       // Бейдж базиса: universe направления (все артикулы Направления делят universe)
-      rows.push({ kind: "direction", label: `${dirLabel} · ${UNIVERSE_BASIS[a.universe]}` })
+      // Quick 260714-or9: при тумблере бытовая считается по сырым заказам (100% выкуп)
+      const basis =
+        a.universe === "appliances" && skipBuyout
+          ? "по заказам (100% выкуп)"
+          : UNIVERSE_BASIS[a.universe]
+      rows.push({ kind: "direction", label: `${dirLabel} · ${basis}` })
       dir = { label: dirLabel, revenue: 0, profitIu: 0, profitStd: 0, planSum: 0 }
       prevBrand = null
       prevCategory = null
@@ -339,6 +347,7 @@ export function WeeklyFinReportTable({
   waterfall,
   meta,
   planFact,
+  skipAppliancesBuyoutDiscount = false,
 }: Props) {
   // ⚠ Хуки объявлены ПЕРВЫМИ — выше early-return для пустой недели. Иначе
   // число хуков меняется при empty↔non-empty (rules-of-hooks violation).
@@ -366,7 +375,7 @@ export function WeeklyFinReportTable({
     )
   }
 
-  const rows = buildRows(articles, rollup, meta, planFact)
+  const rows = buildRows(articles, rollup, meta, planFact, skipAppliancesBuyoutDiscount)
 
   return (
     <div className="flex flex-col gap-4">

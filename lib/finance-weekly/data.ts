@@ -153,6 +153,11 @@ export interface WeeklyArticleMeta {
   directionName: string | null
   categoryName: string | null
   subcategoryName: string | null
+  // Quick 260714-or9: транзит для строк модалки (базис количества). НЕ иерархия
+  // товара, а недельные величины per nmId — кладём сюда, т.к. модалка получает
+  // ТОЛЬКО ArticleResult + meta (движок не трогаем).
+  rawQtyOrders?: number          // сырые заказы (appliances) / нетто-выкупы (clothing) — база ДО дисконта
+  appliedBuyoutPct?: number | null  // применённый % выкупа (appliances: 100 при тумблере, иначе rolling); clothing → null
 }
 
 export interface WeeklyFinReportPageData {
@@ -238,7 +243,9 @@ const RATE_KEYS = [
  */
 export async function loadWeeklyFinReportInputs(
   weekStart: Date,
+  options?: { skipAppliancesBuyoutDiscount?: boolean },
 ): Promise<WeeklyFinReportPageData> {
+  const skipDiscount = options?.skipAppliancesBuyoutDiscount ?? false
   // 1. Границы недели (воскресенье включительно)
   const weekEnd = new Date(weekStart.getTime() + 6 * 86_400_000)
   const weekStartISO = isoDate(weekStart)
@@ -513,6 +520,8 @@ export async function loadWeeklyFinReportInputs(
     universe: Universe
     qty: number
     rub: number
+    rawQtyOrders: number
+    appliedBuyoutPct: number | null
   }[] = []
 
   const allNmIds = new Set<number>([...funnelByNmId.keys(), ...salesByNmId.keys()])
@@ -523,27 +532,40 @@ export async function loadWeeklyFinReportInputs(
     const universe: Universe = product.brand?.direction?.hasSizes ? "clothing" : "appliances"
     let qty: number
     let rub: number
+    let rawQtyOrders: number
+    let appliedBuyoutPct: number | null
     if (universe === "clothing") {
       const sales = salesByNmId.get(nmId)
       qty = sales?.qty ?? 0
       rub = sales?.rub ?? 0 // нетто до СПП (выкупы + returnsRub<0), quick 260714-gt7
+      // Одежда: корректировка % выкупа НЕ применяется (факт нетто-выкупов).
+      rawQtyOrders = qty
+      appliedBuyoutPct = null
     } else {
-      // Quick 260714-maz — модель экономиста для БЫТОВОЙ ТЕХНИКИ: H = заказы ×
-      // (rolling-% выкупа/100). Резолвер — ТОТ ЖЕ инстанс, что и ПВ модели N_std
-      // ниже (buyoutResolver из Promise.all, kuh; второй load НЕ делаем).
-      // Сумму дисконтируем тем же коэф → K=rub/qty сохраняет валовую цену
-      // (ordersSumRub/заказы); per-unit тоталы (реклама/отзывы/логистика ИУ)
-      // лягут на выкупленные ед., недельные тоталы затрат не искажаются.
       const funnel = funnelByNmId.get(nmId)
-      const buyoutPct =
-        buyoutResolver.resolve(nmId, weekEndISO) ?? cardByNmId.get(nmId)?.buyoutPercent ?? 100
-      const discounted = discountAppliancesByBuyout(funnel?.H ?? 0, funnel?.sumRub ?? 0, buyoutPct)
-      qty = discounted.qty
-      rub = discounted.rub
+      const rawH = funnel?.H ?? 0
+      const rawRub = funnel?.sumRub ?? 0
+      rawQtyOrders = rawH
+      if (skipDiscount) {
+        // Quick 260714-or9: тумблер «Без учёта % выкупа» — сырые заказы, % = 100
+        // (сопоставление с листами экономиста без невыкупной надбавки).
+        qty = rawH
+        rub = rawRub
+        appliedBuyoutPct = 100
+      } else {
+        // Quick 260714-maz: H = заказы × (rolling-% выкупа/100). Резолвер — ТОТ ЖЕ
+        // инстанс, что и N_std ниже (kuh).
+        const buyoutPct =
+          buyoutResolver.resolve(nmId, weekEndISO) ?? cardByNmId.get(nmId)?.buyoutPercent ?? 100
+        const discounted = discountAppliancesByBuyout(rawH, rawRub, buyoutPct)
+        qty = discounted.qty
+        rub = discounted.rub
+        appliedBuyoutPct = buyoutPct
+      }
     }
-    if (qty <= 0) continue // guard: нет заказов/выкупов в базисе → строку пропускаем
+    if (qty <= 0) continue
 
-    candidates.push({ nmId, product, universe, qty, rub })
+    candidates.push({ nmId, product, universe, qty, rub, rawQtyOrders, appliedBuyoutPct })
   }
 
   candidates.sort(
@@ -558,7 +580,7 @@ export async function loadWeeklyFinReportInputs(
     ? distributeByRevenue(realizationAccountLevel.reviewPointsRub, revenueByNmId)
     : new Map<number, number>()
 
-  for (const { nmId, product, universe, qty, rub } of candidates) {
+  for (const { nmId, product, universe, qty, rub, rawQtyOrders, appliedBuyoutPct } of candidates) {
     const card = cardByNmId.get(nmId)
     const K = rub / qty
 
@@ -598,7 +620,12 @@ export async function loadWeeklyFinReportInputs(
         // per-subcat / global / 90%), поэтому `?? card?.buyoutPercent ?? 100` —
         // защитный хвост (WbCard.buyoutPercent сейчас NULL по всей базе). Раньше 100%
         // → (1−ПВ)×Л_обратно обнулялось → одежда занижалась в ~7× (сверка 06.07).
-        buyoutPct: buyoutResolver.resolve(nmId, weekEndISO) ?? card?.buyoutPercent ?? 100,
+        // Quick 260714-or9: при тумблере appliances → 100 (без невыкупной надбавки
+        // в Л_эфф). Одежда и обычный режим бытовой — rolling-% выкупа (kuh) без изменений.
+        buyoutPct:
+          skipDiscount && universe === "appliances"
+            ? 100
+            : buyoutResolver.resolve(nmId, weekEndISO) ?? card?.buyoutPercent ?? 100,
         // std-параметры логистики
         commStdPct,
         volumeLiters,
@@ -661,6 +688,9 @@ export async function loadWeeklyFinReportInputs(
       directionName: product.brand?.direction?.name ?? null,
       categoryName: product.category?.name ?? null,
       subcategoryName: product.subcategory?.name ?? null,
+      // Quick 260714-or9: транзит в модалку (базис количества)
+      rawQtyOrders,
+      appliedBuyoutPct,
     }
   }
 

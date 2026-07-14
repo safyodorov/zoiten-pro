@@ -109,6 +109,8 @@ interface Props {
   snapshotStale?: boolean
   /** Quick 260714-gff: Опция Джема — надбавка к комиссии (п.п.), обе сценария. */
   jemOptionPct: number
+  /** Quick 260714-or9: тумблер «Без учёта % выкупа (бытовая)» — view-only, URL-driven. */
+  skipAppliancesBuyoutDiscount?: boolean
 }
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
@@ -125,6 +127,7 @@ export function WeeklyFinReportControls({
   snapshot = null,
   snapshotStale = false,
   jemOptionPct,
+  skipAppliancesBuyoutDiscount = false,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -142,8 +145,20 @@ export function WeeklyFinReportControls({
     overheadAppl: bankAutos.opexRub,
   }
 
+  // Quick 260714-or9: URL несёт и неделю, и режим тумблера — переключение недели
+  // не сбрасывает режим, и наоборот.
+  function buildWeeklyUrl(mondayISO: string, rawBuyout: boolean): string {
+    const params = new URLSearchParams({ week: mondayISO })
+    if (rawBuyout) params.set("rawBuyout", "1")
+    return `/finance/weekly?${params.toString()}`
+  }
+
   function goToWeek(mondayISO: string) {
-    router.push(`/finance/weekly?week=${mondayISO}`)
+    router.push(buildWeeklyUrl(mondayISO, skipAppliancesBuyoutDiscount))
+  }
+
+  const toggleRawBuyout = () => {
+    router.push(buildWeeklyUrl(weekStartISO, !skipAppliancesBuyoutDiscount))
   }
 
   const handleDate = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -335,6 +350,19 @@ export function WeeklyFinReportControls({
               </button>
             )}
           </>
+        )}
+        {/* Quick 260714-or9: тумблер сверки бытовой техники при 100% выкупе.
+            Скрыт в снапшот-режиме (payload заморожен), как редактор пулов. */}
+        {!snapshot && (
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+            <input
+              type="checkbox"
+              checked={skipAppliancesBuyoutDiscount}
+              onChange={toggleRawBuyout}
+              className="accent-primary"
+            />
+            Без учёта % выкупа (бытовая)
+          </label>
         )}
         <span className="text-muted-foreground whitespace-nowrap">
           {weekStartISO} — {weekEndISO}

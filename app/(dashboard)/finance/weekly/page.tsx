@@ -32,7 +32,7 @@ function currentIsoMonday(): string {
 export default async function FinanceWeeklyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string }>
+  searchParams: Promise<{ week?: string; rawBuyout?: string }>
 }) {
   // RBAC-гейт на входе — до любой загрузки данных
   await requireSection("FINANCE")
@@ -43,6 +43,8 @@ export default async function FinanceWeeklyPage({
   const mondayISO =
     sp.week && ISO_DATE_RE.test(sp.week) ? toIsoMonday(sp.week) : currentIsoMonday()
   const weekStart = new Date(mondayISO + "T00:00:00Z")
+  // Quick 260714-or9: тумблер «Без учёта % выкупа (бытовая)» — view-only, URL-driven
+  const rawBuyout = sp.rawBuyout === "1"
 
   // W3c: снапшот недели (если зафиксирована)
   const snapshot = await prisma.weeklyFinReportSnapshot.findUnique({
@@ -97,7 +99,9 @@ export default async function FinanceWeeklyPage({
 
   // ── Live-режим: нет снапшота ИЛИ снапшот с чужой version (stale → warning) ──
   const snapshotStale = Boolean(snapshot && !payload)
-  const { data, result, planFact } = await loadWeeklyLiveBundle(weekStart)
+  const { data, result, planFact } = await loadWeeklyLiveBundle(weekStart, {
+    skipAppliancesBuyoutDiscount: rawBuyout,
+  })
 
   return (
     <div className="h-full flex flex-col gap-4">
@@ -114,6 +118,7 @@ export default async function FinanceWeeklyPage({
         bankPoolSources={data.bankPoolSources}
         snapshotStale={snapshotStale}
         jemOptionPct={data.jemOptionPct}
+        skipAppliancesBuyoutDiscount={rawBuyout}
       />
 
       <WeeklyFinReportTable
@@ -122,6 +127,7 @@ export default async function FinanceWeeklyPage({
         waterfall={result.waterfall}
         meta={data.meta}
         planFact={planFact}
+        skipAppliancesBuyoutDiscount={rawBuyout}
       />
     </div>
   )
