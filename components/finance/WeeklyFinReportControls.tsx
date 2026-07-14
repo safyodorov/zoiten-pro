@@ -107,6 +107,8 @@ interface Props {
   snapshot?: { fixedAtLabel: string; fixedByName: string | null } | null
   /** W3c: снапшот есть, но version не совпал → live-fallback + warning. */
   snapshotStale?: boolean
+  /** Quick 260714-gff: Опция Джема — надбавка к комиссии (п.п.), обе сценария. */
+  jemOptionPct: number
 }
 
 // ── Компонент ───────────────────────────────────────────────────────────────────
@@ -122,6 +124,7 @@ export function WeeklyFinReportControls({
   bankPoolSources,
   snapshot = null,
   snapshotStale = false,
+  jemOptionPct,
 }: Props) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -130,6 +133,8 @@ export function WeeklyFinReportControls({
   const [pools, setPools] = useState<ManualPools>(manualPools)
   // W3a: фикс-часть общих расходов одежды — глобальная константа (не per неделя)
   const [fixedCloth, setFixedCloth] = useState(clothingOverheadFixedRub)
+  // Quick 260714-gff: Опция Джема — надбавка к комиссии, редактируется per неделя
+  const [jemOption, setJemOption] = useState(jemOptionPct)
 
   // W3a: авто-сумма из банка per гибрид-пул
   const bankAutoByKey: Record<BankHybridKey, number> = {
@@ -155,6 +160,7 @@ export function WeeklyFinReportControls({
     startTransition(async () => {
       const res = await saveWeeklyPools(weekStartISO, pools, {
         clothingOverheadFixedRub: fixedCloth,
+        jemOptionPct: jemOption,
       })
       if (res.ok) {
         toast.success("Пулы затрат сохранены")
@@ -347,6 +353,30 @@ export function WeeklyFinReportControls({
             {GROUP_ORDER.map((group) => (
               <div key={group} className="flex flex-col gap-1.5">
                 <div className="text-xs font-medium text-muted-foreground">{group}</div>
+                {/* Quick 260714-gff: Опция Джема — НЕ поле ManualPools (надбавка
+                    к комиссии, не пул затрат) — рендерится в группе «Общее» */}
+                {group === "Общее" && (
+                  <div className="flex flex-col gap-0.5">
+                    <label className="flex items-center gap-2 text-xs">
+                      <span className="w-40 whitespace-nowrap text-muted-foreground">
+                        Опция Джема, %
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        value={Number.isFinite(jemOption) ? jemOption : 0}
+                        onChange={(e) => {
+                          const n = Number(e.target.value)
+                          setJemOption(Number.isFinite(n) ? n : 0)
+                        }}
+                        className="w-28 rounded border bg-background px-2 py-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </label>
+                    <div className="text-[10px] text-muted-foreground">
+                      надбавка к комиссии WB, обе сценария; по неделям (carry-forward)
+                    </div>
+                  </div>
+                )}
                 {/* W3a: фикс-часть общих расходов одежды — НЕ поле ManualPools
                     (глобальная константа, не недельная) — рендерится ПЕРЕД полями группы */}
                 {group === "Одежда" && (

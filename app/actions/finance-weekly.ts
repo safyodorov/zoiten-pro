@@ -18,6 +18,7 @@ import {
   DEFAULT_MANUAL_POOLS,
   type ManualPools,
 } from "@/lib/finance-weekly/data"
+import { financeWeeklyJemOptionKey } from "@/lib/finance-weekly/jem-option"
 import { loadWeeklyLiveBundle } from "@/lib/finance-weekly/live"
 import { buildWeeklySnapshotPayload, toIsoMonday } from "@/lib/finance-weekly/snapshot"
 
@@ -28,11 +29,14 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  * financeWeekly.pools.<weekISO>). Санитизирует значения → конечные числа (иначе 0).
  * W3a (quick 260710-lmb): opts.clothingOverheadFixedRub — глобальная фикс-часть
  * общих расходов одежды → отдельный AppSetting (недельный ключ не меняется).
+ * Quick 260714-gff: opts.jemOptionPct — ставка Опции Джема ТЕКУЩЕЙ недели →
+ * AppSetting financeWeekly.jemOptionPct.<weekISO> (carry-forward резолвится
+ * в data.ts при чтении).
  */
 export async function saveWeeklyPools(
   weekStartISO: string,
   pools: ManualPools,
-  opts?: { clothingOverheadFixedRub?: number },
+  opts?: { clothingOverheadFixedRub?: number; jemOptionPct?: number },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await requireSection("FINANCE", "MANAGE")
@@ -63,6 +67,18 @@ export async function saveWeeklyPools(
         where: { key: CLOTHING_OVERHEAD_FIXED_KEY },
         create: { key: CLOTHING_OVERHEAD_FIXED_KEY, value: String(fixed) },
         update: { value: String(fixed) },
+      })
+    }
+
+    // Quick 260714-gff: Опция Джема — ставка ТЕКУЩЕЙ недели, ≥ 0
+    const jemRaw = Number(opts?.jemOptionPct)
+    if (opts?.jemOptionPct !== undefined && Number.isFinite(jemRaw)) {
+      const jem = Math.max(0, jemRaw)
+      const jemKey = financeWeeklyJemOptionKey(weekStartISO)
+      await prisma.appSetting.upsert({
+        where: { key: jemKey },
+        create: { key: jemKey, value: String(jem) },
+        update: { value: String(jem) },
       })
     }
 

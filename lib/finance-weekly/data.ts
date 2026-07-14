@@ -62,6 +62,7 @@ import {
   type BankPoolAutos,
   type HybridPoolSource,
 } from "@/lib/finance-weekly/bank-pools"
+import { resolveJemOptionPct, JEM_OPTION_PREFIX } from "@/lib/finance-weekly/jem-option"
 
 // ── Ручные пулы (placeholder до W3 банк-классификатора) ───────────────────────
 
@@ -161,6 +162,8 @@ export interface WeeklyFinReportPageData {
   clothingOverheadFixedRub: number
   /** W3a: источник гибрид-пулов delivery / overheadAppl (бейдж в Controls). */
   bankPoolSources: { delivery: HybridPoolSource; overheadAppl: HybridPoolSource }
+  /** Quick 260714-gff: Опция Джема — надбавка к комиссии (п.п.), для UI-шапки. */
+  jemOptionPct: number
 }
 
 /** Все 4 пула из manual — для early-return'ов без данных недели. */
@@ -230,6 +233,15 @@ export async function loadWeeklyFinReportInputs(
   const weekStartISO = isoDate(weekStart)
   const weekEndISO = isoDate(weekEnd)
 
+  // 1a. Quick 260714-gff: Опция Джема — carry-forward резолв, доступен во ВСЕХ
+  // трёх return-сайтах (включая ранние return при пустых marketplace/articles).
+  const jemRows = await prisma.appSetting.findMany({
+    where: { key: { startsWith: JEM_OPTION_PREFIX } },
+    select: { key: true, value: true },
+  })
+  const jemOptionPct = resolveJemOptionPct(jemRows, weekStartISO)
+  const constants: WeeklyConstants = { ...DEFAULT_WEEKLY_CONSTANTS, jemOptionPct }
+
   const emptyPools = (): UniversePools => ({
     deliveryToMp: { total: 0, baseRevenue: 0 },
     creditInterest: { total: 0, baseRevenue: 0 },
@@ -247,13 +259,14 @@ export async function loadWeeklyFinReportInputs(
       articles: [],
       meta: {},
       pools: { appliances: emptyPools(), clothing: emptyPools() },
-      constants: DEFAULT_WEEKLY_CONSTANTS,
+      constants,
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
       bankAutos: { opexRub: 0, deliveryMpRub: 0 },
       clothingOverheadFixedRub: 0,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
+      jemOptionPct,
     }
   }
 
@@ -297,13 +310,14 @@ export async function loadWeeklyFinReportInputs(
       articles: [],
       meta: {},
       pools: { appliances: emptyPools(), clothing: emptyPools() },
-      constants: DEFAULT_WEEKLY_CONSTANTS,
+      constants,
       manualPools: DEFAULT_MANUAL_POOLS,
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
       bankAutos: { opexRub: 0, deliveryMpRub: 0 },
       clothingOverheadFixedRub: 0,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
+      jemOptionPct,
     }
   }
 
@@ -702,7 +716,7 @@ export async function loadWeeklyFinReportInputs(
     articles,
     meta,
     pools: { appliances: appliancesPools, clothing: clothingPools },
-    constants: DEFAULT_WEEKLY_CONSTANTS,
+    constants,
     manualPools,
     hasRealization,
     poolSources: resolvedPools.sources,
@@ -712,5 +726,6 @@ export async function loadWeeklyFinReportInputs(
       delivery: deliveryResolved.source,
       overheadAppl: overheadApplResolved.source,
     },
+    jemOptionPct,
   }
 }

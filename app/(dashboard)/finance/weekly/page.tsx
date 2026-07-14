@@ -81,6 +81,7 @@ export default async function FinanceWeeklyPage({
           clothingOverheadFixedRub={payload.clothingOverheadFixedRub}
           bankPoolSources={payload.bankPoolSources}
           snapshot={{ fixedAtLabel, fixedByName }}
+          jemOptionPct={payload.constants.jemOptionPct ?? 0.75}
         />
 
         <WeeklyFinReportTable
@@ -112,6 +113,7 @@ export default async function FinanceWeeklyPage({
         clothingOverheadFixedRub={data.clothingOverheadFixedRub}
         bankPoolSources={data.bankPoolSources}
         snapshotStale={snapshotStale}
+        jemOptionPct={data.jemOptionPct}
       />
 
       <WeeklyFinReportTable
