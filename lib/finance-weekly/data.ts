@@ -13,8 +13,10 @@
 //   закупка        — ProductCost.costPrice
 //   комиссии       — WbCommissionSnapshot по validFrom <= weekEnd, fallback WbCard
 //                    (W2d, Фикс 2 — прошлые недели не пересчитываются задним числом)
-//   проценты кредита — начисление: остаток тела × ставка × 7/365 по кредитам
-//                    ЗОЙТЕН (W2d, Фикс 4; только бытовая техника)
+//   проценты кредита — начисление: остаток тела × ставка × 7/365 + амортизация
+//                    комиссии JetLend/НДФЛ ×7/30 по ВСЕЙ ГРУППЕ кредитов
+//                    (W2d Фикс 4 accrual; quick 260714-ij9 v2 — снят фильтр
+//                    ЗОЙТЕН + добавлены extras; только бытовая техника)
 //   N_std          — модель calculatePricingStandard (объёмная логистика / ед)
 //
 // Ручные пулы (доставка до МП / общие / приёмка / хранение) хранятся в
@@ -48,7 +50,7 @@ import { calculatePricingStandard, type PricingInputs } from "@/lib/pricing-math
 import { netClothingSales } from "@/lib/finance-weekly/clothing-net"
 import { loadCommissionsForDate } from "@/lib/wb-commission-history"
 import { attributeSpendByShares } from "@/lib/finance-weekly/attribution"
-import { weeklyAccruedInterest } from "@/lib/finance-weekly/credit-accrual"
+import { weeklyAccruedInterest, weeklyLoanExtras } from "@/lib/finance-weekly/credit-accrual"
 import {
   buildRealizationPools,
   distributeByRevenue,
@@ -381,14 +383,16 @@ export async function loadWeeklyFinReportInputs(
       where: { date: { gte: weekStart, lte: weekEnd } },
       _sum: { sum: true },
     }),
-    // W2d Фикс 4: кредиты для accrual-начисления (фильтр ЗОЙТЕН — ниже)
+    // quick 260714-ij9 (v2, W3b): кредиты для accrual-начисления ПО ВСЕЙ ГРУППЕ
+    // (фильтр ЗОЙТЕН убран) + амортизация комиссии JetLend/НДФЛ (weeklyLoanExtras)
     prisma.loan.findMany({
       where: { deletedAt: null },
       select: {
         amount: true,
         annualRatePct: true,
         issueDate: true,
-        company: { select: { name: true } },
+        monthlyCommissionRub: true,
+        monthlyNdflRub: true,
         payments: { select: { date: true, principal: true } },
       },
     }),
@@ -460,17 +464,20 @@ export async function loadWeeklyFinReportInputs(
   for (const r of adRows) fullstatsShares.set(r.nmId, r._sum.sum ?? 0)
   const adByNmId = attributeSpendByShares(updTotal, fullstatsShares, totalFullstats)
 
-  // 8. Проценты по кредиту ЗОЙТЕН (W2d Фикс 4): начисление остаток×ставка×7/365
-  // вместо платежей по дате (большинство недель платежей не имело → пул был 0).
-  const zoitenLoans = loans
-    .filter((l) => l.company.name.toUpperCase().includes("ЗОЙТЕН"))
-    .map((l) => ({
-      amount: Number(l.amount),
-      annualRatePct: Number(l.annualRatePct),
-      issueDate: l.issueDate,
-      payments: l.payments.map((p) => ({ date: p.date, principal: Number(p.principal) })),
-    }))
-  const zoitenWeekInterest = weeklyAccruedInterest(zoitenLoans, weekStart)
+  // 8. Кредитный пул (quick 260714-ij9, v2 — закрывает W3b): начисление процентов
+  // остаток×ставка×7/365 ПО ВСЕЙ ГРУППЕ (погашенные кредиты дают 0 автоматически)
+  // + амортизация единовременных комиссий JetLend и НДФЛ per транш (×7/30 «живых»).
+  // Пул по-прежнему только appliances (одежда кредит не несёт).
+  const groupLoans = loans.map((l) => ({
+    amount: Number(l.amount),
+    annualRatePct: Number(l.annualRatePct),
+    issueDate: l.issueDate,
+    monthlyCommissionRub: l.monthlyCommissionRub != null ? Number(l.monthlyCommissionRub) : null,
+    monthlyNdflRub: l.monthlyNdflRub != null ? Number(l.monthlyNdflRub) : null,
+    payments: l.payments.map((p) => ({ date: p.date, principal: Number(p.principal) })),
+  }))
+  const creditWeekTotal =
+    weeklyAccruedInterest(groupLoans, weekStart) + weeklyLoanExtras(groupLoans, weekStart)
 
   // 9. Сборка articles + meta.
   // Итерируем union nmIds обоих базисов; qty/rub per universe:
@@ -691,7 +698,7 @@ export async function loadWeeklyFinReportInputs(
 
   const appliancesPools: UniversePools = {
     deliveryToMp: { total: deliveryResolved.total, baseRevenue: combinedBase },
-    creditInterest: { total: zoitenWeekInterest, baseRevenue: applBase },
+    creditInterest: { total: creditWeekTotal, baseRevenue: applBase },
     overhead: { total: overheadApplResolved.total, baseRevenue: applBase },
     acceptance: {
       total: resolvedPools.totals.acceptanceAppl,

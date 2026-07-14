@@ -77,3 +77,62 @@ export function weeklyAccruedInterest(
   }
   return round2(total)
 }
+
+export interface LoanExtrasInput {
+  /** Ежемесячная амортизация единовременной комиссии JetLend, ₽ (nullable). */
+  monthlyCommissionRub?: number | null
+  /** Ежемесячный НДФЛ инвесторам, усреднённый на срок, ₽ (nullable). */
+  monthlyNdflRub?: number | null
+  /** Дата выдачи (nullable). issueDate >= weekEnd (эксклюзивно) → вклад 0. */
+  issueDate?: Date | string | null
+  /**
+   * График платежей. «Жив» на неделе, если дата ПОСЛЕДНЕГО планового платежа
+   * (максимальная date) >= weekStart. Пустой график → гейт по последнему платежу
+   * не применяется (консервативно включаем при прошедшем issueDate).
+   */
+  payments: { date: Date | string }[]
+}
+
+/**
+ * Недельная доля ежемесячных «экстра»-нагрузок кредита (амортизация комиссии
+ * JetLend + НДФЛ): Σ per кредит (commission + ndfl) × 7/30, если транш «жив»
+ * на неделе. quick 260714-ij9 (кредитный пул /finance/weekly v2, W3b).
+ *
+ * Гейты «жив»:
+ *  - issueDate (если задана) < weekEnd (эксклюзивно, weekStart + 7д);
+ *  - дата последнего планового платежа >= weekStart (амортизация прекращается
+ *    после последнего планового платежа); при пустом графике — гейт не применяется.
+ * monthly <= 0 (оба поля null/0) → вклад 0. Результат = round2(Σ), ₽.
+ */
+export function weeklyLoanExtras(
+  loans: LoanExtrasInput[],
+  weekStart: Date,
+): number {
+  const weekStartMs = utcMidnightMs(weekStart)
+  const weekEndExclusiveMs = weekStartMs + 7 * 86_400_000
+
+  let total = 0
+  for (const loan of loans) {
+    const monthly = (loan.monthlyCommissionRub ?? 0) + (loan.monthlyNdflRub ?? 0)
+    if (monthly <= 0) continue
+
+    // Гейт 1: транш выдан после (эксклюзивного) конца недели → не существовал
+    if (loan.issueDate != null && utcMidnightMs(loan.issueDate) >= weekEndExclusiveMs) {
+      continue
+    }
+
+    // Гейт 2: срок истёк — последний плановый платёж раньше weekStart. Пустой график
+    // → гейт пропускается (дата конца срока неизвестна, полагаемся на issueDate).
+    if (loan.payments.length > 0) {
+      let lastPaymentMs = -Infinity
+      for (const p of loan.payments) {
+        const ms = utcMidnightMs(p.date)
+        if (ms > lastPaymentMs) lastPaymentMs = ms
+      }
+      if (lastPaymentMs < weekStartMs) continue
+    }
+
+    total += monthly * (7 / 30)
+  }
+  return round2(total)
+}
