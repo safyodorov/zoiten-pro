@@ -32,10 +32,11 @@ import type { WeeklyArticleMeta } from "@/lib/finance-weekly/data"
 const LABEL_WIDTH = 340
 
 // W2d: бейдж базиса вселенной — universe направления (hasSizes) определяет,
-// по чему считаются его строки: заказы (appliances) или нетто-выкупы (clothing,
+// по чему считаются его строки: бытовая — заказы × rolling-% выкупа
+// (quick 260714-maz, модель экономиста H=F×коэф) или нетто-выкупы (clothing,
 // − возвраты, quick 260714-gt7).
 const UNIVERSE_BASIS: Record<Universe, string> = {
-  appliances: "по заказам",
+  appliances: "по заказам × % выкупа",
   clothing: "по выкупам нетто",
 }
 

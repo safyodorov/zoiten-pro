@@ -39,6 +39,9 @@ function fmtRub0(n: number): string {
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 0 })
 }
 
+/** Кол-во ед.: бытовая — дробное (заказы×%выкупа), до 1 знака. */
+const qtyFmt = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 })
+
 /** Доля 0..1 → «%» (для rePct / roi). */
 function fmtPct(fraction: number): string {
   if (!Number.isFinite(fraction)) return "—"
@@ -59,9 +62,10 @@ function profitColor(n: number): string {
       : ""
 }
 
-/** W2d: базис qtyOrders — clothing по выкупам gross, appliances по заказам. */
+/** Базис qtyOrders: одежда — нетто-выкупы; бытовая — заказы × % выкупа
+ *  (quick 260714-maz, дробный H). */
 function basisLabel(universe: ArticleResult["universe"]): string {
-  return universe === "clothing" ? "выкупы" : "заказы"
+  return universe === "clothing" ? "выкупы нетто" : "заказы × %выкупа"
 }
 
 // ── Конфиг строк разбивки (порядок = Excel «Показатели») ─────────────────────
@@ -108,7 +112,7 @@ export function WeeklyFinArticleDialog({ open, onOpenChange, article, meta }: Pr
               <DialogTitle>{meta.productName || String(article.nmId)}</DialogTitle>
               <DialogDescription>
                 Артикул: {article.nmId} · Бренд: {meta.brandName ?? "—"} · Кол-во, шт:{" "}
-                {article.qtyOrders} ({basisLabel(article.universe)}) · Цена:{" "}
+                {qtyFmt.format(article.qtyOrders)} ({basisLabel(article.universe)}) · Цена:{" "}
                 {fmtRub2(article.iu.breakdown.pricePerUnit)} ₽
               </DialogDescription>
             </DialogHeader>
@@ -143,8 +147,8 @@ export function WeeklyFinArticleDialog({ open, onOpenChange, article, meta }: Pr
               </table>
             </div>
             <p className="-mt-2 text-xs text-muted-foreground">
-              × {article.qtyOrders} шт ({basisLabel(article.universe)}) = валовая сумма
-              за неделю
+              × {qtyFmt.format(article.qtyOrders)} шт ({basisLabel(article.universe)}) = валовая
+              сумма за неделю
             </p>
 
             {/* ── Итоги обоих сценариев ── */}
