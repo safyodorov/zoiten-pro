@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260714-maz — базис бытовой = заказы × rolling-выкуп
+stopped_at: Completed quick 260714-or9 — тумблер выкупа + базис количества в модалке
 last_updated: "2026-07-14T12:09:33.504Z"
 progress:
   total_phases: 13
@@ -337,6 +337,7 @@ Recent decisions affecting current work:
 - [Phase quick-260714-kke]: Хранение (Z) в /finance/weekly — статья только Оферты: storagePerUnit стал 5-м параметром внутренней computeScenario (как N), ИУ-вызов получает 0, Оферта — common.storagePerUnit; публичный контракт движка не изменён
 - [Phase quick-260714-kuh]: N_std (офертная логистика Л_эфф) — buyoutPct из loadBuyoutPctRolling30dMap (rolling-30d weighted per nmId на weekEnd) вместо card.buyoutPercent??100 (NULL по всей базе → 100% выкуп → одежда занижалась в ~7 раз)
 - [Phase quick-260714-maz]: Базис бытовой /finance/weekly: H = заказы × rolling-% выкупа (pure discountAppliancesByBuyout, дисконт qty+rub одним коэф — K инвариантен; решение пользователя = модель экономиста H=F×коэф, но per nmId); одежда и plan-fact не тронуты
+- [Phase quick-260714-or9]: Тумблер «Без учёта % выкупа (бытовая)» (?rawBuyout=1, URL-параметр, только live-режим, скрыт в снапшоте) — qty сырые + N_std при 100% для сверки с экономистом; модалка: блок «базис количества» (rolling-%, сырые заказы, с корректировкой) через WeeklyArticleMeta (движок не тронут)
 
 ### Roadmap Evolution
 
@@ -471,5 +472,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-07-14T12:09:33.498Z
-Stopped at: Completed quick 260714-maz — базис бытовой = заказы × rolling-выкуп
+Stopped at: Completed quick 260714-or9 — тумблер выкупа + базис количества в модалке
 Resume file: None
