@@ -11,6 +11,7 @@ import { requireSection, getCurrentUser } from "@/lib/rbac"
 import { prisma } from "@/lib/prisma"
 import { collectNicheRun } from "@/lib/analytics/collector"
 import { deserializeWireData, type NicheRunWireData } from "@/lib/analytics/data"
+import { MPSTATS_BASE, buildByKeywordsPath } from "@/lib/analytics/mpstats"
 
 const MAX_NM_ID = 2 ** 31
 const nmIdSchema = z.number().int().positive().lt(MAX_NM_ID)
@@ -141,6 +142,41 @@ export async function saveMpstatsToken(token: string): Promise<{ ok: boolean; er
   })
   revalidatePath("/analytics")
   return { ok: true }
+}
+
+/**
+ * Живая проверка сохранённого MPSTATS-токена (MANAGE): 1 тестовый вызов by_keywords
+ * по образцовому nmId за 7 дней. Различает: рабочий (200) / не принят (401/403) / лимит (429).
+ * Расходует 1 единицу лимита тарифа MPSTATS.
+ */
+export async function testMpstatsToken(): Promise<{ ok: boolean; message: string }> {
+  try {
+    await requireSection("ANALYTICS", "MANAGE")
+  } catch (e) {
+    return { ok: false, message: authError(e) }
+  }
+  const row = await prisma.appSetting.findUnique({ where: { key: "analytics.mpstatsToken" } })
+  const token = row?.value?.trim() ?? ""
+  if (!token) return { ok: false, message: "Токен не сохранён" }
+
+  const iso = (d: Date) => d.toISOString().slice(0, 10)
+  const now = new Date()
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const SAMPLE_NM = 899301731 // образцовый реальный nmID (кофемашина) — проверяем только авторизацию
+
+  try {
+    const res = await fetch(`${MPSTATS_BASE}${buildByKeywordsPath(SAMPLE_NM, iso(weekAgo), iso(now))}`, {
+      headers: { "X-Mpstats-TOKEN": token },
+    })
+    if (res.status === 200) return { ok: true, message: "Токен рабочий — MPSTATS отвечает (200)" }
+    if (res.status === 401 || res.status === 403)
+      return { ok: false, message: `Токен не принят MPSTATS (${res.status}) — проверьте значение` }
+    if (res.status === 429)
+      return { ok: true, message: "Токен принят, но сейчас лимит запросов MPSTATS (429) — повторите позже" }
+    return { ok: false, message: `MPSTATS вернул ${res.status}` }
+  } catch (e) {
+    return { ok: false, message: `Ошибка соединения с MPSTATS: ${e instanceof Error ? e.message : "неизвестно"}` }
+  }
 }
 
 /** Ручная пометка зависшего прогона как FAILED (MANAGE). */

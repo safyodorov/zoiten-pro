@@ -14,7 +14,10 @@ export default async function AnalyticsUploadPage() {
     where: { key: "analytics.mpstatsToken" },
     select: { value: true },
   })
-  const hasToken = !!tokenRow?.value?.trim()
+  const tokenValue = tokenRow?.value?.trim() ?? ""
+  const hasToken = !!tokenValue
+  const tokenFingerprint =
+    tokenValue.length >= 8 ? `${tokenValue.slice(0, 4)}…${tokenValue.slice(-4)}` : undefined
 
   return (
     <div className="p-4 space-y-4 max-w-5xl">
@@ -25,7 +28,7 @@ export default async function AnalyticsUploadPage() {
           </Link>
           <h1 className="text-lg font-semibold mt-1">Новый прогон ниши</h1>
         </div>
-        {canManage && <AnalyticsTokenBar hasToken={hasToken} />}
+        {canManage && <AnalyticsTokenBar hasToken={hasToken} tokenFingerprint={tokenFingerprint} />}
       </div>
 
       {canManage && !hasToken && (

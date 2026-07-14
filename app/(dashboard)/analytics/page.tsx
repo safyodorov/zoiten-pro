@@ -37,7 +37,10 @@ export default async function AnalyticsListPage() {
     prisma.nicheRun.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.appSetting.findUnique({ where: { key: "analytics.mpstatsToken" }, select: { value: true } }),
   ])
-  const hasToken = !!tokenRow?.value?.trim()
+  const tokenValue = tokenRow?.value?.trim() ?? ""
+  const hasToken = !!tokenValue
+  const tokenFingerprint =
+    tokenValue.length >= 8 ? `${tokenValue.slice(0, 4)}…${tokenValue.slice(-4)}` : undefined
   const now = Date.now()
 
   return (
@@ -48,7 +51,7 @@ export default async function AnalyticsListPage() {
           <p className="text-sm text-muted-foreground">Топ-30 SKU в нише. История сохранённых прогонов.</p>
         </div>
         <div className="flex items-end gap-4">
-          {canManage && <AnalyticsTokenBar hasToken={hasToken} />}
+          {canManage && <AnalyticsTokenBar hasToken={hasToken} tokenFingerprint={tokenFingerprint} />}
           <Link
             href="/analytics/upload"
             prefetch={false}
