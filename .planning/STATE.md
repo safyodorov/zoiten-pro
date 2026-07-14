@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260714-gff — Опция Джема в /finance/weekly
-last_updated: "2026-07-14T09:03:09.907Z"
+stopped_at: Completed quick-260714-gt7 — нетто-базис одежды /finance/weekly
+last_updated: "2026-07-14T09:14:42.013Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -140,6 +140,7 @@ Next: по итогам UAT — хотфиксы; затем Phase 29 (канд�
 | Phase quick-260710-lmb P01 | 10min | 3 tasks | 12 files |
 | Phase quick-260710-mih P01 | 8min | 2 tasks | 8 files |
 | Phase quick-260714-gff P01 | 15min | 2 tasks | 7 files |
+| Phase quick-260714-gt7 P01 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -329,6 +330,7 @@ Recent decisions affecting current work:
 - [Phase quick-260710-lmb]: Гибрид-пулы /finance/weekly из банка: manual>0 приоритетен, 0 = не задано → Σ|amount| тегированных DEBIT-операций недели; CAPEX никуда не суммируется; одежда = AppSetting-фикс + недельная переменная (не из банка)
 - [Phase quick-260710-mih]: W3c: снапшот недели фин-отчёта — одна строка WeeklyFinReportSnapshot с целым рендер-пейлоадом v1 в Json (не дочерние таблицы); version-guard → live-fallback + warning
 - [Phase quick-260714-gff]: Опция Джема — надбавка к комиссии обоих сценариев ИУ/Оферта, carry-forward per неделя, default 0.75 п.п., движок default 0 (golden неизменен)
+- [Phase quick-260714-gt7]: Базис одежды в /finance/weekly переключён с gross на нетто (выкупы − возвраты) — сверка 06.07-12.07 опровергла прежнее gross-решение W2d Фикс 1
 
 ### Roadmap Evolution
 
@@ -462,6 +464,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-14T09:02:56.443Z
-Stopped at: Completed quick 260714-gff — Опция Джема в /finance/weekly
+Last session: 2026-07-14T09:14:02.258Z
+Stopped at: Completed quick-260714-gt7 — нетто-базис одежды /finance/weekly
 Resume file: None
