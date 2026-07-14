@@ -17,7 +17,9 @@
 //                    комиссии JetLend/НДФЛ ×7/30 по ВСЕЙ ГРУППЕ кредитов
 //                    (W2d Фикс 4 accrual; quick 260714-ij9 v2 — снят фильтр
 //                    ЗОЙТЕН + добавлены extras; только бытовая техника)
-//   N_std          — модель calculatePricingStandard (объёмная логистика / ед)
+//   N_std          — модель calculatePricingStandard (объёмная логистика / ед);
+//                    % выкупа = rolling-30d weighted per nmId (loadBuyoutPctRolling30dMap),
+//                    fallback card.buyoutPercent → 100 (quick 260714-kuh)
 //
 // Ручные пулы (доставка до МП / общие / приёмка / хранение) хранятся в
 // AppSetting financeWeekly.pools.<weekISO>, редактируются MANAGE-пользователем
@@ -49,6 +51,7 @@ import {
 import { calculatePricingStandard, type PricingInputs } from "@/lib/pricing-math"
 import { netClothingSales } from "@/lib/finance-weekly/clothing-net"
 import { loadCommissionsForDate } from "@/lib/wb-commission-history"
+import { loadBuyoutPctRolling30dMap } from "@/lib/wb-advert-spend-data"
 import { attributeSpendByShares } from "@/lib/finance-weekly/attribution"
 import { weeklyAccruedInterest, weeklyLoanExtras } from "@/lib/finance-weekly/credit-accrual"
 import {
@@ -346,6 +349,7 @@ export async function loadWeeklyFinReportInputs(
     loans,
     realizationRows,
     bankTxRows,
+    buyoutResolver,
   ] = await Promise.all([
     prisma.wbCard.findMany({ where: { nmId: { in: linkedNmIds }, deletedAt: null } }),
     prisma.appSetting.findMany({
@@ -410,6 +414,17 @@ export async function loadWeeklyFinReportInputs(
       },
       select: { direction: true, amount: true, weeklyCostTag: true },
     }),
+    // quick 260714-kuh: реальный rolling-30d weighted % выкупа per nmId для N_std
+    // (модель Л_эфф сценария «Оферта»). Окно [weekEnd−30d, weekEndExclusive) — mirror
+    // /prices/wb: резолвер ЭМИТит per-nmId строки только для date >= from, поэтому
+    // from сдвинут на −30д (иначе per-nmId output пустой). nmIdsFilter = linkedNmIds.
+    // Резолв на weekEnd; несозревшие дни (buyoutPercent NULL) резолвер сам заменяет
+    // на latest mature ≤ weekEnd. Для прошлых недель (weekEnd < сегодня−7) окно зрелое.
+    loadBuyoutPctRolling30dMap(
+      new Date(weekEnd.getTime() - 30 * 86_400_000),
+      weekEndExclusive,
+      linkedNmIds,
+    ),
   ])
 
   const cardByNmId = new Map<number, (typeof wbCards)[number]>()
@@ -555,6 +570,8 @@ export async function loadWeeklyFinReportInputs(
     // std остаётся МОДЕЛЬЮ НАВСЕГДА (решение 2026-07-10, D-scope): мы работаем на ИУ,
     // в отчёте реализации НЕТ std-логистики/хранения сценария «Оферта». Фактический
     // delivery_rub из WbRealizationWeekly идёт в logisticsIuPerUnit (ИУ-сценарий).
+    // quick 260714-kuh: % выкупа модели = реальный rolling-30d weighted per nmId
+    // (не хардкод 100%) — иначе (1−ПВ)×Л_обратно обнуляется и одежда занижается ~7×.
     const volumeLiters =
       ((product.heightCm ?? 0) * (product.widthCm ?? 0) * (product.depthCm ?? 0)) / 1000
     let logisticsStdPerUnit = 0
@@ -564,7 +581,12 @@ export async function loadWeeklyFinReportInputs(
         // Ценовая база — из карточки (fallback на восстановленную K)
         priceBeforeDiscount: card?.priceBeforeDiscount ?? K,
         sellerDiscountPct: card?.sellerDiscount ?? 0,
-        buyoutPct: card?.buyoutPercent ?? 100,
+        // quick 260714-kuh: реальный rolling-30d выкуп per nmId на weekEnd вместо
+        // хардкода 100%. resolve() ВСЕГДА возвращает число (внутр. fallback →
+        // per-subcat / global / 90%), поэтому `?? card?.buyoutPercent ?? 100` —
+        // защитный хвост (WbCard.buyoutPercent сейчас NULL по всей базе). Раньше 100%
+        // → (1−ПВ)×Л_обратно обнулялось → одежда занижалась в ~7× (сверка 06.07).
+        buyoutPct: buyoutResolver.resolve(nmId, weekEndISO) ?? card?.buyoutPercent ?? 100,
         // std-параметры логистики
         commStdPct,
         volumeLiters,
