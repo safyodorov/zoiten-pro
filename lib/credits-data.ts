@@ -22,6 +22,8 @@ export interface CreditRow {
   annualRatePct: number
   termMonths: number | null
   issueDate: Date | null
+  monthlyCommissionRub: number | null // quick 260714-ij9: амортизация комиссии JetLend, ₽/мес
+  monthlyNdflRub: number | null       // quick 260714-ij9: НДФЛ инвесторам, ₽/мес
   effectiveIssueDate: Date | null   // issueDate ?? первая дата платежа (D-07 display-only)
   currentBalance: number
   totalPrincipalPaid: number
@@ -81,6 +83,8 @@ export async function loadCredits(): Promise<CreditRow[]> {
       annualRatePct: Number(loan.annualRatePct),
       termMonths: loan.termMonths ?? null,
       issueDate: loan.issueDate ?? null,
+      monthlyCommissionRub: loan.monthlyCommissionRub != null ? Number(loan.monthlyCommissionRub) : null,
+      monthlyNdflRub: loan.monthlyNdflRub != null ? Number(loan.monthlyNdflRub) : null,
       effectiveIssueDate,
       currentBalance: agg.currentBalance,
       totalPrincipalPaid: agg.totalPrincipalPaid,

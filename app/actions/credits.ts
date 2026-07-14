@@ -29,6 +29,8 @@ const LoanSchema = z.object({
   annualRatePct: z.number().min(0).max(1000),          // 28.000 и т.п.
   termMonths: z.number().int().positive().nullable().optional(),
   issueDate: z.string().nullable().optional(),          // ISO или null (D-07)
+  monthlyCommissionRub: z.number().nonnegative().nullable().optional(), // quick 260714-ij9
+  monthlyNdflRub: z.number().nonnegative().nullable().optional(),       // quick 260714-ij9
   notes: z.string().max(2000).nullable().optional(),
   payments: z.array(PaymentSchema).default([]),
 })
@@ -69,6 +71,8 @@ export async function createLoan(
         annualRatePct: parsed.annualRatePct,
         termMonths: parsed.termMonths ?? null,
         issueDate: parseDate(parsed.issueDate),
+        monthlyCommissionRub: parsed.monthlyCommissionRub ?? null,
+        monthlyNdflRub: parsed.monthlyNdflRub ?? null,
         notes: parsed.notes ?? null,
         payments: {
           create: parsed.payments.map((p) => ({
@@ -115,6 +119,8 @@ export async function updateLoan(
           annualRatePct: parsed.annualRatePct,
           termMonths: parsed.termMonths ?? null,
           issueDate: parseDate(parsed.issueDate),
+          monthlyCommissionRub: parsed.monthlyCommissionRub ?? null,
+          monthlyNdflRub: parsed.monthlyNdflRub ?? null,
           notes: parsed.notes ?? null,
         },
       })

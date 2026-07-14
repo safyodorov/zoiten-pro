@@ -104,6 +104,8 @@ interface LoanForModal {
   annualRatePct: number
   termMonths: number | null
   issueDate: Date | null
+  monthlyCommissionRub: number | null // quick 260714-ij9
+  monthlyNdflRub: number | null       // quick 260714-ij9
   notes: string | null
   payments: Array<{ date: Date; principal: number; interest: number }>
 }
@@ -208,6 +210,8 @@ export function CreditsTable({ rows, lenders, companies, canManage }: CreditsTab
               annualRatePct: row.annualRatePct,
               termMonths: row.termMonths,
               issueDate: row.issueDate,
+              monthlyCommissionRub: row.monthlyCommissionRub,
+              monthlyNdflRub: row.monthlyNdflRub,
               notes: null,
               payments: [],
             }

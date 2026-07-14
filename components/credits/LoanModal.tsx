@@ -28,6 +28,8 @@ interface LoanForModal {
   annualRatePct: number
   termMonths: number | null
   issueDate: Date | null
+  monthlyCommissionRub: number | null // quick 260714-ij9
+  monthlyNdflRub: number | null       // quick 260714-ij9
   notes: string | null
   payments: Array<{ date: Date; principal: number; interest: number }>
 }
@@ -57,6 +59,8 @@ const LoanFormSchema = z.object({
   annualRatePct: z.number().min(0).max(1000),
   termMonths: z.number().int().positive().nullable().optional(),
   issueDate: z.string().nullable().optional(),
+  monthlyCommissionRub: z.number().nonnegative().nullable().optional(), // quick 260714-ij9
+  monthlyNdflRub: z.number().nonnegative().nullable().optional(),       // quick 260714-ij9
   notes: z.string().max(2000).nullable().optional(),
   payments: z.array(PaymentSchema).default([]),
 })
@@ -116,6 +120,8 @@ export function LoanModal({
       annualRatePct: undefined,
       termMonths: null,
       issueDate: null,
+      monthlyCommissionRub: null,
+      monthlyNdflRub: null,
       notes: "",
       payments: [],
     },
@@ -138,6 +144,8 @@ export function LoanModal({
           annualRatePct: loan.annualRatePct,
           termMonths: loan.termMonths ?? null,
           issueDate: toDateInputValue(loan.issueDate) || null,
+          monthlyCommissionRub: loan.monthlyCommissionRub ?? null,
+          monthlyNdflRub: loan.monthlyNdflRub ?? null,
           notes: loan.notes ?? "",
           payments: loan.payments.map((p) => ({
             date: toDateInputValue(p.date),
@@ -154,6 +162,8 @@ export function LoanModal({
           annualRatePct: undefined,
           termMonths: null,
           issueDate: null,
+          monthlyCommissionRub: null,
+          monthlyNdflRub: null,
           notes: "",
           payments: [],
         })
@@ -173,6 +183,8 @@ export function LoanModal({
           annualRatePct: values.annualRatePct,
           termMonths: values.termMonths ?? null,
           issueDate: values.issueDate || null,
+          monthlyCommissionRub: values.monthlyCommissionRub ?? null,
+          monthlyNdflRub: values.monthlyNdflRub ?? null,
           notes: values.notes || null,
           payments: values.payments,
         })
@@ -194,6 +206,8 @@ export function LoanModal({
           annualRatePct: values.annualRatePct,
           termMonths: values.termMonths ?? null,
           issueDate: values.issueDate || null,
+          monthlyCommissionRub: values.monthlyCommissionRub ?? null,
+          monthlyNdflRub: values.monthlyNdflRub ?? null,
           notes: values.notes || null,
           payments: values.payments,
         })
@@ -364,6 +378,49 @@ export function LoanModal({
                   />
                 </div>
               </div>
+
+              {/* ── Кредитный пул (quick 260714-ij9) ── */}
+              <SectionDivider label="Кредитный пул (фин-отчёт за неделю)" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Комиссия, ₽/мес
+                    <span className="text-muted-foreground/60 ml-1 text-xs">(необязательно)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register("monthlyCommissionRub", {
+                      valueAsNumber: true,
+                      setValueAs: (v) => (v === "" || isNaN(Number(v)) ? null : Number(v)),
+                    })}
+                    placeholder="0"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    НДФЛ, ₽/мес
+                    <span className="text-muted-foreground/60 ml-1 text-xs">(необязательно)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    {...register("monthlyNdflRub", {
+                      valueAsNumber: true,
+                      setValueAs: (v) => (v === "" || isNaN(Number(v)) ? null : Number(v)),
+                    })}
+                    placeholder="0"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Амортизация единовременной комиссии JetLend / НДФЛ инвесторам, равномерно
+                на срок; входит в кредитный пул /finance/weekly.
+              </p>
 
               {/* Заметки */}
               <div className="flex flex-col gap-1">
