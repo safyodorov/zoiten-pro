@@ -269,3 +269,91 @@ describe("computeWeeklyFinReport — Опция Джема (jemOptionPct) адд
     expect(artWithoutJem.std.profit).toBeCloseTo(-2176.7, 0)
   })
 })
+
+// ──────────────────────────────────────────────────────────────────
+// Quick 260714-kke: хранение (Z) — статья ТОЛЬКО Оферты.
+// WB не берёт хранение на ИУ (зашито в комиссию; в отчёте реализации
+// paidStorage по ИУ-аккаунту = 0, экономист колонку Z для ИУ не заполняет).
+// Указание пользователя 2026-07-14: в ИУ хранение НЕ вычитать.
+// ──────────────────────────────────────────────────────────────────
+
+describe("computeWeeklyFinReport — хранение вычитается только в Оферте (ИУ=0)", () => {
+  const storageArticle: WeeklyArticleInput = {
+    nmId: 700001,
+    universe: "appliances",
+    qtyOrders: 5, // H
+    grossPricePerUnit: 1000, // K
+    commIuPct: 30,
+    commStdPct: 24,
+    costPerUnit: 300, // O
+    adSpendTotal: 0,
+    reviewWriteoffTotal: 0,
+    logisticsIuPerUnit: 0,
+    logisticsStdPerUnit: 100,
+    // storagePerUnit НЕ задаём → Оферта берёт из пула, ИУ = 0
+  }
+
+  // baseRevenue=K → poolPerUnit = total (точное разрешение per-unit).
+  function buildStorageInputs(storageTotal: number): WeeklyFinReportInputs {
+    return {
+      articles: [storageArticle],
+      pools: {
+        appliances: {
+          deliveryToMp: { total: 0, baseRevenue: 1000 },
+          creditInterest: { total: 0, baseRevenue: 1000 },
+          overhead: { total: 0, baseRevenue: 1000 },
+          acceptance: { total: 0, baseRevenue: 1000 },
+          storage: { total: storageTotal, baseRevenue: 1000 },
+        },
+        clothing: zeroPools(),
+      },
+    }
+  }
+
+  const withStorage = computeWeeklyFinReport(buildStorageInputs(50))
+  const noStorage = computeWeeklyFinReport(buildStorageInputs(0))
+  const artWith = withStorage.articles[0]
+  const artNo = noStorage.articles[0]
+
+  it("ИУ: breakdown.storagePerUnit = 0 при пуле хранения 50 (WB не берёт хранение)", () => {
+    expect(artWith.iu.breakdown.storagePerUnit).toBe(0)
+  })
+
+  it("Оферта: breakdown.storagePerUnit ≈ 50 (пул применяется)", () => {
+    expect(artWith.std.breakdown.storagePerUnit).toBeCloseTo(50, 6)
+  })
+
+  it("ИУ-прибыль не зависит от хранения (profit при пуле 50 = profit при пуле 0)", () => {
+    expect(artWith.iu.profitPerUnit).toBeCloseTo(artNo.iu.profitPerUnit, 6)
+    expect(artWith.iu.profit).toBeCloseTo(artNo.iu.profit, 6)
+  })
+
+  it("Оферта-прибыль падает ровно на storage×H = 50×5 = 250 ₽", () => {
+    expect(artNo.std.profit - artWith.std.profit).toBeCloseTo(50 * 5, 6)
+    expect(artNo.std.breakdown.storagePerUnit).toBe(0)
+  })
+
+  it("водопад: iu.storage = 0, std.storage = 50×H = 250", () => {
+    expect(withStorage.waterfall.iu.storage).toBe(0)
+    expect(withStorage.waterfall.std.storage).toBeCloseTo(50 * 5, 6)
+  })
+
+  it("per-article override storagePerUnit действует ТОЛЬКО на Оферту (ИУ=0)", () => {
+    const overrideInputs: WeeklyFinReportInputs = {
+      articles: [{ ...storageArticle, nmId: 700002, storagePerUnit: 33 }],
+      pools: {
+        appliances: {
+          deliveryToMp: { total: 0, baseRevenue: 1000 },
+          creditInterest: { total: 0, baseRevenue: 1000 },
+          overhead: { total: 0, baseRevenue: 1000 },
+          acceptance: { total: 0, baseRevenue: 1000 },
+          storage: { total: 0, baseRevenue: 1000 }, // пул пуст — только override
+        },
+        clothing: zeroPools(),
+      },
+    }
+    const ov = computeWeeklyFinReport(overrideInputs).articles[0]
+    expect(ov.iu.breakdown.storagePerUnit).toBe(0)
+    expect(ov.std.breakdown.storagePerUnit).toBeCloseTo(33, 6)
+  })
+})
