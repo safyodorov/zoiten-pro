@@ -5,7 +5,9 @@
 // кабинета Zoiten WB из БД для pure-движка lib/finance-weekly/engine.ts.
 //
 // Источники (все LIVE, без WB API-вызовов):
-//   заказы/выручка (appliances) — WbCardFunnelDaily (Σ недели по nmId)
+//   заказы/выручка (appliances) — WbCardFunnelDaily (Σ недели по nmId),
+//                    дисконтировано rolling-% выкупа (H=заказы×коэф, модель
+//                    экономиста, quick 260714-maz; K=выручка/заказы сохраняется)
 //   выкупы/выручка (clothing)   — WbSalesDaily нетто (выкупы − возвраты),
 //                    quick 260714-gt7 (было gross, W2d Фикс 1)
 //   реклама        — тотал WbAdvertSpendRow.updSum (/adv/v1/upd, ground truth),
@@ -50,6 +52,7 @@ import {
 } from "@/lib/finance-weekly/types"
 import { calculatePricingStandard, type PricingInputs } from "@/lib/pricing-math"
 import { netClothingSales } from "@/lib/finance-weekly/clothing-net"
+import { discountAppliancesByBuyout } from "@/lib/finance-weekly/buyout-discount"
 import { loadCommissionsForDate } from "@/lib/wb-commission-history"
 import { loadBuyoutPctRolling30dMap } from "@/lib/wb-advert-spend-data"
 import { attributeSpendByShares } from "@/lib/finance-weekly/attribution"
@@ -496,7 +499,7 @@ export async function loadWeeklyFinReportInputs(
 
   // 9. Сборка articles + meta.
   // Итерируем union nmIds обоих базисов; qty/rub per universe:
-  //   appliances → заказы (WbCardFunnelDaily), clothing → нетто-выкупы (WbSalesDaily,
+  //   appliances → заказы × rolling-% выкупа (maz), clothing → нетто-выкупы (WbSalesDaily,
   //   выкупы − возвраты, quick 260714-gt7).
   // Кандидаты сортируются глобальной иерархией товаров (Направление → Бренд →
   // Категория → Подкатегория → name) — таблица группирует без пересортировки.
@@ -525,9 +528,18 @@ export async function loadWeeklyFinReportInputs(
       qty = sales?.qty ?? 0
       rub = sales?.rub ?? 0 // нетто до СПП (выкупы + returnsRub<0), quick 260714-gt7
     } else {
+      // Quick 260714-maz — модель экономиста для БЫТОВОЙ ТЕХНИКИ: H = заказы ×
+      // (rolling-% выкупа/100). Резолвер — ТОТ ЖЕ инстанс, что и ПВ модели N_std
+      // ниже (buyoutResolver из Promise.all, kuh; второй load НЕ делаем).
+      // Сумму дисконтируем тем же коэф → K=rub/qty сохраняет валовую цену
+      // (ordersSumRub/заказы); per-unit тоталы (реклама/отзывы/логистика ИУ)
+      // лягут на выкупленные ед., недельные тоталы затрат не искажаются.
       const funnel = funnelByNmId.get(nmId)
-      qty = funnel?.H ?? 0
-      rub = funnel?.sumRub ?? 0
+      const buyoutPct =
+        buyoutResolver.resolve(nmId, weekEndISO) ?? cardByNmId.get(nmId)?.buyoutPercent ?? 100
+      const discounted = discountAppliancesByBuyout(funnel?.H ?? 0, funnel?.sumRub ?? 0, buyoutPct)
+      qty = discounted.qty
+      rub = discounted.rub
     }
     if (qty <= 0) continue // guard: нет заказов/выкупов в базисе → строку пропускаем
 
@@ -621,7 +633,7 @@ export async function loadWeeklyFinReportInputs(
     articles.push({
       nmId,
       universe,
-      // qty выбранного базиса — заказы (appliances) / нетто-выкупы (clothing).
+      // qty выбранного базиса — заказы × rolling-% выкупа (appliances, maz) / нетто-выкупы (clothing).
       // Контракт движка не меняется — для него это «кол-во единиц недели».
       qtyOrders: qty,
       grossPricePerUnit: K,
