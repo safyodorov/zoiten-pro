@@ -32,10 +32,11 @@ import type { WeeklyArticleMeta } from "@/lib/finance-weekly/data"
 const LABEL_WIDTH = 340
 
 // W2d: бейдж базиса вселенной — universe направления (hasSizes) определяет,
-// по чему считаются его строки: заказы (appliances) или выкупы gross (clothing).
+// по чему считаются его строки: заказы (appliances) или нетто-выкупы (clothing,
+// − возвраты, quick 260714-gt7).
 const UNIVERSE_BASIS: Record<Universe, string> = {
   appliances: "по заказам",
-  clothing: "по выкупам",
+  clothing: "по выкупам нетто",
 }
 
 // ── Форматирование ─────────────────────────────────────────────────────────────
@@ -298,9 +299,10 @@ function PlanFactKpiBlock({ planFact }: { planFact: PlanFactProps }) {
           pctLabel="% вып. МТД"
         />
       </div>
-      {/* W2d: базисы вселенных — план и факт каждой строки считаются в её базисе */}
+      {/* W2d: базисы вселенных — план и факт каждой строки считаются в её базисе.
+          Quick 260714-gt7: одежда — нетто-выкупы (− возвраты), не gross. */}
       <p className="text-xs text-muted-foreground">
-        база: бытовая — заказы, одежда — выкупы
+        база: бытовая — заказы, одежда — выкупы нетто (− возвраты)
       </p>
     </div>
   )
