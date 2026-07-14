@@ -37,8 +37,9 @@ export interface WeeklyArticleInput {
   // deliveryRub/qty; без строк реализации = 0 (логистика зашита в ИУ-комиссию).
   logisticsIuPerUnit: number
   logisticsStdPerUnit: number  // N для Оферты (полная объёмная логистика / ед) — МОДЕЛЬ, не факт
-  // Опциональный per-article override хранения / ед. Если не задан — берётся
-  // из пула хранения (poolPerUnit по базе распределения).
+  // Опциональный per-article override хранения / ед. Действует ТОЛЬКО на
+  // Оферту (ИУ хранение не несёт — WB не выставляет, зашито в комиссию).
+  // Если не задан — Оферта берёт из пула хранения (poolPerUnit).
   storagePerUnit?: number
 }
 
@@ -59,7 +60,7 @@ export interface UniversePools {
   creditInterest: WeeklyPool  // Проценты по кредиту (U) — только appliances
   overhead: WeeklyPool        // Общие расходы (W)
   acceptance: WeeklyPool      // Платная приёмка / штрафы (Y)
-  storage: WeeklyPool         // Хранение (Z)
+  storage: WeeklyPool         // Хранение (Z) — распределяется ТОЛЬКО в Оферте (ИУ=0)
 }
 
 // ── Константы недели ──────────────────────────────────────────────────────────
@@ -99,9 +100,10 @@ export interface WeeklyFinReportInputs {
 // ── Пооперационная per-unit разбивка одного сценария ──────────────────────────
 
 // Пооперационная per-unit разбивка одного сценария (строка Excel «Показатели»).
-// Все поля — ₽/ед, кроме commissionPct (%). Различаются ИУ vs Оферта только
-// commissionPct (J), netOfCommissionPerUnit (I) и logisticsPerUnit (N);
-// остальные (пулы + брак/джем/налог/эквайринг/закупка) идентичны в обоих сценариях.
+// Все поля — ₽/ед, кроме commissionPct (%). Различаются ИУ vs Оферта:
+// commissionPct (J), netOfCommissionPerUnit (I), logisticsPerUnit (N) и
+// storagePerUnit (Z — ИУ=0); остальные (delivery/credit/overhead/acceptance +
+// брак/джем/налог/эквайринг/закупка) идентичны.
 export interface CostBreakdown {
   pricePerUnit: number           // K — цена продажи / ед
   commissionPct: number          // J — комиссия % (различается ИУ/Оферта)
@@ -114,7 +116,7 @@ export interface CostBreakdown {
   creditPerUnit: number          // проценты по кредиту / ед (пул U, 0 для clothing)
   overheadPerUnit: number        // общие расходы / ед (пул W)
   acceptancePerUnit: number      // платная приёмка / штрафы / ед (пул Y)
-  storagePerUnit: number         // хранение / ед (пул Z или override)
+  storagePerUnit: number         // хранение / ед (пул Z/override) — ТОЛЬКО Оферта; ИУ=0
   defectPerUnit: number          // брак / ед (O×defectPct)
   jemPerUnit: number             // джем / ед (K×jemPct)
   taxPerUnit: number             // налог / ед (K×taxPct)

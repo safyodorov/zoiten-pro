@@ -59,7 +59,7 @@ const goldenInputs: WeeklyFinReportInputs = {
       creditInterest: { total: 365.1, baseRevenue: 11748.8 },
       overhead: { total: 542.05, baseRevenue: 11748.8 },
       acceptance: { total: 10.77, baseRevenue: 11748.8 },
-      storage: { total: 0, baseRevenue: 11748.8 },
+      storage: { total: 0, baseRevenue: 11748.8 }, // хранение=0 → семантика «Оферта-only» golden не меняет (ИУ и Оферта вычитают 0)
     },
     clothing: zeroPools(),
   },

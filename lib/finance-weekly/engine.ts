@@ -70,8 +70,9 @@ function emptyWaterfall(): CostWaterfall {
 // ── Per-unit разбивка затрат одного сценария ──────────────────────────────────
 //
 // Все per-unit статьи одного артикула для конкретного сценария. Различие
-// между ИУ и Оферта — только в комиссии (J → I) и логистике (N). Пул-статьи
-// (delivery/credit/overhead/acceptance/storage) от сценария не зависят.
+// ИУ/Оферта: комиссия (J→I), логистика (N) и ХРАНЕНИЕ (Z — только Оферта;
+// ИУ=0, WB не выставляет хранение — зашито в ИУ-комиссию). Прочие пул-статьи
+// (delivery/credit/overhead/acceptance) от сценария не зависят.
 interface ScenarioBreakdown {
   cutPricePerUnit: number  // I
   commissionPct: number    // J — комиссия % (различается ИУ/Оферта)
@@ -87,11 +88,13 @@ interface ScenarioBreakdown {
   creditPerUnit: number    // кредит (пул, 0 для clothing)
   overheadPerUnit: number  // общие (пул)
   acceptancePerUnit: number// приёмка (пул)
-  storagePerUnit: number   // хранение (пул или override)
+  storagePerUnit: number   // хранение (пул/override) — ТОЛЬКО Оферта; в ИУ передаётся 0
   profitPerUnit: number    // AA
 }
 
-// Общие для обоих сценариев per-unit статьи (пулы + брак/джем/налог/эквайринг).
+// Per-unit статьи, резолвимые вне сценария комиссии (пулы + брак/джем/налог/
+// эквайринг). ⚠ Хранение резолвится здесь, но применяется ТОЛЬКО к Оферте —
+// в ИУ-вызов computeScenario передаётся 0.
 interface CommonPerUnit {
   costPerUnit: number
   adPerUnit: number
@@ -104,7 +107,7 @@ interface CommonPerUnit {
   creditPerUnit: number
   overheadPerUnit: number
   acceptancePerUnit: number
-  storagePerUnit: number
+  storagePerUnit: number // резолв хранения Оферты (пул/override); ИУ обнуляется в computeScenario
 }
 
 // Резолвит per-unit статьи, не зависящие от сценария комиссии.
@@ -131,6 +134,8 @@ function resolveCommon(
       : poolPerUnit(K, pools.creditInterest.baseRevenue, pools.creditInterest.total)
   const overheadPerUnit = poolPerUnit(K, pools.overhead.baseRevenue, pools.overhead.total)
   const acceptancePerUnit = poolPerUnit(K, pools.acceptance.baseRevenue, pools.acceptance.total)
+  // Хранение Оферты: per-article override → пул. ИУ получает 0 в вызове
+  // computeScenario (WB не берёт хранение на ИУ).
   const storagePerUnit =
     article.storagePerUnit ?? poolPerUnit(K, pools.storage.baseRevenue, pools.storage.total)
 
@@ -151,11 +156,15 @@ function resolveCommon(
 }
 
 // Считает один сценарий: J и N подставляются извне (ИУ или Оферта).
+// storagePerUnit ТОЖЕ подставляется извне (как N) — ИУ передаёт 0
+// (WB не берёт хранение на ИУ, зашито в комиссию), Оферта передаёт
+// common.storagePerUnit (пул/override).
 function computeScenario(
   article: WeeklyArticleInput,
   common: CommonPerUnit,
   commPct: number,
   logisticsPerUnit: number,
+  storagePerUnit: number, // per-сценарий (как N): ИУ=0, Оферта=common.storagePerUnit
 ): ScenarioBreakdown {
   const { grossPricePerUnit: K } = article
 
@@ -163,7 +172,7 @@ function computeScenario(
   const cutPricePerUnit = (K * (100 - commPct)) / 100
 
   // AA = I − N − O − реклама − отзывы − брак − джем − налог − эквайринг
-  //        − доставка − кредит − общие − приёмка − хранение.
+  //        − доставка − кредит − общие − приёмка − хранение (Оферта-only).
   // Полная точность внутри — промежуточные значения НЕ округляем.
   const profitPerUnit =
     cutPricePerUnit -
@@ -179,13 +188,14 @@ function computeScenario(
     common.creditPerUnit -
     common.overheadPerUnit -
     common.acceptancePerUnit -
-    common.storagePerUnit
+    storagePerUnit
 
   return {
     cutPricePerUnit,
     commissionPct: commPct,
     logisticsPerUnit,
     ...common,
+    storagePerUnit,
     profitPerUnit,
   }
 }
@@ -285,12 +295,14 @@ export function computeWeeklyFinReport(
       common,
       article.commIuPct + jemOpt,
       article.logisticsIuPerUnit,
+      0, // ИУ: хранение WB не берёт (зашито в комиссию) — статья только Оферты
     )
     const stdBreakdown = computeScenario(
       article,
       common,
       article.commStdPct + jemOpt,
       article.logisticsStdPerUnit,
+      common.storagePerUnit, // Оферта: хранение из пула/override
     )
 
     const iu = toScenarioResult(article, iuBreakdown)
