@@ -50,6 +50,7 @@ scripts/seed-suppliers.cjs
 mpstats-token.txt
 .mpstats-token.txt
 /кофе*.docx
+/кофе*.txt
 
 # Local deploy secrets (never commit)
 github-token.txt
