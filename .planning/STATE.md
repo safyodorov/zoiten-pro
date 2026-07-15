@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260715-b03 — zero-pad basket-хоста в аналитике (фикс скана карточек)
+stopped_at: Completed quick 260715-f4c — общие одежды 256 руб-ед + переменный пул
 last_updated: "2026-07-15T11:05:00.000Z"
 progress:
   total_phases: 13
@@ -338,6 +338,7 @@ Recent decisions affecting current work:
 - [Phase quick-260714-kuh]: N_std (офертная логистика Л_эфф) — buyoutPct из loadBuyoutPctRolling30dMap (rolling-30d weighted per nmId на weekEnd) вместо card.buyoutPercent??100 (NULL по всей базе → 100% выкуп → одежда занижалась в ~7 раз)
 - [Phase quick-260714-maz]: Базис бытовой /finance/weekly: H = заказы × rolling-% выкупа (pure discountAppliancesByBuyout, дисконт qty+rub одним коэф — K инвариантен; решение пользователя = модель экономиста H=F×коэф, но per nmId); одежда и plan-fact не тронуты
 - [Phase quick-260714-or9]: Тумблер «Без учёта % выкупа (бытовая)» (?rawBuyout=1, URL-параметр, только live-режим, скрыт в снапшоте) — qty сырые + N_std при 100% для сверки с экономистом; модалка: блок «базис количества» (rolling-%, сырые заказы, с корректировкой) через WeeklyArticleMeta (движок не тронут)
+- [Phase quick-260715-f4c]: Общие расходы одежды: фикс 256 ₽/ед (205+51, AppSetting financeWeekly.clothingOverheadPerUnitRub, per-UNIT через WeeklyArticleInput.overheadFixedPerUnit) + переменный пул недели ЦЕЛИКОМ; старый недельный фикс clothingOverheadFixedRub (20 000/нед в пул) удалён из кода
 
 ### Roadmap Evolution
 
@@ -473,5 +474,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-07-14T12:09:33.498Z
-Stopped at: Completed quick 260714-or9 — тумблер выкупа + базис количества в модалке
+Stopped at: Completed quick 260715-f4c — общие одежды 256 руб-ед + переменный пул
 Resume file: None
