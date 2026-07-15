@@ -683,7 +683,7 @@ DELETE FROM "AppSetting" WHERE key IN ('salesPlan.baselineOverrides','salesPlan.
 
 ### ДВА МИРА ЗАТРАТ (критично)
 
-Бытовая (appliances) и Одежда (clothing, по `direction.hasSizes`) НЕ пересекаются: кредитный пул — ТОЛЬКО appliances; общие расходы одежды = AppSetting-фикс + недельная переменная (не из банка); доставка до МП — общий пул на combinedBase.
+Бытовая (appliances) и Одежда (clothing, по `direction.hasSizes`) НЕ пересекаются: кредитный пул — ТОЛЬКО appliances; общие расходы одежды = фикс 256 ₽/ед (глобальный AppSetting) × кол-во + недельная переменная-пул (по выручке; не из банка); доставка до МП — общий пул на combinedBase.
 
 ### Базисы (решение пользователя «как у экономиста»)
 
@@ -700,7 +700,7 @@ Appliances — по ЗАКАЗАМ (WbCardFunnelDaily); clothing — по ВЫК
 
 ### Пулы затрат (источники, per-бакет)
 
-storage/acceptance: реализация (>0) → manual. overhead(быт)/deliveryToMp: manual (>0) → банк-теги → 0. Банк: `BankTransaction.weeklyCostTag` (OPEX/CAPEX/DELIVERY_MP; CAPEX не суммируется), select в /bank (DEBIT, BANK MANAGE). Manual: AppSetting `financeWeekly.pools.<weekStartISO>`; фикс одежды `financeWeekly.clothingOverheadFixedRub`.
+storage/acceptance: реализация (>0) → manual. overhead(быт)/deliveryToMp: manual (>0) → банк-теги → 0. Банк: `BankTransaction.weeklyCostTag` (OPEX/CAPEX/DELIVERY_MP; CAPEX не суммируется), select в /bank (DEBIT, BANK MANAGE). Manual: AppSetting `financeWeekly.pools.<weekStartISO>`; фикс общих одежды НА ЕДИНИЦУ `financeWeekly.clothingOverheadPerUnitRub` (глобальный, дефолт 256 ₽/ед; переменная — недельный пул overheadCloth).
 
 ### RBAC / гейты
 

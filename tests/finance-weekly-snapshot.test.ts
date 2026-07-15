@@ -95,7 +95,7 @@ const fakeData: WeeklyFinReportPageData = {
     acceptanceCloth: "manual",
   },
   bankAutos: { opexRub: 0, deliveryMpRub: 0 },
-  clothingOverheadFixedRub: 0,
+  clothingOverheadPerUnitRub: 256,
   bankPoolSources: { delivery: "none", overheadAppl: "none" },
 }
 
