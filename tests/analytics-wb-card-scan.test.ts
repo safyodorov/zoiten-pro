@@ -14,6 +14,7 @@ import {
   scanCardMedia,
   verifyPricesBatch,
   basketHostForVol,
+  basketHostName,
 } from "@/lib/analytics/wb-card-scan"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -46,6 +47,16 @@ describe("cardJsonUrl — построение URL + анти-SSRF (T-30-02)", (
     expect(cardJsonUrl(NM)).toContain("basket-39.wbbasket.ru")
   })
 
+  it("однозначный basket → zero-pad до 2 цифр (basket-03, НЕ basket-3)", () => {
+    // vol 357 → shard 3. basket-3 не резолвится (DNS 000) — прод-баг 2026-07-15.
+    expect(basketHostForVol(357)).toBe(3)
+    expect(basketHostName(3)).toBe("basket-03.wbbasket.ru")
+    expect(basketHostName(39)).toBe("basket-39.wbbasket.ru") // двузначные не трогаем
+    expect(cardJsonUrl(35783233)).toBe(
+      "https://basket-03.wbbasket.ru/vol357/part35783/35783233/info/ru/card.json",
+    )
+  })
+
   it("отрицательный / нечисловой / ≥2^31 nmID → throw (анти-SSRF)", () => {
     expect(() => cardJsonUrl(-1)).toThrow(/недопустимый nmID/)
     expect(() => cardJsonUrl(2 ** 31)).toThrow(/недопустимый nmID/)
@@ -65,6 +76,16 @@ describe("scanCardMedia — фото листинга + характеристи
     expect(characteristics.length).toBeGreaterThan(0)
     expect(characteristics).toContainEqual({ name: "Высота упаковки", value: "24 см" })
     expect(seller).toBe("114151") // selling.supplier_id из card.json
+  })
+
+  it("протокол-относительный mainPhoto (//basket-03…) + однозначный basket → запрошен basket-03", async () => {
+    const NM3 = 35783233
+    const relPhoto = "//basket-03.wbbasket.ru/vol357/part35783/35783233/images/c246x328/1.webp"
+    const fetchImpl = vi.fn(async () => jsonResponse(cardFixture))
+    await scanCardMedia(NM3, relPhoto, fetchImpl)
+    const firstUrl = String(fetchImpl.mock.calls[0][0])
+    expect(firstUrl).toContain("basket-03.wbbasket.ru") // padded + protocol-relative распознан
+    expect(firstUrl).not.toContain("basket-3.wbbasket.ru")
   })
 
   it("404 на ожидаемом host → пробует соседний host (fallback, T-30-10)", async () => {

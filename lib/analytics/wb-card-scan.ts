@@ -14,6 +14,13 @@ const LISTING_PHOTO_SIZE = "c516x688"
 export const LISTING_PHOTO_LIMIT = 5
 const MAX_NM_ID = 2 ** 31
 
+/** Браузерный UA — WB CDN может 403-ить запросы без него; паритет с рабочим сканером bozon. */
+const CARD_FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/json",
+} as const
+
 /**
  * Карта vol→basket-host — ТОЛЬКО FALLBACK (когда mainPhoto недоступен).
  * Первичный источник host — `mainPhoto` из detail-JSON (Wave 0 §2: карта дрейфует — Pitfall #4).
@@ -41,10 +48,26 @@ export function basketHostForVol(vol: number): number {
   return last.host + Math.ceil((vol - last.max) / 325)
 }
 
-/** Извлекает host из mainPhoto-URL (`https://basket-39.wbbasket.ru/...` → `basket-39.wbbasket.ru`). */
+/**
+ * basket-хост как строка с zero-pad до 2 цифр — WB так именует хосты:
+ * 3 → "basket-03.wbbasket.ru", 39 → "basket-39.wbbasket.ru".
+ * КРИТИЧНО: без padding `basket-3.wbbasket.ru` НЕ существует (DNS не резолвится, http=000)
+ * → card.json недоступен → SKU без фото/характеристик. Баг найден на проде 2026-07-15:
+ * прогон FAILED, все 4 упавших SKU — однозначные basket (1-9). Паритет с bozon get_basket (.zfill(2)).
+ */
+export function basketHostName(shard: number): string {
+  return `basket-${String(shard).padStart(2, "0")}.wbbasket.ru`
+}
+
+/**
+ * Извлекает host из mainPhoto-URL. Принимает и протокол-относительный `//basket-03...`
+ * (detail-JSON часто отдаёт mainPhoto без схемы) — иначе host не распознавался и код
+ * падал в дрейфующую карту vol→host.
+ * `https://basket-39.wbbasket.ru/...` и `//basket-39.wbbasket.ru/...` → `basket-39.wbbasket.ru`.
+ */
 function hostFromMainPhoto(mainPhoto: string | undefined): string | null {
   if (!mainPhoto) return null
-  const m = mainPhoto.match(/https?:\/\/([^/]+)/i)
+  const m = mainPhoto.match(/^(?:https?:)?\/\/([^/]+)/i)
   return m ? m[1] : null
 }
 
@@ -68,7 +91,7 @@ export function cardJsonUrl(nmId: number, host?: string): string {
   assertValidNmId(nmId)
   const vol = Math.floor(nmId / 100000)
   const part = Math.floor(nmId / 1000)
-  const h = host ?? `basket-${basketHostForVol(vol)}.wbbasket.ru`
+  const h = host ?? basketHostName(basketHostForVol(vol))
   return `https://${h}/vol${vol}/part${part}/${nmId}/info/ru/card.json`
 }
 
@@ -89,14 +112,20 @@ interface CardJsonRaw {
 type FetchImpl = typeof fetch
 
 /**
- * Порядок host-кандидатов: заявленный (из mainPhoto/карты) → соседи ±1, ±2 (404-fallback, T-30-10).
+ * Порядок host-кандидатов: заявленный (shard из mainPhoto / карты) → соседи (404-fallback, T-30-10).
+ * Всегда сводим к ЧИСЛУ shard и заново строим host через basketHostName — это гарантирует
+ * zero-pad (basket-03, не basket-3) И нейтрализует SSRF: если mainPhoto подсунул чужой домен,
+ * shardOf вернёт null → падаем в карту vol→host, host всегда остаётся basket-NN.wbbasket.ru.
+ * Соседи шире ВВЕРХ (guess..+4) — WB дрейфует вверх по мере роста ассортимента (как bozon resolve_basket).
  */
 function hostCandidates(nmId: number, mainPhoto?: string): string[] {
-  const primary = hostFromMainPhoto(mainPhoto) ?? `basket-${basketHostForVol(Math.floor(nmId / 100000))}.wbbasket.ru`
-  const n = shardOf(primary)
-  if (n === null) return [primary]
-  const order = [n, n + 1, n - 1, n + 2, n - 2].filter((x) => x >= 1)
-  return [...new Set(order)].map((x) => `basket-${x}.wbbasket.ru`)
+  const vol = Math.floor(nmId / 100000)
+  const fromPhoto = shardOf(hostFromMainPhoto(mainPhoto) ?? "")
+  const primary = fromPhoto ?? basketHostForVol(vol)
+  const order = [primary, primary + 1, primary + 2, primary + 3, primary + 4, primary - 1, primary - 2].filter(
+    (x) => x >= 1,
+  )
+  return [...new Set(order)].map(basketHostName)
 }
 
 /**
@@ -117,7 +146,7 @@ export async function scanCardMedia(
     tried.push(host)
     let res: Response
     try {
-      res = await fetchImpl(cardJsonUrl(nmId, host))
+      res = await fetchImpl(cardJsonUrl(nmId, host), { headers: CARD_FETCH_HEADERS })
     } catch {
       continue // сетевая ошибка на этом host — пробуем следующий
     }
