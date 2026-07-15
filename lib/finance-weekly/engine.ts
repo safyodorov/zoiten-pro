@@ -132,7 +132,11 @@ function resolveCommon(
     article.universe === "clothing"
       ? 0
       : poolPerUnit(K, pools.creditInterest.baseRevenue, pools.creditInterest.total)
-  const overheadPerUnit = poolPerUnit(K, pools.overhead.baseRevenue, pools.overhead.total)
+  // Quick 260715-f4c: фикс/ед (одежда 256 ₽, appliances undefined→0) + доля
+  // переменного пула по выручке — аддитивно, в обоих сценариях (scenario-independent).
+  const overheadPerUnit =
+    (article.overheadFixedPerUnit ?? 0) +
+    poolPerUnit(K, pools.overhead.baseRevenue, pools.overhead.total)
   const acceptancePerUnit = poolPerUnit(K, pools.acceptance.baseRevenue, pools.acceptance.total)
   // Хранение Оферты: per-article override → пул. ИУ получает 0 в вызове
   // computeScenario (WB не берёт хранение на ИУ).
