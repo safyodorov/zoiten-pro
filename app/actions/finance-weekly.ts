@@ -14,7 +14,7 @@ import { requireSection } from "@/lib/rbac"
 import { auth } from "@/lib/auth"
 import {
   financeWeeklyPoolsKey,
-  CLOTHING_OVERHEAD_FIXED_KEY,
+  CLOTHING_OVERHEAD_PER_UNIT_KEY,
   DEFAULT_MANUAL_POOLS,
   type ManualPools,
 } from "@/lib/finance-weekly/data"
@@ -27,8 +27,9 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 /**
  * Сохраняет ручные пулы затрат для ISO-недели (ключ AppSetting
  * financeWeekly.pools.<weekISO>). Санитизирует значения → конечные числа (иначе 0).
- * W3a (quick 260710-lmb): opts.clothingOverheadFixedRub — глобальная фикс-часть
- * общих расходов одежды → отдельный AppSetting (недельный ключ не меняется).
+ * Quick 260715-f4c: opts.clothingOverheadPerUnitRub — глобальный фикс общих
+ * расходов одежды НА ЕДИНИЦУ товара (₽/ед, дефолт 256) → отдельный AppSetting
+ * (недельный ключ не меняется).
  * Quick 260714-gff: opts.jemOptionPct — ставка Опции Джема ТЕКУЩЕЙ недели →
  * AppSetting financeWeekly.jemOptionPct.<weekISO> (carry-forward резолвится
  * в data.ts при чтении).
@@ -36,7 +37,7 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export async function saveWeeklyPools(
   weekStartISO: string,
   pools: ManualPools,
-  opts?: { clothingOverheadFixedRub?: number; jemOptionPct?: number },
+  opts?: { clothingOverheadPerUnitRub?: number; jemOptionPct?: number },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await requireSection("FINANCE", "MANAGE")
@@ -59,13 +60,13 @@ export async function saveWeeklyPools(
       update: { value: JSON.stringify(clean) },
     })
 
-    // W3a: фикс одежды — глобальная константа (НЕ per неделя), ≥ 0
-    const fixedRaw = Number(opts?.clothingOverheadFixedRub)
-    if (opts?.clothingOverheadFixedRub !== undefined && Number.isFinite(fixedRaw)) {
+    // Quick 260715-f4c: фикс общих одежды НА ЕДИНИЦУ — глобальная константа (НЕ per неделя), ≥ 0
+    const fixedRaw = Number(opts?.clothingOverheadPerUnitRub)
+    if (opts?.clothingOverheadPerUnitRub !== undefined && Number.isFinite(fixedRaw)) {
       const fixed = Math.max(0, fixedRaw)
       await prisma.appSetting.upsert({
-        where: { key: CLOTHING_OVERHEAD_FIXED_KEY },
-        create: { key: CLOTHING_OVERHEAD_FIXED_KEY, value: String(fixed) },
+        where: { key: CLOTHING_OVERHEAD_PER_UNIT_KEY },
+        create: { key: CLOTHING_OVERHEAD_PER_UNIT_KEY, value: String(fixed) },
         update: { value: String(fixed) },
       })
     }

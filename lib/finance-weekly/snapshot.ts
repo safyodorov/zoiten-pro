@@ -43,7 +43,7 @@ export interface WeeklyFinReportSnapshotPayload {
   hasRealization: boolean
   poolSources: WeeklyFinReportPageData["poolSources"]
   bankAutos: WeeklyFinReportPageData["bankAutos"]
-  clothingOverheadFixedRub: number
+  clothingOverheadPerUnitRub: number
   bankPoolSources: WeeklyFinReportPageData["bankPoolSources"]
 }
 
@@ -71,7 +71,7 @@ export function buildWeeklySnapshotPayload(
     hasRealization: data.hasRealization,
     poolSources: data.poolSources,
     bankAutos: data.bankAutos,
-    clothingOverheadFixedRub: data.clothingOverheadFixedRub,
+    clothingOverheadPerUnitRub: data.clothingOverheadPerUnitRub,
     bankPoolSources: data.bankPoolSources,
   }
 }

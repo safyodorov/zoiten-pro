@@ -27,8 +27,10 @@
 // AppSetting financeWeekly.pools.<weekISO>, редактируются MANAGE-пользователем
 // через WeeklyFinReportControls. W3a (quick 260710-lmb): delivery / overheadAppl
 // — гибрид с банком (manual > 0 → manual, иначе Σ|amount| DEBIT-операций недели
-// с тегом DELIVERY_MP / OPEX); clothing.overhead = глобальный AppSetting-фикс
-// + недельная переменная (НЕ из банка, §2.2). CAPEX никуда не суммируется.
+// с тегом DELIVERY_MP / OPEX); clothing.overhead (пул) = ТОЛЬКО недельная
+// переменная overheadCloth (НЕ из банка, §2.2) — фикс общих одежды теперь
+// per-article НА ЕДИНИЦУ (overheadFixedPerUnit, Quick 260715-f4c, вне пула).
+// CAPEX никуда не суммируется.
 //
 // Мир затрат (universe): brand.direction.hasSizes=true → одежда (clothing),
 // иначе → бытовая техника (appliances). Кредит несёт ТОЛЬКО appliances (§2.2).
@@ -109,9 +111,11 @@ export function financeWeeklyPoolsKey(weekStartISO: string): string {
   return `financeWeekly.pools.${weekStartISO}`
 }
 
-/** W3a (quick 260710-lmb): глобальный AppSetting-ключ фикс-части общих расходов
- *  одежды (НЕ per неделя). Пул одежды = фикс + manualPools.overheadCloth. */
-export const CLOTHING_OVERHEAD_FIXED_KEY = "financeWeekly.clothingOverheadFixedRub"
+/** Quick 260715-f4c: глобальный AppSetting-ключ ФИКСА общих расходов одежды
+ *  НА ЕДИНИЦУ товара (₽/ед: 205 + 51), НЕ per неделя, НЕ по выручке.
+ *  Пул одежды теперь = ТОЛЬКО manualPools.overheadCloth (переменная целиком). */
+export const CLOTHING_OVERHEAD_PER_UNIT_KEY = "financeWeekly.clothingOverheadPerUnitRub"
+export const CLOTHING_OVERHEAD_PER_UNIT_DEFAULT = 256
 
 // ── Дефолты ставок (mirror /prices/wb DEFAULT_RATES / EFF_FALLBACK) ────────────
 
@@ -174,8 +178,8 @@ export interface WeeklyFinReportPageData {
   poolSources: ResolvedRealizationPools["sources"]
   /** W3a (quick 260710-lmb): авто-суммы пулов из банка — подписи «банк: N ₽». */
   bankAutos: BankPoolAutos
-  /** W3a: фикс-часть общих расходов одежды (глобальный AppSetting). */
-  clothingOverheadFixedRub: number
+  /** Quick 260715-f4c: фикс общих расходов одежды НА ЕДИНИЦУ (глобальный AppSetting, дефолт 256). */
+  clothingOverheadPerUnitRub: number
   /** W3a: источник гибрид-пулов delivery / overheadAppl (бейдж в Controls). */
   bankPoolSources: { delivery: HybridPoolSource; overheadAppl: HybridPoolSource }
   /** Quick 260714-gff: Опция Джема — надбавка к комиссии (п.п.), для UI-шапки. */
@@ -282,7 +286,7 @@ export async function loadWeeklyFinReportInputs(
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
       bankAutos: { opexRub: 0, deliveryMpRub: 0 },
-      clothingOverheadFixedRub: 0,
+      clothingOverheadPerUnitRub: CLOTHING_OVERHEAD_PER_UNIT_DEFAULT,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
       jemOptionPct,
     }
@@ -333,7 +337,7 @@ export async function loadWeeklyFinReportInputs(
       hasRealization: false,
       poolSources: ALL_MANUAL_POOL_SOURCES,
       bankAutos: { opexRub: 0, deliveryMpRub: 0 },
-      clothingOverheadFixedRub: 0,
+      clothingOverheadPerUnitRub: CLOTHING_OVERHEAD_PER_UNIT_DEFAULT,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
       jemOptionPct,
     }
@@ -363,7 +367,7 @@ export async function loadWeeklyFinReportInputs(
   ] = await Promise.all([
     prisma.wbCard.findMany({ where: { nmId: { in: linkedNmIds }, deletedAt: null } }),
     prisma.appSetting.findMany({
-      where: { key: { in: [...RATE_KEYS, poolsKey, CLOTHING_OVERHEAD_FIXED_KEY] } },
+      where: { key: { in: [...RATE_KEYS, poolsKey, CLOTHING_OVERHEAD_PER_UNIT_KEY] } },
     }),
     prisma.wbCardFunnelDaily.groupBy({
       by: ["nmId"],
@@ -458,6 +462,13 @@ export async function loadWeeklyFinReportInputs(
   }
   const appliancesEff = parseEffCoef(settingsMap.get("wbEffCoef.appliances"))
   const clothingEff = parseEffCoef(settingsMap.get("wbEffCoef.clothing"))
+
+  // Quick 260715-f4c: фикс общих одежды/ед — глобальная константа (дефолт 256), НЕ по выручке.
+  const perUnitParsed = parseFloat(settingsMap.get(CLOTHING_OVERHEAD_PER_UNIT_KEY) ?? "")
+  const clothingOverheadPerUnitRub =
+    Number.isFinite(perUnitParsed) && perUnitParsed >= 0
+      ? perUnitParsed
+      : CLOTHING_OVERHEAD_PER_UNIT_DEFAULT
 
   // 6-7. Недельные факты по nmId (два базиса — W2d Фикс 1)
   const funnelByNmId = new Map<number, { H: number; sumRub: number }>()
@@ -680,6 +691,8 @@ export async function loadWeeklyFinReportInputs(
         : 0,
       logisticsStdPerUnit,
       // storagePerUnit НЕ задаём → движок берёт из пула хранения
+      // Quick 260715-f4c: фикс общих/ед — только одежда (appliances: undefined → движок `?? 0`).
+      overheadFixedPerUnit: universe === "clothing" ? clothingOverheadPerUnitRub : undefined,
     })
     meta[nmId] = {
       brandName: product.brand?.name ?? null,
@@ -707,7 +720,8 @@ export async function loadWeeklyFinReportInputs(
   // 11. Ручные пулы
   const manualPools = parseManualPools(settingsMap.get(poolsKey))
 
-  // 11-bis. W3a (quick 260710-lmb): авто-суммы из банка + фикс одежды.
+  // 11-bis. W3a (quick 260710-lmb): авто-суммы из банка. (Quick 260715-f4c:
+  // фикс общих одежды/ед — clothingOverheadPerUnitRub резолвится выше, до цикла articles.)
   const bankAutos = sumBankPoolAutos(
     bankTxRows.map((t) => ({
       direction: t.direction,
@@ -715,9 +729,6 @@ export async function loadWeeklyFinReportInputs(
       weeklyCostTag: t.weeklyCostTag,
     })),
   )
-  const fixedParsed = parseFloat(settingsMap.get(CLOTHING_OVERHEAD_FIXED_KEY) ?? "")
-  const clothingOverheadFixedRub =
-    Number.isFinite(fixedParsed) && fixedParsed >= 0 ? fixedParsed : 0
 
   // 11a. W1: пулы хранения/приёмки из реализации.
   // universeByNmId — из ВСЕХ привязанных артикулов (productByNmId), НЕ из
@@ -777,7 +788,7 @@ export async function loadWeeklyFinReportInputs(
     deliveryToMp: { total: deliveryResolved.total, baseRevenue: combinedBase }, // SHARED
     creditInterest: { total: 0, baseRevenue: 0 }, // одежда кредит не несёт
     overhead: {
-      total: clothingOverheadFixedRub + manualPools.overheadCloth,
+      total: manualPools.overheadCloth, // Quick 260715-f4c: переменная ЦЕЛИКОМ; фикс теперь per-unit (overheadFixedPerUnit)
       baseRevenue: clothBase,
     },
     acceptance: {
@@ -802,7 +813,7 @@ export async function loadWeeklyFinReportInputs(
     hasRealization,
     poolSources: resolvedPools.sources,
     bankAutos,
-    clothingOverheadFixedRub,
+    clothingOverheadPerUnitRub,
     bankPoolSources: {
       delivery: deliveryResolved.source,
       overheadAppl: overheadApplResolved.source,

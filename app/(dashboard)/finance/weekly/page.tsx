@@ -80,7 +80,7 @@ export default async function FinanceWeeklyPage({
           canManage={canManage}
           poolSources={payload.poolSources}
           bankAutos={payload.bankAutos}
-          clothingOverheadFixedRub={payload.clothingOverheadFixedRub}
+          clothingOverheadPerUnitRub={payload.clothingOverheadPerUnitRub}
           bankPoolSources={payload.bankPoolSources}
           snapshot={{ fixedAtLabel, fixedByName }}
           jemOptionPct={payload.constants.jemOptionPct ?? 0.75}
@@ -114,7 +114,7 @@ export default async function FinanceWeeklyPage({
         canManage={canManage}
         poolSources={data.poolSources}
         bankAutos={data.bankAutos}
-        clothingOverheadFixedRub={data.clothingOverheadFixedRub}
+        clothingOverheadPerUnitRub={data.clothingOverheadPerUnitRub}
         bankPoolSources={data.bankPoolSources}
         snapshotStale={snapshotStale}
         jemOptionPct={data.jemOptionPct}

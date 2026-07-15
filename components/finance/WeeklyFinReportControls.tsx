@@ -99,8 +99,8 @@ interface Props {
   poolSources: Record<RealizationPoolKey, "realization" | "manual">
   /** W3a (quick 260710-lmb): авто-суммы из банка — подписи «банк: N ₽». */
   bankAutos: { opexRub: number; deliveryMpRub: number }
-  /** W3a: фикс-часть общих расходов одежды (глобальный AppSetting). */
-  clothingOverheadFixedRub: number
+  /** Quick 260715-f4c: фикс общих расходов одежды НА ЕДИНИЦУ (глобальный AppSetting, дефолт 256). */
+  clothingOverheadPerUnitRub: number
   /** W3a: источник гибрид-пулов delivery / overheadAppl. */
   bankPoolSources: Record<BankHybridKey, "manual" | "bank" | "none">
   /** W3c: снапшот-режим — бейдж + Перефиксировать/Снять; пулы-редактор скрыт. */
@@ -122,7 +122,7 @@ export function WeeklyFinReportControls({
   canManage,
   poolSources,
   bankAutos,
-  clothingOverheadFixedRub,
+  clothingOverheadPerUnitRub,
   bankPoolSources,
   snapshot = null,
   snapshotStale = false,
@@ -134,8 +134,8 @@ export function WeeklyFinReportControls({
   const [isSyncPending, startSyncTransition] = useTransition()
   const [isFixPending, startFixTransition] = useTransition()
   const [pools, setPools] = useState<ManualPools>(manualPools)
-  // W3a: фикс-часть общих расходов одежды — глобальная константа (не per неделя)
-  const [fixedCloth, setFixedCloth] = useState(clothingOverheadFixedRub)
+  // Quick 260715-f4c: фикс общих одежды НА ЕДИНИЦУ — глобальная константа (не per неделя)
+  const [perUnitCloth, setPerUnitCloth] = useState(clothingOverheadPerUnitRub)
   // Quick 260714-gff: Опция Джема — надбавка к комиссии, редактируется per неделя
   const [jemOption, setJemOption] = useState(jemOptionPct)
 
@@ -174,7 +174,7 @@ export function WeeklyFinReportControls({
   const handleSave = () => {
     startTransition(async () => {
       const res = await saveWeeklyPools(weekStartISO, pools, {
-        clothingOverheadFixedRub: fixedCloth,
+        clothingOverheadPerUnitRub: perUnitCloth,
         jemOptionPct: jemOption,
       })
       if (res.ok) {
@@ -411,21 +411,21 @@ export function WeeklyFinReportControls({
                   <div className="flex flex-col gap-0.5">
                     <label className="flex items-center gap-2 text-xs">
                       <span className="w-40 whitespace-nowrap text-muted-foreground">
-                        Общие расходы (фикс.)
+                        Фикс общих одежды, ₽/ед
                       </span>
                       <input
                         type="number"
                         step="any"
-                        value={Number.isFinite(fixedCloth) ? fixedCloth : 0}
+                        value={Number.isFinite(perUnitCloth) ? perUnitCloth : 0}
                         onChange={(e) => {
                           const n = Number(e.target.value)
-                          setFixedCloth(Number.isFinite(n) ? n : 0)
+                          setPerUnitCloth(Number.isFinite(n) ? n : 0)
                         }}
                         className="w-28 rounded border bg-background px-2 py-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </label>
                     <div className="text-[10px] text-muted-foreground">
-                      глобальная константа (не per неделя)
+                      205 + 51 ₽/ед · глобальная константа
                     </div>
                   </div>
                 )}
@@ -473,12 +473,11 @@ export function WeeklyFinReportControls({
                     )}
                   </div>
                 ))}
-                {/* W3a: состав пула общих расходов одежды = фикс + переменная */}
+                {/* Quick 260715-f4c: фикс теперь НЕ в пуле — per-unit статья движка */}
                 {group === "Одежда" && (
                   <div className="text-[10px] text-muted-foreground tabular-nums">
-                    пул одежды = фикс {(Number.isFinite(fixedCloth) ? fixedCloth : 0).toLocaleString("ru-RU")}{" "}
-                    + переменная {pools.overheadCloth.toLocaleString("ru-RU")} ={" "}
-                    {((Number.isFinite(fixedCloth) ? fixedCloth : 0) + pools.overheadCloth).toLocaleString("ru-RU")} ₽
+                    пул общих (переменная, по выручке) = {pools.overheadCloth.toLocaleString("ru-RU")} ₽
+                    {" · "}фикс {(Number.isFinite(perUnitCloth) ? perUnitCloth : 0).toLocaleString("ru-RU")} ₽/ед × кол-во
                   </div>
                 )}
               </div>
