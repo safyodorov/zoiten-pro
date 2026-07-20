@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260720-mj0 — миграция остатков WB на Analytics warehouse_remains
-last_updated: "2026-07-20T13:33:50.000Z"
+stopped_at: Completed quick 260720-oh2 — виртуальные склады БПЛА (сгоревшие остатки)
+last_updated: "2026-07-20T18:15:27.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -340,6 +340,7 @@ Recent decisions affecting current work:
 - [Phase quick-260714-or9]: Тумблер «Без учёта % выкупа (бытовая)» (?rawBuyout=1, URL-параметр, только live-режим, скрыт в снапшоте) — qty сырые + N_std при 100% для сверки с экономистом; модалка: блок «базис количества» (rolling-%, сырые заказы, с корректировкой) через WeeklyArticleMeta (движок не тронут)
 - [Phase quick-260715-f4c]: Общие расходы одежды: фикс 256 ₽/ед (205+51, AppSetting financeWeekly.clothingOverheadPerUnitRub, per-UNIT через WeeklyArticleInput.overheadFixedPerUnit) + переменный пул недели ЦЕЛИКОМ; старый недельный фикс clothingOverheadFixedRub (20 000/нед в пул) удалён из кода
 - [Phase quick-260720-mj0]: Statistics API `GET /api/v1/supplier/stocks` отключён WB (404 PLUG-404-20260720) — fetchStocksPerWarehouse переписан на Analytics API `warehouse_remains` (task-based create→poll→download); мёртвый fetchStocks() (sunset 2026-06-23 прошёл) удалён вместе с единственным продакшн-вызовом в /api/wb-sync — stockQty теперь агрегат из per-warehouse ответа (без второго Analytics-запроса, rate limit ~1/мин); edge case строки только с in-way (без физ. складов) закрыт виртуальным item, чтобы данные не терялись
+- [Phase quick-260720-oh2]: Виртуальные склады БПЛА (WbWarehouse.isVirtual, id 99001/99002 «Электросталь БПЛА»/«Котовск БПЛА») фиксируют сгоревшие 17.07.2026 остатки (атака БПЛА обнулила прод-склады) — защищены от clean-replace в обоих sync-роутах, вычтены из inWayFromClient (applyBurnedInWay, floor 0), исключены из /stock/wb Д/Об/дефицита (physicalWarehouses/virtualWarehouses split); красная строка «Сгоревший товар (потенциальная компенсация WB)» ≈9.2М ₽ в /finance/balance (по себестоимости — решение пользователя), закрытие склада при поступлении компенсации — ручной SQL (задокументирован в SUMMARY), не автоматизировано намеренно
 
 ### Roadmap Evolution
 
@@ -460,6 +461,7 @@ None yet.
 | 260710-mja | Фикс парсера ИУ-комиссий `/api/wb-commission-iu`: WB сменил порядок колонок выгрузки (~07.07.2026), позиционный парсинг писал бы Самовывоз→fbw и Экспресс 3%→fbs/dbs. Новый pure `lib/wb-commission-iu-parser.ts`: детект формата по шапке («Маркетплейс»/«(FBW)» → новый, иначе легаси 1:1), ZWSP U+200B в шапке «Витрина (DBS)/Курьер» вычищается, дедуп subjectName (@unique), нераспознанная шапка → 400 с русской ошибкой; route тонкий (транзакция+snapshot W2d не тронуты); vitest 6/6. Параллельно данные на проде обновлены SQL: std = новая оферта из Tariffs API (Костюмы 34.5→43.5 FBW, все 22 категории); ИУ оставлена прежней (commission.xlsx = ОФЕРТА, не ИУ — уточнение пользователя; Костюмы iu 39.472); снапшоты validFrom=07.07 (253: iu unchanged/std new); справочно вне Prisma: WbCommissionIuBefore20260707 (7247) + WbCommissionOffer20260707 (7421) | 2026-07-10 | f197ec4 |  | [260710-mja-fix-excel-parser-api-wb-commission-iu-he](./quick/260710-mja-fix-excel-parser-api-wb-commission-iu-he/) |
 | 260715-b03 | Analytics card-scan: zero-pad basket-хоста (basket-03, не basket-3). Прод-баг — прогон ниши FAILED, 4 SKU «нет фото/характеристик», все однозначные basket (vol→shard 1-9): код строил `basket-3.wbbasket.ru` без padding → нет в DNS (http=000) → card.json недоступен (двузначные ≥10 работали). Проба VPS: basket-3=000, basket-03=200; Node fetch к CDN исправен, парсер card.json корректен. Фикс: `basketHostName(shard)` padStart(2,"0") в cardJsonUrl+hostCandidates; `hostFromMainPhoto` ловит протокол-относительный //basket-NN…; hostCandidates сводит mainPhoto к числу shard и пересобирает host (padding + SSRF-safe); 404-probe шире вверх guess..+4; браузерный UA в fetch. Изолировано в lib/analytics/ (bozon и др. разделы не тронуты). Эталон — bozon get_basket zfill(2). tsc чисто, analytics 52/52 (+2) | 2026-07-15 | 3ac53aa | Verified | [260715-b03-analytics-basket-zero-pad](./quick/260715-b03-analytics-basket-zero-pad/) |
 | 260720-mj0 | Миграция остатков WB со Statistics API (отключён WB, 404 PLUG-404-20260720) на Analytics API `warehouse_remains` (task-based create→poll→download): fetchStocksPerWarehouse переписан в lib/wb-api.ts (сигнатура/WarehouseStockItem не изменены), мёртвый fetchStocks()+STATISTICS_API_STOCKS удалены; /api/wb-sync stockQty теперь агрегат из stocksPerWarehouse (без второго Analytics-запроса); edge case строки только с in-way (без физ. складов) закрыт виртуальным item «В пути (без физ. склада)». 3 теста адаптированы под новый flow (+ Rule 1 фикс недостающих prisma.wbCard.count/updateMany/deleteMany моков в wb-sync-route.test.ts). tsc чисто, 30/30 в 3 затронутых файлах, полный npm run test 1151/1192 (41 пред-существующих чужих падения в 11 файлах, сверено через git stash — не регрессия) | 2026-07-20 | de5cb2a, f4f2273, 7f59df9 | Verified | [260720-mj0-wb-supplier-stocks-404-deprecated-analyt](./quick/260720-mj0-wb-supplier-stocks-404-deprecated-analyt/) |
+| 260720-oh2 | Виртуальные склады БПЛА (сгоревшие остатки Электросталь/Котовск 17.07.2026): WbWarehouse.isVirtual + enum WB_BURNED (миграция) + lib/wb-virtual-warehouse.ts (applyBurnedInWay pure + loadVirtualWarehouseIds/loadBurnedQtyByNmId DI Prisma loaders); оба sync-роута (/api/wb-sync, /api/cron/wb-cards-refresh) защищают виртуальные склады 99001/99002 от clean-replace + вычитают сгоревшее из inWayFromClient; /stock/wb — физ./виртуальные склады разделены до агрегации (бейдж 🔥 БПЛА в sticky-колонке, не влияет на Д/Об); /finance/balance — красная строка «Сгоревший товар (потенциальная компенсация WB)» ≈9.2М ₽ в Запасы (markDestructiveTree — весь drill-down красный), computeStockSnapshotRows 3-й параметр с дефолтом (обратная совместимость с bootstrap-скриптом). scripts/seed-bpla-warehouses.ts идемпотентный сид — требует ручного запуска на проде после деплоя. tsc чисто, 41 пред-существующее чужое падение в 11 файлах (не регрессия, сверено с deferred-items.md 260720-mj0) | 2026-07-20 | d48fb9f, 278b5e9, 5b2ad6c | Verified | [260720-oh2-bpla-virtual-warehouses](./quick/260720-oh2-bpla-virtual-warehouses/) |
 
 ### Blockers/Concerns
 
@@ -475,6 +477,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-20T13:33:50.000Z
-Stopped at: Completed quick 260720-mj0 — миграция остатков WB на Analytics warehouse_remains
+Last session: 2026-07-20T18:15:27.000Z
+Stopped at: Completed quick 260720-oh2 — виртуальные склады БПЛА (сгоревшие остатки)
 Resume file: None
