@@ -7,13 +7,23 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 // писал stockMap.get(nmId) ?? null = null поверх всех карточек.
 //
 // После фикса:
-//   - fetchStocks throws → upsert.update НЕ содержит ключа stockQty
+//   - fetchStocksPerWarehouse throws → upsert.update НЕ содержит ключа stockQty
+//     (stockQty теперь выводится из per-warehouse ответа, см. quick-260720-mj0)
 //   - fetchAllPrices throws → upsert.update НЕ содержит ключей price, priceBeforeDiscount, sellerDiscount, clubDiscount
 //   - всё OK → все поля присутствуют в upsert.update
 // ──────────────────────────────────────────────────────────────────
 
 // Моки для prisma
 const mockWbCardUpsert = vi.fn().mockResolvedValue({})
+// Rule 1 fix: soft-delete блок в route.ts (после upsert-цикла) вызывает
+// prisma.wbCard.count/updateMany/deleteMany безусловно — без моков любой сценарий,
+// который проверяет response.status, падает 500 (upsert уже отработал к этому
+// моменту, поэтому сценарии 1-6, которые смотрят только на upsert.mock.calls,
+// эту проблему не ловили). existingCount=0 → safetyOk=true, markedDeleted/revived/
+// hardDeleted count=0 → soft-delete блок no-op.
+const mockWbCardCount = vi.fn().mockResolvedValue(0)
+const mockWbCardUpdateMany = vi.fn().mockResolvedValue({ count: 0 })
+const mockWbCardDeleteMany = vi.fn().mockResolvedValue({ count: 0 })
 const mockWbCommissionIuFindMany = vi.fn().mockResolvedValue([])
 const mockAuthFn = vi.fn().mockResolvedValue({ user: { id: "1" } })
 const mockAppSettingFindUnique = vi.fn().mockResolvedValue(null)
@@ -47,7 +57,12 @@ const mockTransaction = vi.fn().mockImplementation(async (cb: (tx: unknown) => P
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    wbCard: { upsert: mockWbCardUpsert },
+    wbCard: {
+      upsert: mockWbCardUpsert,
+      count: mockWbCardCount,
+      updateMany: mockWbCardUpdateMany,
+      deleteMany: mockWbCardDeleteMany,
+    },
     wbCommissionIu: { findMany: mockWbCommissionIuFindMany },
     appSetting: { findUnique: mockAppSettingFindUnique, upsert: mockAppSettingUpsert },
     $transaction: mockTransaction,
@@ -80,9 +95,6 @@ const PRICES_SUCCESS = new Map([
   [12345, { priceBeforeDiscount: 1000, discountedPrice: 900, sellerDiscount: 10, clubDiscount: 5 }],
 ])
 
-// Стандартные остатки
-const STOCKS_SUCCESS = new Map([[12345, 42]])
-
 // Стандартные комиссии
 const COMMISSIONS_SUCCESS = new Map([[500, { fbw: 15.5, fbs: 10.0 }]])
 
@@ -92,8 +104,27 @@ const BUYOUT_SUCCESS = new Map([[12345, 78]])
 // Стандартный Map для скидок WB (СПП)
 const DISCOUNTS_SUCCESS = new Map([[12345, 12.5]])
 
-// Пустые Maps для per-warehouse (их ошибки корректно обрабатываются)
+// Пустой Map для orders (ошибки корректно обрабатываются)
 const ORDERS_EMPTY = new Map()
+
+// quick-260720-mj0: stockQty теперь выводится из fetchStocksPerWarehouse
+// (fetchStocks удалён — Statistics API отключён WB). Дефолт непустой — 42 шт
+// на складе "Коледино" — чтобы сценарии "остальные API OK" видели stockQty.
+const STOCKS_PW_SUCCESS = new Map([
+  [
+    12345,
+    [
+      {
+        warehouseName: "Коледино",
+        techSize: "0",
+        barcode: "b",
+        quantity: 42,
+        inWayToClient: 0,
+        inWayFromClient: 0,
+      },
+    ],
+  ],
+])
 const STOCKS_PW_EMPTY = new Map()
 
 // 2026-05-12: WbRateLimitError должен быть РЕАЛЬНЫМ классом, не stub'ом, потому что
@@ -136,7 +167,6 @@ vi.mock("@/lib/wb-api", () => ({
   fetchAllPrices: vi.fn(),
   fetchWbDiscounts: vi.fn(),
   fetchStandardCommissions: vi.fn(),
-  fetchStocks: vi.fn(),
   fetchBuyoutPercent: vi.fn(),
   fetchOrdersPerWarehouse: vi.fn(),
   fetchStocksPerWarehouse: vi.fn(),
@@ -169,25 +199,26 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
     const wbApi = await import("@/lib/wb-api")
     vi.mocked(wbApi.fetchAllCards).mockResolvedValue(CARDS_SUCCESS as never)
     vi.mocked(wbApi.fetchAllPrices).mockResolvedValue(PRICES_SUCCESS as never)
-    vi.mocked(wbApi.fetchStocks).mockResolvedValue(STOCKS_SUCCESS)
     vi.mocked(wbApi.fetchStandardCommissions).mockResolvedValue(COMMISSIONS_SUCCESS)
     vi.mocked(wbApi.fetchBuyoutPercent).mockResolvedValue(BUYOUT_SUCCESS)
     vi.mocked(wbApi.fetchWbDiscounts).mockResolvedValue(DISCOUNTS_SUCCESS)
     vi.mocked(wbApi.fetchOrdersPerWarehouse).mockResolvedValue(ORDERS_EMPTY)
-    vi.mocked(wbApi.fetchStocksPerWarehouse).mockResolvedValue(STOCKS_PW_EMPTY)
+    vi.mocked(wbApi.fetchStocksPerWarehouse).mockResolvedValue(STOCKS_PW_SUCCESS as never)
   })
 
-  // ─── Сценарий 1: fetchStocks throws ───────────────────────────────────────
+  // ─── Сценарий 1: fetchStocksPerWarehouse throws ───────────────────────────
 
-  it("Сц.1: fetchStocks throws → upsert.update НЕ содержит ключа stockQty", async () => {
+  it("Сц.1: fetchStocksPerWarehouse throws → upsert.update НЕ содержит ключа stockQty", async () => {
     const wbApi = await import("@/lib/wb-api")
-    vi.mocked(wbApi.fetchStocks).mockRejectedValue(new Error("Statistics API stocks ошибка 429"))
+    vi.mocked(wbApi.fetchStocksPerWarehouse).mockRejectedValue(
+      new Error("Analytics warehouse_remains ошибка 429"),
+    )
 
     await callPost()
 
     expect(mockWbCardUpsert).toHaveBeenCalledTimes(1)
     const upsertCall = mockWbCardUpsert.mock.calls[0][0]
-    // update НЕ должен содержать ключ stockQty
+    // stocksOk=false (stocksPerWarehouse пуст после catch) → update НЕ должен содержать ключ stockQty
     expect(upsertCall.update).not.toHaveProperty("stockQty")
   })
 
@@ -285,8 +316,8 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
 
   it("Сц.8: WbRateLimitError → response.failures[] содержит endpoint + retryAfterSec", async () => {
     const wbApi = await import("@/lib/wb-api")
-    vi.mocked(wbApi.fetchStocks).mockRejectedValue(
-      new WbRateLimitErrorMock("Statistics API (stocks)", 6249),
+    vi.mocked(wbApi.fetchStocksPerWarehouse).mockRejectedValue(
+      new WbRateLimitErrorMock("Analytics API (warehouse remains)", 6249),
     )
     vi.mocked(wbApi.fetchAllPrices).mockRejectedValue(
       new WbRateLimitErrorMock("Prices API", 3020),
@@ -302,7 +333,7 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
     expect(body.failures.length).toBeGreaterThanOrEqual(2)
 
     const stocksFailure = body.failures.find(
-      (f: { endpoint: string }) => f.endpoint === "Statistics API (stocks)",
+      (f: { endpoint: string }) => f.endpoint === "Analytics API (warehouse remains)",
     )
     expect(stocksFailure).toBeDefined()
     expect(stocksFailure.retryAfterSec).toBe(6249)
@@ -320,7 +351,7 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
 
   it("Сц.9: generic Error → failures[i].retryAfterSec=null", async () => {
     const wbApi = await import("@/lib/wb-api")
-    vi.mocked(wbApi.fetchStocks).mockRejectedValue(new Error("Network timeout"))
+    vi.mocked(wbApi.fetchStocksPerWarehouse).mockRejectedValue(new Error("Network timeout"))
 
     const { POST } = await importRoute()
     const response = await POST()
@@ -329,7 +360,7 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
     expect(response.status).toBe(200)
     expect(body.failures).toBeDefined()
     const stocksFailure = body.failures.find(
-      (f: { endpoint: string }) => f.endpoint === "Statistics API (stocks)",
+      (f: { endpoint: string }) => f.endpoint === "Analytics API (warehouse remains)",
     )
     expect(stocksFailure.retryAfterSec).toBeNull()
     expect(stocksFailure.message).toContain("Network timeout")
@@ -337,7 +368,7 @@ describe("POST /api/wb-sync — защита от NULL при API 429", () => {
 
   it("Сц.7: несколько API throws одновременно → 200 OK, upsert вызван (с контентными полями)", async () => {
     const wbApi = await import("@/lib/wb-api")
-    vi.mocked(wbApi.fetchStocks).mockRejectedValue(new Error("429"))
+    vi.mocked(wbApi.fetchStocksPerWarehouse).mockRejectedValue(new Error("429"))
     vi.mocked(wbApi.fetchAllPrices).mockRejectedValue(new Error("429"))
     vi.mocked(wbApi.fetchStandardCommissions).mockRejectedValue(new Error("429"))
     vi.mocked(wbApi.fetchBuyoutPercent).mockRejectedValue(new Error("429"))

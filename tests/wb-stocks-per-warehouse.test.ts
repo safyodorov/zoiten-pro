@@ -24,22 +24,38 @@ vi.mock("@/lib/wb-token", () => ({
 }))
 
 // ──────────────────────────────────────────────────────────────────
-// Phase 14 Plan 03 — per-warehouse stocks via Statistics API
+// quick-260720-mj0 — per-warehouse stocks via Analytics warehouse_remains
 // ──────────────────────────────────────────────────────────────────
 //
-// DEVIATION: Plan 14-03 изначально написан под Analytics API
-// (POST /api/analytics/v1/stocks-report/wb-warehouses). Base токен
-// возвращает 403. Используем Statistics API
-// (GET /api/v1/supplier/stocks?dateFrom=...) который уже работает
-// и возвращает per-warehouse данные (warehouseName + nmId + quantity).
-//
-// Statistics API endpoint верифицирован curl на VPS 2026-04-22.
-// Пример ответа см. в deviation notes плана 14-03.
-//
-// Rate limit Statistics API: ~1 запрос в минуту per токен.
-// Один запрос возвращает ВСЕ данные — НЕ ставить в цикл.
+// 2026-07-20: Statistics API `GET /api/v1/supplier/stocks` отключён WB
+// (HTTP 404 `PLUG-404-20260720`). Мигрировано на Analytics API
+// `warehouse_remains` — task-based: CREATE → POLL status → DOWNLOAD.
+// Верифицировано вручную на VPS 2026-07-20.
 
-describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
+/** Helper: мокает CREATE → STATUS(done) → DOWNLOAD последовательность. */
+function mockHappyFlow(rows: unknown[]) {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { taskId: "t1" } }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { id: "t1", status: "done" } }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => rows,
+    })
+  vi.stubGlobal("fetch", fetchMock)
+  return fetchMock
+}
+
+describe("fetchStocksPerWarehouse — Analytics warehouse_remains (STOCK-07)", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.stubEnv("WB_API_TOKEN", "test-token")
@@ -62,115 +78,138 @@ describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("happy path 200 → Map с per-warehouse данными", async () => {
+  it("happy path: create → status done → download → Map с per-warehouse данными", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        {
-          lastChangeDate: "2026-04-21T07:44:34",
-          warehouseName: "Невинномысск",
-          nmId: 418725481,
-          barcode: "2044018340398",
-          quantity: 21,
-          inWayToClient: 0,
-          inWayFromClient: 0,
-          quantityFull: 21,
-          supplierArticle: "МоющийПылесосZoiten",
-          techSize: "0",
-        },
-        {
-          lastChangeDate: "2026-04-21T07:44:34",
-          warehouseName: "Коледино",
-          nmId: 418725481,
-          barcode: "2044018340398",
-          quantity: 5,
-          inWayToClient: 2,
-          inWayFromClient: 1,
-          quantityFull: 8,
-          supplierArticle: "МоющийПылесосZoiten",
-          techSize: "0",
-        },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
+    mockHappyFlow([
+      {
+        nmId: 418725481,
+        barcode: "2044018340398",
+        techSize: "0",
+        warehouses: [
+          { warehouseName: "Всего находится на складах", quantity: 26 },
+          { warehouseName: "В пути до получателей", quantity: 2 },
+          { warehouseName: "В пути возвраты на склад WB", quantity: 1 },
+          { warehouseName: "Невинномысск", quantity: 21 },
+          { warehouseName: "Коледино", quantity: 5 },
+        ],
+      },
+    ])
 
-    const result = await fetchStocksPerWarehouse([418725481])
+    const promise = fetchStocksPerWarehouse([418725481])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
 
     expect(result.size).toBe(1)
-    const items = result.get(418725481)
+    const items = result.get(418725481)!
+    // "Всего находится на складах" исключён — только 2 физических склада
     expect(items).toHaveLength(2)
 
-    const nevinnomyssk = items!.find((i) => i.warehouseName === "Невинномысск")
-    expect(nevinnomyssk).toBeDefined()
-    expect(nevinnomyssk!.quantity).toBe(21)
-    expect(nevinnomyssk!.inWayToClient).toBe(0)
+    const nevinnomyssk = items.find((i) => i.warehouseName === "Невинномысск")!
+    expect(nevinnomyssk.quantity).toBe(21)
+    // in-way навешан на ПЕРВЫЙ физический item строки (Невинномысск)
+    expect(nevinnomyssk.inWayToClient).toBe(2)
+    expect(nevinnomyssk.inWayFromClient).toBe(1)
 
-    const koledino = items!.find((i) => i.warehouseName === "Коледино")
-    expect(koledino!.quantity).toBe(5)
-    expect(koledino!.inWayToClient).toBe(2)
-  })
+    const koledino = items.find((i) => i.warehouseName === "Коледино")!
+    expect(koledino.quantity).toBe(5)
+    expect(koledino.inWayToClient).toBe(0)
+    expect(koledino.inWayFromClient).toBe(0)
 
-  it("несколько nmIds → сгруппированы по nmId в одном запросе", async () => {
-    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
-
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        { warehouseName: "Склад А", nmId: 111, quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
-        { warehouseName: "Склад А", nmId: 222, quantity: 5,  inWayToClient: 1, inWayFromClient: 0 },
-        { warehouseName: "Склад Б", nmId: 111, quantity: 3,  inWayToClient: 0, inWayFromClient: 2 },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
-
-    const result = await fetchStocksPerWarehouse([111, 222])
-
-    // Ровно один HTTP запрос — не несколько
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(result.size).toBe(2)
-    expect(result.get(111)).toHaveLength(2)
-    expect(result.get(222)).toHaveLength(1)
+    expect(items.some((i) => i.warehouseName === "Всего находится на складах")).toBe(false)
   })
 
   it("фильтрует по переданным nmIds — чужие nmId не включаются", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        { warehouseName: "Склад А", nmId: 111, quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
-        { warehouseName: "Склад А", nmId: 999, quantity: 99, inWayToClient: 0, inWayFromClient: 0 },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
+    mockHappyFlow([
+      { nmId: 111, techSize: "0", warehouses: [{ warehouseName: "Склад А", quantity: 10 }] },
+      { nmId: 999, techSize: "0", warehouses: [{ warehouseName: "Склад А", quantity: 99 }] },
+    ])
 
-    // Просим только 111, но API вернул и 999 (другой seller? — не наш)
-    const result = await fetchStocksPerWarehouse([111])
+    const promise = fetchStocksPerWarehouse([111])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
 
     expect(result.has(111)).toBe(true)
     expect(result.has(999)).toBe(false)
   })
 
-  it("пустой ответ API [] → пустой Map без throw", async () => {
+  it("несколько строк одного nmId (разные techSize) → все items конкатенируются в один массив", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [],
-    })
-    vi.stubGlobal("fetch", fetchMock)
+    mockHappyFlow([
+      {
+        nmId: 859398279,
+        barcode: "b46",
+        techSize: "46",
+        warehouses: [{ warehouseName: "Котовск", quantity: 11 }],
+      },
+      {
+        nmId: 859398279,
+        barcode: "b48",
+        techSize: "48",
+        warehouses: [{ warehouseName: "Котовск", quantity: 10 }],
+      },
+      {
+        nmId: 859398279,
+        barcode: "b50",
+        techSize: "50",
+        warehouses: [{ warehouseName: "Котовск", quantity: 10 }],
+      },
+    ])
 
-    const result = await fetchStocksPerWarehouse([12345])
+    const promise = fetchStocksPerWarehouse([859398279])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
+
+    const items = result.get(859398279)!
+    expect(items).toHaveLength(3)
+    const sizes = items.map((i) => i.techSize).sort()
+    expect(sizes).toEqual(["46", "48", "50"])
+  })
+
+  it("пустой ответ download [] → пустой Map без throw", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+
+    mockHappyFlow([])
+
+    const promise = fetchStocksPerWarehouse([12345])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
+
     expect(result.size).toBe(0)
   })
 
-  it("HTTP 401 → throws Error с упоминанием статуса", async () => {
+  it("edge case: строка только с синтетическими складами (in-way без физ. склада) → данные не теряются", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+
+    mockHappyFlow([
+      {
+        nmId: 700000001,
+        techSize: "0",
+        warehouses: [
+          { warehouseName: "Всего находится на складах", quantity: 3 },
+          { warehouseName: "В пути до получателей", quantity: 3 },
+        ],
+      },
+    ])
+
+    const promise = fetchStocksPerWarehouse([700000001])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
+
+    expect(result.has(700000001)).toBe(true)
+    const items = result.get(700000001)!
+    expect(items).toHaveLength(1)
+    expect(items[0].quantity).toBe(0)
+    expect(items[0].inWayToClient).toBe(3)
+    expect(items[0].inWayFromClient).toBe(0)
+    // Явно НЕ используется имя синтетического "Всего" склада
+    expect(items[0].warehouseName).not.toBe("Всего находится на складах")
+  })
+
+  it("CREATE !ok → throw с кодом статуса", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
@@ -183,7 +222,7 @@ describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
     await expect(fetchStocksPerWarehouse([12345])).rejects.toThrow("401")
   })
 
-  it("HTTP 403 → throws Error с упоминанием статуса", async () => {
+  it("CREATE 403 → throw с кодом статуса", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
@@ -196,44 +235,63 @@ describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
     await expect(fetchStocksPerWarehouse([12345])).rejects.toThrow("403")
   })
 
-  it("использует правильный endpoint statistics-api.wildberries.ru", async () => {
+  it("таймаут поллинга (статус не 'done' за отведённое время) → throw", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [],
-    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { taskId: "t1" } }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { id: "t1", status: "processing" } }),
+      })
     vi.stubGlobal("fetch", fetchMock)
 
-    await fetchStocksPerWarehouse([12345])
+    const promise = fetchStocksPerWarehouse([12345])
+    // Ловим rejection сразу, чтобы избежать unhandled rejection во время advance
+    const assertion = expect(promise).rejects.toThrow("не готово")
+    await vi.advanceTimersByTimeAsync(40 * 5000 + 5000)
+    await assertion
+  })
 
+  it("использует правильный endpoint seller-analytics-api.wildberries.ru/warehouse_remains", async () => {
+    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
+
+    mockHappyFlow([])
+
+    const promise = fetchStocksPerWarehouse([12345])
+    await vi.advanceTimersByTimeAsync(5000)
+    await promise
+
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>
     const callUrl = fetchMock.mock.calls[0]?.[0] as string
-    expect(callUrl).toContain("statistics-api.wildberries.ru")
-    expect(callUrl).toContain("/api/v1/supplier/stocks")
-    expect(callUrl).toContain("dateFrom=")
+    expect(callUrl).toContain("seller-analytics-api.wildberries.ru")
+    expect(callUrl).toContain("/api/v1/warehouse_remains")
   })
 
   it("WarehouseStockItem содержит warehouseName, quantity, inWayToClient, inWayFromClient", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
 
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        {
-          warehouseName: "Подольск",
-          nmId: 800750522,
-          quantity: 15,
-          inWayToClient: 3,
-          inWayFromClient: 1,
-          quantityFull: 19,
-        },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
+    mockHappyFlow([
+      {
+        nmId: 800750522,
+        techSize: "0",
+        warehouses: [
+          { warehouseName: "Подольск", quantity: 15 },
+          { warehouseName: "В пути до получателей", quantity: 3 },
+          { warehouseName: "В пути возвраты на склад WB", quantity: 1 },
+        ],
+      },
+    ])
 
-    const result = await fetchStocksPerWarehouse([800750522])
+    const promise = fetchStocksPerWarehouse([800750522])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
     const item = result.get(800750522)![0]!
 
     expect(item).toHaveProperty("warehouseName", "Подольск")
@@ -244,58 +302,32 @@ describe("fetchStocksPerWarehouse — Statistics API (STOCK-07)", () => {
 
   it("Phase 16 (STOCK-32): WarehouseStockItem содержит techSize и barcode", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        {
-          warehouseName: "Котовск",
-          nmId: 859398279,
-          techSize: "46",
-          barcode: "2044018340398",
-          quantity: 11,
-          inWayToClient: 0,
-          inWayFromClient: 0,
-        },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
-    const result = await fetchStocksPerWarehouse([859398279])
+
+    mockHappyFlow([
+      {
+        nmId: 859398279,
+        barcode: "2044018340398",
+        techSize: "46",
+        warehouses: [{ warehouseName: "Котовск", quantity: 11 }],
+      },
+    ])
+
+    const promise = fetchStocksPerWarehouse([859398279])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
     const item = result.get(859398279)![0]!
     expect(item.techSize).toBe("46")
     expect(item.barcode).toBe("2044018340398")
   })
 
-  it("Phase 16 (STOCK-32): несколько techSize для одного warehouseName — каждый отдельная WarehouseStockItem", async () => {
-    const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        { warehouseName: "Котовск", nmId: 859398279, techSize: "46", barcode: "b46", quantity: 11, inWayToClient: 0, inWayFromClient: 0 },
-        { warehouseName: "Котовск", nmId: 859398279, techSize: "48", barcode: "b48", quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
-        { warehouseName: "Котовск", nmId: 859398279, techSize: "50", barcode: "b50", quantity: 10, inWayToClient: 0, inWayFromClient: 0 },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
-    const result = await fetchStocksPerWarehouse([859398279])
-    const items = result.get(859398279)!
-    expect(items).toHaveLength(3)
-    const sizes = items.map((i) => i.techSize).sort()
-    expect(sizes).toEqual(["46", "48", "50"])
-  })
-
   it("Phase 16 (STOCK-32): отсутствие techSize/barcode → пустые строки", async () => {
     const { fetchStocksPerWarehouse } = await import("@/lib/wb-api")
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => [
-        { warehouseName: "Склад X", nmId: 999, quantity: 5, inWayToClient: 0, inWayFromClient: 0 },
-      ],
-    })
-    vi.stubGlobal("fetch", fetchMock)
-    const result = await fetchStocksPerWarehouse([999])
+
+    mockHappyFlow([{ nmId: 999, warehouses: [{ warehouseName: "Склад X", quantity: 5 }] }])
+
+    const promise = fetchStocksPerWarehouse([999])
+    await vi.advanceTimersByTimeAsync(5000)
+    const result = await promise
     const item = result.get(999)![0]!
     expect(item.techSize).toBe("")
     expect(item.barcode).toBe("")
