@@ -570,7 +570,21 @@ export function StockWbTable({ groups, turnoverNormDays, clusterWarehouses, hidd
                       <React.Fragment key={card.wbCardId}>
                         <TableRow className="border-t border-t-border/60">
                         <TableCell className="sticky left-[320px] z-20 bg-background border-r w-24 min-w-24 max-w-24 text-xs tabular-nums">
-                          {card.nmId}
+                          <div className="flex flex-col gap-0.5">
+                            <span>{card.nmId}</span>
+                            {/* quick 260720-oh2: сгоревшие остатки БПЛА — отдельный бейдж,
+                                НЕ входит в О/З/Об/Д (склады Электросталь/Котовск). */}
+                            {card.bpla.totalStock > 0 && (
+                              <span
+                                className="text-[10px] text-red-600 dark:text-red-500 font-medium leading-tight"
+                                title={card.bpla.warehouses
+                                  .map((w) => `${w.warehouseName}: ${w.quantity} шт`)
+                                  .join(", ")}
+                              >
+                                🔥 БПЛА: {card.bpla.totalStock}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         {/* Иваново — пустая ячейка в per-nmId строках (значение только в Сводной) */}
                         <TableCell className="px-2 py-1 h-8 text-xs leading-tight tabular-nums text-right border-r text-muted-foreground w-20 min-w-20 max-w-20">

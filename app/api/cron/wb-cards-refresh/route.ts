@@ -27,6 +27,11 @@ import {
   type WarehouseStockItem,
 } from "@/lib/wb-api"
 import { getMskTodayString } from "@/lib/wb-cron-schedule"
+import {
+  loadVirtualWarehouseIds,
+  loadBurnedQtyByNmId,
+  applyBurnedInWay,
+} from "@/lib/wb-virtual-warehouse"
 
 export const runtime = "nodejs"
 export const maxDuration = 600
@@ -120,6 +125,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let warehousesUpdated = 0
   if (stocksOk && stocksPerWarehouse.size > 0) {
     try {
+      // quick 260720-oh2: виртуальные склады БПЛА (сгоревшие остатки Электросталь/
+      // Котовск) защищены от clean-replace + вычитаются из inWayFromClient.
+      const virtualIds = await loadVirtualWarehouseIds(prisma)
+      const burnedByNmId = await loadBurnedQtyByNmId(prisma)
       await prisma.$transaction(
         async (tx) => {
           for (const [nmId, warehouseItems] of stocksPerWarehouse.entries()) {
@@ -179,8 +188,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
               const incomingSet = new Set(
                 incomingKeys.map((k) => `${k.warehouseId}::${k.techSize}`),
               )
+              // quick 260720-oh2: виртуальные склады БПЛА (сгоревшие остатки) защищены
+              // от clean-replace — отсутствуют в ответе API, но не должны удаляться.
               const toDeleteIds = existing
-                .filter((r) => !incomingSet.has(`${r.warehouseId}::${r.techSize}`))
+                .filter(
+                  (r) =>
+                    !incomingSet.has(`${r.warehouseId}::${r.techSize}`) &&
+                    !virtualIds.has(r.warehouseId),
+                )
                 .map((r) => r.id)
               if (toDeleteIds.length > 0) {
                 await tx.wbCardWarehouseStock.deleteMany({
@@ -199,12 +214,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
               (s, w) => s + w.inWayFromClient,
               0,
             )
+            // quick 260720-oh2: вычитаем сгоревшие БПЛА-остатки из «в пути от клиента».
             await tx.wbCard.update({
               where: { id: wbCardId },
               data: {
                 stockQty: totalStock,
                 inWayToClient: totalInWayTo,
-                inWayFromClient: totalInWayFrom,
+                inWayFromClient: applyBurnedInWay(totalInWayFrom, burnedByNmId.get(nmId) ?? 0),
               },
             })
             warehousesUpdated++

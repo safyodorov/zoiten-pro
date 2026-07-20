@@ -21,6 +21,11 @@ import {
   WbRateLimitError,
 } from "@/lib/wb-api"
 import { snapshotCommissionChanges } from "@/lib/wb-commission-history"
+import {
+  loadVirtualWarehouseIds,
+  loadBurnedQtyByNmId,
+  applyBurnedInWay,
+} from "@/lib/wb-virtual-warehouse"
 
 /**
  * Информация о каждом упавшем external-API во время sync.
@@ -370,6 +375,10 @@ export async function POST(): Promise<NextResponse> {
     // Выполняется после основного цикла upsert карточек — все WbCard уже в БД
     if (stocksPerWarehouse.size > 0) {
       try {
+        // quick 260720-oh2: виртуальные склады БПЛА (сгоревшие остатки Электросталь/
+        // Котовск) защищены от clean-replace + вычитаются из inWayFromClient.
+        const virtualIds = await loadVirtualWarehouseIds(prisma)
+        const burnedByNmId = await loadBurnedQtyByNmId(prisma)
         await prisma.$transaction(
           async (tx) => {
             for (const [nmId, warehouseItems] of stocksPerWarehouse.entries()) {
@@ -450,8 +459,14 @@ export async function POST(): Promise<NextResponse> {
                 const incomingSet = new Set(
                   incomingKeys.map((k) => `${k.warehouseId}::${k.techSize}`),
                 )
+                // quick 260720-oh2: виртуальные склады БПЛА (сгоревшие остатки) защищены
+                // от clean-replace — отсутствуют в ответе API, но не должны удаляться.
                 const toDeleteIds = existingRows
-                  .filter((r) => !incomingSet.has(`${r.warehouseId}::${r.techSize}`))
+                  .filter(
+                    (r) =>
+                      !incomingSet.has(`${r.warehouseId}::${r.techSize}`) &&
+                      !virtualIds.has(r.warehouseId),
+                  )
                   .map((r) => r.id)
                 if (toDeleteIds.length > 0) {
                   await tx.wbCardWarehouseStock.deleteMany({
@@ -471,12 +486,15 @@ export async function POST(): Promise<NextResponse> {
                 (s, w) => s + w.inWayFromClient,
                 0,
               )
+              // quick 260720-oh2: вычитаем сгоревшие БПЛА-остатки из «в пути от клиента» —
+              // WB продолжает показывать их в API-ответе как inWayFromClient, хотя товар
+              // сгорел вместе со складом.
               await tx.wbCard.update({
                 where: { id: card.id },
                 data: {
                   stockQty: totalStock,
                   inWayToClient: totalInWayTo,
-                  inWayFromClient: totalInWayFrom,
+                  inWayFromClient: applyBurnedInWay(totalInWayFrom, burnedByNmId.get(nmId) ?? 0),
                 },
               })
             }

@@ -50,7 +50,7 @@ export interface WbStockRow {
   nmId: number
   wbCardName: string | null
   avgSalesSpeed7d: number | null
-  totalStock: number | null  // SUM всех складов (физ. остаток)
+  totalStock: number | null  // SUM всех ФИЗИЧЕСКИХ складов (виртуальные БПЛА-склады не входят)
   // Phase 15.1: товар в пути (агрегат per nmId, без per-warehouse разбивки)
   inWayToClient: number | null
   inWayFromClient: number | null
@@ -60,6 +60,9 @@ export interface WbStockRow {
   // Phase 16 (STOCK-34): per-size breakdown под этой nmId-строкой
   sizeBreakdown: WbStockSizeRow[]
   hasMultipleSizes: boolean
+  // quick 260720-oh2: сгоревшие остатки на виртуальных складах БПЛА — отдельная группа,
+  // не входит в totalStock/clusters (не влияет на дефицит/оборачиваемость).
+  bpla: { warehouses: WarehouseSlot[]; totalStock: number }
 }
 
 export interface ProductWbGroup {
@@ -155,8 +158,9 @@ export async function getStockWbData(
   for (const cluster of CLUSTER_ORDER) clusterWarehousesMap[cluster] = new Map()
 
   for (const card of wbCards) {
-    // Из stocks
+    // Из stocks (quick 260720-oh2: виртуальные БПЛА-склады НЕ попадают в кластерные колонки)
     for (const ws of card.warehouses) {
+      if (ws.warehouse?.isVirtual) continue
       const shortCluster = (ws.warehouse?.shortCluster as ClusterShortName | undefined) ?? "Прочие"
       const targetKey = (CLUSTER_ORDER as readonly string[]).includes(shortCluster) ? shortCluster : "Прочие"
       const map = clusterWarehousesMap[targetKey]!
@@ -227,29 +231,35 @@ export async function getStockWbData(
         }
       }
 
+      // quick 260720-oh2: отделить виртуальные БПЛА-склады от физических ДО любой
+      // агрегации — они не должны влиять на totalStock/clusters/Д/Об.
+      const allCardWarehouses = card?.warehouses ?? []
+      const physicalWarehouses = allCardWarehouses.filter((ws) => !ws.warehouse?.isVirtual)
+      const virtualWarehouses = allCardWarehouses.filter((ws) => ws.warehouse?.isVirtual)
+
       let totalStock: number | null = null
       if (card) {
-        // Собираем все уникальные warehouseId из stocks + orders
+        // Собираем все уникальные warehouseId из stocks (физических) + orders
         const allWarehouseIds = new Set<number>()
-        for (const ws of card.warehouses) allWarehouseIds.add(ws.warehouseId)
+        for (const ws of physicalWarehouses) allWarehouseIds.add(ws.warehouseId)
         for (const wo of card.warehouseOrders) allWarehouseIds.add(wo.warehouseId)
 
         // Phase 16 fix: stocks aggregated per warehouseId — теперь несколько rows
         // per warehouse (по одному на techSize), нужно SUM, не set/overwrite.
         // До фикса: Map.set перезаписывал rows → quantity = только последний размер.
         const stockSumByWarehouseId = new Map<number, number>()
-        for (const ws of card.warehouses) {
+        for (const ws of physicalWarehouses) {
           const prev = stockSumByWarehouseId.get(ws.warehouseId) ?? 0
           stockSumByWarehouseId.set(ws.warehouseId, prev + (ws.quantity ?? 0))
         }
         // Флаг наличия записи в stocks (для отличия "0 шт" vs "нет данных")
         const hasStockEntryByWarehouseId = new Set<number>(
-          card.warehouses.map((ws) => ws.warehouseId),
+          physicalWarehouses.map((ws) => ws.warehouseId),
         )
 
         // Lookup warehouse meta (имя, кластер, флаг) — приоритет из stocks, затем из orders
         const warehouseMetaById = new Map<number, { name: string; shortCluster: string | null; needsClusterReview: boolean }>()
-        for (const ws of card.warehouses) {
+        for (const ws of physicalWarehouses) {
           warehouseMetaById.set(ws.warehouseId, {
             name: ws.warehouse?.name ?? `Склад ${ws.warehouseId}`,
             shortCluster: ws.warehouse?.shortCluster ?? null,
@@ -319,10 +329,11 @@ export async function getStockWbData(
       // Quick 260514-kzg: передаём card.techSizes — buildSizeBreakdown
       // доливает «выпавшие» размеры (есть в WB API, нет в WbCardWarehouseStock)
       // с пустыми метриками, чтобы UI мог подсветить их красным.
-      const cardWarehouses = card?.warehouses ?? []
+      // quick 260720-oh2: physicalWarehouses (не cardWarehouses) — виртуальные БПЛА-склады
+      // не должны протекать спурриозной размерной строкой (techSize="") в «Прочие».
       const cardTechSizes = card?.techSizes ?? []
       const sizeBreakdown = buildSizeBreakdown(
-        cardWarehouses.map((ws) => ({
+        physicalWarehouses.map((ws) => ({
           warehouseId: ws.warehouseId,
           techSize: ws.techSize ?? "",
           quantity: ws.quantity ?? 0,
@@ -340,10 +351,21 @@ export async function getStockWbData(
       // вернул несколько размеров, должен показывать размерные строки даже если
       // в БД stock есть только по одному размеру (остальные «выпали» и должны
       // быть красными).
-      const stockSizes = new Set<string>(cardWarehouses.map((ws) => ws.techSize ?? ""))
+      const stockSizes = new Set<string>(physicalWarehouses.map((ws) => ws.techSize ?? ""))
       const cardTechSizesFiltered = cardTechSizes.filter((s) => s && s !== "0")
       const effectiveSizeCount = new Set<string>([...stockSizes, ...cardTechSizesFiltered]).size
       const hasMultipleSizes = effectiveSizeCount > 1
+
+      // quick 260720-oh2: сгоревшие остатки БПЛА — отдельная группа, вне кластеров/Д/Об.
+      const bplaWarehouseSlots: WarehouseSlot[] = virtualWarehouses.map((ws) => ({
+        warehouseId: ws.warehouseId,
+        warehouseName: ws.warehouse?.name ?? `Склад ${ws.warehouseId}`,
+        needsClusterReview: false,
+        quantity: ws.quantity ?? 0,
+        ordersCount: 0,
+        ordersPerDay: null,
+      }))
+      const bplaTotalStock = bplaWarehouseSlots.reduce((s, w) => s + w.quantity, 0)
 
       return {
         wbCardId: card?.id ?? `missing-${a.article}`,
@@ -355,6 +377,7 @@ export async function getStockWbData(
         inWayFromClient: card?.inWayFromClient ?? null,
         clusters,
         periodDays: cardPeriodDays,
+        bpla: { warehouses: bplaWarehouseSlots, totalStock: bplaTotalStock },
         sizeBreakdown,
         hasMultipleSizes,
       }
