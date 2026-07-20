@@ -13,7 +13,6 @@ import {
   fetchAllPrices,
   fetchWbDiscounts,
   fetchStandardCommissions,
-  fetchStocks,
   fetchBuyoutPercent,
   fetchOrdersPerWarehouse,
   type OrdersWarehouseStats,
@@ -115,16 +114,6 @@ export async function POST(): Promise<NextResponse> {
     const iuList = await prisma.wbCommissionIu.findMany()
     const iuMap = new Map(iuList.map((iu) => [iu.subjectName, { fbw: iu.fbw, fbs: iu.fbs }]))
 
-    // 5. Остатки из Statistics API
-    let stockMap = new Map<number, number>()
-    let stocksOk = false
-    try {
-      stockMap = await fetchStocks()
-      stocksOk = true
-    } catch (e) {
-      recordFailure(failures, "Statistics API (stocks)", ["stockQty"], e)
-    }
-
     // 6. Процент выкупа из Analytics API
     // fetchBuyoutPercent возвращает пустой Map и НЕ бросает в двух кейсах:
     //   (а) дневной cap 3/день исчерпан (checkAndIncrementAnalyticsCounter)
@@ -141,16 +130,26 @@ export async function POST(): Promise<NextResponse> {
       recordFailure(failures, "Analytics API (buyout)", ["buyoutPercent"], e)
     }
 
-    // 6a. Phase 14 (STOCK-07, STOCK-08): per-warehouse остатки из Statistics API
-    // DEVIATION: Statistics API вместо Analytics API (base token 403 на Analytics)
+    // 6a. Phase 14 (STOCK-07, STOCK-08): per-warehouse остатки из Analytics API
+    // warehouse_remains (2026-07-20: Statistics API отключён WB, см. lib/wb-api.ts)
     // Один запрос возвращает ВСЕ данные — degraded mode при failure
     let stocksPerWarehouse = new Map<number, WarehouseStockItem[]>()
     try {
       stocksPerWarehouse = await fetchStocksPerWarehouse(nmIds)
       console.log(`[wb-sync] Получено per-warehouse остатков для ${stocksPerWarehouse.size} nmIds`)
     } catch (e) {
-      recordFailure(failures, "Statistics API (per-warehouse stocks)", ["WbCardWarehouseStock", "inWayToClient", "inWayFromClient"], e)
+      recordFailure(failures, "Analytics API (warehouse remains)", ["WbCardWarehouseStock", "stockQty", "inWayToClient", "inWayFromClient"], e)
     }
+
+    // Агрегат остатков per nmId выводим из per-warehouse ответа (тот же Analytics-запрос,
+    // без второго обращения к API — rate limit ~1/мин на создание задания). stockQty =
+    // сумма физических остатков по складам (виртуальный "в пути" item имеет quantity=0,
+    // поэтому в сумму не попадает — денормализация inWay* делается отдельно ниже).
+    const stockMap = new Map<number, number>()
+    for (const [nmId, items] of stocksPerWarehouse.entries()) {
+      stockMap.set(nmId, items.reduce((s, w) => s + w.quantity, 0))
+    }
+    const stocksOk = stocksPerWarehouse.size > 0
 
     // 7. СПП из Sales API (ретроспектива; актуальные через кнопку «Скидка WB»)
     // fetchWbDiscounts деградирует тихо (curl + fallback), не бросает при 429.
