@@ -104,6 +104,8 @@ export interface BalanceLine {
   currency?: "RUB" | "CNY"
   approximate?: boolean
   note?: string
+  /** quick 260720-oh2: визуально обособленная (красная) строка — «Сгоревший товар (потенциальная компенсация WB)». */
+  destructive?: boolean
   /**
    * Детализация строки (drill-down, 260704-cvz).
    * Σ листовых amountRub (узлы без children) === amountRub родителя (инвариант).
@@ -333,6 +335,19 @@ function buildProductTree(
   dirNodes.sort((a, b) => b.amountRub - a.amountRub) // направления desc
 
   return dirNodes
+}
+
+/**
+ * quick 260720-oh2 — рекурсивно проставляет destructive:true на узел и всех его потомков.
+ * Используется для дерева детализации «Сгоревший товар» — весь drill-down (Направление →
+ * Категория → Подкатегория → Товар) должен визуально выделяться красным, не только корень.
+ */
+function markDestructiveTree(nodes: BalanceLine[]): BalanceLine[] {
+  return nodes.map((n) => ({
+    ...n,
+    destructive: true,
+    children: n.children ? markDestructiveTree(n.children) : undefined,
+  }))
 }
 
 // ── loadBalanceSheet ──────────────────────────────────────────────────────────
@@ -576,12 +591,16 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
 
   const stockByLocation = new Map<string, number>()
   for (const loc of STOCK_LOCATION_ORDER) stockByLocation.set(loc, 0)
+  // quick 260720-oh2: WB_BURNED регистрируется ОТДЕЛЬНО от STOCK_LOCATION_ORDER — красная
+  // строка «Сгоревший товар» строится вручную ниже (позиция/стиль контролируются отдельно).
+  stockByLocation.set("WB_BURNED", 0)
   const unvaluedMap = new Map<string, { sku: string; name: string; qty: number }>()
   let unvaluedQtySum = 0
 
   // Drill-down: собираем вклады per-товар per-локация (260704-cvz)
   const stockContribsByLocation = new Map<string, ProductContrib[]>()
   for (const loc of STOCK_LOCATION_ORDER) stockContribsByLocation.set(loc, [])
+  stockContribsByLocation.set("WB_BURNED", [])
 
   // Множество productId для product-lookup (заполняется в цикле ниже, дополняется закупками)
   const allProductIds = new Set<string>()
@@ -840,6 +859,23 @@ export async function loadBalanceSheet(asOf: Date): Promise<BalanceSheet> {
     amountRub: round2(inTransitTotal),
     approximate: inTransitApproximate || undefined,
     ...(inTransitChildren.length > 0 ? { children: inTransitChildren } : {}),
+  })
+
+  // quick 260720-oh2: «Сгоревший товар (потенциальная компенсация WB)» — красная строка,
+  // отдельная от товарных остатков (сгоревшие на виртуальных БПЛА-складах, себестоимость).
+  // Входит в inventoryGroup (учитывается в активах), визуально обособлена (destructive:true).
+  // Двойной счёт с «WB в пути от клиента» исключён — inWayFromClient уже вычитает сгоревшее
+  // (applyBurnedInWay в денормализации sync-роутов).
+  const stockWbBurnedChildren = markDestructiveTree(
+    buildProductTree("stock-wb-burned", stockContribsByLocation.get("WB_BURNED") ?? [], productMetaMap),
+  )
+  stockLines.push({
+    key: "stock-wb-burned",
+    label: "Сгоревший товар (потенциальная компенсация WB)",
+    amountRub: round2(stockByLocation.get("WB_BURNED") ?? 0),
+    destructive: true,
+    note: "Остатки складов Электросталь/Котовск, сгоревших 18.07.2026 (атака БПЛА) — потенциальная компенсация WB, может прийти деньгами или не прийти вовсе.",
+    ...(stockWbBurnedChildren.length > 0 ? { children: stockWbBurnedChildren } : {}),
   })
 
   const inventoryGroup: BalanceGroup = {

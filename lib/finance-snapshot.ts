@@ -15,12 +15,15 @@
 
 import { prisma } from "@/lib/prisma"
 import { fetchAccountBalance, fetchWeeklyForPayTail } from "@/lib/wb-finance-api"
+import { loadBurnedQtyByNmId } from "@/lib/wb-virtual-warehouse"
 
 export type FinanceStockLocationName =
   | "WB_WAREHOUSE"
   | "WB_IN_WAY_TO_CLIENT"
   | "WB_IN_WAY_FROM_CLIENT"
   | "IVANOVO"
+  // quick 260720-oh2: сгоревшие остатки БПЛА-атаки — потенциальная компенсация WB
+  | "WB_BURNED"
 
 export interface StockSnapshotRowInput {
   productId: string
@@ -57,6 +60,9 @@ export interface WbCardStockInput {
 export function computeStockSnapshotRows(
   products: StockSnapshotProductInput[],
   wbCardsByNmId: Map<number, WbCardStockInput>,
+  // quick 260720-oh2: сгоревшие остатки БПЛА (Map<nmId, qty>) — дефолт пустой Map сохраняет
+  // обратную совместимость (scripts/bootstrap-balance-snapshot.ts вызывает старой 2-арг сигнатурой).
+  burnedQtyByNmId: Map<number, number> = new Map(),
 ): StockSnapshotRowInput[] {
   const rows: StockSnapshotRowInput[] = []
 
@@ -64,7 +70,9 @@ export function computeStockSnapshotRows(
     let wbWarehouseQty = 0
     let inWayToClientQty = 0
     let inWayFromClientQty = 0
+    let burnedQty = 0
     for (const nmId of product.nmIds) {
+      burnedQty += burnedQtyByNmId.get(nmId) ?? 0
       const card = wbCardsByNmId.get(nmId)
       if (!card) continue
       wbWarehouseQty += card.stockQty ?? 0
@@ -78,6 +86,7 @@ export function computeStockSnapshotRows(
       ["WB_IN_WAY_TO_CLIENT", inWayToClientQty],
       ["WB_IN_WAY_FROM_CLIENT", inWayFromClientQty],
       ["IVANOVO", ivanovoQty],
+      ["WB_BURNED", burnedQty],
     ]
 
     for (const [location, qty] of locations) {
@@ -179,7 +188,10 @@ export async function runFinanceSnapshot(): Promise<RunFinanceSnapshotResult> {
       : []
   const wbCardsByNmId = new Map(wbCards.map((c) => [c.nmId, c]))
 
-  const rows = computeStockSnapshotRows(productInputs, wbCardsByNmId)
+  // quick 260720-oh2: сгоревшие остатки БПЛА → красная строка WB_BURNED в снапшоте
+  const burnedQtyByNmId = await loadBurnedQtyByNmId(prisma)
+
+  const rows = computeStockSnapshotRows(productInputs, wbCardsByNmId, burnedQtyByNmId)
 
   await prisma.$transaction([
     prisma.financeStockSnapshot.deleteMany({ where: { date: snapshotDate } }),

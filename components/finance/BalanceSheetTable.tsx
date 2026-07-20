@@ -155,10 +155,14 @@ function renderLineTree(
             // Плейсхолдер-отступ для выравнивания листовых узлов
             <span className="inline-block w-[14px] shrink-0" />
           )}
-          <span>{node.label}</span>
+          <span className={node.destructive ? "text-red-600 dark:text-red-500" : undefined}>
+            {node.label}
+          </span>
         </span>
       </td>
-      <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+      <td
+        className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40 ${node.destructive ? "text-red-600 dark:text-red-500" : ""}`}
+      >
         {fmtRub(node.amountRub)}
       </td>
       <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
@@ -229,7 +233,9 @@ function LineRow({
               // Плейсхолдер-отступ для выравнивания (CNY-строки и строки без children)
               <span className="inline-block w-[14px] shrink-0" />
             )}
-            <span>{line.label}</span>
+            <span className={line.destructive ? "text-red-600 dark:text-red-500" : undefined}>
+              {line.label}
+            </span>
             {line.approximate && (
               <span title={line.note ?? "Приближённая оценка"} className="ml-1.5 text-amber-600 cursor-help">
                 ⚠
@@ -241,7 +247,9 @@ function LineRow({
             <div className="text-xs text-muted-foreground pl-[18px]">{line.note}</div>
           )}
         </td>
-        <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40">
+        <td
+          className={`px-3 py-1.5 text-right tabular-nums whitespace-nowrap border-b border-border/40 ${line.destructive ? "text-red-600 dark:text-red-500" : ""}`}
+        >
           {isCny ? fmtCny(line.amountRub) : fmtRub(line.amountRub)}
         </td>
         {isCny ? (

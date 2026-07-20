@@ -117,4 +117,46 @@ describe("computeStockSnapshotRows", () => {
     const rows = computeStockSnapshotRows(products, new Map())
     expect(rows).toEqual([])
   })
+
+  // quick 260720-oh2: WB_BURNED — сгоревшие остатки БПЛА (Электросталь/Котовск)
+  it("nmId в burnedQtyByNmId → эмитит строку WB_BURNED (qty × costPrice)", () => {
+    const products = [
+      {
+        id: "p6",
+        sku: "УКТ-000006",
+        name: "Товар со сгоревшим остатком",
+        ivanovoStock: null,
+        costPrice: 100,
+        nmIds: [500],
+      },
+    ]
+    const wbCardsByNmId = new Map([[500, { stockQty: 2, inWayToClient: 0, inWayFromClient: 0 }]])
+    const burnedQtyByNmId = new Map([[500, 5]])
+
+    const rows = computeStockSnapshotRows(products, wbCardsByNmId, burnedQtyByNmId)
+
+    expect(rows).toEqual([
+      { productId: "p6", sku: "УКТ-000006", name: "Товар со сгоревшим остатком", location: "WB_WAREHOUSE", qty: 2, costPriceAtDate: 100, valueRub: 200 },
+      { productId: "p6", sku: "УКТ-000006", name: "Товар со сгоревшим остатком", location: "WB_BURNED", qty: 5, costPriceAtDate: 100, valueRub: 500 },
+    ])
+  })
+
+  it("без сгоревшего (burnedQtyByNmId по умолчанию пустой) → строки WB_BURNED нет", () => {
+    const products = [
+      {
+        id: "p7",
+        sku: "УКТ-000007",
+        name: "Товар без сгоревшего остатка",
+        ivanovoStock: null,
+        costPrice: 100,
+        nmIds: [501],
+      },
+    ]
+    const wbCardsByNmId = new Map([[501, { stockQty: 3, inWayToClient: 0, inWayFromClient: 0 }]])
+
+    // Обратная совместимость: старая 2-арг сигнатура (см. scripts/bootstrap-balance-snapshot.ts)
+    const rows = computeStockSnapshotRows(products, wbCardsByNmId)
+
+    expect(rows.some((r) => r.location === "WB_BURNED")).toBe(false)
+  })
 })
