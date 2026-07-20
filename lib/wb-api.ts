@@ -236,38 +236,6 @@ export async function fetchAllPrices(): Promise<Map<number, PriceData>> {
   return priceMap
 }
 
-// ── Получение остатков через Statistics API ──────────────────────
-
-/**
- * @deprecated Использовать fetchStocksPerWarehouse() — возвращает агрегированные
- * данные без разбивки по складам. Физически не удаляется до sunset 2026-06-23
- * (Plan STOCK-FUT-09). Сохранён для backward compat.
- */
-export async function fetchStocks(): Promise<Map<number, number>> {
-  const token = await getToken()
-  const stockMap = new Map<number, number>()
-
-  const res = await wbFetch(
-    "Statistics API (stocks)",
-    "https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2020-01-01",
-    { headers: { Authorization: token } }
-  )
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Statistics API stocks ошибка ${res.status}: ${text}`)
-  }
-
-  const items: Array<{ nmId: number; quantity: number }> = await res.json()
-
-  for (const item of items) {
-    const current = stockMap.get(item.nmId) ?? 0
-    stockMap.set(item.nmId, current + item.quantity)
-  }
-
-  return stockMap
-}
-
 // ── Получение процента выкупа через Analytics API ───────────────
 
 export async function fetchBuyoutPercent(nmIds: number[]): Promise<Map<number, number>> {
@@ -1119,21 +1087,28 @@ export interface OrdersStats {
  *  `WbCard.avgSalesSpeed7d` и `WbCard.ordersYesterday` пишутся в wb-sync route.
  */
 // ──────────────────────────────────────────────────────────────────
-// Phase 14: Per-Warehouse Stocks via Statistics API (STOCK-07)
+// Per-Warehouse Stocks via Analytics API warehouse_remains (STOCK-07)
 // ──────────────────────────────────────────────────────────────────
 //
-// DEVIATION от Plan 14-03: исходный план использовал Analytics API
-// (POST /api/analytics/v1/stocks-report/wb-warehouses), но base-токен
-// возвращает 403 "base token is not allowed". Верифицировано curl на VPS 2026-04-22.
+// 2026-07-20 (quick-260720-mj0): Statistics API `GET /api/v1/supplier/stocks`
+// отключён WB (HTTP 404 `PLUG-404-20260720`) — миграция на Analytics API
+// `warehouse_remains` (task-based: создать задание → опросить статус →
+// скачать JSON). Верифицировано вручную на VPS 2026-07-20.
 //
-// РЕШЕНИЕ: Statistics API (GET /api/v1/supplier/stocks?dateFrom=...)
-// уже используется в fetchStocks() и возвращает per-warehouse данные
-// (поле warehouseName). Один запрос = все данные, rate limit ~1 req/min.
+// Endpoint'ы (база https://seller-analytics-api.wildberries.ru):
+//   1. CREATE:   GET /api/v1/warehouse_remains?groupByNm=true&groupBySize=true&groupByBarcode=true
+//   2. STATUS:   GET /api/v1/warehouse_remains/tasks/{taskId}/status
+//   3. DOWNLOAD: GET /api/v1/warehouse_remains/tasks/{taskId}/download
 //
-// Endpoint верифицирован на VPS — возвращает поля:
-//   warehouseName, nmId, quantity, inWayToClient, inWayFromClient, quantityFull
-
-const STATISTICS_API_STOCKS = "https://statistics-api.wildberries.ru/api/v1/supplier/stocks"
+// Rate limit: создание задания ~1 req/мин, поллинг статуса — отдельный лимит.
+// Ответ download — JSON-массив строк { nmId, barcode, techSize, warehouses: [...] },
+// где warehouses содержит физические склады ("Коледино" и т.п.) ВМЕСТЕ с тремя
+// синтетическими "складами": "Всего находится на складах" (сумма, исключается),
+// "В пути до получателей" и "В пути возвраты на склад WB" (агрегаты in-way,
+// разносятся в inWayToClient/inWayFromClient на физический item).
+//
+// Деградация при ошибке — throw (потребитель ловит и не затирает БД, см.
+// app/api/wb-sync/route.ts).
 
 /** Per-warehouse остаток для одного nmId на одном складе на одном размере. */
 export interface WarehouseStockItem {
@@ -1151,17 +1126,38 @@ export interface WarehouseStockItem {
   inWayFromClient: number
 }
 
+/** Синтетические "склады" в ответе warehouse_remains — не физические склады. */
+const WAREHOUSE_REMAINS_SYNTHETIC = new Set([
+  "Всего находится на складах",
+  "В пути до получателей",
+  "В пути возвраты на склад WB",
+])
+
+/** Название виртуального item'а, когда в строке ответа нет ни одного физического склада,
+ *  но есть in-way остатки — чтобы данные in-way не терялись при денормализации. */
+const IN_WAY_ONLY_WAREHOUSE_NAME = "В пути (без физ. склада)"
+
+interface WarehouseRemainsRow {
+  nmId: number
+  barcode?: string
+  techSize?: string
+  warehouses?: Array<{ warehouseName: string; quantity: number }>
+}
+
 /**
- * Получить per-warehouse остатки через Statistics API.
+ * Получить per-warehouse остатки через Analytics API `warehouse_remains`
+ * (task-based: create → poll status → download).
  *
- * Endpoint: GET /api/v1/supplier/stocks?dateFrom=<1 day ago>
- * Rate limit: ~1 запрос в минуту per токен. Один запрос = ВСЕ данные.
+ * Rate limit: создание задания ~1 запрос в минуту. Один запрос = ВСЕ данные.
  * НЕ ставить в batch-цикл.
  *
  * @param nmIds Фильтр по nmId — только эти nmId попадут в результат.
  *   API возвращает все nmId продавца, фильтрация на клиенте.
  * @returns Map<nmId, WarehouseStockItem[]> сгруппированные по nmId.
  *   nmId без данных отсутствует в Map (не пустой массив).
+ * @throws Error если задание не создалось, не скачалось или не стало "done"
+ *   за отведённое время поллинга — caller (app/api/wb-sync) ловит и
+ *   деградирует (не затирает БД).
  */
 export async function fetchStocksPerWarehouse(
   nmIds: number[],
@@ -1170,52 +1166,106 @@ export async function fetchStocksPerWarehouse(
   if (nmIds.length === 0) return result
 
   const token = await getToken()
+  const ANALYTICS = "https://seller-analytics-api.wildberries.ru"
 
-  // ВАЖНО: dateFrom — фильтр по lastChangeDate, не период возврата.
-  // Если ставить now-1d, вернутся только остатки изменённые за 24ч — стабильные
-  // (не менялись) пропадут из ответа. Используем 2019-06-20 (дата запуска API)
-  // для полного snapshot. Пример: nmId 418716179 имел qty=90 на Электростали,
-  // но с now-1d вернулась только 1 строка про inWay (1 шт) — реальные 90
-  // терялись. Фикс 2026-04-22.
-  const dateFrom = "2019-06-20T00:00:00"
-  const url = `${STATISTICS_API_STOCKS}?dateFrom=${encodeURIComponent(dateFrom)}`
-
-  const res = await wbFetch("Statistics API (per-warehouse stocks)", url, {
-    headers: { Authorization: token },
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Statistics API stocks per-warehouse ${res.status}: ${text}`)
+  // 1. CREATE — создаём задание на отчёт по остаткам
+  const createRes = await wbFetch(
+    "Analytics API (warehouse remains)",
+    `${ANALYTICS}/api/v1/warehouse_remains?groupByNm=true&groupBySize=true&groupByBarcode=true`,
+    { headers: { Authorization: token } },
+  )
+  if (!createRes.ok) {
+    const text = await createRes.text()
+    throw new Error(`Analytics warehouse_remains create ${createRes.status}: ${text}`)
+  }
+  const createData = await createRes.json()
+  const taskId: string | undefined = createData?.data?.taskId
+  if (!taskId) {
+    throw new Error("Analytics warehouse_remains create: taskId отсутствует в ответе")
   }
 
-  const rows: Array<{
-    nmId: number
-    warehouseName: string
-    techSize?: string
-    barcode?: string
-    quantity: number
-    inWayToClient: number
-    inWayFromClient: number
-    quantityFull?: number
-  }> = await res.json()
+  // 2. POLL — опрашиваем статус задания (готово ~20 сек, лимит ~200 сек)
+  let done = false
+  for (let attempt = 0; attempt < 40; attempt++) {
+    await sleep(5000)
+    const statusRes = await fetch(
+      `${ANALYTICS}/api/v1/warehouse_remains/tasks/${taskId}/status`,
+      { headers: { Authorization: token } },
+    )
+    if (!statusRes.ok) continue
+    const statusData = await statusRes.json()
+    if (statusData?.data?.status === "done") {
+      done = true
+      break
+    }
+  }
+  if (!done) {
+    throw new Error("Analytics warehouse_remains: задание не готово за отведённое время")
+  }
 
+  // 3. DOWNLOAD — скачиваем готовый отчёт
+  const downloadRes = await fetch(
+    `${ANALYTICS}/api/v1/warehouse_remains/tasks/${taskId}/download`,
+    { headers: { Authorization: token } },
+  )
+  if (!downloadRes.ok) {
+    const text = await downloadRes.text()
+    throw new Error(`Analytics warehouse_remains download ${downloadRes.status}: ${text}`)
+  }
+  const rows: WarehouseRemainsRow[] = await downloadRes.json()
   if (!Array.isArray(rows)) return result
 
-  // Фильтруем по запрошенным nmIds и группируем
+  // 4. МАППИНГ строк → WarehouseStockItem[], сгруппированные по nmId
   const nmIdSet = new Set(nmIds)
   for (const row of rows) {
     if (!nmIdSet.has(row.nmId)) continue
-    const items = result.get(row.nmId) ?? []
-    items.push({
-      warehouseName: row.warehouseName ?? "",
-      techSize: row.techSize ?? "",
-      barcode: row.barcode ?? "",
-      quantity: row.quantity ?? 0,
-      inWayToClient: row.inWayToClient ?? 0,
-      inWayFromClient: row.inWayFromClient ?? 0,
-    })
-    result.set(row.nmId, items)
+
+    const warehouses = row.warehouses ?? []
+    const rowInWayTo =
+      warehouses.find((w) => w.warehouseName === "В пути до получателей")?.quantity ?? 0
+    const rowInWayFrom =
+      warehouses.find((w) => w.warehouseName === "В пути возвраты на склад WB")?.quantity ?? 0
+
+    const rowItems: WarehouseStockItem[] = []
+    for (const w of warehouses) {
+      if (WAREHOUSE_REMAINS_SYNTHETIC.has(w.warehouseName)) continue
+      rowItems.push({
+        warehouseName: w.warehouseName,
+        techSize: row.techSize ?? "",
+        barcode: row.barcode ?? "",
+        quantity: w.quantity ?? 0,
+        inWayToClient: 0,
+        inWayFromClient: 0,
+      })
+    }
+
+    if (rowItems.length > 0) {
+      // Навешиваем агрегат in-way на ПЕРВЫЙ физический склад строки — downstream
+      // (app/api/wb-sync) суммирует inWay* по всем items для денормализации
+      // WbCard.inWayToClient/inWayFromClient, поэтому одноразовый учёт корректен
+      // и не плодит фантомные склады в WbCardWarehouseStock.
+      rowItems[0].inWayToClient = rowInWayTo
+      rowItems[0].inWayFromClient = rowInWayFrom
+    } else if (rowInWayTo > 0 || rowInWayFrom > 0) {
+      // Edge case: строка целиком "в пути" — физических складов нет вообще
+      // (весь остаток nmId+techSize сейчас едет к клиенту/от клиента).
+      // Без виртуального item'а эти данные потерялись бы — денормализация
+      // WbCard.inWayToClient/inWayFromClient суммирует только по items массива.
+      rowItems.push({
+        warehouseName: IN_WAY_ONLY_WAREHOUSE_NAME,
+        techSize: row.techSize ?? "",
+        barcode: row.barcode ?? "",
+        quantity: 0,
+        inWayToClient: rowInWayTo,
+        inWayFromClient: rowInWayFrom,
+      })
+    }
+
+    if (rowItems.length > 0) {
+      const existing = result.get(row.nmId) ?? []
+      existing.push(...rowItems)
+      result.set(row.nmId, existing)
+    }
   }
 
   return result
