@@ -321,6 +321,7 @@ function PlanFactKpiBlock({ planFact }: { planFact: PlanFactProps }) {
 
 const WATERFALL_BUCKETS: { key: keyof CostWaterfall; label: string }[] = [
   { key: "cost", label: "Закупка" },
+  { key: "commission", label: "Комиссия" },
   { key: "ad", label: "Реклама" },
   { key: "review", label: "Отзывы" },
   { key: "logistics", label: "Логистика" },
