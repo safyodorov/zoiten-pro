@@ -184,6 +184,8 @@ export interface WeeklyFinReportPageData {
   bankPoolSources: { delivery: HybridPoolSource; overheadAppl: HybridPoolSource }
   /** Quick 260714-gff: Опция Джема — надбавка к комиссии (п.п.), для UI-шапки. */
   jemOptionPct: number
+  /** Quick 260721-o4b (WK-02): лямп-хвосты рекламы/отзывов для водопада (не per-article). */
+  waterfallTails: { ad: number; review: number }
 }
 
 /** Все 4 пула из manual — для early-return'ов без данных недели. */
@@ -289,6 +291,7 @@ export async function loadWeeklyFinReportInputs(
       clothingOverheadPerUnitRub: CLOTHING_OVERHEAD_PER_UNIT_DEFAULT,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
       jemOptionPct,
+      waterfallTails: { ad: 0, review: 0 },
     }
   }
 
@@ -340,6 +343,7 @@ export async function loadWeeklyFinReportInputs(
       clothingOverheadPerUnitRub: CLOTHING_OVERHEAD_PER_UNIT_DEFAULT,
       bankPoolSources: { delivery: "none", overheadAppl: "none" },
       jemOptionPct,
+      waterfallTails: { ad: 0, review: 0 },
     }
   }
 
@@ -620,6 +624,10 @@ export async function loadWeeklyFinReportInputs(
     const volumeLiters =
       ((product.heightCm ?? 0) * (product.widthCm ?? 0) * (product.depthCm ?? 0)) / 1000
     let logisticsStdPerUnit = 0
+    // Quick 260721-o4b: хранение Оферты = модель (calculatePricingStandard.storageAmount),
+    // решение пользователя 2026-07-21; ИУ движок вычитает 0 (не трогаем). volume<=0 →
+    // undefined → движок берёт из пула хранения (fallback прежний, как ИУ).
+    let storageStdPerUnit: number | undefined = undefined
     if (volumeLiters > 0) {
       const effCoef = universe === "clothing" ? clothingEff : appliancesEff
       const pricingInputs: PricingInputs = {
@@ -664,8 +672,10 @@ export async function loadWeeklyFinReportInputs(
         deliveryCostRub: 0,
         costPrice: costPerUnit,
       }
-      // logisticsEffAmount опционален в PricingOutputs → coalesce (advisory #1).
-      logisticsStdPerUnit = calculatePricingStandard(pricingInputs).logisticsEffAmount ?? 0
+      // logisticsEffAmount/storageAmount опциональны в PricingOutputs → coalesce (advisory #1).
+      const stdOut = calculatePricingStandard(pricingInputs)
+      logisticsStdPerUnit = stdOut.logisticsEffAmount ?? 0
+      storageStdPerUnit = stdOut.storageAmount ?? 0
     }
 
     articles.push({
@@ -690,7 +700,9 @@ export async function loadWeeklyFinReportInputs(
         ? logisticsIuPerUnit(realizationByNmId.get(nmId)?.deliveryRub ?? 0, qty)
         : 0,
       logisticsStdPerUnit,
-      // storagePerUnit НЕ задаём → движок берёт из пула хранения
+      // Quick 260721-o4b: Оферта — хранение = модель (calculatePricingStandard.storageAmount),
+      // решение 2026-07-21; ИУ движок вычитает 0. volume<=0 → undefined → пул (fallback прежний).
+      storagePerUnit: storageStdPerUnit,
       // Quick 260715-f4c: фикс общих/ед — только одежда (appliances: undefined → движок `?? 0`).
       overheadFixedPerUnit: universe === "clothing" ? clothingOverheadPerUnitRub : undefined,
     })
@@ -706,6 +718,18 @@ export async function loadWeeklyFinReportInputs(
       appliedBuyoutPct,
     }
   }
+
+  // 9a. Quick 260721-o4b (WK-02): хвосты рекламы/отзывов — доля nmId, выпавших
+  // из candidates (qty<=0 continue) или не привязанных к fullstats/реализации.
+  // Хвосты идут ТОЛЬКО в водопад (waterfallTails), per-article строки не трогаем.
+  const attributedAd = articles.reduce((s, a) => s + a.adSpendTotal, 0)
+  const adTail = Math.max(0, updTotal - attributedAd)
+
+  const totalReviews =
+    realizationAccountLevel.reviewPointsRub +
+    Array.from(realizationByNmId.values()).reduce((s, b) => s + b.reviewPointsRub, 0)
+  const attributedReviews = articles.reduce((s, a) => s + a.reviewWriteoffTotal, 0)
+  const reviewTail = hasRealization ? Math.max(0, totalReviews - attributedReviews) : 0
 
   // 10. Базы распределения пулов
   let applBase = 0
@@ -819,5 +843,6 @@ export async function loadWeeklyFinReportInputs(
       overheadAppl: overheadApplResolved.source,
     },
     jemOptionPct,
+    waterfallTails: { ad: adTail, review: reviewTail },
   }
 }

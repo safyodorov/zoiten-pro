@@ -32,6 +32,7 @@ export async function loadWeeklyLiveBundle(
     articles: data.articles,
     pools: data.pools,
     constants: data.constants,
+    waterfallTails: data.waterfallTails,
   })
 
   // План-факт (W2c): план из SalesPlanVersionDay активной версии; факт —
