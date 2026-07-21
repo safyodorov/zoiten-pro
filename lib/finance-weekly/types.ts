@@ -100,6 +100,11 @@ export interface WeeklyFinReportInputs {
     clothing: UniversePools
   }
   constants?: Partial<WeeklyConstants>
+  // Quick 260721-o4b: лямп-суммы (не per-unit), добавляемые к ОБОИМ сценариям
+  // водопада (iu и std) ПОСЛЕ накопления по articles. Хвосты рекламы/отзывов,
+  // не привязанные к candidates (data.ts: nmId вне qty>0). Отсутствие → default
+  // {} → водопад не меняется (golden-инвариант).
+  waterfallTails?: Partial<CostWaterfall>
 }
 
 // ── Пооперационная per-unit разбивка одного сценария ──────────────────────────
@@ -175,6 +180,7 @@ export interface WeeklyRollup {
 // Отдельно для iu и std, т.к. логистика (N) различается по сценариям.
 export interface CostWaterfall {
   cost: number        // закупка (O·H)
+  commission: number  // комиссия WB (K−I)×H — quick 260721-o4b
   ad: number          // реклама (adPerUnit·H)
   review: number      // отзывы (reviewPerUnit·H)
   logistics: number   // логистика (N·H)

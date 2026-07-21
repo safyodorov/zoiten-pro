@@ -52,6 +52,7 @@ export function poolPerUnit(
 function emptyWaterfall(): CostWaterfall {
   return {
     cost: 0,
+    commission: 0,
     ad: 0,
     review: 0,
     logistics: 0,
@@ -76,6 +77,7 @@ function emptyWaterfall(): CostWaterfall {
 interface ScenarioBreakdown {
   cutPricePerUnit: number  // I
   commissionPct: number    // J — комиссия % (различается ИУ/Оферта)
+  commissionPerUnit: number // K−I — комиссия / ед, quick 260721-o4b (для бакета водопада)
   logisticsPerUnit: number // N
   costPerUnit: number      // O
   adPerUnit: number        // L/H
@@ -174,6 +176,8 @@ function computeScenario(
 
   // I = K × (100 − J) / 100 — цена минус комиссия / ед.
   const cutPricePerUnit = (K * (100 - commPct)) / 100
+  // Комиссия WB / ед (quick 260721-o4b) — для бакета водопада «Комиссия».
+  const commissionPerUnit = K - cutPricePerUnit
 
   // AA = I − N − O − реклама − отзывы − брак − джем − налог − эквайринг
   //        − доставка − кредит − общие − приёмка − хранение (Оферта-only).
@@ -197,6 +201,7 @@ function computeScenario(
   return {
     cutPricePerUnit,
     commissionPct: commPct,
+    commissionPerUnit,
     logisticsPerUnit,
     ...common,
     storagePerUnit,
@@ -245,6 +250,7 @@ function toScenarioResult(article: WeeklyArticleInput, b: ScenarioBreakdown): Sc
 // Аккумулирует бакеты водопада (× H) из per-unit разбивки сценария.
 function addToWaterfall(acc: CostWaterfall, b: ScenarioBreakdown, H: number): void {
   acc.cost += b.costPerUnit * H
+  acc.commission += b.commissionPerUnit * H
   acc.ad += b.adPerUnit * H
   acc.review += b.reviewPerUnit * H
   acc.logistics += b.logisticsPerUnit * H
@@ -324,6 +330,16 @@ export function computeWeeklyFinReport(
     // Водопад
     addToWaterfall(waterfall.iu, iuBreakdown, article.qtyOrders)
     addToWaterfall(waterfall.std, stdBreakdown, article.qtyOrders)
+  }
+
+  // Quick 260721-o4b: хвосты рекламы/отзывов (лямп-суммы вне candidates) —
+  // добавляются к ОБОИМ сценариям водопада ПОСЛЕ накопления по articles.
+  // Отсутствие поля → {} → водопад не меняется (golden-инвариант).
+  const tails = inputs.waterfallTails ?? {}
+  for (const key of Object.keys(tails) as (keyof CostWaterfall)[]) {
+    const v = tails[key] ?? 0
+    waterfall.iu[key] += v
+    waterfall.std[key] += v
   }
 
   // Сборка роллапа: только присутствующие миры, в стабильном порядке.
