@@ -74,6 +74,7 @@ export default async function FinanceWeeklyPage({
         <FinanceTabs />
 
         <WeeklyFinReportControls
+          key={payload.weekStart}
           weekStartISO={payload.weekStart}
           weekEndISO={payload.weekEnd}
           manualPools={payload.manualPools}
@@ -108,6 +109,7 @@ export default async function FinanceWeeklyPage({
       <FinanceTabs />
 
       <WeeklyFinReportControls
+        key={data.weekStart}
         weekStartISO={data.weekStart}
         weekEndISO={data.weekEnd}
         manualPools={data.manualPools}
