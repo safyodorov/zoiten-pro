@@ -6,6 +6,7 @@ import {
   applyBurnedInWay,
   loadVirtualWarehouseIds,
   loadBurnedQtyByNmId,
+  decideBplaSeedAction,
 } from "@/lib/wb-virtual-warehouse"
 import type { PrismaClient } from "@prisma/client"
 
@@ -89,6 +90,30 @@ function selectToDeleteIds(
     )
     .map((r) => r.id)
 }
+
+describe("decideBplaSeedAction", () => {
+  it("виртуальный склад уже засеян (есть строки) → already-seeded, даже если реальный не обнулён", () => {
+    expect(decideBplaSeedAction({ virtualHasRows: true, realWarehouseQty: 1283 })).toBe(
+      "already-seeded",
+    )
+  })
+
+  it("виртуальный склад уже засеян (есть строки) и реальный тоже обнулён → already-seeded (не пересеиваем)", () => {
+    expect(decideBplaSeedAction({ virtualHasRows: true, realWarehouseQty: 0 })).toBe(
+      "already-seeded",
+    )
+  })
+
+  it("виртуальный склад ещё не засеян, реальный ещё не обнулён → gate-blocked", () => {
+    expect(decideBplaSeedAction({ virtualHasRows: false, realWarehouseQty: 1283 })).toBe(
+      "gate-blocked",
+    )
+  })
+
+  it("виртуальный склад ещё не засеян, реальный обнулён → seed", () => {
+    expect(decideBplaSeedAction({ virtualHasRows: false, realWarehouseQty: 0 })).toBe("seed")
+  })
+})
 
 describe("clean-replace delete-фильтр (защита виртуальных складов)", () => {
   it("виртуальный склад НЕ попадает в toDeleteIds, даже если отсутствует в incoming", () => {

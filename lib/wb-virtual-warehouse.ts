@@ -1,7 +1,9 @@
 // lib/wb-virtual-warehouse.ts
-// quick 260720-oh2: виртуальные склады «Электросталь БПЛА»/«Котовск БПЛА» — фиксация
-// сгоревших 17.07.2026 остатков (атака БПЛА обнулила прод-склады Электросталь id=686 и
-// Котовск id=90011). Виртуальные склады защищают эти данные от clean-replace синка
+// quick 260720-oh2 (волна 1) + quick 260723-hr5-2-gate (волна 2): виртуальные склады
+// «Электросталь БПЛА»/«Котовск БПЛА»/«Невинномысск БПЛА»/«Краснодар БПЛА» — фиксация
+// сгоревших остатков (атаки БПЛА обнулили прод-склады): волна 1 — Электросталь id=686 и
+// Котовск id=90011 (пожар 17.07.2026); волна 2 — Невинномысск id=90024 и Краснодар id=304
+// (пожар 22.07.2026 утром). Виртуальные склады защищают эти данные от clean-replace синка
 // (/api/wb-sync, /api/cron/wb-cards-refresh) и исключают их из «в пути от клиента»
 // (WbCard.inWayFromClient), плана продаж, /stock, дефицита/оборачиваемости /stock/wb.
 //
@@ -11,16 +13,49 @@
 
 import type { Prisma, PrismaClient } from "@prisma/client"
 
-/** ID и названия виртуальных складов. 99001/99002 — вне занятого диапазона (реальный Котовск=90011, авто-insert 10_000_001+). */
+/**
+ * ID и названия виртуальных складов. 99001-99004 — вне занятого диапазона (реальный
+ * Котовск=90011, авто-insert неизвестных складов начинается с 10_000_001).
+ * wave — волна пожара; realWarehouseId — реальный склад-прообраз (для gate-проверки
+ * в scripts/seed-bpla-warehouses.ts: сеять виртуальный склад только после обнуления
+ * реального, см. decideBplaSeedAction).
+ */
 export const BPLA_WAREHOUSES = [
-  { id: 99001, name: "Электросталь БПЛА" },
-  { id: 99002, name: "Котовск БПЛА" },
+  { id: 99001, name: "Электросталь БПЛА", wave: 1, realWarehouseId: 686 },
+  { id: 99002, name: "Котовск БПЛА", wave: 1, realWarehouseId: 90011 },
+  { id: 99003, name: "Невинномысск БПЛА", wave: 2, realWarehouseId: 90024 },
+  { id: 99004, name: "Краснодар БПЛА", wave: 2, realWarehouseId: 304 },
 ] as const
 
 /** shortCluster для группировки в /stock/wb — отдельная группа «БПЛА», вне обычных кластеров ЦФО/ЮГ/... */
 export const BPLA_SHORT_CLUSTER = "БПЛА"
 
 type Db = PrismaClient | Prisma.TransactionClient
+
+export type BplaSeedAction = "seed" | "gate-blocked" | "already-seeded"
+
+/**
+ * PURE — решает, что делать с одним виртуальным складом волны 2 при очередном запуске
+ * scripts/seed-bpla-warehouses.ts (в т.ч. ежедневном крон-тике).
+ *
+ * Инвариант: сеять виртуальный склад можно ТОЛЬКО после того, как WB обнулил реальный
+ * склад-прообраз (realWarehouseQty === 0), и ровно ОДИН раз — повторные запуски после
+ * успешного сида должны быть no-op, даже если WB снова временно повезёт товар на тот же
+ * реальный склад (иначе двойной счёт в /finance/balance + преждевременный вычет из
+ * inWayFromClient).
+ *
+ * - virtualHasRows=true  → "already-seeded" (уже засеян ранее — idempotent skip, НЕ пересеиваем)
+ * - virtualHasRows=false, realWarehouseQty>0 → "gate-blocked" (реальный склад ещё не обнулён WB)
+ * - virtualHasRows=false, realWarehouseQty=0 → "seed" (обнулён и ещё не засеян)
+ */
+export function decideBplaSeedAction(input: {
+  virtualHasRows: boolean
+  realWarehouseQty: number
+}): BplaSeedAction {
+  if (input.virtualHasRows) return "already-seeded"
+  if (input.realWarehouseQty > 0) return "gate-blocked"
+  return "seed"
+}
 
 /**
  * PURE — вычитает сгоревшее qty из «в пути от клиента» (API-значение), floor на 0.
