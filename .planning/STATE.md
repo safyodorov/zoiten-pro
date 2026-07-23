@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Служба поддержки WB
 status: ready_to_plan
-stopped_at: Completed quick 260721-o4b — Комиссия/хвосты рекламы-отзывов/хранение-модель в /finance/weekly
-last_updated: "2026-07-21T14:47:14.000Z"
+stopped_at: Completed quick 260723-hr5-2-gate — БПЛА-склады волна 2 (Невинномысск/Краснодар) gate-сид
+last_updated: "2026-07-23T13:10:00.000Z"
 progress:
   total_phases: 13
   completed_phases: 13
@@ -342,6 +342,7 @@ Recent decisions affecting current work:
 - [Phase quick-260720-mj0]: Statistics API `GET /api/v1/supplier/stocks` отключён WB (404 PLUG-404-20260720) — fetchStocksPerWarehouse переписан на Analytics API `warehouse_remains` (task-based create→poll→download); мёртвый fetchStocks() (sunset 2026-06-23 прошёл) удалён вместе с единственным продакшн-вызовом в /api/wb-sync — stockQty теперь агрегат из per-warehouse ответа (без второго Analytics-запроса, rate limit ~1/мин); edge case строки только с in-way (без физ. складов) закрыт виртуальным item, чтобы данные не терялись
 - [Phase quick-260720-oh2]: Виртуальные склады БПЛА (WbWarehouse.isVirtual, id 99001/99002 «Электросталь БПЛА»/«Котовск БПЛА») фиксируют сгоревшие 17.07.2026 остатки (атака БПЛА обнулила прод-склады) — защищены от clean-replace в обоих sync-роутах, вычтены из inWayFromClient (applyBurnedInWay, floor 0), исключены из /stock/wb Д/Об/дефицита (physicalWarehouses/virtualWarehouses split); красная строка «Сгоревший товар (потенциальная компенсация WB)» ≈9.2М ₽ в /finance/balance (по себестоимости — решение пользователя), закрытие склада при поступлении компенсации — ручной SQL (задокументирован в SUMMARY), не автоматизировано намеренно
 - [Phase quick-260721-o4b]: /finance/weekly водопад — добавлен бакет «Комиссия» (K−I)×H в обоих сценариях (иначе Итого затрат ≠ Выручка−Прибыль); хвосты рекламы/отзывов (nmId вне candidates) доводятся до ground truth через аддитивный опц. вход движка `waterfallTails` (лямп-сумма к iu+std, per-article не трогается); хранение Оферты = расчётная модель calculatePricingStandard.storageAmount (решение пользователя 2026-07-21, как логистика) вместо голого пула — ИУ хранение по-прежнему 0
+- [Phase quick-260723-hr5-2-gate]: БПЛА-склады волна 2 (Невинномысск id=90024/Краснодар id=304, пожар 22.07.2026, 1283+485=1768 шт) — в отличие от волны 1 реальные склады-прообразы на 23.07 ЕЩЁ НЕ обнулены WB, поэтому добавлен gate-механизм: `decideBplaSeedAction` (pure, lib/wb-virtual-warehouse.ts) сеет виртуальный склад 99003/99004 ТОЛЬКО когда `realWarehouseQty===0`, и ровно один раз (`already-seeded` проверяется раньше `gate-blocked` — защита от повторного сида при временном возврате товара на реальный склад); scripts/seed-bpla-warehouses.ts теперь безопасен для ежедневного крона (крон НЕ установлен этой задачей — ручной шаг оркестратора/пользователя, см. SUMMARY); полный `npm run test` на этой машине пришлось гонять чанками из-за severe OOM (не связано с кодом) — сверено построчно с baseline (41/11), новых падений нет
 
 ### Roadmap Evolution
 
@@ -480,6 +481,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-21T14:47:14.000Z
-Stopped at: Completed quick 260721-o4b — Комиссия/хвосты рекламы-отзывов/хранение-модель в /finance/weekly
+Last session: 2026-07-23T13:10:00.000Z
+Stopped at: Completed quick 260723-hr5-2-gate — БПЛА-склады волна 2 (Невинномысск/Краснодар) gate-сид
 Resume file: None
